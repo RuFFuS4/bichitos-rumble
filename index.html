@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bichitos Rumble</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; }
+    canvas { display: block; }
+    #hud {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #fff;
+    }
+    #hud-top {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 20px;
+      font-size: 18px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.7);
+    }
+    #overlay {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      font-size: 36px;
+      font-weight: bold;
+      text-shadow: 0 3px 8px rgba(0,0,0,0.8);
+      pointer-events: auto;
+    }
+    #overlay .sub {
+      font-size: 18px;
+      margin-top: 8px;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div id="hud-top">
+      <span id="hud-alive">Alive: 4</span>
+      <span id="hud-timer">1:30</span>
+    </div>
+    <div id="overlay" style="display:none;"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
