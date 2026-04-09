@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { createAbilityStates, getSpeedMultiplier, getMassMultiplier } from './abilities';
+import type { AbilityState } from './abilities';
+import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, FEEL } from './gamefeel';
 
 export interface CritterConfig {
   name: string;
@@ -9,7 +12,7 @@ export interface CritterConfig {
 }
 
 export const CRITTER_PRESETS: CritterConfig[] = [
-  { name: 'Rojo', color: 0xe74c3c, speed: 8, mass: 1.0, headbuttForce: 14 },
+  { name: 'Rojo', color: 0xe74c3c, speed: 10, mass: 1.0, headbuttForce: 14 },
   { name: 'Azul', color: 0x3498db, speed: 9, mass: 0.9, headbuttForce: 12 },
   { name: 'Verde', color: 0x2ecc71, speed: 7, mass: 1.2, headbuttForce: 16 },
   { name: 'Morado', color: 0x9b59b6, speed: 10, mass: 0.8, headbuttForce: 11 },
@@ -25,16 +28,25 @@ export class Critter {
   vx = 0;
   vz = 0;
   alive = true;
+  hasInput = false;
+  lives = FEEL.lives.default;
+  immunityTimer = 0;
+  falling = false;            // true while falling off arena (waiting to respawn)
+  private respawnTimer = 0;
   headbuttCooldown = 0;
   isHeadbutting = false;
   private headbuttTimer = 0;
+  private headbuttAnticipating = false;
+  private anticipationTimer = 0;
 
-  private body: THREE.Mesh;
-  private head: THREE.Mesh;
+  body: THREE.Mesh;
+  head: THREE.Mesh;
+  abilityStates: AbilityState[];
 
   constructor(config: CritterConfig, scene: THREE.Scene) {
     this.config = config;
     this.mesh = new THREE.Group();
+    this.abilityStates = createAbilityStates(config.name);
 
     // Body — small sphere
     const bodyGeo = new THREE.SphereGeometry(BODY_RADIUS, 16, 12);
@@ -80,32 +92,80 @@ export class Critter {
   set z(v: number) { this.mesh.position.z = v; }
   get radius(): number { return HEAD_RADIUS; }
 
+  get isImmune(): boolean {
+    return this.immunityTimer > 0;
+  }
+
+  get effectiveSpeed(): number {
+    return this.config.speed * getSpeedMultiplier(this.abilityStates);
+  }
+
+  get effectiveMass(): number {
+    return this.config.mass * getMassMultiplier(this.abilityStates);
+  }
+
   startHeadbutt(): void {
-    if (this.headbuttCooldown > 0 || this.isHeadbutting) return;
-    this.isHeadbutting = true;
-    this.headbuttTimer = 0.2; // duration of lunge
+    if (this.headbuttCooldown > 0 || this.isHeadbutting || this.headbuttAnticipating || this.isImmune) return;
+    this.headbuttAnticipating = true;
+    this.anticipationTimer = FEEL.headbutt.anticipation.duration;
   }
 
   update(dt: number): void {
+    // Immunity countdown
+    if (this.immunityTimer > 0) this.immunityTimer -= dt;
+
     // Headbutt cooldown
     if (this.headbuttCooldown > 0) this.headbuttCooldown -= dt;
 
-    // Headbutt lunge animation
-    if (this.isHeadbutting) {
-      this.headbuttTimer -= dt;
-      this.head.position.z = 0.3; // head thrust forward
-      if (this.headbuttTimer <= 0) {
-        this.isHeadbutting = false;
-        this.headbuttCooldown = 0.5;
-        this.head.position.z = 0;
+    // Headbutt anticipation phase (brief wind-up)
+    if (this.headbuttAnticipating) {
+      this.anticipationTimer -= dt;
+      this.head.position.z = FEEL.headbutt.anticipation.headRetract;
+      this.body.scale.y = FEEL.headbutt.anticipation.bodySquash;
+      if (this.anticipationTimer <= 0) {
+        this.headbuttAnticipating = false;
+        this.isHeadbutting = true;
+        this.headbuttTimer = FEEL.headbutt.lunge.duration;
+        this.body.scale.y = 1.0;
+        // Micro-lunge: critter steps into the hit
+        const angle = this.mesh.rotation.y;
+        this.vx += Math.sin(angle) * FEEL.headbutt.lunge.velocityBoost;
+        this.vz += Math.cos(angle) * FEEL.headbutt.lunge.velocityBoost;
       }
     }
 
-    // Apply velocity with friction
+    // Headbutt lunge phase
+    if (this.isHeadbutting) {
+      this.headbuttTimer -= dt;
+      this.head.position.z = FEEL.headbutt.lunge.headExtend;
+      if (this.headbuttTimer <= 0) {
+        this.isHeadbutting = false;
+        this.headbuttCooldown = FEEL.headbutt.cooldown;
+        // Recovery pose: head bounces back instead of snapping to 0
+        applyHeadbuttRecovery(this);
+      }
+    }
+
+    // Apply velocity
     this.x += this.vx * dt;
     this.z += this.vz * dt;
-    this.vx *= 0.92;
-    this.vz *= 0.92;
+
+    // Friction: faster decay when no input (stops drift), normal decay with input
+    const halfLife = this.hasInput ? FEEL.movement.frictionHalfLife : FEEL.movement.idleFrictionHalfLife;
+    const friction = Math.pow(0.5, dt / halfLife);
+    this.vx *= friction;
+    this.vz *= friction;
+
+    // Dead zone: kill micro-drift (exponential decay never reaches true zero)
+    const speed = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
+    if (speed < FEEL.movement.velocityDeadZone) {
+      this.vx = 0;
+      this.vz = 0;
+    } else if (speed > FEEL.movement.maxSpeed) {
+      // Velocity cap
+      this.vx = (this.vx / speed) * FEEL.movement.maxSpeed;
+      this.vz = (this.vz / speed) * FEEL.movement.maxSpeed;
+    }
 
     // Face direction of movement
     if (Math.abs(this.vx) > 0.1 || Math.abs(this.vz) > 0.1) {
@@ -114,10 +174,137 @@ export class Critter {
 
     // Bobbing animation
     this.body.position.y = BODY_RADIUS + Math.sin(Date.now() * 0.005) * 0.05;
+
+    // Visual feedback for ability states
+    this.updateVisuals();
+
+    // Game feel visual systems (all visual-only, no gameplay logic)
+    updateScaleFeedback(this, dt);
+    updateKnockbackTilt(this, dt);
+    updateHeadbuttRecovery(this, dt);
   }
 
+  /** Visual-only: updates emissive, posture, and opacity based on current state. No gameplay logic. */
+  private updateVisuals(): void {
+    const bodyMat = this.body.material as THREE.MeshStandardMaterial;
+    const headMat = this.head.material as THREE.MeshStandardMaterial;
+
+    let glowColor = this.config.color;
+    let glowIntensity = 0.15;
+    let bodyScaleY = 1.0;
+    let headOffsetY = 0; // additional Y offset for head during states
+
+    // --- Headbutt states ---
+    if (this.headbuttAnticipating) {
+      glowColor = 0xffffff;
+      glowIntensity = 0.4;
+    } else if (this.isHeadbutting) {
+      glowColor = 0xffcc00;
+      glowIntensity = 0.8;
+    }
+
+    // --- Ability states ---
+    for (const s of this.abilityStates) {
+      if (!s.active) continue;
+
+      if (s.def.type === 'charge_rush') {
+        glowColor = 0xff8800;
+        glowIntensity = 0.7;
+        // Head tucks down during charge
+        headOffsetY = -0.08;
+      } else if (s.def.type === 'ground_pound') {
+        if (s.windUpLeft > 0) {
+          bodyScaleY = FEEL.groundPound.windUpSquash;
+          headOffsetY = FEEL.groundPound.windUpHeadDrop;
+          glowColor = 0xffff00;
+          glowIntensity = 0.5;
+        } else {
+          glowColor = 0xff2200;
+          glowIntensity = 0.7;
+        }
+      }
+    }
+
+    // --- Cooldown visual (muted) ---
+    if (this.headbuttCooldown > 0 && !this.isHeadbutting && !this.headbuttAnticipating) {
+      glowIntensity *= 0.5;
+    }
+
+    // Apply emissive
+    headMat.emissive.setHex(glowColor);
+    headMat.emissiveIntensity = glowIntensity;
+    const isActive = glowColor !== this.config.color;
+    bodyMat.emissive.setHex(isActive ? glowColor : 0x000000);
+    bodyMat.emissiveIntensity = isActive ? glowIntensity * 0.4 : 0;
+
+    // Apply body scale (only from ability wind-ups, not from scale feedback system)
+    this.body.scale.y = bodyScaleY;
+
+    // Apply head offset
+    this.head.position.y = BODY_RADIUS * 2 + HEAD_RADIUS * 0.6 + headOffsetY;
+
+    // --- Immunity blink ---
+    if (this.immunityTimer > 0) {
+      const blink = Math.sin(Date.now() * 0.001 * FEEL.lives.blinkRate * Math.PI * 2) > 0;
+      headMat.opacity = blink ? 1.0 : 0.3;
+      bodyMat.opacity = blink ? 1.0 : 0.3;
+      headMat.transparent = true;
+      bodyMat.transparent = true;
+    } else {
+      headMat.opacity = 1.0;
+      bodyMat.opacity = 1.0;
+      headMat.transparent = false;
+      bodyMat.transparent = false;
+    }
+  }
+
+  /** Start falling off arena — will respawn or eliminate after delay. */
+  startFalling(): void {
+    if (this.falling) return;
+    this.falling = true;
+    this.lives--;
+    this.respawnTimer = FEEL.lives.respawnDelay;
+  }
+
+  /** Update falling state. Returns true if critter should respawn now. */
+  updateFalling(dt: number): boolean {
+    if (!this.falling) return false;
+    this.mesh.position.y -= 12 * dt; // fall animation
+    this.respawnTimer -= dt;
+    if (this.respawnTimer <= 0) {
+      if (this.lives > 0) {
+        return true; // signal: ready to respawn
+      } else {
+        this.eliminate();
+      }
+    }
+    return false;
+  }
+
+  /** Respawn at a position with immunity. */
+  respawnAt(x: number, z: number): void {
+    this.falling = false;
+    this.x = x;
+    this.z = z;
+    this.vx = 0;
+    this.vz = 0;
+    this.mesh.position.y = 0;
+    this.immunityTimer = FEEL.lives.immunityDuration;
+    this.isHeadbutting = false;
+    this.headbuttAnticipating = false;
+    this.headbuttCooldown = 0;
+    this.head.position.z = 0;
+    this.body.rotation.x = 0;
+    this.head.rotation.x = 0;
+    this.mesh.visible = true;
+    this.mesh.scale.set(1, 1, 1);
+    this.body.scale.y = 1.0;
+  }
+
+  /** Permanently eliminated (no lives left). */
   eliminate(): void {
     this.alive = false;
+    this.falling = false;
     this.mesh.visible = false;
   }
 
@@ -128,9 +315,20 @@ export class Critter {
     this.z = z;
     this.vx = 0;
     this.vz = 0;
+    this.lives = FEEL.lives.default;
+    this.immunityTimer = 0;
+    this.falling = false;
     this.headbuttCooldown = 0;
     this.isHeadbutting = false;
+    this.headbuttAnticipating = false;
+    this.hasInput = false;
+    this.anticipationTimer = 0;
     this.head.position.z = 0;
+    this.body.rotation.x = 0;
+    this.head.rotation.x = 0;
     this.mesh.position.y = 0;
+    this.mesh.scale.set(1, 1, 1);
+    this.body.scale.y = 1.0;
+    this.abilityStates = createAbilityStates(this.config.name);
   }
 }

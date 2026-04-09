@@ -18,12 +18,14 @@ All game code lives in `src/`:
 - `main.ts` — entry point, renderer setup, game loop
 - `game.ts` — match state machine (countdown → playing → ended)
 - `arena.ts` — circular arena with collapsible rings
-- `critter.ts` — critter entity (mesh, physics state, headbutt)
-- `player.ts` — keyboard input handler
-- `bot.ts` — simple chase-and-headbutt AI
-- `physics.ts` — collision resolution + fall-off detection
-- `camera.ts` — perspective camera setup
-- `hud.ts` — DOM-based HUD (alive count, timer, overlays)
+- `abilities.ts` — config-driven ability system (defs, states, effects, VFX)
+- `gamefeel.ts` — hit stop, scale feedback (squash/stretch), anticipation config
+- `critter.ts` — critter entity (mesh, physics state, headbutt, abilities)
+- `player.ts` — keyboard input handler (WASD, Space, J, K, R)
+- `bot.ts` — AI with chase, headbutt, and ability heuristics
+- `physics.ts` — collision resolution + fall-off detection (uses effectiveMass)
+- `camera.ts` — pseudo-isometric camera setup
+- `hud.ts` — DOM-based HUD (alive count, timer, overlays, ability cooldown bars)
 
 ## Dependencies
 Only three runtime/dev dependencies:

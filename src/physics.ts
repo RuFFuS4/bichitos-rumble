@@ -1,18 +1,20 @@
 import { Critter } from './critter';
 import { Arena } from './arena';
+import { triggerHitStop, applyImpactFeedback, FEEL } from './gamefeel';
 
-const PUSH_FORCE = 6;
-const HEADBUTT_MULTIPLIER = 2.5;
 const FALL_SPEED = 12;
 
 /** Check and resolve collisions between all critters. */
 export function resolveCollisions(critters: Critter[]): void {
   for (let i = 0; i < critters.length; i++) {
     const a = critters[i];
-    if (!a.alive) continue;
+    if (!a.alive || a.falling) continue;
     for (let j = i + 1; j < critters.length; j++) {
       const b = critters[j];
-      if (!b.alive) continue;
+      if (!b.alive || b.falling) continue;
+
+      // Skip knockback if either critter is immune (still separate overlap though)
+      const eitherImmune = a.isImmune || b.isImmune;
 
       const dx = b.x - a.x;
       const dz = b.z - a.z;
@@ -30,28 +32,33 @@ export function resolveCollisions(critters: Critter[]): void {
         b.x += nx * overlap;
         b.z += nz * overlap;
 
-        // Knockback force
-        let force = PUSH_FORCE;
-        if (a.isHeadbutting) force = a.config.headbuttForce * HEADBUTT_MULTIPLIER;
-        else if (b.isHeadbutting) force = b.config.headbuttForce * HEADBUTT_MULTIPLIER;
+        // No knockback during immunity — only separation
+        if (eitherImmune) continue;
 
-        const massRatioA = b.config.mass / (a.config.mass + b.config.mass);
-        const massRatioB = a.config.mass / (a.config.mass + b.config.mass);
+        // Knockback force — reads from centralized FEEL config
+        let force = FEEL.collision.normalPushForce;
+        if (a.isHeadbutting) force = a.config.headbuttForce * FEEL.collision.headbuttMultiplier;
+        else if (b.isHeadbutting) force = b.config.headbuttForce * FEEL.collision.headbuttMultiplier;
+
+        const massRatioA = b.effectiveMass / (a.effectiveMass + b.effectiveMass);
+        const massRatioB = a.effectiveMass / (a.effectiveMass + b.effectiveMass);
 
         if (a.isHeadbutting) {
-          // A headbutts B: B gets heavy knockback, A gets minor recoil
           b.vx += nx * force * massRatioB;
           b.vz += nz * force * massRatioB;
-          a.vx -= nx * force * 0.2;
-          a.vz -= nz * force * 0.2;
+          a.vx -= nx * force * FEEL.headbutt.recoilFactor;
+          a.vz -= nz * force * FEEL.headbutt.recoilFactor;
+          triggerHitStop(FEEL.hitStop.headbutt);
+          applyImpactFeedback(b);
         } else if (b.isHeadbutting) {
-          // B headbutts A: A gets heavy knockback
           a.vx -= nx * force * massRatioA;
           a.vz -= nz * force * massRatioA;
-          b.vx += nx * force * 0.2;
-          b.vz += nz * force * 0.2;
+          b.vx += nx * force * FEEL.headbutt.recoilFactor;
+          b.vz += nz * force * FEEL.headbutt.recoilFactor;
+          triggerHitStop(FEEL.hitStop.headbutt);
+          applyImpactFeedback(a);
         } else {
-          // Normal collision push
+          // Normal collision — gentle nudge
           a.vx -= nx * force * massRatioA;
           a.vz -= nz * force * massRatioA;
           b.vx += nx * force * massRatioB;
@@ -62,16 +69,23 @@ export function resolveCollisions(critters: Critter[]): void {
   }
 }
 
-/** Check if critters have fallen off the arena. */
-export function checkFalloff(critters: Critter[], arena: Arena, dt: number): void {
+/** Check if critters have fallen off the arena. Starts falling state. */
+export function checkFalloff(critters: Critter[], arena: Arena): void {
   for (const c of critters) {
-    if (!c.alive) continue;
+    if (!c.alive || c.falling || c.isImmune) continue;
     if (!arena.isOnArena(c.x, c.z)) {
-      // Fall animation
-      c.mesh.position.y -= FALL_SPEED * dt;
-      if (c.mesh.position.y < -10) {
-        c.eliminate();
-      }
+      c.startFalling();
     }
   }
+}
+
+/** Update falling critters — returns list of critters ready to respawn. */
+export function updateFalling(critters: Critter[], dt: number): Critter[] {
+  const readyToRespawn: Critter[] = [];
+  for (const c of critters) {
+    if (c.updateFalling(dt)) {
+      readyToRespawn.push(c);
+    }
+  }
+  return readyToRespawn;
 }

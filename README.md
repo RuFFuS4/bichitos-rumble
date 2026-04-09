@@ -2,7 +2,7 @@
 
 A chaotic arena brawler where big-headed critters fight inside a circular arena that progressively collapses. Knock your rivals into the void!
 
-Built for the **2026 Vibe Coding Game Jam**.
+Built for the [**2026 Vibe Coding Game Jam**](https://jam.pieter.com/2026).
 
 ## Play
 

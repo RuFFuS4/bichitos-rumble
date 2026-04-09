@@ -10,6 +10,7 @@
 - [ ] Deployed to public URL
 - [ ] README explains the game
 - [ ] Source code on GitHub
+- [x] Jam widget included (`<script async src="https://jam.pieter.com/2026/widget.js">`)
 
 ## Gameplay Minimum
 - [x] Playable character with movement
@@ -18,7 +19,9 @@
 - [x] Win/lose condition
 - [x] Restart flow
 - [ ] Character selection (4 critters)
-- [ ] Special abilities (2 per critter, J and K keys)
+- [x] Special abilities (2 per critter, J and K keys)
+- [x] Lives system (3 lives, respawn with immunity)
+- [x] All-critter lives HUD
 
 ## Polish Targets
 - [ ] Sound effects

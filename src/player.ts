@@ -1,4 +1,6 @@
 import { Critter } from './critter';
+import { activateAbility } from './abilities';
+import { FEEL } from './gamefeel';
 
 const keys: Record<string, boolean> = {};
 
@@ -22,13 +24,31 @@ export function updatePlayer(critter: Critter, dt: number): void {
     mz /= len;
   }
 
-  const accel = critter.config.speed;
+  // Reduce steering during Charge Rush (commitment)
+  const chargeState = critter.abilityStates[0];
+  if (chargeState?.active && chargeState.def.type === 'charge_rush' && chargeState.windUpLeft <= 0) {
+    mx *= FEEL.chargeRush.steerFactor;
+    mz *= FEEL.chargeRush.steerFactor;
+  }
+
+  // Signal whether player is actively steering
+  critter.hasInput = len > 0;
+
+  const accel = critter.effectiveSpeed * FEEL.movement.accelerationScale;
   critter.vx += mx * accel * dt;
   critter.vz += mz * accel * dt;
 
   // Headbutt on Space
   if (keys['Space']) {
     critter.startHeadbutt();
+  }
+
+  // Abilities
+  if (keys['KeyJ'] && critter.abilityStates[0]) {
+    activateAbility(critter.abilityStates[0], critter);
+  }
+  if (keys['KeyK'] && critter.abilityStates[1]) {
+    activateAbility(critter.abilityStates[1], critter);
   }
 }
 

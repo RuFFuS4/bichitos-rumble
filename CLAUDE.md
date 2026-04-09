@@ -54,6 +54,32 @@ First validate the game loop with a local/simulated prototype:
 - large content scope
 - backend complexity
 
+## Art direction
+- Style: cartoon squashy arcade
+- Game feel > realism
+- Impacts, abilities, and movement must feel punchy, exaggerated, and clear
+- Future phases will add squash/stretch, hit stop, expressive animations, strong audio/visual feedback
+
+## Ability design principles
+- Each critter has 2 unique abilities (J and K)
+- Abilities may share base logic (dash, AoE, etc.) but each critter must have:
+  - Distinct behavior (timing, force, usage)
+  - Distinct identity (animation, VFX, execution style)
+- Architecture must support: config-driven per-critter definitions, reusable base logic, per-critter customization without hacking the system
+- All tuning values (speed multipliers, mass, cooldowns, knockback, radii) must be centralized in config, never hardcoded in logic
+
+## Separation of concerns
+- Gameplay logic (physics, effects, cooldowns) must be separate from visual representation (animations, emissive, squash/stretch, VFX)
+- Leave clear integration points where hit stop, squash/stretch, anticipation, and exaggerated reactions can be added later without refactoring gameplay code
+
+## Code maintenance policy
+1. **Continuous light cleanup**: after each functional block, remove new hardcodes, centralize values in FEEL/config, eliminate duplication
+2. **Structural cleanup only at milestones**: no refactoring for its own sake; only after completing important systems; keep dev momentum
+3. **Complexity control**: no long multi-responsibility functions; keep gameplay/visual separation clean; don't mix unrelated systems in the same file
+4. **Protect working code**: don't rewrite systems that work without clear reason; evaluate impact before modifying existing code
+5. **Branch discipline**: work in dev; merge to main only when a functional block is stable and playable; avoid massive unintegrated changes
+6. **Document decisions**: important decisions in BUILD_LOG.md; structural changes noted
+
 ## Coding rules
 - Keep code modular and typed
 - Prefer simple architecture

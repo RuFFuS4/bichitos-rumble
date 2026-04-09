@@ -2,8 +2,35 @@ import * as THREE from 'three';
 import { createCamera, handleResize, syncSize } from './camera';
 import { Game } from './game';
 
-// Renderer
+// ---------------------------------------------------------------------------
+// WebGL diagnostic + renderer creation
+// ---------------------------------------------------------------------------
+
+console.log('[bichitos] Checking WebGL support...');
+const testCanvas = document.createElement('canvas');
+const gl = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl');
+console.log('[bichitos] WebGL context:', gl ? `${gl.getParameter(gl.RENDERER)} (${gl.getParameter(gl.VERSION)})` : 'NONE');
+
+if (!gl) {
+  document.body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#fff;font-family:sans-serif;text-align:center;padding:20px;">
+      <div>
+        <h1 style="font-size:24px;">⚠ WebGL not available</h1>
+        <p style="margin-top:12px;opacity:0.8;">Bichitos Rumble needs WebGL to run.</p>
+        <p style="margin-top:12px;opacity:0.6;line-height:1.6;">
+          Check these:<br>
+          1. Enable <b>Hardware Acceleration</b> in browser settings<br>
+          2. Update your GPU drivers<br>
+          3. Try a different browser (Chrome, Firefox, Edge)
+        </p>
+      </div>
+    </div>`;
+  throw new Error('WebGL not available');
+}
+
+console.log('[bichitos] Creating Three.js renderer...');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
+console.log('[bichitos] Renderer created OK');
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.setClearColor(0x1a1a2e);
