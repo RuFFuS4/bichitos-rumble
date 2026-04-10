@@ -6,6 +6,8 @@ Built for the [**2026 Vibe Coding Game Jam**](https://jam.pieter.com/2026).
 
 ## Play
 
+Live: **[https://www.bichitosrumble.com](https://www.bichitosrumble.com)**
+
 Run locally:
 
 ```bash
@@ -13,15 +15,18 @@ npm install
 npm run dev
 ```
 
-A public URL will be added here once the game is deployed.
-
 ## Deployment
 
-The project is configured for Vercel via `vercel.json` (SPA rewrites + Vite framework). Once the GitHub repo is connected to a Vercel project:
-- `main` branch → production URL
-- `dev` branch → preview URL (auto-generated per push)
+Configured for Vercel via `vercel.json` (SPA rewrites + Vite framework).
 
-Not yet deployed at the time of writing.
+Current state:
+- Production URL: `https://www.bichitosrumble.com` (custom domain, public)
+- Vercel project: `ruffus4s-projects/bichitos-rumble`
+- Manual deploys: `npx vercel deploy --prod` from project root
+
+To enable automatic push-triggered deploys (`main` → prod, `dev` → preview),
+connect the GitHub repo from the Vercel dashboard:
+Project → Settings → Git → Connect Git Repository.
 
 ## Controls
 

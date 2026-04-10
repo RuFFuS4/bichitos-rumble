@@ -3,12 +3,13 @@
 ## Key Decisions
 - Phase 1 is offline-only with bots. No multiplayer until core loop is validated.
 - Player always controls Rojo (index 0) in phase 1.
-- Arena has 6 rings, collapses every 15s from outside in.
+- Arena has 6 rings, collapses every 20s from outside in.
 - 4 critter presets with different speed/mass/headbutt tradeoffs.
-- Each critter will have 2 special abilities (not 1). Keys: J and K.
+- Each critter has 2 special abilities. Keys: J and K. Currently all critters share Rojo's abilities (placeholder).
 - Controls: WASD move, Space headbutt, J ability 1, K ability 2, R restart.
-- Camera: pseudo-isometric (FOV 32, pos 0/34/14, lookAt 0/0/-1).
-- Lives system: each critter has 2-3 lives (default 3, may vary per critter later). On fall → respawn with 1-2s of immunity. Elimination only when all lives are spent.
+- Camera: pseudo-isometric with depth (FOV 40, pos 0/23/25, lookAt 0/-3/0).
+- Lives system: 3 lives per critter (default). On fall → respawn at center with 1.5s immunity. Permanent elimination when all lives spent.
+- Public deploy: https://www.bichitosrumble.com (Vercel, custom domain).
 
 ## Known Physics Values
 - Arena radius: 12 units, 6 rings
@@ -40,10 +41,20 @@
 - Each match feels different, stays readable
 - Do NOT implement until game feel and combat are mature
 
-## Development Priorities (current)
-- Jam widget included in index.html (required for submission)
-- Do NOT invest more time in bots — they are minimal temporary opposition
-- Next focus: reduce "orthopedic" feel — improve game feel structurally
-- Priorities: anticipation, hit stop, squash/stretch, recoil, impact readability
-- Leave clean hooks for animation/VFX but don't add final art yet
+## Deployment
+- Public URL: https://www.bichitosrumble.com (custom domain aliased)
+- Vercel project: ruffus4s-projects/bichitos-rumble
+- Manual deploy: `npx vercel deploy --prod` from project root
+- vercel.json with SPA rewrite verified working in production
+- GitHub ↔ Vercel push-triggered deploys NOT yet wired (manual dashboard step)
+- `.vercel/` is in `.gitignore` (auto by `vercel link`)
+
+## Development Priorities (next sprint)
+- Differentiate critter abilities (Azul, Verde, Morado all share Rojo's now)
+- Minimal title / character select screen
+- Resume game feel polish on a more solid base
+- Sound effects (small set)
+- Do NOT invest more time in bots — minimal temporary opposition
 - Game must stay fast-loading, no heavy screens
+- Leave clean hooks for animation/VFX but don't add final art yet
+- Jam widget included in index.html (required for submission)

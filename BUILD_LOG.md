@@ -387,9 +387,82 @@ First serious pass to reduce "orthopedic" feel. All changes are visual-only — 
 - `vercel.json` (new)
 - `BUILD_LOG.md`, `README.md`, `SUBMISSION_CHECKLIST.md` — deploy docs
 
+## 2026-04-10 — Sprint: Real deploy + cleanup pass
+
+Goal: leave the project actually deployed and accessible, plus a controlled
+cleanup pass before continuing to grow new features.
+
+### Real deploy live
+**Public URL: https://www.bichitosrumble.com**
+
+- Vercel project `ruffus4s-projects/bichitos-rumble` created via `vercel deploy`
+- Production deploy verified end-to-end:
+  - `/` → 200, serves the game HTML with bundle `index-DF621XLp.js`
+  - `/test` → 200, SPA rewrite serves `index.html`
+  - `/cualquier-ruta-loca` → 200, SPA rewrite confirmed
+  - HTML contains expected markers: `Bichitos Rumble`, `hud-lives`,
+    `ability-bar-container`, jam widget script
+- Custom domain `www.bichitosrumble.com` already aliased to production deploy
+- Preview-style URL `bichitos-rumble-...vercel.app` returns 401 due to
+  Vercel Deployment Protection on the project (custom domain bypasses it)
+- `.vercel/` was added to `.gitignore` automatically by `vercel link`
+- `dev` merged into `main` (fast-forward), both branches now contain the
+  full sprint state and are pushed to GitHub
+
+### Git ↔ Vercel integration status
+- The current deploy was done via `vercel deploy --prod` from the CLI.
+  This is a real, working production deploy, but it is NOT yet wired to
+  push-triggered deployments.
+- To enable `main → production` and `dev → preview` automatically on push,
+  the GitHub repo must be connected to the Vercel project from the dashboard:
+  Project → Settings → Git → Connect Git Repository.
+- Until that step is done, deploys must be triggered manually with
+  `npx vercel deploy --prod` from the project root.
+
+### Code cleanup pass
+Before deploying, did a controlled review of `src/` and applied 5 targeted
+fixes. Nothing was rewritten, no behaviour changed, build/tests stayed green.
+
+| Issue | File | Type | Fix |
+|---|---|---|---|
+| `FALL_SPEED = 12` defined but unused | `physics.ts` | Dead code | Removed |
+| `isHitStopped()` exported but unused | `gamefeel.ts` | Dead export | Removed |
+| `initialRadius` field defined but never read | `arena.ts` | Dead field | Removed |
+| `position.y -= 12 * dt` magic number duplicating `FALL_SPEED` | `critter.ts` | Hardcode | Moved to `FEEL.lives.fallSpeed` |
+| `fireEffect(state, critter, [], null!)` in activateAbility | `abilities.ts` | Type landmine | Removed; firing happens fully inside `updateAbilities`, which always has scene |
+
+The `null!` fix is structural: previously, abilities with `windUp <= 0`
+fired their effect inside `activateAbility` with a `null!` scene. Any
+future ability with no wind-up that needed scene (e.g. spawning a VFX)
+would have crashed. Now `activateAbility` only sets state; `updateAbilities`
+fires the effect on the same frame (player.ts → bot.ts → updateAbilities)
+with a real scene reference. Same behaviour, no landmine.
+
+### Verification
+- `npx tsc --noEmit` → clean, zero errors
+- `npm run build` → 16 modules, 493 KB (125 KB gzip), 565 ms
+- `npx vite preview` local → `/`, `/test`, `/assets/...` all 200
+- Vercel build in iad1 → READY, restored cache, build 1.66s
+- Public URL responds 200, content matches local build
+
+### Files modified
+- `src/abilities.ts` — `activateAbility` no longer fires effect; tick handles it
+- `src/arena.ts` — removed unused `initialRadius`
+- `src/critter.ts` — fall speed reads `FEEL.lives.fallSpeed`
+- `src/gamefeel.ts` — added `lives.fallSpeed`, removed `isHitStopped`
+- `src/physics.ts` — removed dead `FALL_SPEED` const
+- `.gitignore` — added `.vercel/` (auto by vercel link)
+
+### What this sprint achieved
+- Project is now publicly playable at a stable, custom URL
+- Branches `main` and `dev` are both up to date and pushed
+- Codebase has 5 fewer landmines/duplicates
+- vercel.json + SPA rewrite verified against real Vercel infra
+- Deploy flow is documented and reproducible
+
 ### Next steps
-- Connect Vercel project (manual dashboard step)
-- Playtest game feel pass
-- Differentiate abilities for Azul, Verde, Morado
-- Character select screen
-- Sound effects
+- Connect GitHub ↔ Vercel via dashboard for automatic deploys
+- Differentiate critter abilities (Azul, Verde, Morado)
+- Minimal title / character select screen
+- Resume game feel polish on a more solid base
+- Sound effects (small set)
