@@ -6,12 +6,22 @@ Built for the [**2026 Vibe Coding Game Jam**](https://jam.pieter.com/2026).
 
 ## Play
 
-Visit the live version (coming soon) or run locally:
+Run locally:
 
 ```bash
 npm install
 npm run dev
 ```
+
+A public URL will be added here once the game is deployed.
+
+## Deployment
+
+The project is configured for Vercel via `vercel.json` (SPA rewrites + Vite framework). Once the GitHub repo is connected to a Vercel project:
+- `main` branch → production URL
+- `dev` branch → preview URL (auto-generated per push)
+
+Not yet deployed at the time of writing.
 
 ## Controls
 
@@ -28,7 +38,7 @@ npm run dev
 - TypeScript + Vite
 - Three.js for 3D rendering
 - No backend required for the prototype
-- Deployed on Vercel
+- Vercel deployment configured (see `vercel.json`)
 
 ## Status
 

@@ -2,8 +2,6 @@ import { Critter } from './critter';
 import { Arena } from './arena';
 import { triggerHitStop, applyImpactFeedback, FEEL } from './gamefeel';
 
-const FALL_SPEED = 12;
-
 /** Check and resolve collisions between all critters. */
 export function resolveCollisions(critters: Critter[]): void {
   for (let i = 0; i < critters.length; i++) {

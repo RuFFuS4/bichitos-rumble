@@ -33,21 +33,28 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 console.log('[bichitos] Renderer created OK');
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.setClearColor(0x1a1a2e);
+renderer.setClearColor(0x0a0a18);
 document.body.prepend(renderer.domElement);
 
 // Scene
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x1a1a2e, 30, 60);
+scene.fog = new THREE.FogExp2(0x0a0a18, 0.018); // exponential fog for depth falloff
 
-// Lighting
-const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+// Lighting — stronger contrast for depth readability
+const ambient = new THREE.AmbientLight(0xffffff, 0.35);
 scene.add(ambient);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-dirLight.position.set(10, 20, 10);
+const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+dirLight.position.set(8, 25, 12);
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.set(1024, 1024);
+dirLight.shadow.camera.near = 5;
+dirLight.shadow.camera.far = 60;
+dirLight.shadow.camera.left = -18;
+dirLight.shadow.camera.right = 18;
+dirLight.shadow.camera.top = 18;
+dirLight.shadow.camera.bottom = -18;
+dirLight.shadow.bias = -0.002;
 scene.add(dirLight);
 
 // Camera — syncSize sets the correct canvas dimensions and aspect ratio

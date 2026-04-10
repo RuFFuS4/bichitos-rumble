@@ -1,15 +1,15 @@
 # Submission Checklist — Bichitos Rumble
 
 ## Required for Jam Submission
-- [ ] Game runs in browser without install
-- [ ] No login or signup required
-- [ ] Free to play
-- [ ] Fast startup (< 3 seconds to gameplay)
-- [ ] Game is brand new (created during jam)
-- [ ] 90%+ AI-generated code
+- [ ] Game runs in browser without install (pending — verify on public deploy)
+- [x] No login or signup required
+- [x] Free to play
+- [ ] Fast startup (< 3 seconds to gameplay) (pending — verify on public deploy)
+- [x] Game is brand new (created during jam)
+- [x] 90%+ AI-generated code
 - [ ] Deployed to public URL
-- [ ] README explains the game
-- [ ] Source code on GitHub
+- [x] README explains the game
+- [x] Source code on GitHub
 - [x] Jam widget included (`<script async src="https://jam.pieter.com/2026/widget.js">`)
 
 ## Gameplay Minimum
@@ -31,7 +31,12 @@
 - [ ] Victory/defeat screen with stats
 
 ## Deployment
-- [ ] Vercel project connected
+- [x] `vercel.json` with SPA rewrites config (in repo root)
+- [x] `vite.config.ts` with `base: './'` (relative asset paths)
+- [x] Build verified locally (`npx vite build` → 125 KB gzip)
+- [ ] Vercel project connected to GitHub repo
+- [ ] Production branch set to `main` in Vercel dashboard
+- [ ] Preview deployments working on `dev` branch
 - [ ] Custom domain configured (Hostinger)
-- [ ] Final build tested on Vercel
+- [ ] Final build tested on Vercel public URL
 - [ ] Mobile responsiveness checked

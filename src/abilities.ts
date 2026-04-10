@@ -95,16 +95,14 @@ export function canActivateAbility(state: AbilityState): boolean {
   return state.cooldownLeft <= 0 && !state.active;
 }
 
-export function activateAbility(state: AbilityState, critter: Critter): boolean {
+export function activateAbility(state: AbilityState, _critter: Critter): boolean {
   if (!canActivateAbility(state)) return false;
   state.active = true;
   state.effectFired = false;
   state.windUpLeft = state.def.windUp;
   state.durationLeft = state.def.duration;
-  if (state.def.windUp <= 0) {
-    fireEffect(state, critter, [], null!);
-    state.effectFired = true;
-  }
+  // Effect is fired from updateAbilities, which always has access to scene.
+  // This avoids needing a null-scene placeholder and keeps the firing path unified.
   return true;
 }
 
@@ -165,6 +163,7 @@ export function updateAbilities(
 ): void {
   for (const s of states) {
     if (s.active) {
+      // Wind-up phase (visible charge-up before the effect fires)
       if (s.windUpLeft > 0) {
         s.windUpLeft -= dt;
         if (s.windUpLeft <= 0 && !s.effectFired) {
@@ -173,6 +172,12 @@ export function updateAbilities(
         }
         continue;
       }
+      // No wind-up, or wind-up finished — fire effect once if not already fired
+      if (!s.effectFired) {
+        fireEffect(s, critter, allCritters, scene);
+        s.effectFired = true;
+      }
+      // Drain active duration
       s.durationLeft -= dt;
       if (s.durationLeft <= 0) {
         s.active = false;

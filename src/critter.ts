@@ -269,7 +269,7 @@ export class Critter {
   /** Update falling state. Returns true if critter should respawn now. */
   updateFalling(dt: number): boolean {
     if (!this.falling) return false;
-    this.mesh.position.y -= 12 * dt; // fall animation
+    this.mesh.position.y -= FEEL.lives.fallSpeed * dt;
     this.respawnTimer -= dt;
     if (this.respawnTimer <= 0) {
       if (this.lives > 0) {

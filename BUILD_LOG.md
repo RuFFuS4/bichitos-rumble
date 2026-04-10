@@ -356,9 +356,40 @@ First serious pass to reduce "orthopedic" feel. All changes are visual-only — 
 - Jam widget added to index.html (`<script async>`, non-blocking)
 - Future organic arena collapse documented in GAME_DESIGN.md and MEMORY.md
 
+## 2026-04-10 — Vercel deploy configuration
+
+### What was built
+- **`vercel.json`** created at project root with SPA configuration:
+  - `framework: "vite"` — explicit detector
+  - `buildCommand: "npm run build"` — runs `tsc && vite build`
+  - `outputDirectory: "dist"` — Vite's default
+  - `devCommand: "npm run dev"` — for `vercel dev`
+  - `rewrites: [{ source: "/(.*)", destination: "/index.html" }]` — SPA fallback: any unknown URL falls back to `index.html`, preventing 404s on reload. Assets with real files in `dist/` still serve directly (Vercel rewrite rules skip existing files).
+
+### Build verified
+- `npx vite build` → 16 modules, 493 KB (125 KB gzip), ~770ms
+- `dist/index.html` correctly references `./assets/index-XXXX.js` (relative path, no absolute path issues)
+- `base: './'` in `vite.config.ts` ensures relative URLs work on any subpath
+
+### Environments (configured in Vercel dashboard, not vercel.json)
+- **Production**: `main` branch → publishes to primary URL
+- **Preview**: `dev` branch + all other branches/PRs → auto-generated preview URLs
+- Single `vercel.json` serves both environments identically
+
+### Deploy steps (manual, one-time)
+1. Connect GitHub repo `RuFFuS4/bichitos-rumble` to Vercel project
+2. Import project → Vercel auto-detects Vite framework and `vercel.json`
+3. Set production branch to `main` in Vercel → Settings → Git
+4. Push to `dev` → generates preview URL
+5. Merge to `main` when stable → publishes to production URL
+
+### Files created/modified
+- `vercel.json` (new)
+- `BUILD_LOG.md`, `README.md`, `SUBMISSION_CHECKLIST.md` — deploy docs
+
 ### Next steps
+- Connect Vercel project (manual dashboard step)
 - Playtest game feel pass
 - Differentiate abilities for Azul, Verde, Morado
 - Character select screen
 - Sound effects
-- Deploy to Vercel

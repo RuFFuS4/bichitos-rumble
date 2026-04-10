@@ -72,6 +72,7 @@ export const FEEL = {
     immunityDuration: 1.5,    // seconds of invulnerability after respawn
     respawnDelay: 0.8,        // seconds before critter reappears after falling
     blinkRate: 8,             // blinks per second during immunity
+    fallSpeed: 12,            // visual fall speed while descending into the void
   },
 
   // --- Hit Stop ---
@@ -134,10 +135,6 @@ export function applyHitStop(dt: number): number {
     return 0;
   }
   return dt;
-}
-
-export function isHitStopped(): boolean {
-  return hitStopTimer > 0;
 }
 
 // ---------------------------------------------------------------------------
