@@ -18,17 +18,19 @@
 - [x] Opponents to fight
 - [x] Win/lose condition
 - [x] Restart flow
-- [ ] Character selection (4 critters)
+- [x] Character selection (4 critters)
 - [x] Special abilities (2 per critter, J and K keys)
 - [x] Lives system (3 lives, respawn with immunity)
 - [x] All-critter lives HUD
+- [x] Title screen
+- [x] End screen with per-result messaging
 
 ## Polish Targets
 - [ ] Sound effects
 - [ ] Screen shake on hit
 - [ ] Particle effects
-- [ ] Title screen
-- [ ] Victory/defeat screen with stats
+- [x] Title screen
+- [x] Victory/defeat screen
 
 ## Deployment
 - [x] `vercel.json` with SPA rewrites config (in repo root)

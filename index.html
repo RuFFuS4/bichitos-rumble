@@ -115,6 +115,164 @@
       font-size: 13px;
       letter-spacing: 1px;
     }
+
+    /* ---------- Full-screen overlays (title / select / end) ---------- */
+    .full-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, rgba(10,10,24,0.75) 0%, rgba(10,10,24,0.92) 100%);
+      color: #fff;
+      pointer-events: auto;
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+    }
+    .full-overlay.hidden { display: none; }
+
+    .prompt {
+      font-size: 18px;
+      opacity: 0.85;
+      animation: pulse 1.4s ease-in-out infinite;
+      margin-top: 20px;
+    }
+    .prompt kbd {
+      display: inline-block;
+      background: rgba(255,255,255,0.15);
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 15px;
+      border: 1px solid rgba(255,255,255,0.35);
+      margin: 0 2px;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.9; }
+      50% { opacity: 0.4; }
+    }
+    .controls-hint {
+      position: absolute;
+      bottom: 24px;
+      font-size: 12px;
+      opacity: 0.45;
+      letter-spacing: 0.5px;
+    }
+
+    /* ---------- Title Screen ---------- */
+    #title-screen .game-title {
+      font-size: clamp(48px, 8vw, 96px);
+      font-weight: 900;
+      letter-spacing: 4px;
+      text-align: center;
+      line-height: 0.92;
+      text-shadow:
+        0 4px 28px rgba(0,0,0,0.9),
+        0 0 50px rgba(231, 76, 60, 0.35);
+      margin-bottom: 14px;
+    }
+    #title-screen .game-title .rumble {
+      background: linear-gradient(180deg, #ffdc5c 0%, #e74c3c 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    #title-screen .tagline {
+      font-size: 16px;
+      opacity: 0.65;
+      margin-bottom: 44px;
+      letter-spacing: 1px;
+    }
+
+    /* ---------- Character Select ---------- */
+    #character-select h2 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      margin-bottom: 32px;
+      opacity: 0.9;
+    }
+    #critter-cards {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 90vw;
+    }
+    .critter-card {
+      width: 160px;
+      padding: 20px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 2px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
+      text-align: center;
+      transition: transform 0.18s, border-color 0.18s, background 0.18s;
+    }
+    .critter-card.selected {
+      border-color: #fff;
+      background: rgba(255,255,255,0.12);
+      transform: scale(1.08) translateY(-4px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .critter-preview {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      margin: 0 auto 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6), inset 0 -6px 12px rgba(0,0,0,0.3);
+    }
+    .critter-name {
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 2px;
+      letter-spacing: 0.5px;
+    }
+    .critter-role {
+      font-size: 11px;
+      opacity: 0.7;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 10px;
+    }
+    .critter-tagline {
+      font-size: 11px;
+      opacity: 0.55;
+      line-height: 1.3;
+      min-height: 28px;
+    }
+    .critter-stats {
+      margin-top: 10px;
+      font-size: 10px;
+      opacity: 0.5;
+      font-family: monospace;
+    }
+
+    /* ---------- End Screen ---------- */
+    #end-screen .end-result {
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 900;
+      letter-spacing: 3px;
+      text-align: center;
+      margin-bottom: 12px;
+      text-shadow: 0 4px 24px rgba(0,0,0,0.9);
+    }
+    #end-screen .end-result.win {
+      color: #4ade80;
+      text-shadow: 0 4px 28px rgba(74,222,128,0.55), 0 0 60px rgba(74,222,128,0.25);
+    }
+    #end-screen .end-result.lose {
+      color: #e74c3c;
+      text-shadow: 0 4px 28px rgba(231,76,60,0.55), 0 0 60px rgba(231,76,60,0.25);
+    }
+    #end-screen .end-result.draw {
+      color: #ffdc5c;
+    }
+    #end-screen .end-subtitle {
+      font-size: 16px;
+      opacity: 0.7;
+      margin-bottom: 24px;
+    }
   </style>
 </head>
 <body>
@@ -126,6 +284,25 @@
     </div>
     <div id="overlay" style="display:none;"></div>
     <div id="ability-bar-container"></div>
+  </div>
+
+  <div id="title-screen" class="full-overlay hidden">
+    <h1 class="game-title">BICHITOS<br><span class="rumble">RUMBLE</span></h1>
+    <p class="tagline">HEADBUTT YOUR RIVALS INTO THE VOID</p>
+    <div class="prompt">Press <kbd>SPACE</kbd> to start</div>
+    <div class="controls-hint">WASD move · SPACE headbutt · J/K abilities · R restart</div>
+  </div>
+
+  <div id="character-select" class="full-overlay hidden">
+    <h2>CHOOSE YOUR CRITTER</h2>
+    <div id="critter-cards"></div>
+    <div class="prompt"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm</div>
+  </div>
+
+  <div id="end-screen" class="full-overlay hidden">
+    <div class="end-result" id="end-result">Result</div>
+    <div class="end-subtitle" id="end-subtitle"></div>
+    <div class="prompt"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
   </div>
   <script type="module" src="/src/main.ts"></script>
   <!-- Vibe Coding Game Jam 2026 widget (required for submission) -->

@@ -33,44 +33,112 @@ export interface AbilityState {
 }
 
 // ---------------------------------------------------------------------------
-// Ability definitions — read from centralized FEEL config
+// Ability factory — base values come from FEEL, overrides per critter
 // ---------------------------------------------------------------------------
 
-const CHARGE_RUSH: AbilityDef = {
-  type: 'charge_rush',
-  name: 'Charge Rush',
-  key: 'J',
-  cooldown: FEEL.chargeRush.cooldown,
-  duration: FEEL.chargeRush.duration,
-  windUp: FEEL.chargeRush.windUp,
-  speedMultiplier: FEEL.chargeRush.speedMultiplier,
-  massMultiplier: FEEL.chargeRush.massMultiplier,
-  impulse: FEEL.chargeRush.impulse,
-  slowDuringWindUp: 1.0,
-  radius: 0,
-  force: 0,
-};
+function makeChargeRush(overrides: Partial<AbilityDef> = {}): AbilityDef {
+  return {
+    type: 'charge_rush',
+    name: 'Charge Rush',
+    key: 'J',
+    cooldown: FEEL.chargeRush.cooldown,
+    duration: FEEL.chargeRush.duration,
+    windUp: FEEL.chargeRush.windUp,
+    speedMultiplier: FEEL.chargeRush.speedMultiplier,
+    massMultiplier: FEEL.chargeRush.massMultiplier,
+    impulse: FEEL.chargeRush.impulse,
+    slowDuringWindUp: 1.0,
+    radius: 0,
+    force: 0,
+    ...overrides,
+  };
+}
 
-const GROUND_POUND: AbilityDef = {
-  type: 'ground_pound',
-  name: 'Ground Pound',
-  key: 'K',
-  cooldown: FEEL.groundPound.cooldown,
-  duration: FEEL.groundPound.duration,
-  windUp: FEEL.groundPound.windUp,
-  speedMultiplier: 1.0,
-  massMultiplier: 1.0,
-  impulse: 0,
-  slowDuringWindUp: FEEL.groundPound.slowDuringWindUp,
-  radius: FEEL.groundPound.radius,
-  force: FEEL.groundPound.force,
-};
+function makeGroundPound(overrides: Partial<AbilityDef> = {}): AbilityDef {
+  return {
+    type: 'ground_pound',
+    name: 'Ground Pound',
+    key: 'K',
+    cooldown: FEEL.groundPound.cooldown,
+    duration: FEEL.groundPound.duration,
+    windUp: FEEL.groundPound.windUp,
+    speedMultiplier: 1.0,
+    massMultiplier: 1.0,
+    impulse: 0,
+    slowDuringWindUp: FEEL.groundPound.slowDuringWindUp,
+    radius: FEEL.groundPound.radius,
+    force: FEEL.groundPound.force,
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Per-critter ability sets — each critter has unique names + stats
+// ---------------------------------------------------------------------------
 
 export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
-  Rojo:   [CHARGE_RUSH, GROUND_POUND],
-  Azul:   [CHARGE_RUSH, GROUND_POUND],
-  Verde:  [CHARGE_RUSH, GROUND_POUND],
-  Morado: [CHARGE_RUSH, GROUND_POUND],
+  // Rojo — Balanced Brawler (uses FEEL defaults)
+  Rojo: [
+    makeChargeRush(),
+    makeGroundPound(),
+  ],
+
+  // Azul — Fast Skirmisher: hits fast, hits often, smaller payoffs
+  Azul: [
+    makeChargeRush({
+      name: 'Quick Dash',
+      impulse: 20,
+      duration: 0.25,
+      cooldown: 3.0,
+      speedMultiplier: 2.7,
+      massMultiplier: 1.4,
+    }),
+    makeGroundPound({
+      name: 'Sharp Stomp',
+      radius: 2.8,
+      force: 20,
+      windUp: 0.25,
+      cooldown: 4.5,
+    }),
+  ],
+
+  // Verde — Heavy Crusher: slow but devastating
+  Verde: [
+    makeChargeRush({
+      name: 'Heavy Charge',
+      impulse: 13,
+      duration: 0.40,
+      cooldown: 5.0,
+      speedMultiplier: 2.0,
+      massMultiplier: 3.0,
+    }),
+    makeGroundPound({
+      name: 'Earthquake',
+      radius: 4.8,
+      force: 40,
+      windUp: 0.5,
+      cooldown: 7.5,
+    }),
+  ],
+
+  // Morado — Glass Cannon: high risk, high reward
+  Morado: [
+    makeChargeRush({
+      name: 'Blitz',
+      impulse: 22,
+      duration: 0.28,
+      cooldown: 3.5,
+      speedMultiplier: 2.8,
+      massMultiplier: 1.2,
+    }),
+    makeGroundPound({
+      name: 'Shockwave',
+      radius: 3.2,
+      force: 34,
+      windUp: 0.3,
+      cooldown: 6.5,
+    }),
+  ],
 };
 
 // ---------------------------------------------------------------------------

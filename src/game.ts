@@ -1,14 +1,23 @@
 import * as THREE from 'three';
 import { Arena } from './arena';
 import { Critter, CRITTER_PRESETS } from './critter';
-import { updatePlayer, isRestartPressed } from './player';
+import { updatePlayer, isRestartPressed, consumeKey } from './player';
 import { updateBot } from './bot';
 import { updateAbilities } from './abilities';
 import { resolveCollisions, checkFalloff, updateFalling } from './physics';
-import { updateHUD, showOverlay, hideOverlay, initAbilityHUD, updateAbilityHUD, initAllLivesHUD, updateAllLivesHUD } from './hud';
+import {
+  updateHUD, showOverlay, hideOverlay,
+  initAbilityHUD, updateAbilityHUD,
+  initAllLivesHUD, updateAllLivesHUD,
+  showTitleScreen, hideTitleScreen,
+  showCharacterSelect, updateCharacterSelect, hideCharacterSelect,
+  showEndScreen, hideEndScreen,
+  showMatchHud,
+  type EndResult,
+} from './hud';
 import { applyHitStop, FEEL } from './gamefeel';
 
-type Phase = 'countdown' | 'playing' | 'ended';
+type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended';
 
 const SPAWN_POSITIONS: [number, number][] = [
   [0, -6],
@@ -22,8 +31,10 @@ export class Game {
   arena: Arena;
   critters: Critter[] = [];
   player!: Critter;
+  private playerIndex = 0;
+  private selectedIdx = 0;   // index highlighted in character select
 
-  private phase: Phase = 'countdown';
+  private phase: Phase = 'title';
   private phaseTimer = 0;
   private matchTimer = FEEL.match.duration;
 
@@ -38,19 +49,65 @@ export class Game {
       this.critters.push(critter);
     }
 
+    // Default player until character select. Abilities HUD shows placeholder
+    // values that will be rebuilt when the player picks their critter.
     this.player = this.critters[0];
-    initAbilityHUD(this.player.abilityStates);
-    initAllLivesHUD(this.critters);
-    this.startCountdown();
+    this.playerIndex = 0;
+
+    this.enterTitle();
   }
 
-  private startCountdown(): void {
+  // -------------------------------------------------------------------------
+  // Phase transitions
+  // -------------------------------------------------------------------------
+
+  private enterTitle(): void {
+    this.phase = 'title';
+    showTitleScreen();
+    hideCharacterSelect();
+    hideEndScreen();
+    hideOverlay();
+  }
+
+  private enterCharacterSelect(): void {
+    this.phase = 'character_select';
+    hideTitleScreen();
+    hideEndScreen();
+    showCharacterSelect(CRITTER_PRESETS, this.selectedIdx);
+  }
+
+  private enterCountdown(): void {
+    hideCharacterSelect();
+    hideEndScreen();
+    showMatchHud();
     this.phase = 'countdown';
     this.phaseTimer = FEEL.match.countdown;
+    this.matchTimer = FEEL.match.duration;
+
+    // Full reset of arena and all critters for a fresh match
+    this.arena.reset();
+    for (let i = 0; i < this.critters.length; i++) {
+      this.critters[i].reset(SPAWN_POSITIONS[i][0], SPAWN_POSITIONS[i][1]);
+    }
+
+    // Wire up player + HUD to the chosen critter
+    this.playerIndex = this.selectedIdx;
+    this.player = this.critters[this.playerIndex];
+    initAbilityHUD(this.player.abilityStates);
+    initAllLivesHUD(this.critters);
     showOverlay('Get Ready!');
   }
 
-  /** Critters still in the game (have lives or are alive and not permanently eliminated). */
+  private enterEnded(result: EndResult, title: string, subtitle: string): void {
+    this.phase = 'ended';
+    hideOverlay();
+    showEndScreen(result, title, subtitle);
+  }
+
+  // -------------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------------
+
   private get activeCount(): number {
     return this.critters.filter((c) => c.alive).length;
   }
@@ -62,9 +119,39 @@ export class Game {
     return [Math.cos(angle) * r, Math.sin(angle) * r];
   }
 
+  // -------------------------------------------------------------------------
+  // Main update
+  // -------------------------------------------------------------------------
+
   update(dt: number): void {
     switch (this.phase) {
-      case 'countdown':
+      case 'title':
+        // Let critters idle (bob animation, no input)
+        for (const c of this.critters) c.update(dt);
+        if (consumeKey('Space') || consumeKey('Enter')) {
+          this.enterCharacterSelect();
+        }
+        break;
+
+      case 'character_select':
+        for (const c of this.critters) c.update(dt);
+        if (consumeKey('ArrowLeft') || consumeKey('KeyA')) {
+          this.selectedIdx = (this.selectedIdx - 1 + CRITTER_PRESETS.length) % CRITTER_PRESETS.length;
+          updateCharacterSelect(this.selectedIdx);
+        }
+        if (consumeKey('ArrowRight') || consumeKey('KeyD')) {
+          this.selectedIdx = (this.selectedIdx + 1) % CRITTER_PRESETS.length;
+          updateCharacterSelect(this.selectedIdx);
+        }
+        if (consumeKey('Space') || consumeKey('Enter')) {
+          this.enterCountdown();
+        }
+        if (consumeKey('KeyT') || consumeKey('Escape')) {
+          this.enterTitle();
+        }
+        break;
+
+      case 'countdown': {
         this.phaseTimer -= dt;
         const sec = Math.ceil(this.phaseTimer);
         if (sec > 0) {
@@ -74,6 +161,7 @@ export class Game {
           this.phase = 'playing';
         }
         break;
+      }
 
       case 'playing': {
         const effectiveDt = applyHitStop(dt);
@@ -87,8 +175,9 @@ export class Game {
         // 1. Player input
         updatePlayer(this.player, effectiveDt);
 
-        // 2. Bot AI
-        for (let i = 1; i < this.critters.length; i++) {
+        // 2. Bot AI (all critters except the player)
+        for (let i = 0; i < this.critters.length; i++) {
+          if (i === this.playerIndex) continue;
           updateBot(this.critters[i], this.critters, effectiveDt);
         }
 
@@ -125,45 +214,33 @@ export class Game {
 
         // Win/loss check
         if (!this.player.alive) {
-          this.phase = 'ended';
-          showOverlay('Eliminated!', 'Press R to restart');
+          this.enterEnded('lose', 'ELIMINATED', `${this.player.config.name} fell into the void`);
         } else if (this.activeCount <= 1 && !this.critters.some(c => c.falling)) {
-          this.phase = 'ended';
-          showOverlay('You Win!', 'Press R to restart');
+          this.enterEnded('win', 'VICTORY', `${this.player.config.name} is the last one standing`);
         } else if (this.matchTimer <= 0) {
-          this.phase = 'ended';
           if (this.player.alive) {
-            showOverlay('Time Up - You Survived!', 'Press R to restart');
+            this.enterEnded('win', 'SURVIVED', `${this.player.config.name} made it to the end`);
           } else {
-            showOverlay('Time Up!', 'Press R to restart');
+            this.enterEnded('lose', 'TIME UP', 'Better luck next time');
           }
         }
         break;
       }
 
       case 'ended':
+        // Finish any pending fall animations so eliminated critters disappear
         updateFalling(this.critters, dt);
         for (const c of this.critters) {
           if (c.alive) c.update(dt);
         }
 
         if (isRestartPressed()) {
-          this.restart();
+          this.enterCountdown();
+        }
+        if (consumeKey('KeyT')) {
+          this.enterTitle();
         }
         break;
     }
-  }
-
-  private restart(): void {
-    this.arena.reset();
-    this.matchTimer = FEEL.match.duration;
-
-    for (let i = 0; i < this.critters.length; i++) {
-      this.critters[i].reset(SPAWN_POSITIONS[i][0], SPAWN_POSITIONS[i][1]);
-    }
-
-    initAbilityHUD(this.player.abilityStates);
-    initAllLivesHUD(this.critters);
-    this.startCountdown();
   }
 }

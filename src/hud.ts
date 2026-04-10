@@ -1,11 +1,18 @@
 import type { AbilityState } from './abilities';
-import type { Critter } from './critter';
+import type { Critter, CritterConfig } from './critter';
 
 const aliveEl = document.getElementById('hud-alive')!;
 const timerEl = document.getElementById('hud-timer')!;
 const livesContainer = document.getElementById('hud-lives')!;
 const overlayEl = document.getElementById('overlay')!;
 const abilityContainer = document.getElementById('ability-bar-container')!;
+const hudRoot = document.getElementById('hud')!;
+const titleScreen = document.getElementById('title-screen')!;
+const characterSelect = document.getElementById('character-select')!;
+const critterCards = document.getElementById('critter-cards')!;
+const endScreen = document.getElementById('end-screen')!;
+const endResultEl = document.getElementById('end-result')!;
+const endSubtitleEl = document.getElementById('end-subtitle')!;
 
 export function updateHUD(aliveCount: number, timeLeft: number): void {
   aliveEl.textContent = `Alive: ${aliveCount}`;
@@ -129,4 +136,97 @@ export function updateAbilityHUD(states: AbilityState[]): void {
       el.fill.style.width = '100%';
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Full-screen menus (title / character select / end)
+// ---------------------------------------------------------------------------
+
+/** Show/hide the main in-match HUD (top bar + ability bar + overlay). */
+function setMatchHudVisible(visible: boolean): void {
+  hudRoot.style.display = visible ? 'block' : 'none';
+}
+
+export function showTitleScreen(): void {
+  setMatchHudVisible(false);
+  titleScreen.classList.remove('hidden');
+}
+
+export function hideTitleScreen(): void {
+  titleScreen.classList.add('hidden');
+}
+
+export function showCharacterSelect(presets: CritterConfig[], selectedIdx: number): void {
+  setMatchHudVisible(false);
+  // Build cards once per show
+  critterCards.innerHTML = '';
+  for (let i = 0; i < presets.length; i++) {
+    const c = presets[i];
+    const card = document.createElement('div');
+    card.className = 'critter-card' + (i === selectedIdx ? ' selected' : '');
+    card.dataset.idx = String(i);
+
+    const preview = document.createElement('div');
+    preview.className = 'critter-preview';
+    preview.style.background = '#' + c.color.toString(16).padStart(6, '0');
+
+    const name = document.createElement('div');
+    name.className = 'critter-name';
+    name.textContent = c.name;
+
+    const role = document.createElement('div');
+    role.className = 'critter-role';
+    role.textContent = c.role;
+
+    const tagline = document.createElement('div');
+    tagline.className = 'critter-tagline';
+    tagline.textContent = c.tagline;
+
+    const stats = document.createElement('div');
+    stats.className = 'critter-stats';
+    stats.textContent = `SPD ${c.speed} · MAS ${c.mass.toFixed(2)} · HIT ${c.headbuttForce}`;
+
+    card.appendChild(preview);
+    card.appendChild(name);
+    card.appendChild(role);
+    card.appendChild(tagline);
+    card.appendChild(stats);
+    critterCards.appendChild(card);
+  }
+  characterSelect.classList.remove('hidden');
+}
+
+/** Update the selected card highlight without rebuilding everything. */
+export function updateCharacterSelect(selectedIdx: number): void {
+  const cards = critterCards.querySelectorAll('.critter-card');
+  cards.forEach((card, i) => {
+    card.classList.toggle('selected', i === selectedIdx);
+  });
+}
+
+export function hideCharacterSelect(): void {
+  characterSelect.classList.add('hidden');
+}
+
+export type EndResult = 'win' | 'lose' | 'draw';
+
+export function showEndScreen(result: EndResult, title: string, subtitle: string): void {
+  endResultEl.textContent = title;
+  endResultEl.className = 'end-result ' + result;
+  endSubtitleEl.textContent = subtitle;
+  endScreen.classList.remove('hidden');
+  // Keep the match HUD visible behind the end screen so player sees final state
+  setMatchHudVisible(true);
+}
+
+export function hideEndScreen(): void {
+  endScreen.classList.add('hidden');
+}
+
+/** Called when match starts, to ensure HUD is visible and menus are hidden. */
+export function showMatchHud(): void {
+  setMatchHudVisible(true);
+  titleScreen.classList.add('hidden');
+  characterSelect.classList.add('hidden');
+  endScreen.classList.add('hidden');
 }

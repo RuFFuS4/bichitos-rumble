@@ -49,11 +49,25 @@
 - GitHub ↔ Vercel push-triggered deploys NOT yet wired (manual dashboard step)
 - `.vercel/` is in `.gitignore` (auto by `vercel link`)
 
+## Critter identity (implemented)
+- Rojo: Balanced. Standard stats and abilities (FEEL defaults).
+- Azul: Skirmisher. Faster, lighter. Quick Dash + Sharp Stomp.
+- Verde: Crusher. Slow, heavy, devastating. Heavy Charge + Earthquake.
+- Morado: Glass Cannon. Fastest, lightest. Blitz + Shockwave.
+- Abilities use same base types (charge_rush / ground_pound) but with
+  per-critter overrides via makeChargeRush/makeGroundPound factories.
+
+## Game flow (implemented)
+- title → character_select → countdown → playing → ended
+- Title: Press SPACE/Enter
+- Select: Arrow keys or A/D to navigate, SPACE/Enter to confirm, T/Esc back
+- End: R to restart match, T to return to title
+- Player slot is dynamic: `playerIndex` from chosen critter, bots are all others
+
 ## Development Priorities (next sprint)
-- Differentiate critter abilities (Azul, Verde, Morado all share Rojo's now)
-- Minimal title / character select screen
-- Resume game feel polish on a more solid base
 - Sound effects (small set)
+- Subtle title-screen idle animation (e.g. rotating camera)
+- Screen shake on heavy hits
 - Do NOT invest more time in bots — minimal temporary opposition
 - Game must stay fast-loading, no heavy screens
 - Leave clean hooks for animation/VFX but don't add final art yet

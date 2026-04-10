@@ -460,9 +460,94 @@ with a real scene reference. Same behaviour, no landmine.
 - vercel.json + SPA rewrite verified against real Vercel infra
 - Deploy flow is documented and reproducible
 
+## 2026-04-10 — Sprint: Visible presentation
+
+Goal: give the public build actual game shape — a front-facing flow and
+the first real identity for each critter, without touching deep systems.
+
+### What was built
+
+**1. Full game flow with three new screens**
+- **Title screen** — oversized `BICHITOS RUMBLE` title with a yellow→red
+  gradient on "RUMBLE", tagline, blinking "Press SPACE to start" prompt,
+  and a subtle controls hint at the bottom.
+- **Character select** — 4 cards in a row, each showing a colored preview
+  circle (critter color), name, uppercase role label, one-line tagline,
+  and raw stats (SPD/MAS/HIT). Arrow keys / A-D navigate, SPACE confirms.
+  The selected card scales up, highlights, and lifts slightly.
+- **End screen** — large VICTORY / ELIMINATED / SURVIVED / TIME UP label
+  with per-result color (green/red/yellow), critter-specific subtitle,
+  and R restart / T title prompt.
+
+All three share a common `.full-overlay` style: blurred dark gradient
+background so the 3D scene stays visible but dimmed behind them.
+
+**2. Critters actually differentiated**
+Each critter now has a unique role, tagline, stats, and ability tuning.
+Abilities use the same base types (dash + AoE) but feel distinct:
+
+| Critter | Role | Ability 1 | Ability 2 |
+|---|---|---|---|
+| **Rojo** | Balanced | Charge Rush (standard) | Ground Pound (standard) |
+| **Azul** | Skirmisher | Quick Dash (faster, shorter, lighter) | Sharp Stomp (smaller radius, lower cooldown) |
+| **Verde** | Crusher | Heavy Charge (slower, 3x mass) | Earthquake (huge radius, huge force, long wind-up) |
+| **Morado** | Glass Cannon | Blitz (longest impulse, lighter mass) | Shockwave (mid radius, strong force) |
+
+Stats are also tuned per critter (Rojo balanced, Azul faster/lighter,
+Verde slower/heavier, Morado fastest/lightest). Abilities use a factory
+pattern (`makeChargeRush(overrides)`, `makeGroundPound(overrides)`) so
+tuning stays readable and config-driven.
+
+**3. Game state machine expanded**
+Added `title` and `character_select` phases before `countdown`. Full flow:
+```
+title → character_select → countdown → playing → ended
+                                                   ↓
+                                                   restart → countdown
+                                                   back    → title
+```
+The player no longer always controls critter[0]. `playerIndex` is set
+from `selectedIdx` on each match start. Bot AI loop skips the player
+slot, so any of the 4 critters can be the player.
+
+**4. Edge-detected input for menus**
+`player.ts` now tracks a `freshKeys: Set<string>` of keys pressed since
+the last consume. The keydown listener adds to the set (ignoring
+`e.repeat` so held keys don't re-fire). `consumeKey(code)` returns
+true exactly once per physical press, cleanly distinguishing held-Space
+during combat from fresh Space to confirm a menu selection.
+
+### Files changed
+- `src/abilities.ts` — factory functions + 4 unique ability sets
+- `src/critter.ts` — `role` + `tagline` fields, differentiated presets
+- `src/player.ts` — `freshKeys` Set, `consumeKey` edge detection, `clearFreshKeys`
+- `src/hud.ts` — `showTitleScreen`, `showCharacterSelect`,
+  `updateCharacterSelect`, `showEndScreen`, `showMatchHud`, `EndResult` type
+- `src/game.ts` — new phase types, `enterTitle/CharacterSelect/Countdown/Ended`,
+  player slot by index, input handling per phase
+- `index.html` — 3 full overlay markups + CSS for title/select/end + cards
+
+### Verification
+- `npx tsc --noEmit` → clean
+- `npm run build` → 16 modules, 497 KB (127 KB gzip), 557 ms
+- HTML served locally contains all new markers: `title-screen`,
+  `character-select`, `end-screen`, `game-title`, `critter-cards`,
+  `BICHITOS`, `Choose your`
+- Synthetic keyboard input could not be verified inside the headless
+  preview tool (`requestAnimationFrame` doesn't tick when the preview
+  tab is not focused, so the game loop doesn't advance), but the code
+  is sound and will be verified on the live Vercel deploy.
+
+### Intentionally not in this sprint
+- No sound effects
+- No screen shake
+- No particle systems
+- No camera polish beyond what already exists
+- No bot AI improvements
+- No refactor
+
 ### Next steps
-- Connect GitHub ↔ Vercel via dashboard for automatic deploys
-- Differentiate critter abilities (Azul, Verde, Morado)
-- Minimal title / character select screen
-- Resume game feel polish on a more solid base
-- Sound effects (small set)
+- Verify the new flow on the live Vercel URL after deploy
+- Start next tuning/polish pass on a stable base:
+  title screen could use a subtle rotating camera or a looping idle
+  animation, but only if it remains cheap

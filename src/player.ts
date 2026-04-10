@@ -3,8 +3,16 @@ import { activateAbility } from './abilities';
 import { FEEL } from './gamefeel';
 
 const keys: Record<string, boolean> = {};
+// "Fresh" keys = keys that have been pressed since the last consumeKey call.
+// Edge-detected: a held key only produces one entry per physical press.
+const freshKeys: Set<string> = new Set();
 
-window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+window.addEventListener('keydown', (e) => {
+  if (!e.repeat) {
+    freshKeys.add(e.code);
+  }
+  keys[e.code] = true;
+});
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
 export function updatePlayer(critter: Critter, dt: number): void {
@@ -54,4 +62,18 @@ export function updatePlayer(critter: Critter, dt: number): void {
 
 export function isRestartPressed(): boolean {
   return !!keys['KeyR'];
+}
+
+/** Edge-detected: returns true exactly once per physical key press. */
+export function consumeKey(code: string): boolean {
+  if (freshKeys.has(code)) {
+    freshKeys.delete(code);
+    return true;
+  }
+  return false;
+}
+
+/** Clear all pending fresh-key edges (useful when switching phases). */
+export function clearFreshKeys(): void {
+  freshKeys.clear();
 }

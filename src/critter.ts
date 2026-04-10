@@ -9,13 +9,35 @@ export interface CritterConfig {
   speed: number;
   mass: number;
   headbuttForce: number;
+  role: string;           // short label for identity (e.g. "Balanced")
+  tagline: string;        // one-line description for character select
 }
 
 export const CRITTER_PRESETS: CritterConfig[] = [
-  { name: 'Rojo', color: 0xe74c3c, speed: 10, mass: 1.0, headbuttForce: 14 },
-  { name: 'Azul', color: 0x3498db, speed: 9, mass: 0.9, headbuttForce: 12 },
-  { name: 'Verde', color: 0x2ecc71, speed: 7, mass: 1.2, headbuttForce: 16 },
-  { name: 'Morado', color: 0x9b59b6, speed: 10, mass: 0.8, headbuttForce: 11 },
+  {
+    name: 'Rojo', color: 0xe74c3c,
+    speed: 10, mass: 1.0, headbuttForce: 14,
+    role: 'Balanced',
+    tagline: 'All-rounder. Easy to use.',
+  },
+  {
+    name: 'Azul', color: 0x3498db,
+    speed: 11, mass: 0.85, headbuttForce: 12,
+    role: 'Skirmisher',
+    tagline: 'Fast and light. Hit and run.',
+  },
+  {
+    name: 'Verde', color: 0x2ecc71,
+    speed: 7, mass: 1.4, headbuttForce: 17,
+    role: 'Crusher',
+    tagline: 'Slow but devastating.',
+  },
+  {
+    name: 'Morado', color: 0x9b59b6,
+    speed: 10, mass: 0.75, headbuttForce: 11,
+    role: 'Glass Cannon',
+    tagline: 'High risk, high reward.',
+  },
 ];
 
 const BODY_RADIUS = 0.5;
