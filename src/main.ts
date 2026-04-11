@@ -5,6 +5,7 @@ import { updateCameraShake } from './gamefeel';
 import { initPreview, tickPreview } from './preview';
 import { isLikelyMobile } from './input';
 import { initTouchInput } from './input-touch';
+import { loadMutedState, toggleMuted, isMuted } from './audio';
 
 // ---------------------------------------------------------------------------
 // WebGL diagnostic + renderer creation
@@ -81,6 +82,23 @@ if (previewCanvas) {
 // and a narrow viewport. Keyboard backend is always on regardless.
 if (isLikelyMobile()) {
   initTouchInput();
+}
+
+// Audio settings: load persisted mute state + wire the top-right button
+loadMutedState();
+const btnSound = document.getElementById('btn-sound') as HTMLButtonElement | null;
+if (btnSound) {
+  const refreshSoundBtn = () => {
+    const m = isMuted();
+    btnSound.textContent = m ? '🔇' : '🔊';
+    btnSound.classList.toggle('muted', m);
+    btnSound.title = m ? 'Unmute sound' : 'Mute sound';
+  };
+  refreshSoundBtn();
+  btnSound.addEventListener('click', () => {
+    toggleMuted();
+    refreshSoundBtn();
+  });
 }
 
 // Game

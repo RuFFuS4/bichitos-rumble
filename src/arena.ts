@@ -5,6 +5,19 @@ const ARENA_SEGMENTS = 64;
 const ARENA_HEIGHT = 1.2;       // visible thickness from the side
 const COLLAPSE_RINGS = 6;
 
+// Warning before a ring actually disappears. During this window the ring
+// is still standable (isOnArena stays true), but it blinks red with an
+// accelerating rhythm so players have time to step off.
+const WARNING_DURATION = 1.5;   // seconds
+const WARNING_BASE_RATE = 4;    // blinks per second at start
+const WARNING_PEAK_RATE = 16;   // blinks per second at the end
+
+interface CollapseWarning {
+  ring: THREE.Group;
+  ringIndex: number;    // index in this.rings array
+  timer: number;        // seconds remaining until disappear
+}
+
 export class Arena {
   currentRadius = ARENA_RADIUS;
   group: THREE.Group;
@@ -12,6 +25,7 @@ export class Arena {
   private rings: THREE.Group[] = [];
   private collapseIndex = 0;
   private collapseTimer = 0;
+  private warnings: CollapseWarning[] = [];
 
   constructor(scene: THREE.Scene) {
     this.group = new THREE.Group();
@@ -89,29 +103,24 @@ export class Arena {
     scene.add(this.group);
   }
 
+  /**
+   * Schedule the next outer ring for collapse.
+   * The ring stays visible and standable until its warning runs out;
+   * only then does it actually disappear and the currentRadius shrink.
+   */
   collapseNext(): boolean {
     if (this.collapseIndex >= this.rings.length) return false;
 
     const outerIdx = this.rings.length - 1 - this.collapseIndex;
     const ring = this.rings[outerIdx];
 
-    // Flash red on all meshes in this ring group
-    ring.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        const mat = child.material as THREE.MeshStandardMaterial;
-        mat.color.set(0xff3333);
-        mat.emissive.set(0xff1111);
-        mat.emissiveIntensity = 0.6;
-      }
+    this.warnings.push({
+      ring,
+      ringIndex: outerIdx,
+      timer: WARNING_DURATION,
     });
 
-    setTimeout(() => {
-      ring.visible = false;
-    }, 600);
-
     this.collapseIndex++;
-    const ringWidth = ARENA_RADIUS / COLLAPSE_RINGS;
-    this.currentRadius = ARENA_RADIUS - this.collapseIndex * ringWidth;
     return this.collapseIndex < this.rings.length;
   }
 
@@ -120,6 +129,43 @@ export class Arena {
     if (this.collapseTimer >= intervalSec) {
       this.collapseTimer = 0;
       this.collapseNext();
+    }
+
+    // Tick pending warnings: blink red with accelerating rate, then disappear
+    for (let i = this.warnings.length - 1; i >= 0; i--) {
+      const w = this.warnings[i];
+      w.timer -= dt;
+
+      if (w.timer <= 0) {
+        // Actually disappear + shrink radius NOW
+        w.ring.visible = false;
+        const ringWidth = ARENA_RADIUS / COLLAPSE_RINGS;
+        this.currentRadius = Math.max(0, this.currentRadius - ringWidth);
+        this.warnings.splice(i, 1);
+        continue;
+      }
+
+      // t goes 0 → 1 across the warning duration
+      const t = 1 - w.timer / WARNING_DURATION;
+      // Blink rate ramps up as we approach disappear
+      const rate = WARNING_BASE_RATE + (WARNING_PEAK_RATE - WARNING_BASE_RATE) * t;
+      // Square wave blink (crisper than sine)
+      const phase = (Date.now() * 0.001 * rate) % 1;
+      const on = phase < 0.5;
+
+      // Intensity ramps up too — starts subtle, ends loud
+      const maxIntensity = 0.3 + t * 0.7;
+      const intensity = on ? maxIntensity : 0.0;
+      const color = on ? 0xff3333 : 0x5c2020;
+
+      w.ring.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          const mat = child.material as THREE.MeshStandardMaterial;
+          mat.color.setHex(color);
+          mat.emissive.setHex(on ? 0xff1111 : 0x000000);
+          mat.emissiveIntensity = intensity;
+        }
+      });
     }
   }
 
@@ -131,6 +177,7 @@ export class Arena {
     this.collapseIndex = 0;
     this.collapseTimer = 0;
     this.currentRadius = ARENA_RADIUS;
+    this.warnings.length = 0;
     for (let i = 0; i < this.rings.length; i++) {
       const ring = this.rings[i];
       ring.visible = true;

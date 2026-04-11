@@ -26,11 +26,16 @@
 - [x] End screen with per-result messaging
 
 ## Polish Targets
-- [ ] Sound effects
-- [ ] Screen shake on hit
-- [ ] Particle effects
+- [x] Sound effects (6 synthesized via Web Audio API)
+- [x] Sound toggle button (top-right) with localStorage persistence
+- [x] Screen shake on headbutt and ground pound
+- [x] Hit flash on impact
+- [x] Arena ring warning blink (1.5s) before collapse
+- [x] Immunity blink on respawn
+- [ ] Particle effects (beyond shockwave rings)
 - [x] Title screen
 - [x] Victory/defeat screen
+- [x] 3D rotatable preview in character select
 
 ## Deployment
 - [x] `vercel.json` with SPA rewrites config (in repo root)
@@ -41,7 +46,8 @@
 - [x] Custom domain `www.bichitosrumble.com` aliased to production
 - [x] SPA rewrite verified (`/test`, `/random-route` → 200, serve game)
 - [x] Final build tested on Vercel public URL
-- [ ] GitHub ↔ Vercel auto-deploy on push (manual dashboard step pending)
-- [ ] Production branch set to `main` in Vercel dashboard (auto-deploy step)
-- [ ] Preview deployments working on `dev` branch (auto-deploy step)
-- [ ] Mobile responsiveness checked
+- [x] GitHub ↔ Vercel auto-deploy on push (dev → preview, main → production)
+- [x] Production branch set to `main` in Vercel dashboard
+- [x] Preview deployments working on `dev` branch
+- [x] Mobile support (virtual joystick, action buttons, landscape lock, tap menus)
+- [ ] Full cross-device playtest report

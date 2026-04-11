@@ -32,6 +32,32 @@
       text-shadow: 0 3px 8px rgba(0,0,0,0.8);
       pointer-events: auto;
     }
+    /* Top-right settings cluster (sound toggle, etc.) */
+    #hud-settings {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      display: flex;
+      gap: 6px;
+      pointer-events: auto;
+    }
+    .settings-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .settings-btn:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.4); }
+    .settings-btn.muted { opacity: 0.55; }
     #overlay .sub {
       font-size: 18px;
       margin-top: 8px;
@@ -362,6 +388,51 @@
       margin-bottom: 24px;
     }
 
+    /* ---------- Desktop/touch hint visibility ---------- */
+    /* Hints shown only when keyboard is the primary input */
+    body.touch-mode .desktop-only { display: none !important; }
+    /* Hints shown only on touch devices */
+    .touch-only { display: none; }
+    body.touch-mode .touch-only { display: inline; }
+
+    /* ---------- Landscape lock (portrait prompt) ---------- */
+    #rotate-prompt {
+      position: fixed;
+      inset: 0;
+      background: #0a0a18;
+      color: #fff;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 20px;
+      z-index: 9999;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      padding: 30px;
+      text-align: center;
+    }
+    #rotate-prompt .rotate-icon {
+      font-size: 64px;
+      animation: rotate-hint 2s ease-in-out infinite;
+    }
+    #rotate-prompt .rotate-text {
+      font-size: 18px;
+      letter-spacing: 1px;
+      opacity: 0.9;
+    }
+    #rotate-prompt .rotate-sub {
+      font-size: 13px;
+      opacity: 0.6;
+    }
+    @keyframes rotate-hint {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(90deg); }
+    }
+    /* Only activate the rotate prompt for touch devices in portrait */
+    @media (orientation: portrait) {
+      body.touch-mode #rotate-prompt { display: flex; }
+    }
+
     /* ---------- Mobile touch controls ---------- */
     #touch-controls {
       position: fixed;
@@ -469,6 +540,9 @@
       <div id="hud-lives"></div>
       <span id="hud-timer">2:00</span>
     </div>
+    <div id="hud-settings">
+      <button id="btn-sound" class="settings-btn" title="Toggle sound">🔊</button>
+    </div>
     <div id="overlay" style="display:none;"></div>
     <div id="ability-bar-container"></div>
   </div>
@@ -476,8 +550,10 @@
   <div id="title-screen" class="full-overlay hidden">
     <h1 class="game-title">BICHITOS<br><span class="rumble">RUMBLE</span></h1>
     <p class="tagline">HEADBUTT YOUR RIVALS INTO THE VOID</p>
-    <div class="prompt">Press <kbd>SPACE</kbd> to start</div>
-    <div class="controls-hint">WASD move · SPACE headbutt · J/K abilities · R restart</div>
+    <div class="prompt desktop-only">Press <kbd>SPACE</kbd> to start</div>
+    <div class="prompt touch-only">Tap to start</div>
+    <div class="controls-hint desktop-only">WASD move · SPACE headbutt · J/K abilities · R restart</div>
+    <div class="controls-hint touch-only">Joystick to move · buttons for headbutt and abilities</div>
   </div>
 
   <div id="character-select" class="full-overlay hidden">
@@ -494,13 +570,21 @@
         </div>
       </div>
     </div>
-    <div class="prompt"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate</div>
+    <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate</div>
+    <div class="prompt touch-only">Tap a slot to select · tap again to confirm · drag preview to rotate</div>
   </div>
 
   <div id="end-screen" class="full-overlay hidden">
     <div class="end-result" id="end-result">Result</div>
     <div class="end-subtitle" id="end-subtitle"></div>
-    <div class="prompt"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
+    <div class="prompt desktop-only"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
+    <div class="prompt touch-only">Tap to play again</div>
+  </div>
+
+  <div id="rotate-prompt">
+    <div class="rotate-icon">📱</div>
+    <div class="rotate-text">Please rotate your device</div>
+    <div class="rotate-sub">Bichitos Rumble is designed for landscape</div>
   </div>
   <div id="touch-controls">
     <div id="touch-joystick">

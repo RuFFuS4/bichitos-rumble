@@ -14,6 +14,7 @@ import {
   showCharacterSelect, updateCharacterSelect, hideCharacterSelect,
   showEndScreen, hideEndScreen,
   showMatchHud,
+  setSlotClickHandler, setTitleTapHandler, setEndTapHandler,
   type EndResult,
 } from './hud';
 import { applyHitStop, FEEL } from './gamefeel';
@@ -56,6 +57,33 @@ export class Game {
     // values that will be rebuilt when the player picks their critter.
     this.player = this.critters[0];
     this.playerIndex = 0;
+
+    // Wire up tap/click handlers for menu UX (desktop click + mobile tap)
+    setSlotClickHandler((idx: number) => {
+      if (this.phase !== 'character_select') return;
+      if (idx >= CRITTER_PRESETS.length) return; // locked slot
+      if (idx === this.selectedIdx) {
+        // Tap on already-selected slot → confirm
+        this.enterCountdown();
+      } else {
+        // Tap on different slot → select it and refresh preview
+        this.selectedIdx = idx;
+        updateCharacterSelect(CRITTER_PRESETS, this.selectedIdx);
+        swapPreviewCritter(CRITTER_PRESETS[this.selectedIdx]);
+      }
+    });
+
+    setTitleTapHandler(() => {
+      if (this.phase === 'title') {
+        this.enterCharacterSelect();
+      }
+    });
+
+    setEndTapHandler(() => {
+      if (this.phase === 'ended') {
+        this.enterCountdown();
+      }
+    });
 
     this.enterTitle();
   }

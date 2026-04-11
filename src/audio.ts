@@ -68,11 +68,29 @@ function getNoiseBuffer(): AudioBuffer | null {
 // Public API
 // ---------------------------------------------------------------------------
 
+const STORAGE_KEY = 'bichitos.muted';
+
+/** Load the muted state from localStorage (called once at init). */
+export function loadMutedState(): void {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === '1') muted = true;
+  } catch { /* ignore private-mode errors */ }
+}
+
 export function setMuted(value: boolean): void {
   muted = value;
+  try {
+    localStorage.setItem(STORAGE_KEY, value ? '1' : '0');
+  } catch { /* ignore */ }
   if (masterGain && ctx) {
     masterGain.gain.setTargetAtTime(value ? 0 : MASTER_VOLUME, ctx.currentTime, 0.05);
   }
+}
+
+export function toggleMuted(): boolean {
+  setMuted(!muted);
+  return muted;
 }
 
 export function isMuted(): boolean {

@@ -75,8 +75,15 @@ export class Critter {
     this.abilityStates = createAbilityStates(config.name);
 
     // Body — small sphere
+    // NOTE: transparent: true is set from the start so the immunity blink
+    // actually works. Without it, Three.js would need needsUpdate=true to
+    // recompile the shader when toggling transparency mid-frame.
     const bodyGeo = new THREE.SphereGeometry(BODY_RADIUS, 16, 12);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: config.color });
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: config.color,
+      transparent: true,
+      opacity: 1.0,
+    });
     this.body = new THREE.Mesh(bodyGeo, bodyMat);
     this.body.position.y = BODY_RADIUS;
     this.body.castShadow = true;
@@ -88,6 +95,8 @@ export class Critter {
       color: config.color,
       emissive: config.color,
       emissiveIntensity: 0.15,
+      transparent: true,
+      opacity: 1.0,
     });
     this.head = new THREE.Mesh(headGeo, headMat);
     this.head.position.y = BODY_RADIUS * 2 + HEAD_RADIUS * 0.6;
@@ -281,17 +290,25 @@ export class Critter {
     this.head.position.y = BODY_RADIUS * 2 + HEAD_RADIUS * 0.6 + headOffsetY;
 
     // --- Immunity blink ---
+    // Materials are initialized with transparent: true so opacity changes
+    // always apply. Blink is a square wave (not sine) for a crisper on/off.
     if (this.immunityTimer > 0) {
-      const blink = Math.sin(Date.now() * 0.001 * FEEL.lives.blinkRate * Math.PI * 2) > 0;
-      headMat.opacity = blink ? 1.0 : 0.3;
-      bodyMat.opacity = blink ? 1.0 : 0.3;
-      headMat.transparent = true;
-      bodyMat.transparent = true;
+      const phase = (Date.now() * 0.001 * FEEL.lives.blinkRate) % 1;
+      const visible = phase < 0.5;
+      const opacity = visible ? 1.0 : 0.15;
+      headMat.opacity = opacity;
+      bodyMat.opacity = opacity;
+      // Also add a white emissive tint on the "on" frames for extra visibility
+      if (visible) {
+        headMat.emissive.setHex(0xffffff);
+        headMat.emissiveIntensity = 0.8;
+        bodyMat.emissive.setHex(0xffffff);
+        bodyMat.emissiveIntensity = 0.5;
+      }
     } else {
+      // Restore fully opaque (transparent stays true — it's harmless when opacity = 1)
       headMat.opacity = 1.0;
       bodyMat.opacity = 1.0;
-      headMat.transparent = false;
-      bodyMat.transparent = false;
     }
   }
 

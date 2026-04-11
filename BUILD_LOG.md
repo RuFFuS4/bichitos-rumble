@@ -821,9 +821,147 @@ don't exist. A mobile user with an external keyboard would get both.
 - Winner posing screen (documented, not built)
 - Per-critter pedestals (documented, not built)
 
+## 2026-04-10 — Sprint: Playtest fixes + docs refresh
+
+First playtest report from the user surfaced 4 concrete issues. Small,
+targeted fixes. No refactor. Also a full docs refresh across the project.
+
+### Playtest issues reported and fixed
+
+**1. Immunity blink was invisible**
+Root cause: the critter materials were created without `transparent: true`.
+When `updateVisuals()` tried to set opacity and flip transparent mid-frame,
+Three.js silently ignored the opacity changes (would need `needsUpdate`
+to recompile the shader).
+
+Fix:
+- Materials now initialized with `transparent: true, opacity: 1.0` from
+  the constructor. Harmless when fully opaque.
+- Blink uses a **square wave** (not sine) for crisper on/off
+- During "on" frames: white emissive tint at intensity 0.8 (head) / 0.5 (body)
+- During "off" frames: opacity drops to **0.15** (was 0.3, now clearly
+  dramatic)
+- Rate remains at `FEEL.lives.blinkRate` (8 Hz)
+
+**2. Arena rings disappeared with no warning**
+Root cause: the old code turned the ring red and called `setTimeout` for
+600 ms before hiding. No blink, no margin — and the `currentRadius`
+shrunk IMMEDIATELY, so critters on the ring were already "off arena"
+during those 600 ms and started falling.
+
+Fix: rewrote `arena.ts` with a proper warning system.
+- New `CollapseWarning` struct tracked in `this.warnings[]`
+- Each warning has a 1.5s timer during which the ring blinks red with an
+  accelerating rhythm (4 Hz → 16 Hz over the warning duration)
+- Intensity ramps up too (0.3 → 1.0)
+- Square-wave blink for crispness
+- **Critically**: `currentRadius` is NOT shrunk until the ring actually
+  disappears at the end of the warning. Players have real physical
+  margin to step off during the blink.
+- The 20s collapse interval kept — effective playable time per ring is
+  18.5s + 1.5s warning
+
+**3. Sound toggle button**
+Added a top-right settings cluster with a single 🔊/🔇 toggle button.
+- `src/audio.ts` exposes `toggleMuted()`, `loadMutedState()`,
+  `isMuted()`
+- Mute state persisted in localStorage under `bichitos.muted`
+- Loaded at init in `main.ts` before the button wiring
+- Button reflects state visually (icon + `.muted` class for opacity)
+- Only one toggle for now (covers all SFX since there's no music yet);
+  settings UI has room for a second button when/if music is added
+
+**4. Mobile UX fixes**
+User couldn't play on mobile because:
+- "Press SPACE to start" was shown but there's no keyboard
+- No way to confirm character selection without a keyboard
+- End screen asked for "R to restart"
+- Portrait mode was the default and broke the layout
+- Desktop hints cluttered the mobile screen
+
+Fixes:
+
+*Portrait landscape lock*:
+- New `#rotate-prompt` overlay with a rotating phone icon and "Please
+  rotate your device" text
+- CSS `@media (orientation: portrait)` + `body.touch-mode` combo → only
+  appears on touch devices in portrait, invisible on desktop
+
+*Desktop/touch hint differentiation*:
+- Added `.desktop-only` and `.touch-only` CSS classes
+- `body.touch-mode .desktop-only { display: none !important }` hides
+  keyboard hints on mobile
+- Without `body.touch-mode`, `.touch-only` elements are hidden
+- Title, character select, and end screens now carry both versions of
+  their prompt text
+
+*Tap menus*:
+- `hud.ts` registers click listeners on the title screen and end screen
+  overlays (work for both mouse click and touch tap)
+- Exposes `setTitleTapHandler`, `setEndTapHandler`, `setSlotClickHandler`
+  for game.ts to wire phase transitions
+- `game.ts` registers: title tap → enterCharacterSelect, end tap →
+  enterCountdown, slot click → select-or-confirm logic
+- Slot click on unselected slot → select + refresh preview
+- Slot click on already-selected slot → confirm and enter match
+- Locked slots ignore clicks
+- The keyboard flow still works unchanged (arrow keys + Space + T)
+
+### Files created / modified
+**Modified only** (no new files this sprint):
+- `src/critter.ts` — materials with transparent: true, dramatic blink
+- `src/arena.ts` — collapse warning system, deferred radius shrink
+- `src/audio.ts` — toggleMuted, loadMutedState, localStorage persistence
+- `src/hud.ts` — settings button ref, tap handlers + setters,
+  setSlotClickHandler with select-or-confirm logic
+- `src/game.ts` — wire tap/click handlers in constructor
+- `src/main.ts` — load mute state, wire sound button
+- `index.html` — settings button, rotate prompt, desktop-only/touch-only
+  classes on all menu hints
+
+### Docs refreshed in this sprint
+- **STACK.md**: added `audio.ts`, `input.ts`, `input-touch.ts`,
+  `preview.ts` to the architecture list; updated `player.ts` description
+  to reflect input abstraction
+- **GAME_DESIGN.md**: updated Rojo abilities table with current values,
+  added per-critter ability listings for Azul/Verde/Morado, updated
+  Arena section with warning blink, updated Phase 1 → Current Scope,
+  Game Feel section expanded with shake/flash/immunity/ring-warning/audio
+- **RULES.md**: updated match duration (90 → 120), collapse interval
+  (15 → 20), critter stats table (new speed/mass/power values per
+  preset), added mobile controls section, added per-critter ability
+  table, added lives + immunity mechanics
+- **SUBMISSION_CHECKLIST.md**: checked off sound effects, screen shake,
+  hit flash, arena warning, immunity blink, rotatable preview; checked
+  off git auto-deploy and mobile support in Deployment
+- **README.md**: updated Deployment section (git auto-deploy is now
+  active), added Mobile controls section, updated Tech Stack (two
+  renderers, Web Audio), updated Status to v0.3
+- **MEMORY.md**: added Mobile Support, Audio, Arena Collapse, and
+  Immunity Blink sections with the decisions made this sprint
+
+Not touched:
+- `CLAUDE.md` — project rules, unchanged
+- `ULTI_DESIGN.md` — future design, unchanged
+- `ERROR_LOG.md` — no new recurring errors
+- `PROMPTS.md` — only the initial kickoff prompt, sprint history is in
+  BUILD_LOG instead
+
+### Verification
+- `npx tsc --noEmit` → clean
+- `npm run build` → 509 KB (130 KB gzip), 604 ms
+- Size growth: +1.5 KB vs previous sprint
+
+### Intentionally NOT in this sprint
+- ULTI system implementation (still awaiting go)
+- Winner posing screen (documented, not built)
+- Per-critter pedestals (documented, not built)
+- Background music (settings button has room when added)
+- Touch UI visual polish beyond functional
+
 ### Next sprint options
-1. **Implement ULTI system** following `ULTI_DESIGN.md` (5-6 h)
+1. **Implement ULTI system** following `ULTI_DESIGN.md` (5–6 h)
 2. **Winner posing screen** on end overlay using preview.ts
 3. **Per-critter pedestals** in the preview scene
-4. **Audio settings** (mute toggle in HUD + persistence)
-5. **Playtest report** from the user to decide tuning priorities
+4. **Playtest report round 2** on the fixes delivered in this sprint
+5. **Background music** (would also need a second toggle button)

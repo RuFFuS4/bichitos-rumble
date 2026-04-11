@@ -83,10 +83,39 @@
 ## Deployment
 - Public URL: https://www.bichitosrumble.com (custom domain aliased)
 - Vercel project: ruffus4s-projects/bichitos-rumble
-- Manual deploy: `npx vercel deploy --prod` from project root
+- GitHub ↔ Vercel auto-deploy ACTIVE: main → prod, dev → preview
 - vercel.json with SPA rewrite verified working in production
-- GitHub ↔ Vercel push-triggered deploys NOT yet wired (manual dashboard step)
 - `.vercel/` is in `.gitignore` (auto by `vercel link`)
+
+## Mobile Support
+- Detection via capability probing: `hasTouchSupport()` + `isNarrowViewport(900)` → `isLikelyMobile()`
+- Touch backend (`src/input-touch.ts`) only initialized if mobile-leaning
+- Landscape orientation is REQUIRED — portrait shows a rotation prompt via CSS media query
+- Hints in menus use `.desktop-only` and `.touch-only` CSS classes
+- Tap handlers on title/end overlays (HUD layer), slot click handlers in character select
+- Touch UI hidden by default, shown via `body.touch-mode` class
+- Keyboard backend remains active on mobile too (external keyboards work)
+
+## Audio
+- Web Audio API synthesized (no asset files): `src/audio.ts`
+- 6 sounds: headbuttHit, groundPound, abilityFire, fall, respawn, victory
+- Mute state persisted in localStorage key `bichitos.muted`
+- Top-right 🔊/🔇 button toggles mute, reflects state visually
+- AudioContext lazily created on first `play()` call (respects autoplay policies)
+
+## Arena Collapse (updated)
+- 6 rings, one collapses every 20s starting at ring 0 (outermost)
+- 1.5s warning BEFORE disappearance: ring blinks red with accelerating rate
+  (WARNING_BASE_RATE 4 → WARNING_PEAK_RATE 16 blinks/s)
+- Ring is STANDABLE during warning — `currentRadius` only shrinks when the
+  ring actually disappears, so players have real margin to step off
+
+## Immunity Blink
+- Materials MUST be initialized with `transparent: true` from the start.
+  Toggling transparency mid-frame requires `needsUpdate = true` and is flaky.
+- Blink uses square wave (not sine) for crisper on/off
+- During "on" frame: white emissive at 0.8 intensity on head, 0.5 on body
+- During "off" frame: opacity 0.15 (was 0.3, now more dramatic)
 
 ## Critter identity (implemented)
 - Rojo: Balanced. Standard stats and abilities (FEEL defaults).

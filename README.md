@@ -18,33 +18,45 @@ npm run dev
 ## Deployment
 
 Configured for Vercel via `vercel.json` (SPA rewrites + Vite framework).
+GitHub ↔ Vercel auto-deploy is connected:
+- Push to `main` → production (`www.bichitosrumble.com`)
+- Push to `dev` → preview URL (auto-generated per push)
 
-Current state:
-- Production URL: `https://www.bichitosrumble.com` (custom domain, public)
-- Vercel project: `ruffus4s-projects/bichitos-rumble`
-- Manual deploys: `npx vercel deploy --prod` from project root
-
-To enable automatic push-triggered deploys (`main` → prod, `dev` → preview),
-connect the GitHub repo from the Vercel dashboard:
-Project → Settings → Git → Connect Git Repository.
+Project: `ruffus4s-projects/bichitos-rumble`.
 
 ## Controls
 
+### Desktop
 | Key | Action |
 |-----|--------|
 | WASD / Arrow Keys | Move |
 | Space | Headbutt |
 | J | Ability 1 |
 | K | Ability 2 |
-| R | Restart (after match ends) |
+| R | Restart / confirm |
+| T / Esc | Back to title |
+
+Top-right button: toggle all sound (state persists in localStorage).
+
+### Mobile
+- Virtual joystick bottom-left for movement
+- Three action buttons bottom-right: J / ⚡ headbutt (large) / K
+- Tap title/end screens to continue, tap a critter slot to select (tap again to confirm)
+- Drag the 3D character preview in the select screen to rotate it
+- **Landscape orientation required** (portrait shows a rotation prompt)
 
 ## Tech Stack
 
 - TypeScript + Vite
-- Three.js for 3D rendering
-- No backend required for the prototype
-- Vercel deployment configured (see `vercel.json`)
+- Three.js for 3D rendering (two isolated renderers: main arena + menu preview)
+- Web Audio API for synthesized SFX (no asset files)
+- No backend
+- Vercel deployment
 
 ## Status
 
-Phase 1: Local prototype with bots. See [BUILD_LOG.md](BUILD_LOG.md) for progress.
+v0.3 "core gameplay loop" is the current tag on `main`. Full playable flow
+(title → character select → match → end screen) with mobile support,
+differentiated critters, audio, and game feel pass. See
+[BUILD_LOG.md](BUILD_LOG.md) for sprint history and [ULTI_DESIGN.md](ULTI_DESIGN.md)
+for the upcoming Ultimate Ability system.

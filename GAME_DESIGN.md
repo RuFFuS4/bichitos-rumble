@@ -46,21 +46,32 @@ Cartoon squashy arcade. Game feel over realism. Every action should feel exagger
 - **Mass**: affects knockback received (heavier = harder to move). Abilities can modify effective mass.
 - **Collision**: all critters push each other on overlap, headbutts amplify force 2.5x
 
-## Rojo's Abilities
+## Abilities (differentiated per critter)
+Each critter has 2 abilities. Same base types (dash + AoE) but different tuning. See `src/abilities.ts` for exact values.
+
+### Rojo — Balanced (baseline)
 | | Charge Rush (J) | Ground Pound (K) |
 |---|---|---|
-| Type | Directional dash | Radial AoE |
 | Cooldown | 4.0s | 6.0s |
-| Duration | 0.35s | Instant (after 0.25s wind-up) |
-| Effect | Speed x2.2, Mass x1.5, impulse burst | Knockback 18 in radius 3.5 |
-| Visual | Orange glow | Body squish + shockwave ring |
-| Synergy | Combo with headbutt for massive knockback | Push enemies toward arena edge |
+| Duration | 0.30s | Instant after 0.35s wind-up |
+| Effect | Speed ×2.5, Mass ×2.0, impulse 16 | Knockback 28 in radius 3.5 |
+
+### Azul — Skirmisher (fast, light, short cooldowns)
+- **Quick Dash** (J): impulse 22, cooldown 3.0s, mass ×1.4, speed ×2.7
+- **Sharp Stomp** (K): radius 2.8, force 20, cooldown 4.5s
+
+### Verde — Crusher (slow, heavy, devastating)
+- **Heavy Charge** (J): impulse 13, cooldown 5.0s, mass ×3.0, speed ×2.0
+- **Earthquake** (K): radius 4.2, force 34, cooldown 8.5s, wind-up 0.5s
+
+### Morado — Glass Cannon (fragile, high-burst)
+- **Blitz** (J): impulse 22, cooldown 3.0s, mass ×1.2, speed ×2.8
+- **Shockwave** (K): radius 3.2, force 34, cooldown 6.5s
 
 ## Arena
-- Circular, 12-unit radius
-- 6 concentric rings
-- Outer ring collapses first, working inward
-- Collapsed rings flash red then disappear
+- Circular, 12-unit radius, visible side walls
+- 6 concentric rings collapse outside → inside, one every 20 seconds
+- **Warning blink**: 1.5s before a ring disappears it blinks red with an accelerating rhythm. The ring stays standable during the warning so the player has time to step off.
 - Red rim glow marks the current edge
 
 ### Future: Organic Arena Collapse (not yet implemented)
@@ -83,25 +94,35 @@ Current system uses perfect circular rings. Future evolution:
 
 ## Game Feel (implemented)
 - **Hit stop**: brief freeze on headbutt (0.07s) and ground pound (0.09s)
+- **Camera shake**: on headbutt connect and on every ground pound slam
+- **Hit flash**: target critter flashes white briefly on every impact
 - **Squash/stretch**: bounce-overshoot scale deformation on impact, dash, landing
 - **Anticipation**: headbutt wind-up (head retract + body squash), ground pound (extreme squash + head drop)
 - **Recovery**: headbutt head bounce-back + body stretch, smooth return to neutral
 - **Knockback reaction**: critters tilt backward when hit (body + head rotation)
 - **Visual state contrast**: distinct glow colors per state (idle/anticipation/attack/ability/cooldown)
-- All systems in `gamefeel.ts`, visual-only, no gameplay logic coupling
+- **Immunity blink**: square-wave opacity blink + white emissive tint during respawn immunity
+- **Ring warning**: accelerating red blink on arena rings 1.5s before they disappear
+- **Synthesized SFX**: Web Audio API, 6 sounds, zero asset weight
+- All systems in `gamefeel.ts` / `audio.ts`, visual/audio-only, no gameplay logic coupling
 
-## Phase 1 Scope
-- 1 arena
-- 4 preset critters (all share Rojo's abilities for now)
-- Player controls Rojo
-- 3 bot opponents (chase + headbutt + ability heuristics)
+## Current Scope (v0.3-core-gameplay-loop)
+- 1 arena with visible side walls, void, and warning blinks
+- 4 playable critters with differentiated stats and abilities
+- Character select (3×3 grid with 3D rotatable preview)
+- Title screen and end screen with per-result messaging
+- Lives system with respawn + 1.5s immunity (visible blink)
+- 3 bot opponents (chase + headbutt + ability heuristics) — intentionally minimal
 - 2 abilities per critter with cooldown HUD
-- No character select (yet)
+- Synthesized SFX (Web Audio API, 6 sounds)
+- Mobile support: landscape lock, virtual joystick, action buttons, tap menus
+- Sound toggle button with localStorage persistence
 
 ## Future Phases
+- **Ultimate Ability system** (designed in ULTI_DESIGN.md, not implemented)
+- Winner posing screen (reuses `preview.ts` on end overlay)
+- Per-critter pedestals in the preview system
 - Organic/procedural arena collapse (irregular sectors instead of rings)
-- Unique abilities per critter (Azul, Verde, Morado)
-- Character select screen
 - More arenas
 - Online multiplayer
 - Ranking / belts

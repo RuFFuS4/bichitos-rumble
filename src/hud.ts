@@ -163,6 +163,34 @@ export function hideTitleScreen(): void {
   titleScreen.classList.add('hidden');
 }
 
+/** Callback registered by the game layer — invoked when a slot is clicked/tapped. */
+let slotClickHandler: ((idx: number) => void) | null = null;
+export function setSlotClickHandler(handler: (idx: number) => void): void {
+  slotClickHandler = handler;
+}
+
+// Tap-anywhere handlers on full-screen overlays — mobile menu UX.
+// Registered once at module init; the callbacks can be swapped by game.ts.
+let titleTapHandler: (() => void) | null = null;
+let endTapHandler: (() => void) | null = null;
+
+export function setTitleTapHandler(handler: () => void): void {
+  titleTapHandler = handler;
+}
+export function setEndTapHandler(handler: () => void): void {
+  endTapHandler = handler;
+}
+
+titleScreen.addEventListener('click', () => {
+  titleTapHandler?.();
+});
+endScreen.addEventListener('click', (e) => {
+  // Don't trigger if clicking on the kbd hint elements (let them be passive)
+  const target = e.target as HTMLElement;
+  if (target.closest('kbd')) return;
+  endTapHandler?.();
+});
+
 /**
  * Build the character select grid once on show. Fills `GRID_SLOTS` slots:
  * the first N match the presets (N = presets.length), the rest are shown
@@ -191,6 +219,13 @@ export function showCharacterSelect(presets: CritterConfig[], selectedIdx: numbe
 
       slot.appendChild(dot);
       slot.appendChild(name);
+
+      // Click/tap handler — tap on a non-selected slot selects it,
+      // tap on the already-selected slot confirms it.
+      const capturedIdx = i;
+      slot.addEventListener('click', () => {
+        slotClickHandler?.(capturedIdx);
+      });
     } else {
       slot.className = 'critter-slot locked';
 
