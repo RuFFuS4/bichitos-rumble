@@ -96,6 +96,24 @@
 - Touch UI hidden by default, shown via `body.touch-mode` class
 - Keyboard backend remains active on mobile too (external keyboards work)
 
+## Future: HUD and character select mobile restructure
+The current HUD and character select layouts were designed desktop-first
+and then patched for mobile. On narrow landscape phones some elements
+still compete for space:
+- The 3×3 critter grid + 3D preview + info panel is very wide and can
+  overflow on small landscape screens
+- The top HUD row (alive + timer / lives / settings) is tight
+- The touch controls (joystick + 3 buttons) eat ~200 px each side
+
+Future restructure ideas (NOT yet implemented):
+- Character select: stack grid and preview vertically on narrow screens
+  (`@media (max-width: 800px) and (orientation: landscape)` or similar)
+- Shrink the slot size on mobile, maybe 2×3 or 1×4 grid instead of 3×3
+- Move lives panel to the bottom-center above the ability bar so the
+  top HUD only has alive/timer on the left and settings on the right
+- Make settings buttons slightly smaller on mobile (30 px vs 36 px)
+- Consider a dedicated mobile stylesheet section after the current CSS
+
 ## Audio
 - Web Audio API synthesized (no asset files): `src/audio.ts`
 - 6 sounds: headbuttHit, groundPound, abilityFire, fall, respawn, victory

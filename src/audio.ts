@@ -22,7 +22,10 @@ export type SoundName =
 
 let ctx: AudioContext | null = null;
 let masterGain: GainNode | null = null;
-let muted = false;
+// SFX channel (all current sounds go here)
+let sfxMuted = false;
+// Music channel (no music yet — flag reserved for future)
+let musicMuted = false;
 
 const MASTER_VOLUME = 0.35;
 
@@ -43,7 +46,10 @@ function ensureContext(): boolean {
     if (!AC) return false;
     ctx = new AC();
     masterGain = ctx.createGain();
-    masterGain.gain.value = MASTER_VOLUME;
+    // Respect the current sfx mute state at context creation time. Without
+    // this, a user who muted before any sound played would have masterGain
+    // start at full volume when the context was lazily created.
+    masterGain.gain.value = sfxMuted ? 0 : MASTER_VOLUME;
     masterGain.connect(ctx.destination);
     return true;
   } catch {
@@ -65,40 +71,77 @@ function getNoiseBuffer(): AudioBuffer | null {
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// Public API — two independent channels: SFX and Music
+// ---------------------------------------------------------------------------
+//
+// SFX = all gameplay sounds (headbutt, ground pound, ability fire, fall,
+//       respawn, victory). Currently the only populated channel.
+// Music = background music. No sources yet — the toggle exists so the UI
+//         is ready for when we add it.
 // ---------------------------------------------------------------------------
 
-const STORAGE_KEY = 'bichitos.muted';
+const STORAGE_KEY_SFX = 'bichitos.sfxMuted';
+const STORAGE_KEY_MUSIC = 'bichitos.musicMuted';
 
-/** Load the muted state from localStorage (called once at init). */
+/** Load both mute states from localStorage. Called once at init. */
 export function loadMutedState(): void {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === '1') muted = true;
+    if (localStorage.getItem(STORAGE_KEY_SFX) === '1') sfxMuted = true;
+    if (localStorage.getItem(STORAGE_KEY_MUSIC) === '1') musicMuted = true;
   } catch { /* ignore private-mode errors */ }
 }
 
-export function setMuted(value: boolean): void {
-  muted = value;
+/**
+ * Mute/unmute the SFX channel. Applies INSTANTLY via setValueAtTime
+ * (not setTargetAtTime) so there's no audible tail when muting mid-combat.
+ * Any in-flight oscillators stop being audible immediately because their
+ * output flows through the masterGain node which is now at 0.
+ */
+export function setSfxMuted(value: boolean): void {
+  sfxMuted = value;
   try {
-    localStorage.setItem(STORAGE_KEY, value ? '1' : '0');
+    localStorage.setItem(STORAGE_KEY_SFX, value ? '1' : '0');
   } catch { /* ignore */ }
   if (masterGain && ctx) {
-    masterGain.gain.setTargetAtTime(value ? 0 : MASTER_VOLUME, ctx.currentTime, 0.05);
+    // Clear any pending scheduled values and jump the gain instantly.
+    masterGain.gain.cancelScheduledValues(ctx.currentTime);
+    masterGain.gain.setValueAtTime(value ? 0 : MASTER_VOLUME, ctx.currentTime);
   }
 }
 
-export function toggleMuted(): boolean {
-  setMuted(!muted);
-  return muted;
+export function toggleSfxMuted(): boolean {
+  setSfxMuted(!sfxMuted);
+  return sfxMuted;
 }
 
-export function isMuted(): boolean {
-  return muted;
+export function isSfxMuted(): boolean {
+  return sfxMuted;
+}
+
+/**
+ * Mute/unmute the Music channel. Placeholder for when we add background
+ * music — currently does nothing audible, but the state is persisted and
+ * the HUD button respects it.
+ */
+export function setMusicMuted(value: boolean): void {
+  musicMuted = value;
+  try {
+    localStorage.setItem(STORAGE_KEY_MUSIC, value ? '1' : '0');
+  } catch { /* ignore */ }
+  // TODO: connect to musicGain when music is added
+}
+
+export function toggleMusicMuted(): boolean {
+  setMusicMuted(!musicMuted);
+  return musicMuted;
+}
+
+export function isMusicMuted(): boolean {
+  return musicMuted;
 }
 
 export function play(sound: SoundName): void {
-  if (muted) return;
+  if (sfxMuted) return;
   if (!ensureContext() || !ctx || !masterGain) return;
 
   switch (sound) {

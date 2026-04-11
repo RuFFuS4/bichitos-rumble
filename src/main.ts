@@ -5,7 +5,11 @@ import { updateCameraShake } from './gamefeel';
 import { initPreview, tickPreview } from './preview';
 import { isLikelyMobile } from './input';
 import { initTouchInput } from './input-touch';
-import { loadMutedState, toggleMuted, isMuted } from './audio';
+import {
+  loadMutedState,
+  toggleSfxMuted, isSfxMuted,
+  toggleMusicMuted, isMusicMuted,
+} from './audio';
 
 // ---------------------------------------------------------------------------
 // WebGL diagnostic + renderer creation
@@ -84,21 +88,36 @@ if (isLikelyMobile()) {
   initTouchInput();
 }
 
-// Audio settings: load persisted mute state + wire the top-right button
+// Audio settings: load persisted mute states + wire the top-right buttons.
+// Two independent channels:
+//  - SFX  (all gameplay sounds)      → #btn-sfx
+//  - Music (placeholder, no audio yet) → #btn-music
 loadMutedState();
-const btnSound = document.getElementById('btn-sound') as HTMLButtonElement | null;
-if (btnSound) {
-  const refreshSoundBtn = () => {
-    const m = isMuted();
-    btnSound.textContent = m ? '🔇' : '🔊';
-    btnSound.classList.toggle('muted', m);
-    btnSound.title = m ? 'Unmute sound' : 'Mute sound';
+
+const btnSfx = document.getElementById('btn-sfx') as HTMLButtonElement | null;
+if (btnSfx) {
+  const refresh = () => {
+    const m = isSfxMuted();
+    btnSfx.textContent = m ? '🔇' : '🔊';
+    btnSfx.classList.toggle('muted', m);
+    btnSfx.title = m ? 'Enable sound effects' : 'Disable sound effects';
+    btnSfx.setAttribute('aria-pressed', m ? 'true' : 'false');
   };
-  refreshSoundBtn();
-  btnSound.addEventListener('click', () => {
-    toggleMuted();
-    refreshSoundBtn();
-  });
+  refresh();
+  btnSfx.addEventListener('click', () => { toggleSfxMuted(); refresh(); });
+}
+
+const btnMusic = document.getElementById('btn-music') as HTMLButtonElement | null;
+if (btnMusic) {
+  const refresh = () => {
+    const m = isMusicMuted();
+    btnMusic.textContent = m ? '🎵' : '🎶';
+    btnMusic.classList.toggle('muted', m);
+    btnMusic.title = m ? 'Enable music (not yet available)' : 'Disable music';
+    btnMusic.setAttribute('aria-pressed', m ? 'true' : 'false');
+  };
+  refresh();
+  btnMusic.addEventListener('click', () => { toggleMusicMuted(); refresh(); });
 }
 
 // Game

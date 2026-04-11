@@ -18,25 +18,24 @@
     #hud-top {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       padding: 12px 20px;
       font-size: 18px;
       text-shadow: 0 2px 4px rgba(0,0,0,0.7);
+      gap: 16px;
     }
-    #overlay {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      text-align: center;
-      font-size: 36px;
-      font-weight: bold;
-      text-shadow: 0 3px 8px rgba(0,0,0,0.8);
-      pointer-events: auto;
+    /* Left cluster: alive count + match timer */
+    #hud-top-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
     }
-    /* Top-right settings cluster (sound toggle, etc.) */
+    #hud-timer {
+      font-variant-numeric: tabular-nums;
+      opacity: 0.9;
+    }
+    /* Right cluster: settings buttons (SFX + music). Lives panel in the center. */
     #hud-settings {
-      position: absolute;
-      top: 10px;
-      right: 12px;
       display: flex;
       gap: 6px;
       pointer-events: auto;
@@ -53,11 +52,23 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.15s, border-color 0.15s;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
       -webkit-tap-highlight-color: transparent;
+      padding: 0;
+      line-height: 1;
     }
     .settings-btn:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.4); }
-    .settings-btn.muted { opacity: 0.55; }
+    .settings-btn.muted { opacity: 0.45; }
+    #overlay {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      font-size: 36px;
+      font-weight: bold;
+      text-shadow: 0 3px 8px rgba(0,0,0,0.8);
+      pointer-events: auto;
+    }
     #overlay .sub {
       font-size: 18px;
       margin-top: 8px;
@@ -536,12 +547,15 @@
 <body>
   <div id="hud">
     <div id="hud-top">
-      <span id="hud-alive">Alive: 4</span>
+      <div id="hud-top-left">
+        <span id="hud-alive">Alive: 4</span>
+        <span id="hud-timer">2:00</span>
+      </div>
       <div id="hud-lives"></div>
-      <span id="hud-timer">2:00</span>
-    </div>
-    <div id="hud-settings">
-      <button id="btn-sound" class="settings-btn" title="Toggle sound">🔊</button>
+      <div id="hud-settings">
+        <button id="btn-sfx" class="settings-btn" title="Disable sound effects" aria-pressed="false">🔊</button>
+        <button id="btn-music" class="settings-btn" title="Disable music" aria-pressed="false">🎶</button>
+      </div>
     </div>
     <div id="overlay" style="display:none;"></div>
     <div id="ability-bar-container"></div>
