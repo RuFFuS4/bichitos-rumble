@@ -18,6 +18,7 @@ import {
 } from './hud';
 import { applyHitStop, FEEL } from './gamefeel';
 import { showPreview, swapPreviewCritter, hidePreview } from './preview';
+import { play as playSound } from './audio';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended';
 
@@ -111,6 +112,9 @@ export class Game {
     this.phase = 'ended';
     hideOverlay();
     showEndScreen(result, title, subtitle);
+    if (result === 'win') {
+      playSound('victory');
+    }
   }
 
   // -------------------------------------------------------------------------

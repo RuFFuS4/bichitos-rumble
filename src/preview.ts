@@ -162,9 +162,13 @@ function buildPedestal(): void {
 function swapCritter(config: CritterConfig): void {
   if (!holder || !scene) return;
 
-  // Remove previous critter if any
+  // Remove previous critter and dispose all its GPU resources.
+  // Each Critter has 8 meshes (body, head, 2 eyes, 2 pupils), each with its
+  // own geometry + material. Without explicit dispose, Three.js will NOT
+  // release them and rapid arrow-key navigation would leak VRAM.
   if (critter) {
     holder.remove(critter.mesh);
+    disposeMeshTree(critter.mesh);
     critter = null;
   }
 
@@ -173,6 +177,22 @@ function swapCritter(config: CritterConfig): void {
   critter = new Critter(config, scene);
   scene.remove(critter.mesh);
   holder.add(critter.mesh);
+}
+
+/** Recursively dispose all geometries and materials in a mesh tree. */
+function disposeMeshTree(root: THREE.Object3D): void {
+  root.traverse((child) => {
+    if ((child as THREE.Mesh).isMesh) {
+      const mesh = child as THREE.Mesh;
+      mesh.geometry?.dispose();
+      const mat = mesh.material;
+      if (Array.isArray(mat)) {
+        for (const m of mat) m.dispose();
+      } else if (mat) {
+        mat.dispose();
+      }
+    }
+  });
 }
 
 function resize(): void {

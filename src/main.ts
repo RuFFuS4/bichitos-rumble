@@ -3,6 +3,8 @@ import { createCamera, handleResize, syncSize } from './camera';
 import { Game } from './game';
 import { updateCameraShake } from './gamefeel';
 import { initPreview, tickPreview } from './preview';
+import { isLikelyMobile } from './input';
+import { initTouchInput } from './input-touch';
 
 // ---------------------------------------------------------------------------
 // WebGL diagnostic + renderer creation
@@ -73,6 +75,12 @@ const baseCamZ = camera.position.z;
 const previewCanvas = document.getElementById('preview-canvas') as HTMLCanvasElement | null;
 if (previewCanvas) {
   initPreview(previewCanvas);
+}
+
+// Touch controls — activate only if the device reports touch capability
+// and a narrow viewport. Keyboard backend is always on regardless.
+if (isLikelyMobile()) {
+  initTouchInput();
 }
 
 // Game

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Critter } from './critter';
 import { triggerHitStop, triggerCameraShake, applyDashFeedback, applyLandingFeedback, applyImpactFeedback, FEEL } from './gamefeel';
+import { play as playSound } from './audio';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -190,6 +191,7 @@ function fireChargeRush(def: AbilityDef, critter: Critter): void {
   critter.vx += Math.sin(angle) * def.impulse;
   critter.vz += Math.cos(angle) * def.impulse;
   applyDashFeedback(critter);
+  playSound('abilityFire');
 }
 
 function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
@@ -216,6 +218,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
     triggerHitStop(FEEL.hitStop.groundPound);
   }
   spawnShockwaveRing(scene, critter.x, critter.z, def.radius);
+  playSound('groundPound');
 }
 
 const EFFECT_MAP: Record<AbilityType, (def: AbilityDef, critter: Critter, all: Critter[], scene: THREE.Scene) => void> = {

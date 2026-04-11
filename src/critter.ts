@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createAbilityStates, getSpeedMultiplier, getMassMultiplier } from './abilities';
 import type { AbilityState } from './abilities';
 import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
+import { play as playSound } from './audio';
 
 export interface CritterConfig {
   name: string;
@@ -300,6 +301,7 @@ export class Critter {
     this.falling = true;
     this.lives--;
     this.respawnTimer = FEEL.lives.respawnDelay;
+    playSound('fall');
   }
 
   /** Update falling state. Returns true if critter should respawn now. */
@@ -326,6 +328,7 @@ export class Critter {
     this.vz = 0;
     this.mesh.position.y = 0;
     this.immunityTimer = FEEL.lives.immunityDuration;
+    playSound('respawn');
     this.isHeadbutting = false;
     this.headbuttAnticipating = false;
     this.headbuttCooldown = 0;

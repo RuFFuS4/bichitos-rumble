@@ -361,6 +361,105 @@
       opacity: 0.7;
       margin-bottom: 24px;
     }
+
+    /* ---------- Mobile touch controls ---------- */
+    #touch-controls {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 50;
+      display: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body.touch-mode #touch-controls { display: block; }
+
+    #touch-joystick {
+      position: absolute;
+      bottom: 28px;
+      left: 28px;
+      width: 140px;
+      height: 140px;
+      pointer-events: auto;
+      touch-action: none;
+    }
+    .joystick-base {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+    }
+    .joystick-handle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 62px;
+      height: 62px;
+      margin-left: -31px;
+      margin-top: -31px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.3);
+      border: 2px solid rgba(255, 255, 255, 0.55);
+      transition: background 0.1s;
+      will-change: transform;
+    }
+    #touch-joystick.active .joystick-handle {
+      background: rgba(255, 220, 92, 0.45);
+    }
+
+    #touch-actions {
+      position: absolute;
+      bottom: 28px;
+      right: 28px;
+      width: 180px;
+      height: 180px;
+      pointer-events: none;
+    }
+    .touch-button {
+      position: absolute;
+      width: 74px;
+      height: 74px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      color: #fff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-weight: bold;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.08s, background 0.08s, border-color 0.08s;
+    }
+    .touch-button:active,
+    .touch-button.pressed {
+      transform: scale(0.92);
+      background: rgba(255, 220, 92, 0.35);
+      border-color: rgba(255, 220, 92, 0.9);
+    }
+    /* Layout: 3 buttons in a triangular cluster, thumb-friendly */
+    .touch-btn-headbutt {
+      bottom: 0;
+      right: 0;
+      width: 92px;
+      height: 92px;
+      font-size: 22px;
+    }
+    .touch-btn-j {
+      top: 0;
+      right: 60px;
+    }
+    .touch-btn-k {
+      bottom: 60px;
+      left: 0;
+    }
   </style>
 </head>
 <body>
@@ -403,6 +502,18 @@
     <div class="end-subtitle" id="end-subtitle"></div>
     <div class="prompt"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
   </div>
+  <div id="touch-controls">
+    <div id="touch-joystick">
+      <div class="joystick-base"></div>
+      <div class="joystick-handle"></div>
+    </div>
+    <div id="touch-actions">
+      <button class="touch-button touch-btn-j" data-action="ability1">J</button>
+      <button class="touch-button touch-btn-headbutt" data-action="headbutt">⚡</button>
+      <button class="touch-button touch-btn-k" data-action="ability2">K</button>
+    </div>
+  </div>
+
   <script type="module" src="/src/main.ts"></script>
   <!-- Vibe Coding Game Jam 2026 widget (required for submission) -->
   <script async src="https://jam.pieter.com/2026/widget.js"></script>

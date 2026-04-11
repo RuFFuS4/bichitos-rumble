@@ -1,6 +1,7 @@
 import { Critter } from './critter';
 import { Arena } from './arena';
 import { triggerHitStop, applyImpactFeedback, triggerCameraShake, FEEL } from './gamefeel';
+import { play as playSound } from './audio';
 
 /** Check and resolve collisions between all critters. */
 export function resolveCollisions(critters: Critter[]): void {
@@ -49,6 +50,7 @@ export function resolveCollisions(critters: Critter[]): void {
           triggerHitStop(FEEL.hitStop.headbutt);
           triggerCameraShake(FEEL.shake.headbutt);
           applyImpactFeedback(b);
+          playSound('headbuttHit');
         } else if (b.isHeadbutting) {
           a.vx -= nx * force * massRatioA;
           a.vz -= nz * force * massRatioA;
@@ -57,6 +59,7 @@ export function resolveCollisions(critters: Critter[]): void {
           triggerHitStop(FEEL.hitStop.headbutt);
           triggerCameraShake(FEEL.shake.headbutt);
           applyImpactFeedback(a);
+          playSound('headbuttHit');
         } else {
           // Normal collision — gentle nudge
           a.vx -= nx * force * massRatioA;

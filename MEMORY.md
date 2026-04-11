@@ -45,9 +45,40 @@
 - The `src/preview.ts` system (a second isolated WebGL renderer + scene)
   was built for the character select. It should be reused for:
   - **Winner posing screen** on the end overlay: show the winning critter
-    on its pedestal, maybe with a subtle victory pose / trophy
+    on its pedestal, maybe with a subtle victory pose / trophy.
+    Concrete idea: when entering `enterEnded('win', ...)`, fade out the
+    3D arena, fade in the preview overlay with the player critter doing
+    a celebration bob + slight scale pulse, name and stats panel on the
+    side. Reuse existing `showPreview(config)` API.
   - Possible stats/achievements screen where the selected critter reacts
 - Keep the preview module general (not coupled to character_select)
+
+## Future: Character select polish (not yet implemented)
+- **Slot transitions**: when navigating left/right, the previous slot
+  should slide out / fade while the new slot slides in. Currently it's
+  an instant swap. CSS `transition` on transform + opacity would be
+  enough. The preview 3D already transitions smoothly thanks to the
+  rotation smoothing, but the 2D slot grid feels snappy.
+- **Stat bar bounce**: stats currently animate on `width` only. A small
+  bounce overshoot (keyframe animation) would sell the "this critter is
+  different" feel.
+- **Selection sound**: a subtle tick on arrow navigation and a stronger
+  confirm on SPACE. Ties in with the audio system.
+
+## Future: Per-critter pedestals in PreviewScene
+- Currently every critter stands on the same generic cylinder pedestal
+  (`src/preview.ts:buildPedestal`).
+- Long-term idea: each critter has a themed pedestal matching its
+  identity (rock/lava for Verde, crystal for Morado, metal plate for
+  Azul, wooden ring for Rojo).
+- Implementation sketch:
+  1. Add `pedestal` field to `CritterConfig`: `'default' | 'rock' | 'crystal' | 'metal' | 'wood'`
+  2. In `preview.ts`, replace `buildPedestal()` with a map of builder
+     functions keyed by pedestal type.
+  3. On `showPreview(config)`, dispose the old pedestal meshes (already
+     using `disposeMeshTree`) and build the one specified by config.
+  4. Keep `'default'` as the current generic cylinder for locked/unknown.
+- Same pattern could later extend to background skybox per critter.
 
 ## Deployment
 - Public URL: https://www.bichitosrumble.com (custom domain aliased)

@@ -676,12 +676,154 @@ from in-game key presses leaking into menus.
 - Particle systems beyond the shockwave rebuild
 - Camera follow / cinematic camera
 
-### Next sprint (recommended)
-1. **Playtest the live deploy** and report back which predictions were
-   right / wrong — this is the real validation
-2. **Mobile input implementation** based on this sprint's abstraction
-   (on-screen joystick + action buttons)
-3. **First sound pass** — 5-6 SFX (headbutt, ground pound, fall, respawn,
-   ability use) using Howler.js or native `HTMLAudioElement`
-4. **Dynamic ability HUD** — show bot ability cooldowns too, so you can
-   read which opponent is about to do what
+## 2026-04-10 — Sprint: Cleanup + audio + mobile + ULTI design
+
+Focused consolidation sprint before growing further. 5 blocks, all small
+or medium, no refactor.
+
+### 1. Cleanup pass
+- **Leak fixed** in `src/preview.ts swapCritter`: each Critter creates 8
+  geometries + 8 materials (body, head, 2 eyes, 2 pupils). When the
+  player navigates the character select with arrow keys, the old critter
+  was removed from the holder group but its GPU resources were NOT
+  disposed. Rapid navigation would accumulate orphan allocations.
+  Added `disposeMeshTree()` helper that traverses a tree and calls
+  `dispose()` on every mesh's geometry + material. Called before setting
+  `critter = null`.
+- Audited `.dispose()` sites across src/: shockwave rings in
+  `abilities.ts` already dispose correctly (4 disposes per slam). Arena
+  and main-scene critters are persistent — no leak path.
+- Audited console.logs: 4 diagnostic logs in `main.ts` remain
+  intentionally (they saved us during the WebGL context bug sprint).
+- Audited pointer listeners in `preview.ts` and `input.ts`: registered
+  once, never removed, correct.
+
+### 2. Future improvements documented in MEMORY.md
+- **Character select polish**: slot slide-in transitions, stat bar bounce
+  keyframes, selection tick sound
+- **Per-critter pedestals** in the preview system: architecture sketch
+  with `pedestal` field on `CritterConfig`, builder map in preview.ts
+- **Winner posing screen**: reuse preview.ts on the end overlay, fade
+  out arena, show the winning critter on its pedestal
+
+### 3. ULTI system design — `ULTI_DESIGN.md` (new file)
+Full design doc for the Ultimate Ability system. NOT implemented.
+
+Key points:
+- **Structure**: reuse existing ability system. Ulti = third slot in
+  `CRITTER_ABILITIES[name]`. Adds `isUltimate?: boolean` to `AbilityDef`.
+- **New ability types** added to the `AbilityType` union:
+  `'rampage' | 'phantom_strike' | 'titan_slam' | 'glass_storm'`
+- **Input**: `KeyL` on desktop (natural extension of J/K). 4th touch
+  button on mobile with golden border + pulse when ready.
+- **HUD**: third slot in `#ability-bar-container`, 1.3× bigger, gold
+  accents, circular radial fill instead of linear bar.
+- **Character select**: ulti box below the stat bars with "ULTIMATE"
+  label, ulti name in critter color, one-line description.
+- **Per-critter concepts**:
+  - Rojo — "Rampage": 3s invincible berserker mode (spam headbutts)
+  - Azul — "Phantom Strike": teleport behind nearest + 3× headbutt
+  - Verde — "Titan Slam": jump offscreen, land with screen-wide slam
+  - Morado — "Glass Storm": spin and fire 5 mini-Blitzes in a star
+- **Estimated implementation effort**: 5-6h when the user greenlights
+
+### 4. Audio system — `src/audio.ts` (new file)
+First audio pass using the **Web Audio API directly with synthesized
+sounds**. No Howler, no asset files, zero network latency, 0 KB added
+to static assets.
+
+**6 sounds, all synthesized:**
+- `headbuttHit`: 170→60 Hz sine thump + high-passed noise crack (140 ms)
+- `groundPound`: 80→35 Hz sawtooth + low-passed noise rumble (450 ms)
+- `abilityFire`: 220→660 Hz triangle sweep + band-passed noise (180 ms)
+- `fall`: 440→80 Hz descending sine (550 ms)
+- `respawn`: C5-E5-G5 triangle arpeggio (300 ms total)
+- `victory`: C5-E5-G5-C6 triangle chord held (900 ms)
+
+**Architecture:**
+- `AudioContext` lazily created on first `play()` call (respects browser
+  autoplay policies — always triggered by a user key press or tap)
+- Shared noise buffer allocated once, reused by every noise-based sound
+- Master gain node (0.35) connected to destination
+- `setMuted(bool)` and `isMuted()` for future settings menu
+- `play(name: SoundName)` public API
+
+**Wired into gameplay:**
+- `physics.ts` → `'headbuttHit'` on every headbutt collision
+- `abilities.ts` → `'abilityFire'` in fireChargeRush, `'groundPound'` in
+  fireGroundPound
+- `critter.ts` → `'fall'` in startFalling(), `'respawn'` in respawnAt()
+- `game.ts` → `'victory'` in enterEnded('win', ...)
+
+### 5. Mobile touch controls
+Full working touch backend using the existing input abstraction. No
+changes to game logic or player controller — the touch module just
+writes into `_setMove` / `_setHeld` via the abstract API.
+
+**New file**: `src/input-touch.ts` (~160 lines)
+- `initTouchInput()` — idempotent setup, adds `touch-mode` class to body
+- **Virtual joystick** (left bottom, 140 px base, 62 px handle):
+  - Pointer events with pointer capture (handles drag outside the base)
+  - Center recomputed on resize / orientationchange
+  - Clamp to 50 px radius, normalize to ±1, dead zone 12% for jitter
+  - Handle visually follows the finger within the base
+  - On release → `_setMove(0, 0)` and reset handle
+- **3 action buttons** (right bottom):
+  - Triangular cluster: J top-right, headbutt (larger, ⚡) bottom-right,
+    K bottom-left
+  - Pointer events with pointer capture
+  - pointerdown → `_setHeld(action, true)` + `.pressed` class (scale + glow)
+  - pointerup / leave → `_setHeld(action, false)`
+
+**Activation**: `main.ts` calls `initTouchInput()` only if
+`isLikelyMobile()` returns true (from `input.ts` — capability probe,
+not user-agent sniffing). Desktop users never see the touch UI.
+
+**CSS**:
+- `#touch-controls` fixed, pointer-events: none (children are auto)
+- Hidden by default; shown only when `body.touch-mode` is set
+- `touch-action: none` on joystick and buttons to prevent browser scroll
+- `user-select: none` and `-webkit-tap-highlight-color: transparent` to
+  kill mobile defaults
+
+**Compatibility with desktop**: the keyboard backend in `input.ts`
+stays active regardless. Both write into the same abstract state. A
+desktop user never initializes the touch backend, so DOM touch listeners
+don't exist. A mobile user with an external keyboard would get both.
+
+### Files created / modified
+**Created:**
+- `src/audio.ts` (~210 lines)
+- `src/input-touch.ts` (~160 lines)
+- `ULTI_DESIGN.md` (design doc)
+
+**Modified:**
+- `src/preview.ts` — disposeMeshTree helper, called on swapCritter
+- `src/physics.ts` — playSound('headbuttHit') on collisions
+- `src/abilities.ts` — playSound('abilityFire' / 'groundPound')
+- `src/critter.ts` — playSound('fall' / 'respawn')
+- `src/game.ts` — playSound('victory') on win
+- `src/main.ts` — initTouchInput() conditionally
+- `index.html` — touch controls markup + CSS
+- `MEMORY.md` — future improvements documented
+
+### Verification
+- `npx tsc --noEmit` → clean
+- `npm run build` → 17 modules (audio + input-touch added), 508 KB
+  (130 KB gzip), 605 ms
+- Size growth: +5 KB (~1 KB gzip) for audio system and touch controls
+
+### Intentionally NOT in this sprint
+- ULTI system implementation (design only, awaiting go)
+- Touch UI polish (final positions, animations)
+- Audio settings menu (mute button)
+- Custom sound sources (all synthesized)
+- Winner posing screen (documented, not built)
+- Per-critter pedestals (documented, not built)
+
+### Next sprint options
+1. **Implement ULTI system** following `ULTI_DESIGN.md` (5-6 h)
+2. **Winner posing screen** on end overlay using preview.ts
+3. **Per-critter pedestals** in the preview scene
+4. **Audio settings** (mute toggle in HUD + persistence)
+5. **Playtest report** from the user to decide tuning priorities
