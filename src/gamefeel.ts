@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import type { Critter } from './critter';
 
 // ---------------------------------------------------------------------------
@@ -82,6 +83,18 @@ export const FEEL = {
     ability: 0.04,            // generic ability hit
   },
 
+  // --- Camera Shake ---
+  shake: {
+    headbutt: 0.22,           // amplitude when a headbutt connects
+    groundPound: 0.45,        // stronger, it's a slam
+    decay: 0.18,              // how fast the shake fades (seconds)
+  },
+
+  // --- Hit Flash ---
+  hitFlash: {
+    duration: 0.11,           // seconds of white-out on target critter
+  },
+
   // --- Scale Feedback ---
   impact: {
     scaleX: 1.35,             // X/Z stretch on receiving hit
@@ -163,6 +176,8 @@ export function applyImpactFeedback(critter: Critter): void {
   });
   // Knockback tilt: lean backward from hit direction
   applyKnockbackTilt(critter);
+  // Flash white briefly to clearly read the hit
+  applyHitFlash(critter);
 }
 
 export function applyDashFeedback(critter: Critter): void {
@@ -293,4 +308,64 @@ function lerpMeshScale(critter: Critter, tx: number, ty: number, tz: number, dt:
   s.x += (tx - s.x) * f;
   s.y += (ty - s.y) * f;
   s.z += (tz - s.z) * f;
+}
+
+// ---------------------------------------------------------------------------
+// Camera shake — global, decays over time
+// ---------------------------------------------------------------------------
+
+let shakeAmount = 0;
+let shakeTimer = 0;
+
+/** Trigger a shake with given peak amplitude. Stacks by taking the max. */
+export function triggerCameraShake(intensity: number): void {
+  shakeAmount = Math.max(shakeAmount, intensity);
+  shakeTimer = FEEL.shake.decay;
+}
+
+/**
+ * Apply the current shake to the camera.
+ * Caller provides the base (unshaken) camera position so this function can
+ * always write an absolute value (no accumulation errors).
+ */
+export function updateCameraShake(
+  camera: THREE.PerspectiveCamera,
+  baseX: number, baseY: number, baseZ: number,
+  dt: number,
+): void {
+  if (shakeTimer <= 0) {
+    camera.position.set(baseX, baseY, baseZ);
+    shakeAmount = 0;
+    return;
+  }
+  shakeTimer -= dt;
+  const tNorm = Math.max(0, shakeTimer / FEEL.shake.decay); // 1 → 0
+  const amp = shakeAmount * tNorm * tNorm;                   // quadratic fade
+  camera.position.x = baseX + (Math.random() - 0.5) * 2 * amp;
+  camera.position.y = baseY + (Math.random() - 0.5) * 2 * amp;
+  // Don't shake Z — keeps arena framing stable
+  camera.position.z = baseZ;
+}
+
+// ---------------------------------------------------------------------------
+// Hit Flash — target critter flashes white briefly on impact
+// ---------------------------------------------------------------------------
+
+const hitFlashTimers = new WeakMap<Critter, number>();
+
+export function applyHitFlash(critter: Critter): void {
+  hitFlashTimers.set(critter, FEEL.hitFlash.duration);
+}
+
+/** Returns the current flash intensity 0..1, or 0 if inactive. Ticks internally. */
+export function tickHitFlash(critter: Critter, dt: number): number {
+  const t = hitFlashTimers.get(critter);
+  if (t === undefined) return 0;
+  const newT = t - dt;
+  if (newT <= 0) {
+    hitFlashTimers.delete(critter);
+    return 0;
+  }
+  hitFlashTimers.set(critter, newT);
+  return newT / FEEL.hitFlash.duration;
 }

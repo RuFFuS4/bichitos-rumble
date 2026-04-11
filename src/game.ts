@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Arena } from './arena';
 import { Critter, CRITTER_PRESETS } from './critter';
-import { updatePlayer, isRestartPressed, consumeKey } from './player';
+import { updatePlayer } from './player';
+import { consumeMenuAction, clearMenuActions } from './input';
 import { updateBot } from './bot';
 import { updateAbilities } from './abilities';
 import { resolveCollisions, checkFalloff, updateFalling } from './physics';
@@ -62,6 +63,7 @@ export class Game {
   // -------------------------------------------------------------------------
 
   private enterTitle(): void {
+    clearMenuActions();
     this.phase = 'title';
     showTitleScreen();
     hideCharacterSelect();
@@ -70,6 +72,7 @@ export class Game {
   }
 
   private enterCharacterSelect(): void {
+    clearMenuActions();
     this.phase = 'character_select';
     hideTitleScreen();
     hideEndScreen();
@@ -77,6 +80,7 @@ export class Game {
   }
 
   private enterCountdown(): void {
+    clearMenuActions();
     hideCharacterSelect();
     hideEndScreen();
     showMatchHud();
@@ -99,6 +103,7 @@ export class Game {
   }
 
   private enterEnded(result: EndResult, title: string, subtitle: string): void {
+    clearMenuActions();
     this.phase = 'ended';
     hideOverlay();
     showEndScreen(result, title, subtitle);
@@ -128,25 +133,25 @@ export class Game {
       case 'title':
         // Let critters idle (bob animation, no input)
         for (const c of this.critters) c.update(dt);
-        if (consumeKey('Space') || consumeKey('Enter')) {
+        if (consumeMenuAction('confirm')) {
           this.enterCharacterSelect();
         }
         break;
 
       case 'character_select':
         for (const c of this.critters) c.update(dt);
-        if (consumeKey('ArrowLeft') || consumeKey('KeyA')) {
+        if (consumeMenuAction('left')) {
           this.selectedIdx = (this.selectedIdx - 1 + CRITTER_PRESETS.length) % CRITTER_PRESETS.length;
           updateCharacterSelect(this.selectedIdx);
         }
-        if (consumeKey('ArrowRight') || consumeKey('KeyD')) {
+        if (consumeMenuAction('right')) {
           this.selectedIdx = (this.selectedIdx + 1) % CRITTER_PRESETS.length;
           updateCharacterSelect(this.selectedIdx);
         }
-        if (consumeKey('Space') || consumeKey('Enter')) {
+        if (consumeMenuAction('confirm')) {
           this.enterCountdown();
         }
-        if (consumeKey('KeyT') || consumeKey('Escape')) {
+        if (consumeMenuAction('back')) {
           this.enterTitle();
         }
         break;
@@ -234,10 +239,10 @@ export class Game {
           if (c.alive) c.update(dt);
         }
 
-        if (isRestartPressed()) {
+        if (consumeMenuAction('restart')) {
           this.enterCountdown();
         }
-        if (consumeKey('KeyT')) {
+        if (consumeMenuAction('back')) {
           this.enterTitle();
         }
         break;

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCamera, handleResize, syncSize } from './camera';
 import { Game } from './game';
+import { updateCameraShake } from './gamefeel';
 
 // ---------------------------------------------------------------------------
 // WebGL diagnostic + renderer creation
@@ -62,6 +63,11 @@ const camera = createCamera();
 syncSize(camera, renderer);
 handleResize(camera, renderer);
 
+// Snapshot the base camera position for shake offset calculations
+const baseCamX = camera.position.x;
+const baseCamY = camera.position.y;
+const baseCamZ = camera.position.z;
+
 // Game
 const game = new Game(scene);
 
@@ -77,6 +83,8 @@ function loop(now: number) {
   }
 
   game.update(dt);
+  // Apply camera shake on top of the base position (no accumulation drift)
+  updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }

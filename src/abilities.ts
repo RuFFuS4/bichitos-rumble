@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Critter } from './critter';
-import { triggerHitStop, applyDashFeedback, applyLandingFeedback, applyImpactFeedback, FEEL } from './gamefeel';
+import { triggerHitStop, triggerCameraShake, applyDashFeedback, applyLandingFeedback, applyImpactFeedback, FEEL } from './gamefeel';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,10 +84,11 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   ],
 
   // Azul — Fast Skirmisher: hits fast, hits often, smaller payoffs
+  // Sprint tuning: impulse 20 → 22 so the dash reads clearly above Rojo's
   Azul: [
     makeChargeRush({
       name: 'Quick Dash',
-      impulse: 20,
+      impulse: 22,
       duration: 0.25,
       cooldown: 3.0,
       speedMultiplier: 2.7,
@@ -103,6 +104,9 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   ],
 
   // Verde — Heavy Crusher: slow but devastating
+  // Sprint tuning: Earthquake was OP. Nerfed radius 4.8 → 4.2, force 40 → 34,
+  // cooldown 7.5 → 8.5. Still the hardest-hitting AoE, but no longer
+  // a "I win" button on small late-game arenas.
   Verde: [
     makeChargeRush({
       name: 'Heavy Charge',
@@ -114,20 +118,23 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     }),
     makeGroundPound({
       name: 'Earthquake',
-      radius: 4.8,
-      force: 40,
+      radius: 4.2,
+      force: 34,
       windUp: 0.5,
-      cooldown: 7.5,
+      cooldown: 8.5,
     }),
   ],
 
   // Morado — Glass Cannon: high risk, high reward
+  // Sprint tuning: Blitz cooldown 3.5 → 3.0 so Morado gets its burst more often.
+  // Combined with baseline headbutt 11 → 13 on the preset, Morado finally
+  // threatens in mid-range even between abilities.
   Morado: [
     makeChargeRush({
       name: 'Blitz',
       impulse: 22,
       duration: 0.28,
-      cooldown: 3.5,
+      cooldown: 3.0,
       speedMultiplier: 2.8,
       massMultiplier: 1.2,
     }),
@@ -203,6 +210,8 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
     }
   }
   applyLandingFeedback(critter);
+  // Always shake on ground pound (the slam itself is dramatic)
+  triggerCameraShake(FEEL.shake.groundPound);
   if (hitCount > 0) {
     triggerHitStop(FEEL.hitStop.groundPound);
   }
@@ -288,29 +297,64 @@ export function getMassMultiplier(states: AbilityState[]): number {
 // VFX: shockwave ring
 // ---------------------------------------------------------------------------
 
+/**
+ * Spawn a dramatic shockwave at (x, z). Two concentric rings:
+ *  - inner white flash that expands fast and fades quickly
+ *  - outer red torus that expands to maxRadius with a thicker tube
+ */
 function spawnShockwaveRing(scene: THREE.Scene, x: number, z: number, maxRadius: number): void {
-  const geo = new THREE.TorusGeometry(0.5, 0.12, 8, 32);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.8 });
-  const ring = new THREE.Mesh(geo, mat);
-  ring.rotation.x = Math.PI / 2;
-  ring.position.set(x, 0.3, z);
-  scene.add(ring);
+  const duration = 450; // ms
+  const startTime = performance.now();
 
-  const duration = 300;
-  const start = performance.now();
+  // Outer red torus (the "slam" ring)
+  const outerGeo = new THREE.TorusGeometry(0.3, 0.28, 10, 40);
+  const outerMat = new THREE.MeshBasicMaterial({
+    color: 0xff3322,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const outer = new THREE.Mesh(outerGeo, outerMat);
+  outer.rotation.x = Math.PI / 2;
+  outer.position.set(x, 0.35, z);
+  scene.add(outer);
+
+  // Inner white flash (fades faster than the outer ring)
+  const innerGeo = new THREE.TorusGeometry(0.3, 0.18, 10, 40);
+  const innerMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 1.0,
+  });
+  const inner = new THREE.Mesh(innerGeo, innerMat);
+  inner.rotation.x = Math.PI / 2;
+  inner.position.set(x, 0.5, z);
+  scene.add(inner);
 
   function animate() {
-    const elapsed = performance.now() - start;
+    const elapsed = performance.now() - startTime;
     const t = Math.min(elapsed / duration, 1);
-    const scale = 0.5 + t * (maxRadius / 0.5);
-    ring.scale.set(scale, scale, 1);
-    mat.opacity = 0.8 * (1 - t);
+
+    // Outer: grows to maxRadius + 10% overshoot, eased out
+    const outerEase = 1 - Math.pow(1 - t, 2);
+    const outerScale = (0.3 + outerEase * (maxRadius * 1.1 / 0.3));
+    outer.scale.set(outerScale, outerScale, 1);
+    outerMat.opacity = 0.9 * (1 - t);
+
+    // Inner: grows faster, fades in half the time
+    const innerT = Math.min(t * 2, 1);
+    const innerScale = (0.3 + innerT * (maxRadius * 0.7 / 0.3));
+    inner.scale.set(innerScale, innerScale, 1);
+    innerMat.opacity = 1.0 * (1 - innerT);
+
     if (t < 1) {
       requestAnimationFrame(animate);
     } else {
-      scene.remove(ring);
-      geo.dispose();
-      mat.dispose();
+      scene.remove(outer);
+      scene.remove(inner);
+      outerGeo.dispose();
+      outerMat.dispose();
+      innerGeo.dispose();
+      innerMat.dispose();
     }
   }
   requestAnimationFrame(animate);

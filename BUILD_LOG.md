@@ -546,8 +546,142 @@ during combat from fresh Space to confirm a menu selection.
 - No bot AI improvements
 - No refactor
 
-### Next steps
-- Verify the new flow on the live Vercel URL after deploy
-- Start next tuning/polish pass on a stable base:
-  title screen could use a subtle rotating camera or a looping idle
-  animation, but only if it remains cheap
+## 2026-04-10 — Sprint: Game feel impact + input abstraction
+
+Focus: make hits feel weighty, fix the two most broken critters, and
+prepare the input path for future mobile without implementing touch yet.
+No new systems, no refactor.
+
+### 1. Critical review of the live build (static)
+Static code review of what's deployed on www.bichitosrumble.com.
+Not a live playtest — I can't actually play it — but a predictable list
+of problems based on the code:
+
+| Issue | Severity |
+|---|---|
+| Hit impacts lack drama (only subtle scale + tilt) | **High** |
+| Ground Pound shockwave is a hairline ring, barely visible | **High** |
+| Verde Earthquake covers 40% of arena with 40 force — "I win" button | **High** |
+| Morado is too fragile between its ability cooldowns | Medium |
+| Azul's "faster" (+10% vs Rojo) is imperceptible | Medium |
+| Bots use the same logic regardless of critter | Low (out of scope) |
+| Camera is fixed (no player follow) | Low |
+
+### 2. Game feel: visible impact
+
+**Camera shake** — new system in `gamefeel.ts`:
+- `triggerCameraShake(intensity)` — stacks by max, decays quadratically
+- `updateCameraShake(camera, baseX, baseY, baseZ, dt)` — writes absolute
+  position each frame (no drift)
+- Decay: 0.18s. Headbutt: 0.22 amplitude. Ground Pound: 0.45 amplitude.
+- Main loop calls it after `game.update()` and before render
+- Base camera position snapshotted at init so shake never accumulates
+- Triggered from `physics.ts` (headbutt collisions) and from
+  `abilities.ts fireGroundPound` (every slam, not only hits)
+
+**Hit flash** — new system in `gamefeel.ts`:
+- `applyHitFlash(critter)` sets a 0.11s timer via WeakMap
+- `tickHitFlash(critter, dt)` returns current intensity 0..1
+- Integrated into `applyImpactFeedback` — every time a critter gets
+  hit (headbutt or ground pound AoE), the target flashes white
+- `critter.update()` calls `tickHitFlash` AFTER `updateVisuals` so the
+  flash always overrides the state emissive (body + head both go white)
+- Clear, unambiguous "I got hit" read
+
+**Ground Pound shockwave rebuilt**:
+- Old: single TorusGeometry with tube 0.12, 300ms, 0.8 opacity
+- New: **two concentric rings**
+  - Outer red torus (tube **0.28**), eases out to `maxRadius × 1.1`,
+    450ms duration
+  - Inner white flash (tube 0.18), grows faster, fades in half the time
+- Much more readable at a glance
+
+### 3. Critter tuning
+
+Fine-tuned 5 values based on predicted imbalances:
+
+| Critter | Change | Why |
+|---|---|---|
+| **Azul** | `speed 11 → 12` | +10% vs Rojo was imperceptible |
+| **Azul** | `Quick Dash impulse 20 → 22` | Match the new baseline, feels distinctly faster |
+| **Verde** | `Earthquake radius 4.8 → 4.2` | 40% arena coverage was oppressive |
+| **Verde** | `Earthquake force 40 → 34` | Still the hardest-hitting AoE, no longer game-ending |
+| **Verde** | `Earthquake cooldown 7.5 → 8.5` | More downtime between slams |
+| **Morado** | `headbuttForce 11 → 13` | No longer helpless between Blitz cooldowns |
+| **Morado** | `Blitz cooldown 3.5 → 3.0` | Burst comes around more often — rewards the glass cannon playstyle |
+
+### 4. Input abstraction layer (for future mobile)
+
+New file **`src/input.ts`** (~140 lines). Device-agnostic input layer.
+Game logic and player controller no longer read physical keys — they
+read from this module's abstract API. Adding touch input later means
+adding one new backend file; no changes to game/player code.
+
+**Public read API:**
+- `getMoveVector(): { x, z }` — normalized movement vector
+- `isHeld(action)` — action is one of `'headbutt' | 'ability1' | 'ability2'`
+- `consumeMenuAction(action)` — edge-detected, `'confirm' | 'back' | 'left' |
+  'right' | 'up' | 'down' | 'restart'`
+- `clearMenuActions()` — drop stale edges on phase transitions
+
+**Public write API (for device backends):**
+- `_setMove(x, z)`, `_setHeld(action, value)`, `_pushMenuAction(action)`
+
+**Capability detection:**
+- `hasTouchSupport()` — probes `ontouchstart` and `navigator.maxTouchPoints`
+- `isNarrowViewport()` — `innerWidth < 900`
+- `isLikelyMobile()` — combination of both
+
+**Keyboard backend**: always active, lives inside `input.ts`. Edge
+detection via `e.repeat` check. WASD/Arrows cover movement AND menu
+navigation; Space/Enter confirm; T/Escape back; R restart.
+
+**How to add touch later** (documented inline in `input.ts`):
+1. Create `src/input-touch.ts`
+2. Listen to touchstart/touchmove/touchend
+3. Call `_setMove`, `_setHeld`, `_pushMenuAction` based on UI state
+4. Import from `main.ts` conditionally via `isLikelyMobile()`
+
+`player.ts` rewritten to use `getMoveVector()` + `isHeld()`. `game.ts`
+rewritten to use `consumeMenuAction()` on all menu transitions.
+`clearMenuActions()` is called on every phase entry to kill stale edges
+from in-game key presses leaking into menus.
+
+### Files created/modified
+- `src/input.ts` (NEW) — full abstraction layer + keyboard backend
+- `src/player.ts` — no keyboard access, reads input abstract API
+- `src/game.ts` — `consumeMenuAction` instead of `consumeKey`,
+  `clearMenuActions` on every phase entry
+- `src/abilities.ts` — tuning for Azul/Verde/Morado, camera shake on
+  ground pound, rebuilt `spawnShockwaveRing` (2 concentric rings)
+- `src/critter.ts` — baseline stat tuning, hit flash integrated into
+  `update()` (runs after `updateVisuals` to override emissive)
+- `src/physics.ts` — `triggerCameraShake` on headbutt connect
+- `src/gamefeel.ts` — `FEEL.shake`, `FEEL.hitFlash`, camera shake system,
+  hit flash system, `applyImpactFeedback` now triggers hit flash
+- `src/main.ts` — snapshot base camera position, call `updateCameraShake`
+  after game.update and before render
+
+### Verification
+- `npx tsc --noEmit` → clean
+- `npm run build` → 17 modules (16 → +input.ts), 499 KB (127 KB gzip), 749 ms
+- All config values centralized in FEEL
+- No gameplay logic changed — only visual/tuning/abstraction
+
+### Intentionally NOT in this sprint
+- Touch input implementation (only the abstraction base is ready)
+- Sound effects
+- Bot AI changes
+- Refactor
+- Particle systems beyond the shockwave rebuild
+- Camera follow / cinematic camera
+
+### Next sprint (recommended)
+1. **Playtest the live deploy** and report back which predictions were
+   right / wrong — this is the real validation
+2. **Mobile input implementation** based on this sprint's abstraction
+   (on-screen joystick + action buttons)
+3. **First sound pass** — 5-6 SFX (headbutt, ground pound, fall, respawn,
+   ability use) using Howler.js or native `HTMLAudioElement`
+4. **Dynamic ability HUD** — show bot ability cooldowns too, so you can
+   read which opponent is about to do what

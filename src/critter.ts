@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createAbilityStates, getSpeedMultiplier, getMassMultiplier } from './abilities';
 import type { AbilityState } from './abilities';
-import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, FEEL } from './gamefeel';
+import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
 
 export interface CritterConfig {
   name: string;
@@ -21,8 +21,9 @@ export const CRITTER_PRESETS: CritterConfig[] = [
     tagline: 'All-rounder. Easy to use.',
   },
   {
+    // Sprint tuning: speed 11 → 12 so Azul actually feels fastest.
     name: 'Azul', color: 0x3498db,
-    speed: 11, mass: 0.85, headbuttForce: 12,
+    speed: 12, mass: 0.85, headbuttForce: 12,
     role: 'Skirmisher',
     tagline: 'Fast and light. Hit and run.',
   },
@@ -33,8 +34,10 @@ export const CRITTER_PRESETS: CritterConfig[] = [
     tagline: 'Slow but devastating.',
   },
   {
+    // Sprint tuning: headbutt 11 → 13 so baseline combat isn't a loss.
+    // Morado is fragile (mass 0.75) but no longer a total punching bag.
     name: 'Morado', color: 0x9b59b6,
-    speed: 10, mass: 0.75, headbuttForce: 11,
+    speed: 10, mass: 0.75, headbuttForce: 13,
     role: 'Glass Cannon',
     tagline: 'High risk, high reward.',
   },
@@ -199,6 +202,17 @@ export class Critter {
 
     // Visual feedback for ability states
     this.updateVisuals();
+
+    // Hit flash overrides the state emissive briefly (applied AFTER updateVisuals)
+    const flashT = tickHitFlash(this, dt);
+    if (flashT > 0) {
+      const bodyMat = this.body.material as THREE.MeshStandardMaterial;
+      const headMat = this.head.material as THREE.MeshStandardMaterial;
+      headMat.emissive.setHex(0xffffff);
+      headMat.emissiveIntensity = flashT * 1.2;
+      bodyMat.emissive.setHex(0xffffff);
+      bodyMat.emissiveIntensity = flashT * 0.9;
+    }
 
     // Game feel visual systems (all visual-only, no gameplay logic)
     updateScaleFeedback(this, dt);

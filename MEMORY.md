@@ -64,10 +64,21 @@
 - End: R to restart match, T to return to title
 - Player slot is dynamic: `playerIndex` from chosen critter, bots are all others
 
+## Input Architecture
+- Device-agnostic: `src/input.ts` is the only module that touches physical keys
+- Game logic reads `getMoveVector()`, `isHeld(action)`, `consumeMenuAction(action)`
+- Menu actions are edge-detected (no repeat), cleared on phase transitions
+- Keyboard backend lives inside `input.ts` (always active)
+- Touch backend NOT implemented yet — just add a new file that writes into
+  `_setMove`, `_setHeld`, `_pushMenuAction` and the rest of the game works
+- Capability detection via `hasTouchSupport()` + `isNarrowViewport()` +
+  `isLikelyMobile()` (no user-agent sniffing)
+
 ## Development Priorities (next sprint)
-- Sound effects (small set)
-- Subtle title-screen idle animation (e.g. rotating camera)
-- Screen shake on heavy hits
+- Playtest live deploy and validate which predicted issues were real
+- Implement touch input backend (on-screen joystick + buttons)
+- First small sound pass (5-6 SFX)
+- Dynamic ability HUD showing bot cooldowns (opponent reads)
 - Do NOT invest more time in bots — minimal temporary opposition
 - Game must stay fast-loading, no heavy screens
 - Leave clean hooks for animation/VFX but don't add final art yet

@@ -1,36 +1,19 @@
 import { Critter } from './critter';
 import { activateAbility } from './abilities';
 import { FEEL } from './gamefeel';
+import { getMoveVector, isHeld } from './input';
 
-const keys: Record<string, boolean> = {};
-// "Fresh" keys = keys that have been pressed since the last consumeKey call.
-// Edge-detected: a held key only produces one entry per physical press.
-const freshKeys: Set<string> = new Set();
-
-window.addEventListener('keydown', (e) => {
-  if (!e.repeat) {
-    freshKeys.add(e.code);
-  }
-  keys[e.code] = true;
-});
-window.addEventListener('keyup', (e) => { keys[e.code] = false; });
-
+/**
+ * Player controller — reads device-agnostic input via the input abstraction.
+ * Never touches the keyboard directly. When touch input is added, this file
+ * needs no changes.
+ */
 export function updatePlayer(critter: Critter, dt: number): void {
   if (!critter.alive) return;
 
-  let mx = 0;
-  let mz = 0;
-  if (keys['KeyW'] || keys['ArrowUp']) mz = -1;
-  if (keys['KeyS'] || keys['ArrowDown']) mz = 1;
-  if (keys['KeyA'] || keys['ArrowLeft']) mx = -1;
-  if (keys['KeyD'] || keys['ArrowRight']) mx = 1;
-
-  // Normalize diagonal
-  const len = Math.sqrt(mx * mx + mz * mz);
-  if (len > 0) {
-    mx /= len;
-    mz /= len;
-  }
+  const move = getMoveVector();
+  let mx = move.x;
+  let mz = move.z;
 
   // Reduce steering during Charge Rush (commitment)
   const chargeState = critter.abilityStates[0];
@@ -39,41 +22,23 @@ export function updatePlayer(critter: Critter, dt: number): void {
     mz *= FEEL.chargeRush.steerFactor;
   }
 
-  // Signal whether player is actively steering
-  critter.hasInput = len > 0;
+  // Signal whether player is actively steering (kills drift when idle)
+  critter.hasInput = mx !== 0 || mz !== 0;
 
   const accel = critter.effectiveSpeed * FEEL.movement.accelerationScale;
   critter.vx += mx * accel * dt;
   critter.vz += mz * accel * dt;
 
-  // Headbutt on Space
-  if (keys['Space']) {
+  // Headbutt is a held action — the critter state machine handles cooldown
+  if (isHeld('headbutt')) {
     critter.startHeadbutt();
   }
 
   // Abilities
-  if (keys['KeyJ'] && critter.abilityStates[0]) {
+  if (isHeld('ability1') && critter.abilityStates[0]) {
     activateAbility(critter.abilityStates[0], critter);
   }
-  if (keys['KeyK'] && critter.abilityStates[1]) {
+  if (isHeld('ability2') && critter.abilityStates[1]) {
     activateAbility(critter.abilityStates[1], critter);
   }
-}
-
-export function isRestartPressed(): boolean {
-  return !!keys['KeyR'];
-}
-
-/** Edge-detected: returns true exactly once per physical key press. */
-export function consumeKey(code: string): boolean {
-  if (freshKeys.has(code)) {
-    freshKeys.delete(code);
-    return true;
-  }
-  return false;
-}
-
-/** Clear all pending fresh-key edges (useful when switching phases). */
-export function clearFreshKeys(): void {
-  freshKeys.clear();
 }
