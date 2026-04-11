@@ -9,10 +9,17 @@ const abilityContainer = document.getElementById('ability-bar-container')!;
 const hudRoot = document.getElementById('hud')!;
 const titleScreen = document.getElementById('title-screen')!;
 const characterSelect = document.getElementById('character-select')!;
-const critterCards = document.getElementById('critter-cards')!;
+const critterGrid = document.getElementById('critter-grid')!;
+const infoName = document.getElementById('critter-info-name')!;
+const infoRole = document.getElementById('critter-info-role')!;
+const infoTagline = document.getElementById('critter-info-tagline')!;
+const infoStats = document.getElementById('critter-info-stats')!;
 const endScreen = document.getElementById('end-screen')!;
 const endResultEl = document.getElementById('end-result')!;
 const endSubtitleEl = document.getElementById('end-subtitle')!;
+
+/** Total slots on the grid. Must match CSS grid-template-columns × rows. */
+export const GRID_SLOTS = 9;
 
 export function updateHUD(aliveCount: number, timeLeft: number): void {
   aliveEl.textContent = `Alive: ${aliveCount}`;
@@ -156,56 +163,137 @@ export function hideTitleScreen(): void {
   titleScreen.classList.add('hidden');
 }
 
+/**
+ * Build the character select grid once on show. Fills `GRID_SLOTS` slots:
+ * the first N match the presets (N = presets.length), the rest are shown
+ * as locked "Coming Soon" placeholders.
+ * Also paints the right-side info panel with the currently selected critter.
+ */
 export function showCharacterSelect(presets: CritterConfig[], selectedIdx: number): void {
   setMatchHudVisible(false);
-  // Build cards once per show
-  critterCards.innerHTML = '';
-  for (let i = 0; i < presets.length; i++) {
-    const c = presets[i];
-    const card = document.createElement('div');
-    card.className = 'critter-card' + (i === selectedIdx ? ' selected' : '');
-    card.dataset.idx = String(i);
+  critterGrid.innerHTML = '';
 
-    const preview = document.createElement('div');
-    preview.className = 'critter-preview';
-    preview.style.background = '#' + c.color.toString(16).padStart(6, '0');
+  for (let i = 0; i < GRID_SLOTS; i++) {
+    const slot = document.createElement('div');
+    slot.dataset.idx = String(i);
 
-    const name = document.createElement('div');
-    name.className = 'critter-name';
-    name.textContent = c.name;
+    if (i < presets.length) {
+      const c = presets[i];
+      slot.className = 'critter-slot' + (i === selectedIdx ? ' selected' : '');
 
-    const role = document.createElement('div');
-    role.className = 'critter-role';
-    role.textContent = c.role;
+      const dot = document.createElement('div');
+      dot.className = 'slot-dot';
+      dot.style.background = '#' + c.color.toString(16).padStart(6, '0');
 
-    const tagline = document.createElement('div');
-    tagline.className = 'critter-tagline';
-    tagline.textContent = c.tagline;
+      const name = document.createElement('div');
+      name.className = 'slot-name';
+      name.textContent = c.name;
 
-    const stats = document.createElement('div');
-    stats.className = 'critter-stats';
-    stats.textContent = `SPD ${c.speed} · MAS ${c.mass.toFixed(2)} · HIT ${c.headbuttForce}`;
+      slot.appendChild(dot);
+      slot.appendChild(name);
+    } else {
+      slot.className = 'critter-slot locked';
 
-    card.appendChild(preview);
-    card.appendChild(name);
-    card.appendChild(role);
-    card.appendChild(tagline);
-    card.appendChild(stats);
-    critterCards.appendChild(card);
+      const lock = document.createElement('div');
+      lock.className = 'slot-lock';
+      lock.textContent = '🔒';
+
+      const name = document.createElement('div');
+      name.className = 'slot-name';
+      name.textContent = 'Coming Soon';
+
+      slot.appendChild(lock);
+      slot.appendChild(name);
+    }
+
+    critterGrid.appendChild(slot);
   }
+
+  // Paint the info pane for the current selection
+  paintInfoPane(presets, selectedIdx);
   characterSelect.classList.remove('hidden');
 }
 
-/** Update the selected card highlight without rebuilding everything. */
-export function updateCharacterSelect(selectedIdx: number): void {
-  const cards = critterCards.querySelectorAll('.critter-card');
-  cards.forEach((card, i) => {
-    card.classList.toggle('selected', i === selectedIdx);
+/** Update the selected slot highlight and refresh the info pane. Cheap call per navigation. */
+export function updateCharacterSelect(presets: CritterConfig[], selectedIdx: number): void {
+  const slots = critterGrid.querySelectorAll('.critter-slot');
+  slots.forEach((slot, i) => {
+    if (i < presets.length) {
+      slot.classList.toggle('selected', i === selectedIdx);
+    }
   });
+  paintInfoPane(presets, selectedIdx);
 }
 
 export function hideCharacterSelect(): void {
   characterSelect.classList.add('hidden');
+}
+
+// ---------------------------------------------------------------------------
+// Info pane — name, role, tagline, animated stat bars
+// ---------------------------------------------------------------------------
+
+/** Relative normalization: bars fill based on min/max across the current preset pool. */
+function normalize(value: number, min: number, max: number): number {
+  if (max <= min) return 0.5;
+  return Math.max(0, Math.min(1, (value - min) / (max - min)));
+}
+
+function paintInfoPane(presets: CritterConfig[], idx: number): void {
+  const c = presets[idx];
+  if (!c) return;
+
+  infoName.textContent = c.name;
+  infoRole.textContent = c.role;
+  infoTagline.textContent = c.tagline;
+
+  // Compute min/max across all presets for relative bars
+  const speedMin = Math.min(...presets.map(p => p.speed));
+  const speedMax = Math.max(...presets.map(p => p.speed));
+  const massMin = Math.min(...presets.map(p => p.mass));
+  const massMax = Math.max(...presets.map(p => p.mass));
+  const powerMin = Math.min(...presets.map(p => p.headbuttForce));
+  const powerMax = Math.max(...presets.map(p => p.headbuttForce));
+
+  // Bars never show empty — map the true 0 of the relative scale to a small
+  // minimum fill so every critter has a visible stat presence
+  const MIN_FILL = 0.18;
+  const rel = (v: number, min: number, max: number) =>
+    MIN_FILL + normalize(v, min, max) * (1 - MIN_FILL);
+
+  const stats: { label: string; pct: number }[] = [
+    { label: 'Speed',  pct: rel(c.speed, speedMin, speedMax) * 100 },
+    { label: 'Weight', pct: rel(c.mass, massMin, massMax) * 100 },
+    { label: 'Power',  pct: rel(c.headbuttForce, powerMin, powerMax) * 100 },
+  ];
+
+  infoStats.innerHTML = '';
+  for (const s of stats) {
+    const row = document.createElement('div');
+    row.className = 'stat-row';
+
+    const label = document.createElement('span');
+    label.className = 'stat-label';
+    label.textContent = s.label;
+
+    const bg = document.createElement('div');
+    bg.className = 'stat-bar-bg';
+
+    const fill = document.createElement('div');
+    fill.className = 'stat-bar';
+    // Start at 0 so the CSS transition animates the bar in
+    fill.style.width = '0%';
+    bg.appendChild(fill);
+
+    row.appendChild(label);
+    row.appendChild(bg);
+    infoStats.appendChild(row);
+
+    // Trigger the CSS transition on next frame
+    requestAnimationFrame(() => {
+      fill.style.width = s.pct.toFixed(1) + '%';
+    });
+  }
 }
 
 export type EndResult = 'win' | 'lose' | 'draw';

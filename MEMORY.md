@@ -41,6 +41,14 @@
 - Each match feels different, stays readable
 - Do NOT implement until game feel and combat are mature
 
+## Future: Reusable PreviewScene for menus
+- The `src/preview.ts` system (a second isolated WebGL renderer + scene)
+  was built for the character select. It should be reused for:
+  - **Winner posing screen** on the end overlay: show the winning critter
+    on its pedestal, maybe with a subtle victory pose / trophy
+  - Possible stats/achievements screen where the selected critter reacts
+- Keep the preview module general (not coupled to character_select)
+
 ## Deployment
 - Public URL: https://www.bichitosrumble.com (custom domain aliased)
 - Vercel project: ruffus4s-projects/bichitos-rumble

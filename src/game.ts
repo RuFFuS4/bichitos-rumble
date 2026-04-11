@@ -17,6 +17,7 @@ import {
   type EndResult,
 } from './hud';
 import { applyHitStop, FEEL } from './gamefeel';
+import { showPreview, swapPreviewCritter, hidePreview } from './preview';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended';
 
@@ -69,6 +70,7 @@ export class Game {
     hideCharacterSelect();
     hideEndScreen();
     hideOverlay();
+    hidePreview();
   }
 
   private enterCharacterSelect(): void {
@@ -77,11 +79,13 @@ export class Game {
     hideTitleScreen();
     hideEndScreen();
     showCharacterSelect(CRITTER_PRESETS, this.selectedIdx);
+    showPreview(CRITTER_PRESETS[this.selectedIdx]);
   }
 
   private enterCountdown(): void {
     clearMenuActions();
     hideCharacterSelect();
+    hidePreview();
     hideEndScreen();
     showMatchHud();
     this.phase = 'countdown';
@@ -142,11 +146,13 @@ export class Game {
         for (const c of this.critters) c.update(dt);
         if (consumeMenuAction('left')) {
           this.selectedIdx = (this.selectedIdx - 1 + CRITTER_PRESETS.length) % CRITTER_PRESETS.length;
-          updateCharacterSelect(this.selectedIdx);
+          updateCharacterSelect(CRITTER_PRESETS, this.selectedIdx);
+          swapPreviewCritter(CRITTER_PRESETS[this.selectedIdx]);
         }
         if (consumeMenuAction('right')) {
           this.selectedIdx = (this.selectedIdx + 1) % CRITTER_PRESETS.length;
-          updateCharacterSelect(this.selectedIdx);
+          updateCharacterSelect(CRITTER_PRESETS, this.selectedIdx);
+          swapPreviewCritter(CRITTER_PRESETS[this.selectedIdx]);
         }
         if (consumeMenuAction('confirm')) {
           this.enterCountdown();

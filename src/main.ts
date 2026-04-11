@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createCamera, handleResize, syncSize } from './camera';
 import { Game } from './game';
 import { updateCameraShake } from './gamefeel';
+import { initPreview, tickPreview } from './preview';
 
 // ---------------------------------------------------------------------------
 // WebGL diagnostic + renderer creation
@@ -68,6 +69,12 @@ const baseCamX = camera.position.x;
 const baseCamY = camera.position.y;
 const baseCamZ = camera.position.z;
 
+// Preview (second renderer for menu 3D — character select, future winner pose)
+const previewCanvas = document.getElementById('preview-canvas') as HTMLCanvasElement | null;
+if (previewCanvas) {
+  initPreview(previewCanvas);
+}
+
 // Game
 const game = new Game(scene);
 
@@ -86,6 +93,8 @@ function loop(now: number) {
   // Apply camera shake on top of the base position (no accumulation drift)
   updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
   renderer.render(scene, camera);
+  // Preview renders only when visible; cheap no-op otherwise
+  tickPreview(dt);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
