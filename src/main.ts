@@ -92,7 +92,35 @@ if (isLikelyMobile()) {
 // Two independent channels:
 //  - SFX  (all gameplay sounds)      → #btn-sfx
 //  - Music (placeholder, no audio yet) → #btn-music
+//
+// IMPORTANT: HTML <button> elements activate on Space and Enter when they
+// have focus. Without the mousedown preventDefault below, clicking the
+// button would give it focus, and every subsequent Space press (to
+// headbutt) would re-trigger the button click — silently toggling the
+// sound mid-combat. We prevent focus on pointerdown for BOTH buttons.
 loadMutedState();
+
+/** Wire a settings button so it never takes keyboard focus. */
+function wireSettingsButton(btn: HTMLButtonElement, onClick: () => void): void {
+  // Prevent focus on mouse/touch press — the click still fires, but the
+  // button never becomes `document.activeElement`, so Space/Enter can't
+  // re-trigger it while playing.
+  btn.addEventListener('mousedown', (e) => e.preventDefault());
+  btn.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+  btn.addEventListener('click', (e) => {
+    onClick();
+    // Defensive: if focus slipped through anyway, drop it back to body.
+    btn.blur();
+    e.preventDefault();
+  });
+  // Also swallow keyboard activation on the button itself — belt + suspenders.
+  btn.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' || e.code === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
+}
 
 const btnSfx = document.getElementById('btn-sfx') as HTMLButtonElement | null;
 if (btnSfx) {
@@ -104,7 +132,7 @@ if (btnSfx) {
     btnSfx.setAttribute('aria-pressed', m ? 'true' : 'false');
   };
   refresh();
-  btnSfx.addEventListener('click', () => { toggleSfxMuted(); refresh(); });
+  wireSettingsButton(btnSfx, () => { toggleSfxMuted(); refresh(); });
 }
 
 const btnMusic = document.getElementById('btn-music') as HTMLButtonElement | null;
@@ -117,7 +145,7 @@ if (btnMusic) {
     btnMusic.setAttribute('aria-pressed', m ? 'true' : 'false');
   };
   refresh();
-  btnMusic.addEventListener('click', () => { toggleMusicMuted(); refresh(); });
+  wireSettingsButton(btnMusic, () => { toggleMusicMuted(); refresh(); });
 }
 
 // Game
