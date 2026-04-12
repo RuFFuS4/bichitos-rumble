@@ -10,6 +10,8 @@ export interface CritterConfig {
   speed: number;
   mass: number;
   headbuttForce: number;
+  /** Seconds between consecutive headbutts. Falls back to FEEL.headbutt.cooldown. */
+  headbuttCooldown?: number;
   role: string;           // short label for identity (e.g. "Balanced")
   tagline: string;        // one-line description for character select
 }
@@ -175,7 +177,7 @@ export class Critter {
       this.head.position.z = FEEL.headbutt.lunge.headExtend;
       if (this.headbuttTimer <= 0) {
         this.isHeadbutting = false;
-        this.headbuttCooldown = FEEL.headbutt.cooldown;
+        this.headbuttCooldown = this.config.headbuttCooldown ?? FEEL.headbutt.cooldown;
         // Recovery pose: head bounces back instead of snapping to 0
         applyHeadbuttRecovery(this);
       }
