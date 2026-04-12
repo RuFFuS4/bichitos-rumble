@@ -41,4 +41,9 @@ export function updatePlayer(critter: Critter, dt: number): void {
   if (isHeld('ability2') && critter.abilityStates[1]) {
     activateAbility(critter.abilityStates[1], critter);
   }
+  // Ultimate — only critters with a third ability respond. Safe on current
+  // roster (placeholders have 2 abilities → abilityStates[2] is undefined).
+  if (isHeld('ultimate') && critter.abilityStates[2]) {
+    activateAbility(critter.abilityStates[2], critter);
+  }
 }

@@ -23,7 +23,7 @@
 // Device detection uses capability probing (not user-agent sniffing).
 // ---------------------------------------------------------------------------
 
-export type HeldAction = 'headbutt' | 'ability1' | 'ability2';
+export type HeldAction = 'headbutt' | 'ability1' | 'ability2' | 'ultimate';
 export type MenuAction =
   | 'confirm'    // SPACE / Enter (menus) or headbutt (in game — separate slot)
   | 'back'       // T / Escape
@@ -47,6 +47,7 @@ const heldActions: Record<HeldAction, boolean> = {
   headbutt: false,
   ability1: false,
   ability2: false,
+  ultimate: false,
 };
 const freshMenuActions = new Set<MenuAction>();
 
@@ -166,4 +167,7 @@ function updateContinuousFromKeyboard(): void {
   _setHeld('headbutt', !!keyState['Space']);
   _setHeld('ability1', !!keyState['KeyJ']);
   _setHeld('ability2', !!keyState['KeyK']);
+  // Ultimate — maps to abilityStates[2]. Critters without a third ability
+  // simply ignore it in player.ts (null-safe check).
+  _setHeld('ultimate', !!keyState['KeyL']);
 }
