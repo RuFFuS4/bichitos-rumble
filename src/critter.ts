@@ -366,6 +366,27 @@ export class Critter {
     this.mesh.visible = false;
   }
 
+  /**
+   * Release GPU resources and detach from the scene. Idempotent.
+   * Call before dropping the reference to a Critter (e.g. on match
+   * rebuild). Without this, every roster swap leaks 8 geometries +
+   * materials per critter.
+   */
+  dispose(): void {
+    if (this.mesh.parent) this.mesh.parent.remove(this.mesh);
+    this.mesh.traverse((child) => {
+      const m = child as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.geometry?.dispose();
+      const mat = m.material;
+      if (Array.isArray(mat)) {
+        for (const mm of mat) mm.dispose();
+      } else if (mat) {
+        mat.dispose();
+      }
+    });
+  }
+
   reset(x: number, z: number): void {
     this.alive = true;
     this.mesh.visible = true;

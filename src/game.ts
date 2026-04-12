@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Arena } from './arena';
-import { Critter, CRITTER_PRESETS } from './critter';
+import { Critter, CRITTER_PRESETS, type CritterConfig } from './critter';
 import { updatePlayer } from './player';
 import { consumeMenuAction, clearMenuActions } from './input';
 import { updateBot } from './bot';
@@ -29,6 +29,31 @@ const SPAWN_POSITIONS: [number, number][] = [
   [-6, 0],
   [6, 0],
 ];
+const MAX_CRITTERS_PER_MATCH = SPAWN_POSITIONS.length;
+
+/**
+ * Pure function: pick which CritterConfigs participate in a match, in order.
+ * Index 0 of the returned array is always the player. The remaining slots
+ * are filled with bot critters chosen deterministically from `presets`,
+ * starting right after the player index and wrapping.
+ *
+ * Example: presets = [A, B, C, D, E, F, G], playerIdx = 2, botCount = 3
+ *   → [C (player), D, E, F]
+ */
+function buildMatchRoster(
+  playerIdx: number,
+  presets: CritterConfig[],
+  botCount: number,
+): CritterConfig[] {
+  if (presets.length === 0) return [];
+  const n = presets.length;
+  const safePlayerIdx = ((playerIdx % n) + n) % n;
+  const roster: CritterConfig[] = [presets[safePlayerIdx]];
+  for (let i = 1; i <= botCount; i++) {
+    roster.push(presets[(safePlayerIdx + i) % n]);
+  }
+  return roster;
+}
 
 export class Game {
   scene: THREE.Scene;
@@ -46,17 +71,11 @@ export class Game {
     this.scene = scene;
     this.arena = new Arena(scene);
 
-    for (let i = 0; i < 4; i++) {
-      const critter = new Critter(CRITTER_PRESETS[i], scene);
-      critter.x = SPAWN_POSITIONS[i][0];
-      critter.z = SPAWN_POSITIONS[i][1];
-      this.critters.push(critter);
-    }
-
-    // Default player until character select. Abilities HUD shows placeholder
-    // values that will be rebuilt when the player picks their critter.
-    this.player = this.critters[0];
-    this.playerIndex = 0;
+    // Initial "background" roster for the title and character select phases.
+    // These critters are disposed and rebuilt at enterCountdown with the
+    // actual match roster. Keeps 4 placeholders bobbing in the background
+    // while the player is in menus, without any special-casing.
+    this.rebuildCritters(CRITTER_PRESETS.slice(0, MAX_CRITTERS_PER_MATCH));
 
     // Wire up tap/click handlers for menu UX (desktop click + mobile tap)
     setSlotClickHandler((idx: number) => {
@@ -121,18 +140,44 @@ export class Game {
     this.phaseTimer = FEEL.match.countdown;
     this.matchTimer = FEEL.match.duration;
 
-    // Full reset of arena and all critters for a fresh match
+    // Rebuild the roster from the player's selection. Player always ends
+    // up in slot 0, so this.playerIndex becomes 0 implicitly.
     this.arena.reset();
-    for (let i = 0; i < this.critters.length; i++) {
-      this.critters[i].reset(SPAWN_POSITIONS[i][0], SPAWN_POSITIONS[i][1]);
-    }
+    const roster = buildMatchRoster(
+      this.selectedIdx,
+      CRITTER_PRESETS,
+      MAX_CRITTERS_PER_MATCH - 1,
+    );
+    this.rebuildCritters(roster);
 
-    // Wire up player + HUD to the chosen critter
-    this.playerIndex = this.selectedIdx;
-    this.player = this.critters[this.playerIndex];
     initAbilityHUD(this.player.abilityStates);
     initAllLivesHUD(this.critters);
     showOverlay('Get Ready!');
+  }
+
+  /**
+   * Replace the live critter array with fresh instances from the given
+   * configs. Disposes GPU resources from the old critters and positions
+   * the new ones at SPAWN_POSITIONS. The roster is clipped to the number
+   * of spawn slots. Player is always critters[0] after this call.
+   */
+  private rebuildCritters(roster: CritterConfig[]): void {
+    // Dispose and drop existing critters
+    for (const c of this.critters) c.dispose();
+    this.critters = [];
+
+    // Instantiate fresh critters from the roster, clipped to spawn slots
+    const count = Math.min(roster.length, SPAWN_POSITIONS.length);
+    for (let i = 0; i < count; i++) {
+      const critter = new Critter(roster[i], this.scene);
+      critter.x = SPAWN_POSITIONS[i][0];
+      critter.z = SPAWN_POSITIONS[i][1];
+      this.critters.push(critter);
+    }
+
+    // Player is always the first critter of the roster
+    this.playerIndex = 0;
+    this.player = this.critters[0];
   }
 
   private enterEnded(result: EndResult, title: string, subtitle: string): void {
