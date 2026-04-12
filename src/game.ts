@@ -20,6 +20,7 @@ import {
 import { applyHitStop, FEEL } from './gamefeel';
 import { showPreview, swapPreviewCritter, hidePreview } from './preview';
 import { play as playSound } from './audio';
+import { recordPick, recordOutcome, recordFall } from './stats';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended';
 
@@ -153,6 +154,9 @@ export class Game {
     initAbilityHUD(this.player.abilityStates);
     initAllLivesHUD(this.critters);
     showOverlay('Get Ready!');
+
+    // Stats: the player just committed to a critter for this match.
+    recordPick(this.player.config.name);
   }
 
   /**
@@ -187,6 +191,13 @@ export class Game {
     showEndScreen(result, title, subtitle);
     if (result === 'win') {
       playSound('victory');
+    }
+
+    // Stats: record the match outcome for the player's critter. Draws are
+    // not recorded (no current code path produces 'draw', but the type
+    // allows it — guarded here so future tie logic doesn't inflate counts).
+    if (result === 'win' || result === 'lose') {
+      recordOutcome(this.player.config.name, result);
     }
   }
 
@@ -283,7 +294,14 @@ export class Game {
 
         // 5. Physics
         resolveCollisions(this.critters);
+        const playerWasFalling = this.player.falling;
         checkFalloff(this.critters, this.arena);
+        // Stats: record player falls only (bots falling would inflate counts).
+        // Rising edge of `falling` — checkFalloff is the only path that
+        // sets it to true, so it's safe to diff before/after this call.
+        if (!playerWasFalling && this.player.falling) {
+          recordFall(this.player.config.name);
+        }
 
         // 6. Update falling critters + handle respawns
         const toRespawn = updateFalling(this.critters, effectiveDt);
