@@ -965,3 +965,59 @@ Not touched:
 3. **Per-critter pedestals** in the preview scene
 4. **Playtest report round 2** on the fixes delivered in this sprint
 5. **Background music** (would also need a second toggle button)
+
+---
+
+## 2026-04-12 — Phase A: Engine Preparation for 9-Character Roster
+
+### Context
+The 4 current critters (Rojo, Azul, Verde, Morado) are **placeholders/scaffolding**.
+The real target roster is 9 characters defined in `CHARACTER_DESIGN.md`, each with
+2 abilities + 1 ultimate. This sprint prepares the engine to absorb N critters,
+3 abilities per critter, and per-critter stats — without implementing any final
+character or changing gameplay.
+
+### Discipline constraint
+Avoid gameplay/HUD/input coupling, avoid hiding state in visual layer. Do NOT
+introduce networking abstractions — only clean up local architecture.
+
+### Tasks completed (6 commits, 8 files, +351 / −42 lines)
+
+| Task | Commit | What |
+|------|--------|------|
+| T1 | `969c5a4` | `headbuttCooldown?: number` in `CritterConfig` — per-critter override, falls back to `FEEL.headbutt.cooldown` |
+| T2 | `938f296` | Dynamic match builder: pure `buildMatchRoster()` + `rebuildCritters()` + `Critter.dispose()` for GPU cleanup |
+| T3 | `3c770d3` | `AbilityTag` type + `tags` field on `AbilityDef` + `findAbilityByTag()` helper. Bot AI fully decoupled from slot indices |
+| T4 | `ef7df30` | `HeldAction.ultimate` + `KeyL` mapping + null-safe hook in `player.ts`. Reserved `#critter-info-ulti` in character select |
+| T5 | `c6f9980` | 4th touch button (`data-action="ultimate"`) in 2×2 cluster layout (200×200). No backend changes needed |
+| T6 | `ede05ad` | `src/stats.ts` — localStorage persistence (`br-stats-v1`). Zero gameplay imports. Hooks in `game.ts`: pick / outcome / fall |
+
+### Key decisions
+- **Bot AI uses semantic tags, not slot indices.** `findAbilityByTag('mobility')` / `findAbilityByTag('aoe_push')` means critters can reorder or omit abilities without breaking the bot. Unknown tags are silently ignored.
+- **Match builder is a pure function.** `buildMatchRoster(playerIdx, presets, botCount)` wraps around the presets array. `rebuildCritters()` disposes old Three.js resources before spawning new ones — no GPU leaks on roster changes.
+- **Stats module has zero coupling.** `src/stats.ts` receives plain strings (`critterName`) and a `'win'|'lose'` enum. Does not import Critter, Game, HUD, or anything from gameplay. Only `game.ts` calls the 3 recording functions.
+- **Ultimate slot is null-safe.** `abilityStates[2]` is `undefined` for current placeholders. `player.ts` guards with `&& critter.abilityStates[2]`. HUD iterates `states.length` — 3rd slot auto-appears when a critter has 3 abilities.
+- **Touch layout shifted from triangle (3 buttons) to 2×2 grid (4 buttons).** Headbutt stays bottom-right as the largest button.
+
+### Files touched
+- `src/critter.ts` — T1 (optional field), T2 (dispose method)
+- `src/game.ts` — T2 (match builder, rebuildCritters), T6 (stats hooks)
+- `src/abilities.ts` — T3 (AbilityTag, tags field, findAbilityByTag)
+- `src/bot.ts` — T3 (full rewrite to tag-based decisions)
+- `src/input.ts` — T4 (ultimate in HeldAction union + KeyL mapping)
+- `src/player.ts` — T4 (ultimate hook with null guard)
+- `index.html` — T4 (critter-info-ulti placeholder), T5 (4th touch button + CSS)
+- `src/stats.ts` — T6 (new file)
+
+### Verification
+- `npx tsc --noEmit` → clean after every commit
+- `npm run build` → 512 KB (131 KB gzip), 600 ms — +3 KB vs previous sprint
+- `buildMatchRoster` tested in isolation: N=9, idx=8 wraps correctly, idx=99 and idx=-1 safe, N=0 returns []
+- Stats module exercised in Node mock: pick/win/loss/fall counters persist and reload correctly
+- Module coupling audit: stats imports 0, input imports 0, bot imports only critter+abilities+gamefeel, HUD imports only types
+
+### Open debts (small)
+- No runtime browser test framework — all validation is build + static + isolated Node
+- 4th touch button not tested on a real mobile device yet (code path identical to J/K)
+- `BUILD_LOG.md` docs were behind — updated here
+- Stats are collected but not displayed anywhere yet (intentional — display is a later task)

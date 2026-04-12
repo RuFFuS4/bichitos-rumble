@@ -94,6 +94,7 @@ Keep these files updated when relevant:
 - README.md
 - RULES.md
 - STACK.md
+- CHARACTER_DESIGN.md
 - PROMPTS.md
 - BUILD_LOG.md
 - SUBMISSION_CHECKLIST.md
