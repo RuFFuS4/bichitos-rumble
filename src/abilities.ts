@@ -7,7 +7,7 @@ import { play as playSound } from './audio';
 // Types
 // ---------------------------------------------------------------------------
 
-export type AbilityType = 'charge_rush' | 'ground_pound';
+export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy';
 
 /**
  * Semantic tags attached to an ability definition. The bot AI (and any
@@ -24,6 +24,7 @@ export type AbilityType = 'charge_rush' | 'ground_pound';
 export type AbilityTag =
   | 'mobility'
   | 'aoe_push'
+  | 'buff'
   | 'targeted'
   | 'defensive'
   | 'utility'
@@ -93,6 +94,25 @@ function makeGroundPound(overrides: Partial<AbilityDef> = {}): AbilityDef {
     radius: FEEL.groundPound.radius,
     force: FEEL.groundPound.force,
     tags: ['aoe_push'],
+    ...overrides,
+  };
+}
+
+function makeFrenzy(overrides: Partial<AbilityDef> = {}): AbilityDef {
+  return {
+    type: 'frenzy',
+    name: 'Frenzy',
+    key: 'L',
+    cooldown: FEEL.frenzy.cooldown,
+    duration: FEEL.frenzy.duration,
+    windUp: FEEL.frenzy.windUp,
+    speedMultiplier: FEEL.frenzy.speedMultiplier,
+    massMultiplier: FEEL.frenzy.massMultiplier,
+    impulse: 0,
+    slowDuringWindUp: FEEL.frenzy.slowDuringWindUp,
+    radius: 0,
+    force: 0,
+    tags: ['buff'],
     ...overrides,
   };
 }
@@ -170,6 +190,27 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       windUp: 0.3,
       cooldown: 6.5,
     }),
+  ],
+
+  // Sergei — Balanced (first real roster character, gorilla)
+  // Validates 3-ability pipeline: charge_rush + ground_pound + frenzy (ultimate).
+  Sergei: [
+    makeChargeRush({
+      name: 'Gorilla Rush',
+      impulse: 18,
+      duration: 0.32,
+      cooldown: 4.5,
+      speedMultiplier: 2.4,
+      massMultiplier: 2.2,
+    }),
+    makeGroundPound({
+      name: 'Shockwave',
+      radius: 3.2,
+      force: 30,
+      windUp: 0.35,
+      cooldown: 6.5,
+    }),
+    makeFrenzy(),
   ],
 };
 
@@ -261,9 +302,17 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   playSound('groundPound');
 }
 
+function fireFrenzy(_def: AbilityDef, _critter: Critter): void {
+  // Frenzy is a pure buff — no positional effect. The speed/mass multipliers
+  // are applied automatically by getSpeedMultiplier/getMassMultiplier while
+  // the ability state is active. The visual glow is handled in critter.ts.
+  playSound('abilityFire');
+}
+
 const EFFECT_MAP: Record<AbilityType, (def: AbilityDef, critter: Critter, all: Critter[], scene: THREE.Scene) => void> = {
   charge_rush: fireChargeRush,
   ground_pound: fireGroundPound,
+  frenzy: fireFrenzy,
 };
 
 function fireEffect(state: AbilityState, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {

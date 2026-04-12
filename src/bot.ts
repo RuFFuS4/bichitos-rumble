@@ -91,4 +91,12 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
       activateAbility(aoeAbility, bot);
     }
   }
+
+  // --- Buff ability (e.g. Frenzy): activate when close to an enemy
+  const buffAbility = findAbilityByTag(bot.abilityStates, 'buff');
+  if (buffAbility && canActivateAbility(buffAbility) && nearestDist < 3.5) {
+    if (Math.random() < 0.008) {
+      activateAbility(buffAbility, bot);
+    }
+  }
 }

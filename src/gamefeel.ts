@@ -60,6 +60,16 @@ export const FEEL = {
     windUpHeadDrop: -0.15,    // head sinks during wind-up
   },
 
+  // --- Frenzy (buff ultimate) ---
+  frenzy: {
+    speedMultiplier: 1.3,     // conservative: 30% faster, tweak after playtest
+    massMultiplier: 1.35,     // conservative: harder to push, not unstoppable
+    duration: 4.0,            // buff window
+    windUp: 0.4,              // visible charge-up before buff starts
+    slowDuringWindUp: 0.1,    // nearly rooted while channeling
+    cooldown: 18.0,           // ultimate-tier cooldown
+  },
+
   // --- Match ---
   match: {
     duration: 120,            // seconds total (raised from 90 for 3-life matches)

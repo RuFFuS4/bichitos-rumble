@@ -44,6 +44,13 @@ export const CRITTER_PRESETS: CritterConfig[] = [
     role: 'Glass Cannon',
     tagline: 'High risk, high reward.',
   },
+  // --- First real roster character ---
+  {
+    name: 'Sergei', color: 0xb5651d,
+    speed: 10, mass: 1.1, headbuttForce: 15,
+    role: 'Balanced',
+    tagline: 'Strong and agile. No weakness.',
+  },
 ];
 
 const BODY_RADIUS = 0.5;
@@ -269,6 +276,18 @@ export class Critter {
         } else {
           glowColor = 0xff2200;
           glowIntensity = 0.7;
+        }
+      } else if (s.def.type === 'frenzy') {
+        if (s.windUpLeft > 0) {
+          // Channeling: yellow glow, slight body compression
+          glowColor = 0xffff00;
+          glowIntensity = 0.5;
+          bodyScaleY = 0.85;
+        } else {
+          // Buff active: pulsing deep red glow
+          const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.008);
+          glowColor = 0xff1100;
+          glowIntensity = 0.6 + pulse * 0.4;
         }
       }
     }
