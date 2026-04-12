@@ -497,8 +497,8 @@
       position: absolute;
       bottom: 28px;
       right: 28px;
-      width: 180px;
-      height: 180px;
+      width: 200px;
+      height: 200px;
       pointer-events: none;
     }
     .touch-button {
@@ -526,7 +526,10 @@
       background: rgba(255, 220, 92, 0.35);
       border-color: rgba(255, 220, 92, 0.9);
     }
-    /* Layout: 3 buttons in a triangular cluster, thumb-friendly */
+    /* Layout: 2×2 cluster, thumb-friendly. Headbutt is the larger primary
+       action in the bottom-right; J/K flank it for abilities; L (ultimate)
+       sits in the top-left slot. Populated only when a critter has a third
+       ability — for the current placeholder roster, L is a no-op. */
     .touch-btn-headbutt {
       bottom: 0;
       right: 0;
@@ -536,10 +539,14 @@
     }
     .touch-btn-j {
       top: 0;
-      right: 60px;
+      right: 0;
     }
     .touch-btn-k {
-      bottom: 60px;
+      bottom: 0;
+      left: 0;
+    }
+    .touch-btn-l {
+      top: 0;
       left: 0;
     }
   </style>
@@ -610,6 +617,7 @@
       <div class="joystick-handle"></div>
     </div>
     <div id="touch-actions">
+      <button class="touch-button touch-btn-l" data-action="ultimate">L</button>
       <button class="touch-button touch-btn-j" data-action="ability1">J</button>
       <button class="touch-button touch-btn-headbutt" data-action="headbutt">⚡</button>
       <button class="touch-button touch-btn-k" data-action="ability2">K</button>
