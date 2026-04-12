@@ -9,6 +9,26 @@ import { play as playSound } from './audio';
 
 export type AbilityType = 'charge_rush' | 'ground_pound';
 
+/**
+ * Semantic tags attached to an ability definition. The bot AI (and any
+ * future ability-aware consumer) decides what to do with an ability by
+ * inspecting these tags, NOT by its index in the slot array.
+ *
+ * Tags currently understood by bot.ts:
+ *   'mobility'  — dash / reposition / close distance
+ *   'aoe_push'  — area effect that pushes targets away
+ *
+ * Add more tags as new ability types are introduced. Keep them plain
+ * strings — no class hierarchy, no enum, no registry.
+ */
+export type AbilityTag =
+  | 'mobility'
+  | 'aoe_push'
+  | 'targeted'
+  | 'defensive'
+  | 'utility'
+  | 'risky';
+
 export interface AbilityDef {
   type: AbilityType;
   name: string;
@@ -22,6 +42,8 @@ export interface AbilityDef {
   slowDuringWindUp: number;
   radius: number;
   force: number;
+  /** Semantic tags. Required — bot AI depends on this to pick abilities. */
+  tags: AbilityTag[];
 }
 
 export interface AbilityState {
@@ -51,6 +73,7 @@ function makeChargeRush(overrides: Partial<AbilityDef> = {}): AbilityDef {
     slowDuringWindUp: 1.0,
     radius: 0,
     force: 0,
+    tags: ['mobility'],
     ...overrides,
   };
 }
@@ -69,6 +92,7 @@ function makeGroundPound(overrides: Partial<AbilityDef> = {}): AbilityDef {
     slowDuringWindUp: FEEL.groundPound.slowDuringWindUp,
     radius: FEEL.groundPound.radius,
     force: FEEL.groundPound.force,
+    tags: ['aoe_push'],
     ...overrides,
   };
 }
@@ -169,6 +193,22 @@ export function createAbilityStates(critterName: string): AbilityState[] {
 
 export function canActivateAbility(state: AbilityState): boolean {
   return state.cooldownLeft <= 0 && !state.active;
+}
+
+/**
+ * Find the first ability state whose definition carries the given tag,
+ * or null if none matches. Callers that want to decide by semantic tag
+ * (bot AI, future tooltips) should use this instead of indexing into
+ * the ability states array directly.
+ */
+export function findAbilityByTag(
+  states: AbilityState[],
+  tag: AbilityTag,
+): AbilityState | null {
+  for (const s of states) {
+    if (s.def.tags.includes(tag)) return s;
+  }
+  return null;
 }
 
 export function activateAbility(state: AbilityState, _critter: Critter): boolean {

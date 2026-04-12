@@ -1,12 +1,28 @@
 import { Critter } from './critter';
-import { activateAbility, canActivateAbility } from './abilities';
+import { activateAbility, canActivateAbility, findAbilityByTag } from './abilities';
 import { FEEL } from './gamefeel';
 
-/** Simple bot AI: chase the nearest alive critter, headbutt when close, use abilities. */
+/**
+ * Placeholder bot AI: chase the nearest alive critter, headbutt when close,
+ * and use abilities based on their SEMANTIC TAGS (not on their slot index).
+ *
+ * The bot is intentionally dumb. Its only job is to not crash with new
+ * ability types and to use abilities in roughly sensible contexts. Any
+ * real intelligence is out of scope — the bot is itself a placeholder
+ * and will likely be rewritten once the final roster is in.
+ *
+ * Decisions:
+ *   - A 'mobility' ability gets used to close mid-range gaps (dist 3..6)
+ *   - An 'aoe_push' ability gets used when surrounded (>= 2 enemies nearby)
+ *
+ * If an ability has neither of those tags, the bot simply doesn't touch
+ * it — the player will, and we don't care about bot optimality with
+ * unknown abilities right now.
+ */
 export function updateBot(bot: Critter, allCritters: Critter[], dt: number): void {
   if (!bot.alive) return;
 
-  // Find nearest alive enemy
+  // Find nearest alive enemy + count enemies within 4 units
   let nearest: Critter | null = null;
   let nearestDist = Infinity;
   let nearbyCount = 0;
@@ -32,13 +48,14 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
   const dz = nearest.z - bot.z;
   const dist = Math.sqrt(dx * dx + dz * dz);
 
+  // --- Movement: chase the target, with the same steering reduction as
+  // the player has during a mobility-tagged ability's active window.
   if (dist > 0.01) {
     let nx = dx / dist;
     let nz = dz / dist;
 
-    // Reduce steering during Charge Rush (same commitment as player)
-    const chargeState = bot.abilityStates[0];
-    if (chargeState?.active && chargeState.def.type === 'charge_rush' && chargeState.windUpLeft <= 0) {
+    const mobility = findAbilityByTag(bot.abilityStates, 'mobility');
+    if (mobility?.active && mobility.windUpLeft <= 0) {
       nx *= FEEL.chargeRush.steerFactor;
       nz *= FEEL.chargeRush.steerFactor;
     }
@@ -48,24 +65,30 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
     bot.vz += nz * accel * dt;
   }
 
-  // Headbutt when close
+  // --- Basic headbutt when close
   if (nearestDist < 2.0) {
     bot.startHeadbutt();
   }
 
-  // Ability 1: use when enemy is at mid-range (dash/charge type)
-  const ab0 = bot.abilityStates[0];
-  if (ab0 && canActivateAbility(ab0) && nearestDist > 3.0 && nearestDist < 6.0) {
-    if (Math.random() < 0.02) { // ~40% chance per second at 60fps
-      activateAbility(ab0, bot);
+  // --- Mobility ability: use at mid-range to close the gap
+  const mobilityAbility = findAbilityByTag(bot.abilityStates, 'mobility');
+  if (
+    mobilityAbility &&
+    canActivateAbility(mobilityAbility) &&
+    nearestDist > 3.0 &&
+    nearestDist < 6.0
+  ) {
+    // ~40% chance per second at 60fps
+    if (Math.random() < 0.02) {
+      activateAbility(mobilityAbility, bot);
     }
   }
 
-  // Ability 2: use when surrounded (AoE type)
-  const ab1 = bot.abilityStates[1];
-  if (ab1 && canActivateAbility(ab1) && nearbyCount >= 2) {
+  // --- AoE push ability: use when surrounded
+  const aoeAbility = findAbilityByTag(bot.abilityStates, 'aoe_push');
+  if (aoeAbility && canActivateAbility(aoeAbility) && nearbyCount >= 2) {
     if (Math.random() < 0.015) {
-      activateAbility(ab1, bot);
+      activateAbility(aoeAbility, bot);
     }
   }
 }
