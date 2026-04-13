@@ -87,8 +87,11 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Sergei',
     glbPath: './models/critters/sergei.glb',
     baseColor: 0xb5651d,
-    scale: 2.0, rotation: Math.PI, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.05,
+    // Model bounds: Y [-0.49, 0.49], center at origin, front faces ±X
+    // pivotY = |minY| × scale to place feet at ground level
+    // rotation = -π/2 to turn from X-facing to Z-facing (game forward)
+    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0.98,
     status: 'playable',
     role: 'Balanced',
     tagline: 'Strong and agile. No weakness.',

@@ -83,7 +83,7 @@ export class Critter {
   /** Roster visual data (null for characters without a roster entry). */
   rosterEntry: RosterEntry | null = null;
   /** Loaded GLB scene graph (null while loading or if procedural-only). */
-  private glbMesh: THREE.Group | null = null;
+  glbMesh: THREE.Group | null = null;  // public for debug tuning (make private after)
   /** Pre-collected MeshStandardMaterials from the GLB for fast visual updates. */
   private glbMaterials: THREE.MeshStandardMaterial[] = [];
 
