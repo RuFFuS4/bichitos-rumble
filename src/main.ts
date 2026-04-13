@@ -173,40 +173,44 @@ function loop(now: number) {
 requestAnimationFrame(loop);
 
 // ---------------------------------------------------------------------------
-// TEMPORARY DEBUG: GLB transform tuning — remove after values are final
+// DEBUG ONLY: GLB transform tuning tool
 // ---------------------------------------------------------------------------
+// Available only in dev mode (npm run dev). Stripped from production builds
+// by Vite's dead-code elimination on import.meta.env.DEV.
+//
 // Usage in browser console:
 //   __tune({ scale: 2.0 })           — adjust scale
 //   __tune({ rotation: -1.57 })      — adjust Y rotation (radians)
 //   __tune({ pivotY: 0.98 })         — adjust vertical offset
 //   __tune({ offsetX: 0, offsetZ: 0 }) — adjust horizontal offset
 //   __tune()                          — print current values
-//
-// Affects ALL critters with a loaded GLB (preview + match).
+//   __game                            — access Game instance
 // ---------------------------------------------------------------------------
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const w = window as any;
-w.__game = game;
-w.__tune = (opts?: {
-  scale?: number; rotation?: number; pivotY?: number;
-  offsetX?: number; offsetZ?: number;
-}) => {
-  const all = game.critters.filter((c: any) => c.glbMesh) as any[]; // eslint-disable-line
-  if (!opts) {
+if (import.meta.env.DEV) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any;
+  w.__game = game;
+  w.__tune = (opts?: {
+    scale?: number; rotation?: number; pivotY?: number;
+    offsetX?: number; offsetZ?: number;
+  }) => {
+    const all = game.critters.filter((c: any) => c.glbMesh) as any[];
+    if (!opts) {
+      for (const c of all) {
+        const g = c.glbMesh as THREE.Group;
+        console.log(`[tune] ${c.config.name}: scale=${g.scale.x.toFixed(3)} rot=${g.rotation.y.toFixed(3)} pivotY=${g.position.y.toFixed(3)} pos=(${g.position.x.toFixed(3)}, ${g.position.z.toFixed(3)})`);
+      }
+      if (all.length === 0) console.log('[tune] no GLB critters loaded yet.');
+      return;
+    }
     for (const c of all) {
       const g = c.glbMesh as THREE.Group;
-      console.log(`[tune] ${c.config.name}: scale=${g.scale.x.toFixed(3)} rot=${g.rotation.y.toFixed(3)} pivotY=${g.position.y.toFixed(3)} pos=(${g.position.x.toFixed(3)}, ${g.position.z.toFixed(3)})`);
+      if (opts.scale !== undefined) g.scale.setScalar(opts.scale);
+      if (opts.rotation !== undefined) g.rotation.y = opts.rotation;
+      if (opts.pivotY !== undefined) g.position.y = opts.pivotY;
+      if (opts.offsetX !== undefined) g.position.x = opts.offsetX;
+      if (opts.offsetZ !== undefined) g.position.z = opts.offsetZ;
     }
-    if (all.length === 0) console.log('[tune] no GLB critters in match. Use __tunePreview() for character select.');
-    return;
-  }
-  for (const c of all) {
-    const g = c.glbMesh as THREE.Group;
-    if (opts.scale !== undefined) g.scale.setScalar(opts.scale);
-    if (opts.rotation !== undefined) g.rotation.y = opts.rotation;
-    if (opts.pivotY !== undefined) g.position.y = opts.pivotY;
-    if (opts.offsetX !== undefined) g.position.x = opts.offsetX;
-    if (opts.offsetZ !== undefined) g.position.z = opts.offsetZ;
-  }
-  console.log('[tune] applied to match critters:', JSON.stringify(opts));
-};
+    console.log('[tune] applied:', JSON.stringify(opts));
+  };
+}
