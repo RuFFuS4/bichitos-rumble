@@ -392,6 +392,43 @@
       border-radius: 4px;
       transition: width 0.35s ease-out;
     }
+    #critter-info-abilities {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      width: 80%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .ability-info-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-size: 10px;
+      opacity: 0.85;
+    }
+    .ability-info-key {
+      font-weight: bold;
+      font-family: monospace;
+      font-size: 9px;
+      color: #4ade80;
+      min-width: 18px;
+    }
+    .ability-info-name {
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    .ability-info-desc {
+      opacity: 0.6;
+      font-size: 9px;
+    }
+    .ability-info-planned {
+      font-size: 8px;
+      color: #ffcc00;
+      opacity: 0.5;
+      margin-left: 2px;
+    }
 
     /* ---------- End Screen ---------- */
     #end-screen .end-result {
@@ -475,7 +512,7 @@
       -webkit-user-select: none;
       -webkit-tap-highlight-color: transparent;
     }
-    body.touch-mode #touch-controls { display: block; }
+    body.touch-mode.match-active #touch-controls { display: block; }
 
     #touch-joystick {
       position: absolute;
@@ -608,10 +645,7 @@
           <div id="critter-info-role"></div>
           <div id="critter-info-tagline"></div>
           <div id="critter-info-stats"></div>
-          <!-- Reserved: ultimate slot. Populated only when a critter has
-               abilityStates[2] (final roster introduces ultimates). Hidden
-               while empty so the layout stays stable for 2-ability critters. -->
-          <div id="critter-info-ulti" hidden></div>
+          <div id="critter-info-abilities"></div>
         </div>
       </div>
     </div>

@@ -127,6 +127,7 @@ export class Game {
   private enterTitle(): void {
     clearMenuActions();
     this.phase = 'title';
+    document.body.classList.remove('match-active');
     showTitleScreen();
     hideCharacterSelect();
     hideEndScreen();
@@ -137,6 +138,7 @@ export class Game {
   private enterCharacterSelect(): void {
     clearMenuActions();
     this.phase = 'character_select';
+    document.body.classList.remove('match-active');
     hideTitleScreen();
     hideEndScreen();
     showCharacterSelect(this.displayRoster, CRITTER_PRESETS, this.selectedIdx);
@@ -149,6 +151,7 @@ export class Game {
 
   private enterCountdown(): void {
     clearMenuActions();
+    document.body.classList.add('match-active');
     hideCharacterSelect();
     hidePreview();
     hideEndScreen();
@@ -215,6 +218,7 @@ export class Game {
   private enterEnded(result: EndResult, title: string, subtitle: string): void {
     clearMenuActions();
     this.phase = 'ended';
+    document.body.classList.remove('match-active');
     hideOverlay();
     showEndScreen(result, title, subtitle);
     if (result === 'win') {

@@ -45,6 +45,8 @@ export interface AbilityDef {
   force: number;
   /** Semantic tags. Required — bot AI depends on this to pick abilities. */
   tags: AbilityTag[];
+  /** Short one-line description shown in character select info pane. */
+  description: string;
 }
 
 export interface AbilityState {
@@ -75,6 +77,7 @@ function makeChargeRush(overrides: Partial<AbilityDef> = {}): AbilityDef {
     radius: 0,
     force: 0,
     tags: ['mobility'],
+    description: 'Frontal dash that pushes enemies',
     ...overrides,
   };
 }
@@ -94,6 +97,7 @@ function makeGroundPound(overrides: Partial<AbilityDef> = {}): AbilityDef {
     radius: FEEL.groundPound.radius,
     force: FEEL.groundPound.force,
     tags: ['aoe_push'],
+    description: 'Slams ground, knocking back nearby enemies',
     ...overrides,
   };
 }
@@ -113,6 +117,7 @@ function makeFrenzy(overrides: Partial<AbilityDef> = {}): AbilityDef {
     radius: 0,
     force: 0,
     tags: ['buff'],
+    description: 'Temporary speed and power boost',
     ...overrides,
   };
 }
@@ -197,6 +202,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Sergei: [
     makeChargeRush({
       name: 'Gorilla Rush',
+      description: 'Heavy palm strike charge',
       impulse: 18,
       duration: 0.32,
       cooldown: 4.5,
@@ -205,12 +211,13 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     }),
     makeGroundPound({
       name: 'Shockwave',
+      description: 'Slams ground with both fists',
       radius: 3.2,
       force: 30,
       windUp: 0.35,
       cooldown: 6.5,
     }),
-    makeFrenzy(),
+    makeFrenzy({ description: 'Enters berserk mode: +speed, +power' }),
   ],
 };
 

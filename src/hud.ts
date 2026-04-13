@@ -1,4 +1,5 @@
 import type { AbilityState } from './abilities';
+import { createAbilityStates } from './abilities';
 import type { Critter, CritterConfig } from './critter';
 import type { RosterEntry } from './roster';
 
@@ -15,6 +16,7 @@ const infoName = document.getElementById('critter-info-name')!;
 const infoRole = document.getElementById('critter-info-role')!;
 const infoTagline = document.getElementById('critter-info-tagline')!;
 const infoStats = document.getElementById('critter-info-stats')!;
+const infoAbilities = document.getElementById('critter-info-abilities')!;
 const endScreen = document.getElementById('end-screen')!;
 const endResultEl = document.getElementById('end-result')!;
 const endSubtitleEl = document.getElementById('end-subtitle')!;
@@ -365,6 +367,53 @@ function paintInfoPane(roster: RosterEntry[], presets: CritterConfig[], idx: num
       fill.style.width = s.pct.toFixed(1) + '%';
     });
   }
+
+  // --- Ability list ---
+  infoAbilities.innerHTML = '';
+
+  // Source 1: real abilities from gameplay config (playable characters)
+  if (config) {
+    const states = createAbilityStates(config.name);
+    for (const s of states) {
+      appendAbilityRow(s.def.key, s.def.name, s.def.description, false);
+    }
+  }
+  // Source 2: planned abilities from roster (WIP characters)
+  else if (entry.plannedAbilities) {
+    for (const a of entry.plannedAbilities) {
+      appendAbilityRow(a.key, a.name, a.description, true);
+    }
+  }
+}
+
+function appendAbilityRow(key: string, name: string, desc: string, planned: boolean): void {
+  const row = document.createElement('div');
+  row.className = 'ability-info-row';
+
+  const keyEl = document.createElement('span');
+  keyEl.className = 'ability-info-key';
+  keyEl.textContent = `[${key}]`;
+
+  const nameEl = document.createElement('span');
+  nameEl.className = 'ability-info-name';
+  nameEl.textContent = name;
+
+  const descEl = document.createElement('span');
+  descEl.className = 'ability-info-desc';
+  descEl.textContent = '— ' + desc;
+
+  row.appendChild(keyEl);
+  row.appendChild(nameEl);
+  row.appendChild(descEl);
+
+  if (planned) {
+    const badge = document.createElement('span');
+    badge.className = 'ability-info-planned';
+    badge.textContent = '(planned)';
+    row.appendChild(badge);
+  }
+
+  infoAbilities.appendChild(row);
 }
 
 export type EndResult = 'win' | 'lose' | 'draw';

@@ -366,6 +366,7 @@ export class Critter {
     }
     // Apply roster visual config
     group.scale.setScalar(entry.scale);
+    group.rotation.y = entry.rotation;
     group.position.set(...entry.offset);
     group.position.y += entry.pivotY;
 
