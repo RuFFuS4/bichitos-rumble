@@ -321,56 +321,55 @@ function paintInfoPane(roster: RosterEntry[], presets: CritterConfig[], idx: num
     : entry.tagline;
 
   infoStats.innerHTML = '';
+  infoAbilities.innerHTML = '';
 
   // Stat bars only if this character has a gameplay config
   const config = presets.find(p => p.name === entry.displayName);
-  if (!config) return;
+  if (config) {
+    const speedMin = Math.min(...presets.map(p => p.speed));
+    const speedMax = Math.max(...presets.map(p => p.speed));
+    const massMin = Math.min(...presets.map(p => p.mass));
+    const massMax = Math.max(...presets.map(p => p.mass));
+    const powerMin = Math.min(...presets.map(p => p.headbuttForce));
+    const powerMax = Math.max(...presets.map(p => p.headbuttForce));
 
-  const speedMin = Math.min(...presets.map(p => p.speed));
-  const speedMax = Math.max(...presets.map(p => p.speed));
-  const massMin = Math.min(...presets.map(p => p.mass));
-  const massMax = Math.max(...presets.map(p => p.mass));
-  const powerMin = Math.min(...presets.map(p => p.headbuttForce));
-  const powerMax = Math.max(...presets.map(p => p.headbuttForce));
+    const MIN_FILL = 0.18;
+    const rel = (v: number, min: number, max: number) =>
+      MIN_FILL + normalize(v, min, max) * (1 - MIN_FILL);
 
-  const MIN_FILL = 0.18;
-  const rel = (v: number, min: number, max: number) =>
-    MIN_FILL + normalize(v, min, max) * (1 - MIN_FILL);
+    const stats: { label: string; pct: number }[] = [
+      { label: 'Speed',  pct: rel(config.speed, speedMin, speedMax) * 100 },
+      { label: 'Weight', pct: rel(config.mass, massMin, massMax) * 100 },
+      { label: 'Power',  pct: rel(config.headbuttForce, powerMin, powerMax) * 100 },
+    ];
 
-  const stats: { label: string; pct: number }[] = [
-    { label: 'Speed',  pct: rel(config.speed, speedMin, speedMax) * 100 },
-    { label: 'Weight', pct: rel(config.mass, massMin, massMax) * 100 },
-    { label: 'Power',  pct: rel(config.headbuttForce, powerMin, powerMax) * 100 },
-  ];
+    for (const s of stats) {
+      const row = document.createElement('div');
+      row.className = 'stat-row';
 
-  for (const s of stats) {
-    const row = document.createElement('div');
-    row.className = 'stat-row';
+      const label = document.createElement('span');
+      label.className = 'stat-label';
+      label.textContent = s.label;
 
-    const label = document.createElement('span');
-    label.className = 'stat-label';
-    label.textContent = s.label;
+      const bg = document.createElement('div');
+      bg.className = 'stat-bar-bg';
 
-    const bg = document.createElement('div');
-    bg.className = 'stat-bar-bg';
+      const fill = document.createElement('div');
+      fill.className = 'stat-bar';
+      fill.style.width = '0%';
+      bg.appendChild(fill);
 
-    const fill = document.createElement('div');
-    fill.className = 'stat-bar';
-    fill.style.width = '0%';
-    bg.appendChild(fill);
+      row.appendChild(label);
+      row.appendChild(bg);
+      infoStats.appendChild(row);
 
-    row.appendChild(label);
-    row.appendChild(bg);
-    infoStats.appendChild(row);
-
-    requestAnimationFrame(() => {
-      fill.style.width = s.pct.toFixed(1) + '%';
-    });
+      requestAnimationFrame(() => {
+        fill.style.width = s.pct.toFixed(1) + '%';
+      });
+    }
   }
 
   // --- Ability list ---
-  infoAbilities.innerHTML = '';
-
   // Source 1: real abilities from gameplay config (playable characters)
   if (config) {
     const states = createAbilityStates(config.name);
