@@ -1097,3 +1097,26 @@ Jam widget URL changed from `jam.pieter.com` to `vibej.am`. Updated in:
 
 ### Jam deadline
 May 1, 2026 @ 13:37 UTC. Submission form: https://forms.gle/bGG4e3uD9PUUJKUc7
+
+---
+
+## 2026-04-13 — Post-validation fixes + merge to production
+
+### Fixes applied (4 commits)
+- Sergei GLB transform corrected: scale 2.0, rotation -π/2, pivotY 0.98
+  (model was 0.93 units underground due to wrong pivotY)
+- Stale abilities bug in WIP character select (early return skipped clear)
+- Touch controls hidden in title/select/ended (CSS `.match-active` gate)
+- `__tune()` debug tool gated behind `import.meta.env.DEV`
+
+### Merge
+15 commits merged dev → main (fast-forward). Production verified at
+bichitosrumble.com. All features from Phase A, Phase B, and GLB pipeline
+now live.
+
+### Current production state
+- 9-character roster grid (1 playable: Sergei with 3D GLB model)
+- 8 WIP characters with planned ability info
+- 4 internal placeholders for bot matches
+- Widget: vibej.am/2026/widget.js (verified)
+- Bundle: 624 KB JS (163 KB gzip) + 425 KB Sergei GLB + 1.1 MB Draco decoder

@@ -2,14 +2,17 @@
 
 ## Key Decisions
 - Phase 1 is offline-only with bots. No multiplayer until core loop is validated.
-- Player always controls Rojo (index 0) in phase 1.
-- Arena has 6 rings, collapses every 20s from outside in.
-- 4 critter presets with different speed/mass/headbutt tradeoffs.
-- Each critter has 2 special abilities. Keys: J and K. Currently all critters share Rojo's abilities (placeholder).
-- Controls: WASD move, Space headbutt, J ability 1, K ability 2, R restart.
+- Roster is data-driven: `src/roster.ts` (13 entries: 9 real + 4 internal placeholders).
+- 9-character real roster visible in character select. Only characters with gameplay are confirmable (currently: Sergei).
+- 4 placeholders (Rojo/Azul/Verde/Morado) hidden from UX, used only as bots.
+- GLB pipeline: `scripts/optimize-models.mjs` → `public/models/critters/<id>.glb`. Procedural fallback if GLB missing.
+- Each critter has up to 3 abilities. Keys: J, K, L (ultimate). Abilities are config-driven with semantic tags.
+- Bot AI uses `findAbilityByTag()` — decoupled from ability slot indices.
+- `__tune()` debug tool available only in dev mode (`import.meta.env.DEV`).
+- Controls: WASD move, Space headbutt, J/K abilities, L ultimate, R restart.
 - Camera: pseudo-isometric with depth (FOV 40, pos 0/23/25, lookAt 0/-3/0).
-- Lives system: 3 lives per critter (default). On fall → respawn at center with 1.5s immunity. Permanent elimination when all lives spent.
-- Public deploy: https://www.bichitosrumble.com (Vercel, custom domain).
+- Lives system: 3 lives per critter (default). On fall → respawn at center with 1.5s immunity.
+- Public deploy: https://www.bichitosrumble.com (Vercel, auto-deploy from main).
 
 ## Known Physics Values
 - Arena radius: 12 units, 6 rings
@@ -136,12 +139,14 @@ Future restructure ideas (NOT yet implemented):
 - During "off" frame: opacity 0.15 (was 0.3, now more dramatic)
 
 ## Critter identity (implemented)
-- Rojo: Balanced. Standard stats and abilities (FEEL defaults).
-- Azul: Skirmisher. Faster, lighter. Quick Dash + Sharp Stomp.
-- Verde: Crusher. Slow, heavy, devastating. Heavy Charge + Earthquake.
-- Morado: Glass Cannon. Fastest, lightest. Blitz + Shockwave.
-- Abilities use same base types (charge_rush / ground_pound) but with
-  per-critter overrides via makeChargeRush/makeGroundPound factories.
+- Rojo: Balanced (internal). Standard stats (FEEL defaults). 2 abilities.
+- Azul: Skirmisher (internal). Faster, lighter. Quick Dash + Sharp Stomp.
+- Verde: Crusher (internal). Slow, heavy. Heavy Charge + Earthquake.
+- Morado: Glass Cannon (internal). Fastest, lightest. Blitz + Shockwave.
+- **Sergei: Balanced (playable, GLB model).** Gorilla Rush + Shockwave + Frenzy (ultimate). First real roster character.
+- Abilities use base types (charge_rush / ground_pound / frenzy) with
+  per-critter overrides via factory functions. `AbilityDef.description`
+  field used for character select info pane.
 
 ## Game flow (implemented)
 - title → character_select → countdown → playing → ended
@@ -154,18 +159,17 @@ Future restructure ideas (NOT yet implemented):
 - Device-agnostic: `src/input.ts` is the only module that touches physical keys
 - Game logic reads `getMoveVector()`, `isHeld(action)`, `consumeMenuAction(action)`
 - Menu actions are edge-detected (no repeat), cleared on phase transitions
+- HeldActions: headbutt, ability1, ability2, ultimate (4 actions)
 - Keyboard backend lives inside `input.ts` (always active)
-- Touch backend NOT implemented yet — just add a new file that writes into
-  `_setMove`, `_setHeld`, `_pushMenuAction` and the rest of the game works
+- Touch backend: `src/input-touch.ts` (joystick + 4 buttons, 2×2 layout)
+- Touch controls gated with CSS `.match-active` — hidden in title/select/ended
 - Capability detection via `hasTouchSupport()` + `isNarrowViewport()` +
   `isLikelyMobile()` (no user-agent sniffing)
 
-## Development Priorities (next sprint)
-- Playtest live deploy and validate which predicted issues were real
-- Implement touch input backend (on-screen joystick + buttons)
-- First small sound pass (5-6 SFX)
-- Dynamic ability HUD showing bot cooldowns (opponent reads)
-- Do NOT invest more time in bots — minimal temporary opposition
-- Game must stay fast-loading, no heavy screens
-- Leave clean hooks for animation/VFX but don't add final art yet
-- Jam widget included in index.html (required for submission)
+## Next Priorities
+- Optimize remaining 8 GLBs and tune transforms per model
+- Procedural animation for GLB models (idle bob, movement tilt, squash-stretch)
+- Separate visual scale per character (modelScale vs physicsRadius)
+- Ability icon/logo system (data-driven, circular logos per ability)
+- Portal integration (optional, link to vibej.am/portal/2026)
+- Submit via Google Form before May 1, 2026 13:37 UTC

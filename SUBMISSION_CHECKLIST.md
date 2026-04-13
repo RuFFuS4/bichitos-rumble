@@ -52,8 +52,8 @@
 - [x] Custom domain `www.bichitosrumble.com` aliased to production
 - [x] GitHub ↔ Vercel auto-deploy (dev → preview, main → production)
 - [x] Mobile support (virtual joystick, 4 action buttons, landscape lock)
-- [ ] Merge dev → main with current features
-- [ ] Verify production after merge
+- [x] Merge dev → main with current features (2026-04-13, 15 commits)
+- [x] Verify production after merge (bichitosrumble.com verified)
 - [ ] Portal integration (optional)
 - [ ] Submit via Google Form
 - [ ] Full cross-device playtest
