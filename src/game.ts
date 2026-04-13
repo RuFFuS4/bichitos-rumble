@@ -21,6 +21,8 @@ import { applyHitStop, FEEL } from './gamefeel';
 import { showPreview, swapPreviewCritter, hidePreview } from './preview';
 import { play as playSound } from './audio';
 import { recordPick, recordOutcome, recordFall } from './stats';
+import { getDisplayRoster, getRosterEntry, type RosterEntry } from './roster';
+import { preloadModels } from './model-loader';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended';
 
@@ -33,27 +35,34 @@ const SPAWN_POSITIONS: [number, number][] = [
 const MAX_CRITTERS_PER_MATCH = SPAWN_POSITIONS.length;
 
 /**
- * Pure function: pick which CritterConfigs participate in a match, in order.
- * Index 0 of the returned array is always the player. The remaining slots
- * are filled with bot critters chosen deterministically from `presets`,
- * starting right after the player index and wrapping.
- *
- * Example: presets = [A, B, C, D, E, F, G], playerIdx = 2, botCount = 3
- *   → [C (player), D, E, F]
+ * Build the match roster: player config first, then bots from a pool.
+ * Bots are drawn round-robin from the pool, skipping the player's config.
  */
 function buildMatchRoster(
-  playerIdx: number,
-  presets: CritterConfig[],
+  playerConfig: CritterConfig,
+  botPool: CritterConfig[],
   botCount: number,
 ): CritterConfig[] {
-  if (presets.length === 0) return [];
-  const n = presets.length;
-  const safePlayerIdx = ((playerIdx % n) + n) % n;
-  const roster: CritterConfig[] = [presets[safePlayerIdx]];
-  for (let i = 1; i <= botCount; i++) {
-    roster.push(presets[(safePlayerIdx + i) % n]);
+  const roster: CritterConfig[] = [playerConfig];
+  const available = botPool.filter(c => c.name !== playerConfig.name);
+  if (available.length === 0) return roster;
+  for (let i = 0; i < botCount; i++) {
+    roster.push(available[i % available.length]);
   }
   return roster;
+}
+
+/** Create a minimal CritterConfig for preview-only (WIP characters without gameplay). */
+function previewConfigFromRoster(entry: RosterEntry): CritterConfig {
+  return {
+    name: entry.displayName,
+    color: entry.baseColor,
+    speed: 10,
+    mass: 1.0,
+    headbuttForce: 14,
+    role: entry.role,
+    tagline: entry.tagline,
+  };
 }
 
 export class Game {
@@ -62,11 +71,13 @@ export class Game {
   critters: Critter[] = [];
   player!: Critter;
   private playerIndex = 0;
-  private selectedIdx = 0;   // index highlighted in character select
+  // Start on the first playable entry in the display roster
+  private selectedIdx = getDisplayRoster().findIndex(e => e.status === 'playable');
 
   private phase: Phase = 'title';
   private phaseTimer = 0;
   private matchTimer = FEEL.match.duration;
+  private displayRoster: RosterEntry[] = getDisplayRoster();
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -81,15 +92,16 @@ export class Game {
     // Wire up tap/click handlers for menu UX (desktop click + mobile tap)
     setSlotClickHandler((idx: number) => {
       if (this.phase !== 'character_select') return;
-      if (idx >= CRITTER_PRESETS.length) return; // locked slot
-      if (idx === this.selectedIdx) {
-        // Tap on already-selected slot → confirm
+      const entry = this.displayRoster[idx];
+      if (!entry || entry.status === 'locked') return;
+      if (idx === this.selectedIdx && entry.status === 'playable') {
+        // Tap on already-selected playable slot → confirm
         this.enterCountdown();
       } else {
-        // Tap on different slot → select it and refresh preview
+        // Tap on different slot → select it for preview (playable or WIP)
         this.selectedIdx = idx;
-        updateCharacterSelect(CRITTER_PRESETS, this.selectedIdx);
-        swapPreviewCritter(CRITTER_PRESETS[this.selectedIdx]);
+        updateCharacterSelect(this.selectedIdx);
+        this.swapPreviewForEntry(entry);
       }
     });
 
@@ -127,8 +139,12 @@ export class Game {
     this.phase = 'character_select';
     hideTitleScreen();
     hideEndScreen();
-    showCharacterSelect(CRITTER_PRESETS, this.selectedIdx);
-    showPreview(CRITTER_PRESETS[this.selectedIdx]);
+    showCharacterSelect(this.displayRoster, CRITTER_PRESETS, this.selectedIdx);
+    // showPreview resets rotation; swapPreviewForEntry handles config resolution
+    const entry = this.displayRoster[this.selectedIdx];
+    const config = CRITTER_PRESETS.find(p => p.name === entry?.displayName)
+      ?? (entry ? previewConfigFromRoster(entry) : CRITTER_PRESETS[0]);
+    showPreview(config);
   }
 
   private enterCountdown(): void {
@@ -141,15 +157,27 @@ export class Game {
     this.phaseTimer = FEEL.match.countdown;
     this.matchTimer = FEEL.match.duration;
 
-    // Rebuild the roster from the player's selection. Player always ends
-    // up in slot 0, so this.playerIndex becomes 0 implicitly.
+    // Resolve player config from the display roster selection
+    const entry = this.displayRoster[this.selectedIdx];
+    const playerConfig = CRITTER_PRESETS.find(p => p.name === entry?.displayName)
+      ?? CRITTER_PRESETS[0]; // safety fallback
+
+    // Rebuild the roster: player first, bots from full CRITTER_PRESETS pool
     this.arena.reset();
     const roster = buildMatchRoster(
-      this.selectedIdx,
+      playerConfig,
       CRITTER_PRESETS,
       MAX_CRITTERS_PER_MATCH - 1,
     );
     this.rebuildCritters(roster);
+
+    // Preload GLB models for all match participants (async, non-blocking)
+    const glbPaths = roster
+      .map(c => getRosterEntry(c.name)?.glbPath)
+      .filter((p): p is string => p !== null && p !== undefined);
+    if (glbPaths.length > 0) {
+      preloadModels(glbPaths);
+    }
 
     initAbilityHUD(this.player.abilityStates);
     initAllLivesHUD(this.critters);
@@ -209,6 +237,14 @@ export class Game {
     return this.critters.filter((c) => c.alive).length;
   }
 
+  /** Show the correct preview model for a roster entry (playable or WIP). */
+  private swapPreviewForEntry(entry: RosterEntry | undefined): void {
+    if (!entry) return;
+    const config = CRITTER_PRESETS.find(p => p.name === entry.displayName)
+      ?? previewConfigFromRoster(entry);
+    swapPreviewCritter(config);
+  }
+
   /** Pick a respawn position near center that's inside the current arena. */
   private pickRespawnPos(): [number, number] {
     const r = this.arena.currentRadius * 0.4;
@@ -230,25 +266,31 @@ export class Game {
         }
         break;
 
-      case 'character_select':
+      case 'character_select': {
         for (const c of this.critters) c.update(dt);
-        if (consumeMenuAction('left')) {
-          this.selectedIdx = (this.selectedIdx - 1 + CRITTER_PRESETS.length) % CRITTER_PRESETS.length;
-          updateCharacterSelect(CRITTER_PRESETS, this.selectedIdx);
-          swapPreviewCritter(CRITTER_PRESETS[this.selectedIdx]);
+        const rLen = this.displayRoster.length;
+        if (consumeMenuAction('left') && rLen > 0) {
+          this.selectedIdx = (this.selectedIdx - 1 + rLen) % rLen;
+          updateCharacterSelect(this.selectedIdx);
+          this.swapPreviewForEntry(this.displayRoster[this.selectedIdx]);
         }
-        if (consumeMenuAction('right')) {
-          this.selectedIdx = (this.selectedIdx + 1) % CRITTER_PRESETS.length;
-          updateCharacterSelect(CRITTER_PRESETS, this.selectedIdx);
-          swapPreviewCritter(CRITTER_PRESETS[this.selectedIdx]);
+        if (consumeMenuAction('right') && rLen > 0) {
+          this.selectedIdx = (this.selectedIdx + 1) % rLen;
+          updateCharacterSelect(this.selectedIdx);
+          this.swapPreviewForEntry(this.displayRoster[this.selectedIdx]);
         }
         if (consumeMenuAction('confirm')) {
-          this.enterCountdown();
+          const sel = this.displayRoster[this.selectedIdx];
+          if (sel?.status === 'playable') {
+            this.enterCountdown();
+          }
+          // WIP/locked → ignore confirm
         }
         if (consumeMenuAction('back')) {
           this.enterTitle();
         }
         break;
+      }
 
       case 'countdown': {
         this.phaseTimer -= dt;

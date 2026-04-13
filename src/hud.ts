@@ -1,5 +1,6 @@
 import type { AbilityState } from './abilities';
 import type { Critter, CritterConfig } from './critter';
+import type { RosterEntry } from './roster';
 
 const aliveEl = document.getElementById('hud-alive')!;
 const timerEl = document.getElementById('hud-timer')!;
@@ -191,42 +192,74 @@ endScreen.addEventListener('click', (e) => {
   endTapHandler?.();
 });
 
+/** Cached roster + presets for repaint calls. */
+let cachedRoster: RosterEntry[] = [];
+let cachedPresets: CritterConfig[] = [];
+
 /**
- * Build the character select grid once on show. Fills `GRID_SLOTS` slots:
- * the first N match the presets (N = presets.length), the rest are shown
- * as locked "Coming Soon" placeholders.
- * Also paints the right-side info panel with the currently selected critter.
+ * Build the character select grid. Roster entries control layout and status;
+ * presets provide gameplay stats for the info pane (only playable characters).
  */
-export function showCharacterSelect(presets: CritterConfig[], selectedIdx: number): void {
+export function showCharacterSelect(
+  roster: RosterEntry[],
+  presets: CritterConfig[],
+  selectedIdx: number,
+): void {
   setMatchHudVisible(false);
   critterGrid.innerHTML = '';
+  cachedRoster = roster;
+  cachedPresets = presets;
 
-  for (let i = 0; i < GRID_SLOTS; i++) {
+  for (let i = 0; i < roster.length; i++) {
+    const entry = roster[i];
     const slot = document.createElement('div');
     slot.dataset.idx = String(i);
 
-    if (i < presets.length) {
-      const c = presets[i];
+    if (entry.status === 'playable') {
       slot.className = 'critter-slot' + (i === selectedIdx ? ' selected' : '');
 
       const dot = document.createElement('div');
       dot.className = 'slot-dot';
-      dot.style.background = '#' + c.color.toString(16).padStart(6, '0');
+      dot.style.background = '#' + entry.baseColor.toString(16).padStart(6, '0');
 
       const name = document.createElement('div');
       name.className = 'slot-name';
-      name.textContent = c.name;
+      name.textContent = entry.displayName;
 
       slot.appendChild(dot);
       slot.appendChild(name);
 
-      // Click/tap handler — tap on a non-selected slot selects it,
-      // tap on the already-selected slot confirms it.
+      const capturedIdx = i;
+      slot.addEventListener('click', () => {
+        slotClickHandler?.(capturedIdx);
+      });
+    } else if (entry.status === 'wip') {
+      slot.className = 'critter-slot wip' + (i === selectedIdx ? ' selected' : '');
+
+      const dot = document.createElement('div');
+      dot.className = 'slot-dot';
+      dot.style.background = '#' + entry.baseColor.toString(16).padStart(6, '0');
+      dot.style.opacity = '0.5';
+
+      const name = document.createElement('div');
+      name.className = 'slot-name';
+      name.textContent = entry.displayName;
+
+      const badge = document.createElement('div');
+      badge.className = 'slot-badge';
+      badge.textContent = 'WIP';
+
+      slot.appendChild(dot);
+      slot.appendChild(name);
+      slot.appendChild(badge);
+
+      // WIP slots can be highlighted (for preview) but not confirmed
       const capturedIdx = i;
       slot.addEventListener('click', () => {
         slotClickHandler?.(capturedIdx);
       });
     } else {
+      // locked
       slot.className = 'critter-slot locked';
 
       const lock = document.createElement('div');
@@ -244,20 +277,20 @@ export function showCharacterSelect(presets: CritterConfig[], selectedIdx: numbe
     critterGrid.appendChild(slot);
   }
 
-  // Paint the info pane for the current selection
-  paintInfoPane(presets, selectedIdx);
+  paintInfoPane(roster, presets, selectedIdx);
   characterSelect.classList.remove('hidden');
 }
 
 /** Update the selected slot highlight and refresh the info pane. Cheap call per navigation. */
-export function updateCharacterSelect(presets: CritterConfig[], selectedIdx: number): void {
+export function updateCharacterSelect(selectedIdx: number): void {
   const slots = critterGrid.querySelectorAll('.critter-slot');
   slots.forEach((slot, i) => {
-    if (i < presets.length) {
+    const entry = cachedRoster[i];
+    if (entry && entry.status !== 'locked') {
       slot.classList.toggle('selected', i === selectedIdx);
     }
   });
-  paintInfoPane(presets, selectedIdx);
+  paintInfoPane(cachedRoster, cachedPresets, selectedIdx);
 }
 
 export function hideCharacterSelect(): void {
@@ -274,15 +307,23 @@ function normalize(value: number, min: number, max: number): number {
   return Math.max(0, Math.min(1, (value - min) / (max - min)));
 }
 
-function paintInfoPane(presets: CritterConfig[], idx: number): void {
-  const c = presets[idx];
-  if (!c) return;
+function paintInfoPane(roster: RosterEntry[], presets: CritterConfig[], idx: number): void {
+  const entry = roster[idx];
+  if (!entry) return;
 
-  infoName.textContent = c.name;
-  infoRole.textContent = c.role;
-  infoTagline.textContent = c.tagline;
+  // Name / role / tagline always come from the roster entry
+  infoName.textContent = entry.displayName;
+  infoRole.textContent = entry.role;
+  infoTagline.textContent = entry.status === 'wip'
+    ? entry.tagline + ' (coming soon)'
+    : entry.tagline;
 
-  // Compute min/max across all presets for relative bars
+  infoStats.innerHTML = '';
+
+  // Stat bars only if this character has a gameplay config
+  const config = presets.find(p => p.name === entry.displayName);
+  if (!config) return;
+
   const speedMin = Math.min(...presets.map(p => p.speed));
   const speedMax = Math.max(...presets.map(p => p.speed));
   const massMin = Math.min(...presets.map(p => p.mass));
@@ -290,19 +331,16 @@ function paintInfoPane(presets: CritterConfig[], idx: number): void {
   const powerMin = Math.min(...presets.map(p => p.headbuttForce));
   const powerMax = Math.max(...presets.map(p => p.headbuttForce));
 
-  // Bars never show empty — map the true 0 of the relative scale to a small
-  // minimum fill so every critter has a visible stat presence
   const MIN_FILL = 0.18;
   const rel = (v: number, min: number, max: number) =>
     MIN_FILL + normalize(v, min, max) * (1 - MIN_FILL);
 
   const stats: { label: string; pct: number }[] = [
-    { label: 'Speed',  pct: rel(c.speed, speedMin, speedMax) * 100 },
-    { label: 'Weight', pct: rel(c.mass, massMin, massMax) * 100 },
-    { label: 'Power',  pct: rel(c.headbuttForce, powerMin, powerMax) * 100 },
+    { label: 'Speed',  pct: rel(config.speed, speedMin, speedMax) * 100 },
+    { label: 'Weight', pct: rel(config.mass, massMin, massMax) * 100 },
+    { label: 'Power',  pct: rel(config.headbuttForce, powerMin, powerMax) * 100 },
   ];
 
-  infoStats.innerHTML = '';
   for (const s of stats) {
     const row = document.createElement('div');
     row.className = 'stat-row';
@@ -316,7 +354,6 @@ function paintInfoPane(presets: CritterConfig[], idx: number): void {
 
     const fill = document.createElement('div');
     fill.className = 'stat-bar';
-    // Start at 0 so the CSS transition animates the bar in
     fill.style.width = '0%';
     bg.appendChild(fill);
 
@@ -324,7 +361,6 @@ function paintInfoPane(presets: CritterConfig[], idx: number): void {
     row.appendChild(bg);
     infoStats.appendChild(row);
 
-    // Trigger the CSS transition on next frame
     requestAnimationFrame(() => {
       fill.style.width = s.pct.toFixed(1) + '%';
     });

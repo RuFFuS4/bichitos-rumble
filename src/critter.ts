@@ -3,6 +3,8 @@ import { createAbilityStates, getSpeedMultiplier, getMassMultiplier } from './ab
 import type { AbilityState } from './abilities';
 import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
+import { getRosterEntry, type RosterEntry } from './roster';
+import { loadModel } from './model-loader';
 
 export interface CritterConfig {
   name: string;
@@ -78,6 +80,13 @@ export class Critter {
   head: THREE.Mesh;
   abilityStates: AbilityState[];
 
+  /** Roster visual data (null for characters without a roster entry). */
+  rosterEntry: RosterEntry | null = null;
+  /** Loaded GLB scene graph (null while loading or if procedural-only). */
+  private glbMesh: THREE.Group | null = null;
+  /** Pre-collected MeshStandardMaterials from the GLB for fast visual updates. */
+  private glbMaterials: THREE.MeshStandardMaterial[] = [];
+
   constructor(config: CritterConfig, scene: THREE.Scene) {
     this.config = config;
     this.mesh = new THREE.Group();
@@ -128,13 +137,25 @@ export class Critter {
     }
 
     scene.add(this.mesh);
+
+    // --- GLB model loading (async, non-blocking) ---
+    this.rosterEntry = getRosterEntry(config.name);
+    if (this.rosterEntry?.glbPath) {
+      const entry = this.rosterEntry;
+      const path = entry.glbPath!;
+      loadModel(path)
+        .then(group => this.attachGlbMesh(group, entry))
+        .catch(() => {
+          console.debug('[Critter] GLB load failed, keeping procedural:', config.name);
+        });
+    }
   }
 
   get x(): number { return this.mesh.position.x; }
   set x(v: number) { this.mesh.position.x = v; }
   get z(): number { return this.mesh.position.z; }
   set z(v: number) { this.mesh.position.z = v; }
-  get radius(): number { return HEAD_RADIUS; }
+  get radius(): number { return this.rosterEntry?.physicsRadius ?? HEAD_RADIUS; }
 
   get isImmune(): boolean {
     return this.immunityTimer > 0;
@@ -218,6 +239,9 @@ export class Critter {
 
     // Bobbing animation
     this.body.position.y = BODY_RADIUS + Math.sin(Date.now() * 0.005) * 0.05;
+    if (this.glbMesh) {
+      this.glbMesh.position.y = (this.rosterEntry?.pivotY ?? 0) + Math.sin(Date.now() * 0.005) * 0.05;
+    }
 
     // Visual feedback for ability states
     this.updateVisuals();
@@ -225,12 +249,10 @@ export class Critter {
     // Hit flash overrides the state emissive briefly (applied AFTER updateVisuals)
     const flashT = tickHitFlash(this, dt);
     if (flashT > 0) {
-      const bodyMat = this.body.material as THREE.MeshStandardMaterial;
-      const headMat = this.head.material as THREE.MeshStandardMaterial;
-      headMat.emissive.setHex(0xffffff);
-      headMat.emissiveIntensity = flashT * 1.2;
-      bodyMat.emissive.setHex(0xffffff);
-      bodyMat.emissiveIntensity = flashT * 0.9;
+      for (const mat of this.getActiveMaterials()) {
+        mat.emissive.setHex(0xffffff);
+        mat.emissiveIntensity = flashT * 1.2;
+      }
     }
 
     // Game feel visual systems (all visual-only, no gameplay logic)
@@ -241,9 +263,6 @@ export class Critter {
 
   /** Visual-only: updates emissive, posture, and opacity based on current state. No gameplay logic. */
   private updateVisuals(): void {
-    const bodyMat = this.body.material as THREE.MeshStandardMaterial;
-    const headMat = this.head.material as THREE.MeshStandardMaterial;
-
     let glowColor = this.config.color;
     let glowIntensity = 0.15;
     let bodyScaleY = 1.0;
@@ -265,7 +284,6 @@ export class Critter {
       if (s.def.type === 'charge_rush') {
         glowColor = 0xff8800;
         glowIntensity = 0.7;
-        // Head tucks down during charge
         headOffsetY = -0.08;
       } else if (s.def.type === 'ground_pound') {
         if (s.windUpLeft > 0) {
@@ -279,12 +297,10 @@ export class Critter {
         }
       } else if (s.def.type === 'frenzy') {
         if (s.windUpLeft > 0) {
-          // Channeling: yellow glow, slight body compression
           glowColor = 0xffff00;
           glowIntensity = 0.5;
           bodyScaleY = 0.85;
         } else {
-          // Buff active: pulsing deep red glow
           const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.008);
           glowColor = 0xff1100;
           glowIntensity = 0.6 + pulse * 0.4;
@@ -297,41 +313,119 @@ export class Critter {
       glowIntensity *= 0.5;
     }
 
-    // Apply emissive
-    headMat.emissive.setHex(glowColor);
-    headMat.emissiveIntensity = glowIntensity;
+    // --- Apply to active materials (GLB or procedural) ---
+    const mats = this.getActiveMaterials();
     const isActive = glowColor !== this.config.color;
-    bodyMat.emissive.setHex(isActive ? glowColor : 0x000000);
-    bodyMat.emissiveIntensity = isActive ? glowIntensity * 0.4 : 0;
+    for (const mat of mats) {
+      mat.emissive.setHex(isActive ? glowColor : 0x000000);
+      mat.emissiveIntensity = isActive ? glowIntensity : 0;
+    }
 
-    // Apply body scale (only from ability wind-ups, not from scale feedback system)
+    // Procedural-only posture changes (harmless on invisible meshes when GLB active)
     this.body.scale.y = bodyScaleY;
-
-    // Apply head offset
     this.head.position.y = BODY_RADIUS * 2 + HEAD_RADIUS * 0.6 + headOffsetY;
 
     // --- Immunity blink ---
-    // Materials are initialized with transparent: true so opacity changes
-    // always apply. Blink is a square wave (not sine) for a crisper on/off.
     if (this.immunityTimer > 0) {
       const phase = (Date.now() * 0.001 * FEEL.lives.blinkRate) % 1;
       const visible = phase < 0.5;
       const opacity = visible ? 1.0 : 0.15;
-      headMat.opacity = opacity;
-      bodyMat.opacity = opacity;
-      // Also add a white emissive tint on the "on" frames for extra visibility
-      if (visible) {
-        headMat.emissive.setHex(0xffffff);
-        headMat.emissiveIntensity = 0.8;
-        bodyMat.emissive.setHex(0xffffff);
-        bodyMat.emissiveIntensity = 0.5;
+      for (const mat of mats) {
+        mat.opacity = opacity;
+        if (visible) {
+          mat.emissive.setHex(0xffffff);
+          mat.emissiveIntensity = 0.8;
+        }
       }
     } else {
-      // Restore fully opaque (transparent stays true — it's harmless when opacity = 1)
-      headMat.opacity = 1.0;
-      bodyMat.opacity = 1.0;
+      for (const mat of mats) {
+        mat.opacity = 1.0;
+      }
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // GLB model integration
+  // ---------------------------------------------------------------------------
+
+  /** Attach a loaded GLB scene graph, hiding the procedural mesh. */
+  private attachGlbMesh(group: THREE.Group, entry: RosterEntry): void {
+    // Guard: if critter was disposed/detached before GLB loaded, discard
+    // the clone to prevent GPU resource leaks on rapid navigation.
+    if (!this.mesh.parent) {
+      group.traverse((node) => {
+        const m = node as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.geometry?.dispose();
+        const mat = m.material;
+        if (Array.isArray(mat)) { for (const mm of mat) mm.dispose(); }
+        else if (mat) { (mat as THREE.Material).dispose(); }
+      });
+      console.debug('[Critter] GLB discarded (critter already disposed):', this.config.name);
+      return;
+    }
+    // Apply roster visual config
+    group.scale.setScalar(entry.scale);
+    group.position.set(...entry.offset);
+    group.position.y += entry.pivotY;
+
+    // Ensure all GLB materials support transparency (needed for immunity blink)
+    group.traverse((node) => {
+      const m = node as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mat = m.material as THREE.MeshStandardMaterial;
+      if (mat.isMeshStandardMaterial) {
+        mat.transparent = true;
+        mat.opacity = 1.0;
+      }
+    });
+
+    // Hide procedural geometry (keep body/head alive for harmless code paths)
+    this.body.visible = false;
+    this.head.visible = false;
+
+    // Collect materials for fast updateVisuals() access
+    this.glbMaterials = [];
+    group.traverse((node) => {
+      const m = node as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mat = m.material;
+      if (Array.isArray(mat)) {
+        for (const mm of mat) {
+          if ((mm as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+            this.glbMaterials.push(mm as THREE.MeshStandardMaterial);
+          }
+        }
+      } else if ((mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+        this.glbMaterials.push(mat as THREE.MeshStandardMaterial);
+      }
+    });
+
+    this.mesh.add(group);
+    this.glbMesh = group;
+    console.debug('[Critter] GLB attached:', this.config.name, '| materials:', this.glbMaterials.length);
+  }
+
+  /**
+   * Returns the materials that are currently visible. When a GLB is loaded,
+   * returns its materials; otherwise falls back to the procedural body/head.
+   */
+  private getActiveMaterials(): THREE.MeshStandardMaterial[] {
+    if (this.glbMaterials.length > 0) return this.glbMaterials;
+    return [
+      this.body.material as THREE.MeshStandardMaterial,
+      this.head.material as THREE.MeshStandardMaterial,
+    ];
+  }
+
+  /** True when the critter is rendering a real 3D model instead of spheres. */
+  get hasGlb(): boolean {
+    return this.glbMesh !== null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Falling / respawn / elimination
+  // ---------------------------------------------------------------------------
 
   /** Start falling off arena — will respawn or eliminate after delay. */
   startFalling(): void {
@@ -393,6 +487,7 @@ export class Critter {
    */
   dispose(): void {
     if (this.mesh.parent) this.mesh.parent.remove(this.mesh);
+    // Dispose all GPU resources: procedural + GLB
     this.mesh.traverse((child) => {
       const m = child as THREE.Mesh;
       if (!m.isMesh) return;
@@ -404,6 +499,8 @@ export class Critter {
         mat.dispose();
       }
     });
+    this.glbMesh = null;
+    this.glbMaterials = [];
   }
 
   reset(x: number, z: number): void {
