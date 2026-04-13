@@ -1019,5 +1019,81 @@ introduce networking abstractions — only clean up local architecture.
 ### Open debts (small)
 - No runtime browser test framework — all validation is build + static + isolated Node
 - 4th touch button not tested on a real mobile device yet (code path identical to J/K)
-- `BUILD_LOG.md` docs were behind — updated here
 - Stats are collected but not displayed anywhere yet (intentional — display is a later task)
+
+---
+
+## 2026-04-12 — Phase B: Sergei (first real roster character)
+
+### What was built
+Sergei (gorilla, Balanced) — first character from the final 9-character roster.
+Validates the 3-ability pipeline from Phase A.
+
+Kit: Gorilla Rush (J, charge_rush), Shockwave (K, ground_pound), Frenzy (L, buff ultimate).
+Frenzy is a pure stat buff: +30% speed, +35% mass for 4s with 18s cooldown.
+
+### Files changed (4 files, +87 / −1 lines)
+- `src/gamefeel.ts` — `FEEL.frenzy` tuning section
+- `src/abilities.ts` — `'frenzy'` AbilityType, `'buff'` AbilityTag, `makeFrenzy()`,
+  `fireFrenzy()`, Sergei in CRITTER_ABILITIES
+- `src/critter.ts` — Sergei in CRITTER_PRESETS, frenzy visual in updateVisuals()
+- `src/bot.ts` — `'buff'` tag heuristic
+
+### Key decisions
+- Frenzy multipliers are conservative (speed ×1.3, mass ×1.35) pending playtest
+- Frenzy visual: pulsing deep-red glow via `sin(Date.now())`, no VFX system
+- Bot uses Frenzy when near enemy (dist < 3.5), low probability (0.8%/frame)
+
+---
+
+## 2026-04-13 — Visual Pipeline + Sergei GLB Integration
+
+### What was built
+Complete 3D model loading pipeline, validated end-to-end with Sergei.
+
+### New files (7)
+- `STYLE_LOCK.md` — mandatory visual rules
+- `ASSET_PIPELINE.md` — asset integration guide + optimization record
+- `scripts/optimize-models.mjs` — reproducible GLB optimization pipeline
+- `public/models/critters/sergei.glb` — 425 KB, 7K verts (from 40 MB, 956K verts)
+- `public/draco/` — Draco WASM decoder (1.1 MB, for future compressed models)
+- `src/model-loader.ts` — GLTFLoader + cache + deep clone + material isolation
+- `src/roster.ts` — 13-entry data-driven roster (9 real + 4 internal)
+
+### Modified files (5)
+- `src/critter.ts` — async GLB swap, procedural fallback, configurable radius
+- `src/hud.ts` — roster-aware grid (playable/wip/locked status)
+- `src/game.ts` — display roster for select, preload in countdown, confirm guard
+- `index.html` — WIP slot CSS
+- `package.json` — devDeps for gltf-transform + meshoptimizer
+
+### Key decisions
+- **Procedural mesh always built** (sync), GLB swaps in async. Body/head stay as
+  invisible references — existing code runs harmlessly on hidden meshes.
+- **Deep clone + material isolation** per critter instance. Textures shared (read-only).
+- **Race guard** in attachGlbMesh: discards GLB if critter was disposed during load.
+- **Placeholders invisible in UX** (status 'internal'), used only for bots.
+- **Only Sergei GLB integrated**. Other 8 have roster entries with WIP status.
+
+### Verification
+- Build: 624 KB JS (163 KB gzip) — +111 KB from GLTFLoader/DRACOLoader
+- Optimization: Sergei 956K → 7K verts, 40 MB → 425 KB
+- Typecheck clean
+
+### Open debts
+- Sergei GLB never validated visually in browser (scale/pivotY may need tuning)
+- public/draco/ (1.1 MB) is currently unused — models are not Draco-compressed
+- 8 remaining GLBs need optimization before integration
+
+---
+
+## 2026-04-13 — Compliance Fix: Widget URL Update
+
+### What was fixed
+Jam widget URL changed from `jam.pieter.com` to `vibej.am`. Updated in:
+- `index.html` (the actual widget script tag)
+- `README.md` (jam link)
+- `SUBMISSION_CHECKLIST.md` (widget reference + added deadline/form info)
+
+### Jam deadline
+May 1, 2026 @ 13:37 UTC. Submission form: https://forms.gle/bGG4e3uD9PUUJKUc7

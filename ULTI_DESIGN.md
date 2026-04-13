@@ -1,6 +1,7 @@
 # Ultimate Ability System — Design Doc
 
-Status: **Design only. Not yet implemented.**
+Status: **Partially implemented.** Infrastructure complete (Phase A). First real
+ultimate (Sergei — Frenzy) is implemented and wired. See BUILD_LOG.md for details.
 
 ## Goals
 - One long-cooldown, spectacular ability per critter
