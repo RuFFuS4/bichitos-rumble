@@ -353,15 +353,19 @@ function createLabelSprite(text: string, color: number): THREE.Sprite {
   return sprite;
 }
 
-/** Small particle ring around the portal — ~12 points, very light. */
+/**
+ * Particle halo orbiting the vertical torus ring (plane XY).
+ * Enough points to feel magical without impacting performance.
+ */
 function createPortalParticles(color: number): THREE.Points {
-  const COUNT = 12;
+  const COUNT = 28;
+  const TORUS_CY = PORTAL_RADIUS + 0.1;
   const positions = new Float32Array(COUNT * 3);
   for (let i = 0; i < COUNT; i++) {
     const a = (i / COUNT) * Math.PI * 2;
-    positions[i * 3] = Math.cos(a) * PORTAL_RADIUS;
-    positions[i * 3 + 1] = PORTAL_RADIUS + 0.15 + Math.sin(a) * PORTAL_RADIUS * 0.3;
-    positions[i * 3 + 2] = Math.sin(a) * PORTAL_RADIUS * 0.2;
+    positions[i * 3]     = Math.cos(a) * PORTAL_RADIUS;
+    positions[i * 3 + 1] = TORUS_CY + Math.sin(a) * PORTAL_RADIUS;
+    positions[i * 3 + 2] = Math.sin(a * 2 + i) * 0.12;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -412,19 +416,19 @@ function animatePortal(portal: THREE.Group, _dt: number): void {
   const labelMat = label.material as THREE.SpriteMaterial;
   labelMat.opacity = 0.35 + T * 0.65;
 
-  // Particles: fade + bob
+  // Particles: fade + orbit around the vertical ring (plane XY)
   const pointsMat = particles.material as THREE.PointsMaterial;
   pointsMat.opacity = 0.25 + T * 0.65;
   if (particles.isPoints) {
     const posAttr = particles.geometry.getAttribute('position') as THREE.BufferAttribute;
     const arr = posAttr.array as Float32Array;
     const COUNT = arr.length / 3;
+    const TORUS_CY = PORTAL_RADIUS + 0.1;
     for (let i = 0; i < COUNT; i++) {
       const angle = (i / COUNT) * Math.PI * 2 + t * 0.5;
-      arr[i * 3] = Math.cos(angle) * PORTAL_RADIUS;
-      arr[i * 3 + 1] = PORTAL_RADIUS + 0.15 + Math.sin(angle) * PORTAL_RADIUS * 0.3
-        + Math.sin(t * 2 + i) * 0.08;
-      arr[i * 3 + 2] = Math.sin(angle) * PORTAL_RADIUS * 0.2;
+      arr[i * 3]     = Math.cos(angle) * PORTAL_RADIUS;
+      arr[i * 3 + 1] = TORUS_CY + Math.sin(angle) * PORTAL_RADIUS;
+      arr[i * 3 + 2] = Math.sin(t * 2 + i) * 0.12;
     }
     posAttr.needsUpdate = true;
   }
