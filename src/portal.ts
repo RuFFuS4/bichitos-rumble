@@ -31,8 +31,11 @@ const incomingUsername = params.get('username') || null;
 // Portal config
 // ---------------------------------------------------------------------------
 
-const EXIT_POS = new THREE.Vector3(0, 0, -9);
-const START_POS = new THREE.Vector3(0, 0, -4);
+// Positions: back corners of the arena — visible from the isometric camera
+// but out of the main central combat lane. Arena radius 12, main combat
+// happens within ±5 of center.
+const EXIT_POS = new THREE.Vector3(6, 0, -6);
+const START_POS = new THREE.Vector3(-6, 0, -6);
 const PORTAL_RADIUS = 1.2;
 const TRIGGER_DIST = 1.5;
 const GRACE_PERIOD = 5.0; // seconds before start portal activates
@@ -142,14 +145,14 @@ export function initPortals(scene: THREE.Scene): void {
   graceTimer = GRACE_PERIOD;
 
   // Exit portal — always present
-  exitPortal = createPortalMesh(EXIT_COLOR);
+  exitPortal = createPortalMesh(EXIT_COLOR, 'NEXT GAME');
   exitPortal.position.copy(EXIT_POS);
   scene.add(exitPortal);
   console.debug('[Portal] exit portal created at', EXIT_POS.x, EXIT_POS.z);
 
   // Start portal — only if in portal mode with a ref URL
   if (portalActive && refUrl) {
-    startPortal = createPortalMesh(START_COLOR);
+    startPortal = createPortalMesh(START_COLOR, 'GO BACK');
     startPortal.position.copy(START_POS);
     scene.add(startPortal);
     console.debug('[Portal] start portal created at', START_POS.x, START_POS.z);
@@ -159,6 +162,11 @@ export function initPortals(scene: THREE.Scene): void {
 /**
  * Animate portals and check player collision. Call every frame during 'playing'.
  * Returns 'exit' | 'start' if a redirect was triggered, null otherwise.
+ *
+ * IMPORTANT: this function must ONLY be called with the local player's
+ * coordinates. Bots must never trigger a portal redirect. The portal meshes
+ * have no physics hitbox — bots pass through them visually but do not
+ * interact with collision or redirect logic.
  */
 export function updatePortals(playerX: number, playerZ: number, dt: number): 'exit' | 'start' | null {
   if (redirected) return null;
@@ -217,20 +225,22 @@ export function disposePortals(): void {
 // Visual construction
 // ---------------------------------------------------------------------------
 
-function createPortalMesh(color: number): THREE.Group {
+function createPortalMesh(color: number, label: string): THREE.Group {
   const group = new THREE.Group();
 
-  // Outer ring — torus standing upright
+  // Outer ring — torus tilted slightly toward the camera (75°)
+  // so the "hole" of the portal reads clearly from the isometric view.
+  const TILT = Math.PI * 0.42;
   const torusGeo = new THREE.TorusGeometry(PORTAL_RADIUS, 0.12, 12, 32);
   const torusMat = new THREE.MeshStandardMaterial({
     color,
     emissive: color,
-    emissiveIntensity: 0.6,
+    emissiveIntensity: 0.5,
     transparent: true,
     opacity: 0.9,
   });
   const torus = new THREE.Mesh(torusGeo, torusMat);
-  torus.rotation.x = Math.PI / 2; // stand upright
+  torus.rotation.x = TILT;
   torus.position.y = PORTAL_RADIUS + 0.15;
   group.add(torus);
 
@@ -241,11 +251,11 @@ function createPortalMesh(color: number): THREE.Group {
     emissive: color,
     emissiveIntensity: 0.3,
     transparent: true,
-    opacity: 0.25,
+    opacity: 0.2,
     side: THREE.DoubleSide,
   });
   const disc = new THREE.Mesh(discGeo, discMat);
-  disc.rotation.x = Math.PI / 2;
+  disc.rotation.x = TILT;
   disc.position.y = PORTAL_RADIUS + 0.15;
   group.add(disc);
 
@@ -264,24 +274,98 @@ function createPortalMesh(color: number): THREE.Group {
   glow.position.y = 0.02;
   group.add(glow);
 
+  // Label sprite floating above the portal
+  const labelSprite = createLabelSprite(label, color);
+  labelSprite.position.y = PORTAL_RADIUS * 2 + 0.6;
+  group.add(labelSprite);
+
+  // Lightweight particles orbiting the torus
+  const particles = createPortalParticles(color);
+  group.add(particles);
+
   return group;
+}
+
+/** Canvas-texture sprite with the portal label, colored to match. */
+function createLabelSprite(text: string, color: number): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  const hex = '#' + color.toString(16).padStart(6, '0');
+
+  ctx.font = 'bold 36px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // Black stroke for contrast + colored fill
+  ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+  ctx.lineWidth = 6;
+  ctx.strokeText(text, 128, 32);
+  ctx.fillStyle = hex;
+  ctx.fillText(text, 128, 32);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(1.8, 0.45, 1);
+  return sprite;
+}
+
+/** Small particle ring around the portal — ~12 points, very light. */
+function createPortalParticles(color: number): THREE.Points {
+  const COUNT = 12;
+  const positions = new Float32Array(COUNT * 3);
+  for (let i = 0; i < COUNT; i++) {
+    const a = (i / COUNT) * Math.PI * 2;
+    positions[i * 3] = Math.cos(a) * PORTAL_RADIUS;
+    positions[i * 3 + 1] = PORTAL_RADIUS + 0.15 + Math.sin(a) * PORTAL_RADIUS * 0.3;
+    positions[i * 3 + 2] = Math.sin(a) * PORTAL_RADIUS * 0.2;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const mat = new THREE.PointsMaterial({
+    color,
+    size: 0.1,
+    transparent: true,
+    opacity: 0.8,
+    depthWrite: false,
+  });
+  return new THREE.Points(geo, mat);
 }
 
 function animatePortal(portal: THREE.Group, _dt: number): void {
   const t = Date.now() * 0.001;
 
-  // Slow Y rotation on the whole group
-  portal.children[0].rotation.z = t * 0.5;
-
-  // Pulse emissive on the torus
+  // Slow rotation on the torus (around its own axis)
   const torus = portal.children[0] as THREE.Mesh;
-  const mat = torus.material as THREE.MeshStandardMaterial;
-  mat.emissiveIntensity = 0.5 + Math.sin(t * 2) * 0.3;
+  torus.rotation.z = t * 0.4;
 
-  // Pulse disc opacity
+  // Gentle emissive pulse
+  const mat = torus.material as THREE.MeshStandardMaterial;
+  mat.emissiveIntensity = 0.4 + Math.sin(t * 1.8) * 0.2;
+
+  // Gentle disc pulse
   const disc = portal.children[1] as THREE.Mesh;
   const discMat = disc.material as THREE.MeshStandardMaterial;
-  discMat.opacity = 0.2 + Math.sin(t * 3) * 0.1;
+  discMat.opacity = 0.15 + Math.sin(t * 2) * 0.08;
+
+  // Particle drift — gentle vertical bob while orbiting
+  // (children: [torus, disc, glow, label, particles])
+  const particles = portal.children[4] as THREE.Points;
+  if (particles && particles.isPoints) {
+    const posAttr = particles.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const arr = posAttr.array as Float32Array;
+    const COUNT = arr.length / 3;
+    for (let i = 0; i < COUNT; i++) {
+      const angle = (i / COUNT) * Math.PI * 2 + t * 0.5;
+      arr[i * 3] = Math.cos(angle) * PORTAL_RADIUS;
+      arr[i * 3 + 1] = PORTAL_RADIUS + 0.15 + Math.sin(angle) * PORTAL_RADIUS * 0.3
+        + Math.sin(t * 2 + i) * 0.08;
+      arr[i * 3 + 2] = Math.sin(angle) * PORTAL_RADIUS * 0.2;
+    }
+    posAttr.needsUpdate = true;
+  }
 }
 
 // ---------------------------------------------------------------------------

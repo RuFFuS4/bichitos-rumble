@@ -74,6 +74,15 @@
       margin-top: 8px;
       opacity: 0.8;
     }
+    /* Countdown pop: apply class on content change, keyframe scales in quickly */
+    #overlay.pop {
+      animation: overlay-pop 0.25s ease-out;
+    }
+    @keyframes overlay-pop {
+      0%   { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
+      60%  { transform: translate(-50%, -50%) scale(0.95); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+    }
     /* Ability cooldown bars */
     #ability-bar-container {
       position: absolute;
@@ -455,6 +464,21 @@
       opacity: 0.7;
       margin-bottom: 24px;
     }
+    /* Portal prompt on end screen — separated from match prompt */
+    #end-portal-prompt {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,0.15);
+      font-size: 16px;
+    }
+    #end-portal-prompt .kbd-portal-exit {
+      border-color: rgba(74, 222, 128, 0.7);
+      color: #4ade80;
+    }
+    #end-portal-prompt .kbd-portal-return {
+      border-color: rgba(255, 170, 68, 0.7);
+      color: #ffaa44;
+    }
 
     /* ---------- Desktop/touch hint visibility ---------- */
     /* Hints shown only when keyboard is the primary input */
@@ -658,8 +682,8 @@
     <div class="end-subtitle" id="end-subtitle"></div>
     <div class="prompt desktop-only"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
     <div class="prompt touch-only">Tap to play again</div>
-    <div id="end-portal-prompt" class="prompt desktop-only" style="display:none; margin-top:4px; font-size:14px;">
-      <kbd>P</kbd> next game 🌀 · <kbd>B</kbd> return to previous game
+    <div id="end-portal-prompt" class="prompt desktop-only" style="display:none;">
+      <kbd class="kbd-portal-exit">P</kbd> next game 🌀 · <kbd class="kbd-portal-return">B</kbd> return to previous
     </div>
   </div>
 

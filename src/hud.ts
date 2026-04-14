@@ -82,8 +82,18 @@ export function updateAllLivesHUD(critters: Critter[]): void {
 // ---------------------------------------------------------------------------
 
 export function showOverlay(main: string, sub?: string): void {
+  const html = main + (sub ? `<div class="sub">${sub}</div>` : '');
+  // Only pop when the visible text actually changes (e.g. countdown tick),
+  // so setting the same value back-to-back doesn't re-trigger the animation.
+  const changed = overlayEl.innerHTML !== html;
   overlayEl.style.display = 'block';
-  overlayEl.innerHTML = main + (sub ? `<div class="sub">${sub}</div>` : '');
+  overlayEl.innerHTML = html;
+  if (changed) {
+    overlayEl.classList.remove('pop');
+    // Force reflow so re-adding the class restarts the animation
+    void overlayEl.offsetWidth;
+    overlayEl.classList.add('pop');
+  }
 }
 
 export function hideOverlay(): void {
