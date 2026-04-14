@@ -23,6 +23,10 @@ import { play as playSound } from './audio';
 import { recordPick, recordOutcome, recordFall } from './stats';
 import { getDisplayRoster, getRosterEntry, type RosterEntry } from './roster';
 import { preloadModels } from './model-loader';
+import {
+  isFromPortal, resolvePortalCharacter, setPortalPlayerInfo,
+  initPortals, updatePortals, disposePortals,
+} from './portal';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended';
 
@@ -117,7 +121,14 @@ export class Game {
       }
     });
 
-    this.enterTitle();
+    // Portal entry: skip title + character select, go straight to match
+    if (isFromPortal()) {
+      this.selectedIdx = resolvePortalCharacter();
+      console.debug('[Game] portal entry → direct to match, character idx:', this.selectedIdx);
+      this.enterCountdown();
+    } else {
+      this.enterTitle();
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -128,6 +139,7 @@ export class Game {
     clearMenuActions();
     this.phase = 'title';
     document.body.classList.remove('match-active');
+    disposePortals();
     showTitleScreen();
     hideCharacterSelect();
     hideEndScreen();
@@ -181,6 +193,14 @@ export class Game {
     if (glbPaths.length > 0) {
       preloadModels(glbPaths);
     }
+
+    // Portals
+    initPortals(this.scene);
+    setPortalPlayerInfo(
+      this.player.config.name,
+      this.player.config.color,
+      this.player.config.speed,
+    );
 
     initAbilityHUD(this.player.abilityStates);
     initAllLivesHUD(this.critters);
@@ -319,6 +339,12 @@ export class Game {
 
         // 1. Player input
         updatePlayer(this.player, effectiveDt);
+
+        // 1.5. Portal check (before physics so redirect happens cleanly)
+        if (this.player.alive && !this.player.falling) {
+          const portalHit = updatePortals(this.player.x, this.player.z, effectiveDt);
+          if (portalHit) return; // redirect in progress, freeze game loop
+        }
 
         // 2. Bot AI (all critters except the player)
         for (let i = 0; i < this.critters.length; i++) {
