@@ -152,8 +152,17 @@ if (btnMusic) {
 const game = new Game(scene);
 
 // Online mode entry — "Play Online" button on title screen
+//
+// FEATURE GATE: the button is only shown when an online server URL is
+// available. In dev: always shown (defaults to ws://localhost:2567).
+// In prod: requires VITE_SERVER_URL to be set at build time, otherwise
+// the button is removed from the DOM so users never see a broken path.
 const btnOnline = document.getElementById('btn-online');
-if (btnOnline) {
+const hasServerUrl = !!(import.meta.env.VITE_SERVER_URL) || !!import.meta.env.DEV;
+if (btnOnline && !hasServerUrl) {
+  btnOnline.remove();
+  console.info('[Main] online mode disabled (no VITE_SERVER_URL)');
+} else if (btnOnline) {
   btnOnline.addEventListener('click', async (e) => {
     e.stopPropagation(); // don't trigger the title tap handler
     btnOnline.setAttribute('disabled', 'true');
@@ -167,7 +176,8 @@ if (btnOnline) {
       btnOnline.removeAttribute('disabled');
       btnOnline.textContent = '🌐 Play Online (2P)';
       alert('Could not connect to multiplayer server.\n\n' +
-            'Make sure the server is running: cd server && npm run dev');
+            'In dev: make sure the server is running (cd server && npm run dev).\n' +
+            'In prod: contact the site owner.');
     }
   });
 }
