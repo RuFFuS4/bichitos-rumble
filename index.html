@@ -162,6 +162,59 @@
       letter-spacing: 1px;
     }
 
+    /* ---------- Portal legend (HUD, top-left under timer) ---------- */
+    #portal-legend {
+      position: absolute;
+      top: 54px;
+      left: 20px;
+      display: none;
+      font-size: 11px;
+      letter-spacing: 0.3px;
+      color: rgba(255,255,255,0.85);
+      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+      pointer-events: none;
+    }
+    body.match-active #portal-legend { display: block; }
+    .portal-legend-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 2px;
+      opacity: 0.75;
+    }
+    .portal-legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 6px currentColor;
+    }
+    .portal-legend-dot-exit {
+      background: #44ff88;
+      color: #44ff88;
+    }
+    .portal-legend-dot-return {
+      background: #ff8844;
+      color: #ff8844;
+    }
+    .portal-legend-hint {
+      opacity: 0.45;
+      font-size: 10px;
+      margin-top: 2px;
+    }
+    .portal-legend-hint kbd {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: monospace;
+      font-size: 9px;
+    }
+
+    /* Portal toggle button (mobile only, match-active only) */
+    #btn-portal-toggle { display: none; }
+    body.touch-mode.match-active #btn-portal-toggle { display: flex; }
+
     /* ---------- Full-screen overlays (title / select / end) ---------- */
     .full-overlay {
       position: absolute;
@@ -641,12 +694,24 @@
       </div>
       <div id="hud-lives"></div>
       <div id="hud-settings">
+        <button id="btn-portal-toggle" class="settings-btn touch-only" title="Toggle portals" aria-label="Toggle portals">🌀</button>
         <button id="btn-sfx" class="settings-btn" title="Disable sound effects" aria-pressed="false">🔊</button>
         <button id="btn-music" class="settings-btn" title="Disable music" aria-pressed="false">🎶</button>
       </div>
     </div>
     <div id="overlay" style="display:none;"></div>
     <div id="ability-bar-container"></div>
+    <div id="portal-legend">
+      <div class="portal-legend-row">
+        <span class="portal-legend-dot portal-legend-dot-exit"></span>
+        <span>Vibe Jam Games Multiverse</span>
+      </div>
+      <div id="portal-legend-return" class="portal-legend-row" style="display:none;">
+        <span class="portal-legend-dot portal-legend-dot-return"></span>
+        <span>Return to previous world</span>
+      </div>
+      <div class="portal-legend-hint desktop-only">Press <kbd>P</kbd> to show</div>
+    </div>
   </div>
 
   <div id="title-screen" class="full-overlay hidden">

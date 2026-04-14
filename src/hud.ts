@@ -20,6 +20,9 @@ const infoAbilities = document.getElementById('critter-info-abilities')!;
 const endScreen = document.getElementById('end-screen')!;
 const endResultEl = document.getElementById('end-result')!;
 const endSubtitleEl = document.getElementById('end-subtitle')!;
+const portalLegendEl = document.getElementById('portal-legend')!;
+const portalLegendReturnEl = document.getElementById('portal-legend-return')!;
+const portalToggleBtn = document.getElementById('btn-portal-toggle')!;
 
 /** Total slots on the grid. Must match CSS grid-template-columns × rows. */
 export const GRID_SLOTS = 9;
@@ -175,6 +178,22 @@ export function showTitleScreen(): void {
 export function hideTitleScreen(): void {
   titleScreen.classList.add('hidden');
 }
+
+/** Configure the portal HUD legend: visibility and which rows to show. */
+export function setPortalLegend(showReturn: boolean): void {
+  portalLegendReturnEl.style.display = showReturn ? '' : 'none';
+}
+
+/** Register a handler for the mobile portal toggle button. */
+let portalToggleHandler: (() => void) | null = null;
+export function setPortalToggleHandler(handler: () => void): void {
+  portalToggleHandler = handler;
+}
+portalToggleBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  portalToggleBtn.blur();
+  portalToggleHandler?.();
+});
 
 /** Callback registered by the game layer — invoked when a slot is clicked/tapped. */
 let slotClickHandler: ((idx: number) => void) | null = null;

@@ -15,6 +15,7 @@ import {
   showEndScreen, hideEndScreen,
   showMatchHud,
   setSlotClickHandler, setTitleTapHandler, setEndTapHandler,
+  setPortalLegend, setPortalToggleHandler,
   type EndResult,
 } from './hud';
 import { applyHitStop, FEEL } from './gamefeel';
@@ -27,6 +28,7 @@ import {
   isFromPortal, resolvePortalCharacter, setPortalPlayerInfo,
   initPortals, updatePortals, disposePortals,
   getPortalExitUrl, getPortalReturnUrl, clearPortalContext,
+  togglePortalExpanded, hasStartPortal,
 } from './portal';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended';
@@ -124,6 +126,9 @@ export class Game {
 
     this.initPortalKeys();
 
+    // Mobile portal toggle button → same toggle as desktop P key
+    setPortalToggleHandler(() => togglePortalExpanded());
+
     // Portal entry: skip title + character select, go straight to match
     if (isFromPortal()) {
       this.selectedIdx = resolvePortalCharacter();
@@ -205,6 +210,7 @@ export class Game {
       this.player.config.color,
       this.player.config.speed,
     );
+    setPortalLegend(hasStartPortal());
 
     initAbilityHUD(this.player.abilityStates);
     initAllLivesHUD(this.critters);
@@ -363,6 +369,10 @@ export class Game {
         updatePlayer(this.player, effectiveDt);
 
         // 1.5. Portal check (before physics so redirect happens cleanly)
+        // P key toggles minimized/expanded state during match.
+        if (this.portalKeyPressed('KeyP')) {
+          togglePortalExpanded();
+        }
         if (this.player.alive && !this.player.falling) {
           const portalHit = updatePortals(this.player.x, this.player.z, effectiveDt);
           if (portalHit) return; // redirect in progress, freeze game loop

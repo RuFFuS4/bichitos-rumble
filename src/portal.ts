@@ -37,11 +37,16 @@ const incomingUsername = params.get('username') || null;
 const EXIT_POS = new THREE.Vector3(6, 0, -6);
 const START_POS = new THREE.Vector3(-6, 0, -6);
 const PORTAL_RADIUS = 1.2;
-const TRIGGER_DIST = 1.5;
-const GRACE_PERIOD = 5.0; // seconds before start portal activates
+const TRIGGER_DIST_MIN = 0.8;   // hitbox when minimized (tight, avoids combat accidents)
+const TRIGGER_DIST_MAX = 1.5;   // hitbox when expanded (generous, easy to hit)
+const GRACE_PERIOD = 5.0;       // seconds before start portal activates
 
 const EXIT_COLOR = 0x44ff88;
 const START_COLOR = 0xff8844;
+
+// Expansion state: smoothed 0..1 value for scale/opacity/emissive lerp.
+// Portals start minimized (discreet). Toggled by P key or mobile button.
+const EXPAND_LERP_SPEED = 8;    // higher = snappier transition
 
 // ---------------------------------------------------------------------------
 // State
@@ -51,6 +56,8 @@ let exitPortal: THREE.Group | null = null;
 let startPortal: THREE.Group | null = null;
 let graceTimer = GRACE_PERIOD;
 let redirected = false;
+let expanded = false;       // target state
+let expansionT = 0;         // smoothed 0..1, driven each frame
 
 // Player info for redirect params (set by game.ts before first update)
 let playerName = 'Unknown';
@@ -131,6 +138,22 @@ export function resolvePortalCharacter(): number {
   return 0;
 }
 
+/** Toggle portals between minimized (discreet) and expanded (full brightness). */
+export function togglePortalExpanded(): void {
+  expanded = !expanded;
+  console.debug('[Portal] expanded =', expanded);
+}
+
+/** Current expansion target (not the smoothed value). */
+export function isPortalExpanded(): boolean {
+  return expanded;
+}
+
+/** Whether a start portal exists in this match (for HUD legend). */
+export function hasStartPortal(): boolean {
+  return portalActive && refUrl !== null;
+}
+
 /** Set player info used in redirect query params. Call before first update. */
 export function setPortalPlayerInfo(name: string, colorHex: number, speed: number): void {
   playerName = name;
@@ -143,6 +166,8 @@ export function initPortals(scene: THREE.Scene): void {
   disposePortals();
   redirected = false;
   graceTimer = GRACE_PERIOD;
+  expanded = false;
+  expansionT = 0;
 
   // Exit portal — always present
   exitPortal = createPortalMesh(EXIT_COLOR, 'NEXT GAME');
@@ -157,6 +182,12 @@ export function initPortals(scene: THREE.Scene): void {
     scene.add(startPortal);
     console.debug('[Portal] start portal created at', START_POS.x, START_POS.z);
   }
+
+  // Apply initial minimized visual state immediately, so countdown and the
+  // first frame of 'playing' both render the portal at 0.5× scale / low glow
+  // instead of a visible pop from 1.0× to 0.5× when the match starts.
+  if (exitPortal) animatePortal(exitPortal, 0);
+  if (startPortal) animatePortal(startPortal, 0);
 }
 
 /**
@@ -171,6 +202,14 @@ export function initPortals(scene: THREE.Scene): void {
 export function updatePortals(playerX: number, playerZ: number, dt: number): 'exit' | 'start' | null {
   if (redirected) return null;
 
+  // Smooth expansion toward target (0 or 1)
+  const target = expanded ? 1 : 0;
+  const k = Math.min(1, dt * EXPAND_LERP_SPEED);
+  expansionT += (target - expansionT) * k;
+
+  // Dynamic hitbox: tight when minimized, generous when expanded
+  const triggerDist = TRIGGER_DIST_MIN + (TRIGGER_DIST_MAX - TRIGGER_DIST_MIN) * expansionT;
+
   // Animate
   if (exitPortal) animatePortal(exitPortal, dt);
   if (startPortal) animatePortal(startPortal, dt);
@@ -184,7 +223,7 @@ export function updatePortals(playerX: number, playerZ: number, dt: number): 'ex
   if (exitPortal) {
     const dx = playerX - EXIT_POS.x;
     const dz = playerZ - EXIT_POS.z;
-    if (Math.sqrt(dx * dx + dz * dz) < TRIGGER_DIST) {
+    if (Math.sqrt(dx * dx + dz * dz) < triggerDist) {
       redirected = true;
       console.debug('[Portal] exit portal triggered');
       redirectToPortalHub();
@@ -196,7 +235,7 @@ export function updatePortals(playerX: number, playerZ: number, dt: number): 'ex
   if (startPortal && graceTimer <= 0 && refUrl) {
     const dx = playerX - START_POS.x;
     const dz = playerZ - START_POS.z;
-    if (Math.sqrt(dx * dx + dz * dz) < TRIGGER_DIST) {
+    if (Math.sqrt(dx * dx + dz * dz) < triggerDist) {
       redirected = true;
       console.debug('[Portal] start portal triggered → returning to', refUrl);
       redirectToRef();
@@ -230,7 +269,7 @@ function createPortalMesh(color: number, label: string): THREE.Group {
 
   // Outer ring — torus tilted slightly toward the camera (75°)
   // so the "hole" of the portal reads clearly from the isometric view.
-  const TILT = Math.PI * 0.42;
+  const TILT = Math.PI / 2; // perpendicular to ground (standing like a door)
   const torusGeo = new THREE.TorusGeometry(PORTAL_RADIUS, 0.12, 12, 32);
   const torusMat = new THREE.MeshStandardMaterial({
     color,
@@ -336,24 +375,45 @@ function createPortalParticles(color: number): THREE.Points {
 
 function animatePortal(portal: THREE.Group, _dt: number): void {
   const t = Date.now() * 0.001;
+  const T = expansionT; // 0..1 smoothed
 
-  // Slow rotation on the torus (around its own axis)
+  // Uniform scale on the whole group: 0.5× minimized → 1.0× expanded
+  const s = 0.5 + T * 0.5;
+  portal.scale.setScalar(s);
+
+  // (children: [torus, disc, glow, label, particles])
   const torus = portal.children[0] as THREE.Mesh;
+  const disc = portal.children[1] as THREE.Mesh;
+  const glow = portal.children[2] as THREE.Mesh;
+  const label = portal.children[3] as THREE.Sprite;
+  const particles = portal.children[4] as THREE.Points;
+
+  // Slow rotation on the torus
   torus.rotation.z = t * 0.4;
 
-  // Gentle emissive pulse
-  const mat = torus.material as THREE.MeshStandardMaterial;
-  mat.emissiveIntensity = 0.4 + Math.sin(t * 1.8) * 0.2;
+  // Torus emissive: dim (0.15) when minimized, bright with pulse (0.3-0.5) when expanded
+  const torusMat = torus.material as THREE.MeshStandardMaterial;
+  const baseGlow = 0.15 + T * 0.25;
+  const pulseAmt = T * 0.15;
+  torusMat.emissiveIntensity = baseGlow + Math.sin(t * 1.8) * pulseAmt;
+  torusMat.opacity = 0.5 + T * 0.4;
 
-  // Gentle disc pulse
-  const disc = portal.children[1] as THREE.Mesh;
+  // Disc: subtle when minimized, visible with pulse when expanded
   const discMat = disc.material as THREE.MeshStandardMaterial;
-  discMat.opacity = 0.15 + Math.sin(t * 2) * 0.08;
+  discMat.opacity = 0.05 + T * 0.15 + Math.sin(t * 2) * T * 0.05;
 
-  // Particle drift — gentle vertical bob while orbiting
-  // (children: [torus, disc, glow, label, particles])
-  const particles = portal.children[4] as THREE.Points;
-  if (particles && particles.isPoints) {
+  // Ground glow: very subtle when minimized
+  const glowMat = glow.material as THREE.MeshStandardMaterial;
+  glowMat.opacity = 0.05 + T * 0.15;
+
+  // Label: fade in with expansion
+  const labelMat = label.material as THREE.SpriteMaterial;
+  labelMat.opacity = 0.35 + T * 0.65;
+
+  // Particles: fade + bob
+  const pointsMat = particles.material as THREE.PointsMaterial;
+  pointsMat.opacity = 0.25 + T * 0.65;
+  if (particles.isPoints) {
     const posAttr = particles.geometry.getAttribute('position') as THREE.BufferAttribute;
     const arr = posAttr.array as Float32Array;
     const COUNT = arr.length / 3;
