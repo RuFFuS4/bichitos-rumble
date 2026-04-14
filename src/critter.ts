@@ -82,6 +82,14 @@ export class Critter {
 
   /** Roster visual data (null for characters without a roster entry). */
   rosterEntry: RosterEntry | null = null;
+
+  /**
+   * If true, update() skips the local physics + headbutt state machine.
+   * Used for online mode where the server is authoritative — position,
+   * velocity, isHeadbutting, lives etc. are set from server state each
+   * frame, and local update() only runs the visual animations.
+   */
+  skipPhysics = false;
   /** Loaded GLB scene graph (null while loading or if procedural-only). */
   glbMesh: THREE.Group | null = null;  // public for debug tuning (make private after)
   /** Pre-collected MeshStandardMaterials from the GLB for fast visual updates. */
@@ -176,6 +184,29 @@ export class Critter {
   }
 
   update(dt: number): void {
+    // Online mode: server is authoritative. Run only visual animations.
+    // Position/velocity/isHeadbutting/etc. are set externally before this
+    // call from the network state. We still need bobbing, emissive, hit
+    // flash, scale feedback, and knockback tilt for visual parity.
+    if (this.skipPhysics) {
+      this.body.position.y = BODY_RADIUS + Math.sin(Date.now() * 0.005) * 0.05;
+      if (this.glbMesh) {
+        this.glbMesh.position.y = (this.rosterEntry?.pivotY ?? 0) + Math.sin(Date.now() * 0.005) * 0.05;
+      }
+      this.updateVisuals();
+      const flashT = tickHitFlash(this, dt);
+      if (flashT > 0) {
+        for (const mat of this.getActiveMaterials()) {
+          mat.emissive.setHex(0xffffff);
+          mat.emissiveIntensity = flashT * 1.2;
+        }
+      }
+      updateScaleFeedback(this, dt);
+      updateKnockbackTilt(this, dt);
+      updateHeadbuttRecovery(this, dt);
+      return;
+    }
+
     // Immunity countdown
     if (this.immunityTimer > 0) this.immunityTimer -= dt;
 

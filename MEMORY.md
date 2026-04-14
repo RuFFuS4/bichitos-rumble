@@ -1,7 +1,10 @@
 # Memory — Bichitos Rumble
 
 ## Key Decisions
-- Phase 1 is offline-only with bots. No multiplayer until core loop is validated.
+- **Online multiplayer is a hard jam target** (decision 2026-04-15). Architecture:
+  authoritative Node/TS server with Colyseus, NO Vercel Functions for realtime,
+  NO WebRTC/P2P, NO rollback. Client sends inputs, server simulates + broadcasts state.
+- Offline mode with bots stays as alternate path (no regression allowed).
 - Roster is data-driven: `src/roster.ts` (13 entries: 9 real + 4 internal placeholders).
 - 9-character real roster visible in character select. Only characters with gameplay are confirmable (currently: Sergei).
 - 4 placeholders (Rojo/Azul/Verde/Morado) hidden from UX, used only as bots.
@@ -166,20 +169,39 @@ Future restructure ideas (NOT yet implemented):
 - Capability detection via `hasTouchSupport()` + `isNarrowViewport()` +
   `isLikelyMobile()` (no user-agent sniffing)
 
-## Next Priorities (17 days to deadline, ordered by ROI)
-1. **Submit via Google Form** before May 1, 2026 13:37 UTC (user task)
-2. **Measure production load with Lighthouse** — document startup time
-3. **Expand real playable roster**: optimize 2-3 more GLBs (Trunk, Kurama, one more)
-   and give them gameplay kits (reuse charge_rush + ground_pound with per-critter tuning)
-4. **Tune transforms** of new GLBs using `__tune()` in dev
-5. **Light procedural animation on GLBs**: movement tilt + ability wind-up
-   applied to the GLB group (currently only procedural spheres get these)
+## Next Priorities (deadline May 1, 2026 13:37 UTC)
+
+**Major direction shift**: online multiplayer is NO LONGER deferred. It is
+a hard target for this jam. The risk is placed up front, not at the end.
+
+### Bloque A — Multiplayer vertical slice (in progress)
+Authoritative server, Colyseus, no prediction. Scope:
+1. Server workspace in `/server` (Node + TS + Colyseus)
+2. 2 players per room, both Sergei (fixed for now)
+3. Sync: movement, headbutt, collision/knockback, falls, respawn, match timer, win/lose
+4. Sync: charge_rush ability (only one in Bloque A, generic arch ready for more)
+5. Local develop + real deploy (Fly.io or Railway) + remote test
+6. Offline mode stays intact as alternate path (no regression)
+
+Closed only after remote test with two real clients (ideally including mobile).
+
+### Bloque B — Complete online gameplay (after A validated)
+- Frenzy + ground_pound sync (arch ready from A)
+- Character select online (sends critter config to server)
+- Arena collapse sync
+- Basic reconnection
+- Production deploy URL stable
+
+### Bloque C — Minimum content / compliance (late, parallel if possible)
+- Google Form submission (user task, before May 1)
+- Lighthouse measurement on prod URL
+- 2-3 more playable characters (optional if time)
 
 ## Deferred (post-deadline or if time permits)
 - Full 9-character kits with unique abilities
-- Ability icons / logos
+- Matchmaking, login, ranking, chat, rollback
+- Client-side prediction
 - Warp animation + SFX on portal transition
 - Stats display in end screen
 - HUD restructure for mobile
 - Skeletal animation / rigging (against style lock)
-- Multiplayer (explicitly out of scope, risk too high)

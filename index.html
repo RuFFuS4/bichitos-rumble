@@ -285,6 +285,28 @@
       background-clip: text;
       color: transparent;
     }
+    #title-screen .title-mode-btn {
+      margin-top: 24px;
+      padding: 10px 22px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: rgba(255,255,255,0.9);
+      border-radius: 6px;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: background 0.15s, border-color 0.15s;
+      font-family: inherit;
+    }
+    #title-screen .title-mode-btn:hover {
+      background: rgba(255,255,255,0.15);
+      border-color: rgba(255,255,255,0.5);
+    }
+    #title-screen .title-mode-btn:active {
+      transform: scale(0.97);
+    }
     #title-screen .tagline {
       font-size: 16px;
       opacity: 0.65;
@@ -727,6 +749,7 @@
     <p class="tagline">HEADBUTT YOUR RIVALS INTO THE VOID</p>
     <div class="prompt desktop-only">Press <kbd>SPACE</kbd> to start</div>
     <div class="prompt touch-only">Tap to start</div>
+    <button id="btn-online" class="title-mode-btn">🌐 Play Online (2P)</button>
     <div class="controls-hint desktop-only">WASD move · SPACE headbutt · J/K abilities · R restart</div>
     <div class="controls-hint touch-only">Joystick to move · buttons for headbutt and abilities</div>
   </div>

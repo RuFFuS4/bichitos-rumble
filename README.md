@@ -15,6 +15,30 @@ npm install
 npm run dev
 ```
 
+## Multiplayer (local dev)
+
+The online mode needs a Colyseus server running alongside the Vite client:
+
+```bash
+# terminal 1 — client
+npm install
+npm run dev
+
+# terminal 2 — server
+cd server
+npm install
+npm run dev
+```
+
+Client points at `ws://localhost:2567` by default in dev. Override with
+`VITE_SERVER_URL` (e.g. `VITE_SERVER_URL=wss://my-server.fly.dev npm run dev`).
+
+Once both are running, open `http://localhost:5173` in two browser
+windows and click "Play Online (2P)" in each. The first becomes player 1,
+the second joins as player 2, countdown starts, match begins.
+
+Offline mode (title → select → match with bots) works without the server.
+
 ## Deployment
 
 Configured for Vercel via `vercel.json` (SPA rewrites + Vite framework).

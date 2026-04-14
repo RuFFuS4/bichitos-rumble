@@ -151,6 +151,27 @@ if (btnMusic) {
 // Game
 const game = new Game(scene);
 
+// Online mode entry — "Play Online" button on title screen
+const btnOnline = document.getElementById('btn-online');
+if (btnOnline) {
+  btnOnline.addEventListener('click', async (e) => {
+    e.stopPropagation(); // don't trigger the title tap handler
+    btnOnline.setAttribute('disabled', 'true');
+    btnOnline.textContent = 'Connecting...';
+    try {
+      const { connectToBrawl, getDefaultServerUrl } = await import('./network');
+      const room = await connectToBrawl(getDefaultServerUrl());
+      game.enterOnline(room);
+    } catch (err) {
+      console.error('[Main] online connect failed:', err);
+      btnOnline.removeAttribute('disabled');
+      btnOnline.textContent = '🌐 Play Online (2P)';
+      alert('Could not connect to multiplayer server.\n\n' +
+            'Make sure the server is running: cd server && npm run dev');
+    }
+  });
+}
+
 // Game loop
 let lastTime = performance.now();
 function loop(now: number) {

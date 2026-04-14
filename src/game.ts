@@ -30,8 +30,14 @@ import {
   getPortalExitUrl, getPortalReturnUrl, clearPortalContext,
   togglePortalExpanded, hasStartPortal,
 } from './portal';
+import type { Room } from 'colyseus.js';
+import { getStateCallbacks } from 'colyseus.js';
+import { sendInput, onAbilityFired, type AbilityFiredEvent } from './network';
+import { getMoveVector, isHeld } from './input';
+import { triggerCameraShake, applyDashFeedback } from './gamefeel';
+import { play as playSoundEffect } from './audio';
 
-type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended';
+type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended' | 'online';
 
 const SPAWN_POSITIONS: [number, number][] = [
   [0, -6],
@@ -85,6 +91,11 @@ export class Game {
   private phaseTimer = 0;
   private matchTimer = FEEL.match.duration;
   private displayRoster: RosterEntry[] = getDisplayRoster();
+
+  // --- Online mode state (null when offline) ---
+  private room: Room | null = null;
+  private onlineCritters = new Map<string, Critter>(); // sessionId → visual
+  private lastServerPhase: string = '';                 // for transition detection
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -243,6 +254,200 @@ export class Game {
     // Player is always the first critter of the roster
     this.playerIndex = 0;
     this.player = this.critters[0];
+  }
+
+  // -------------------------------------------------------------------------
+  // Online mode
+  // -------------------------------------------------------------------------
+
+  /**
+   * Switch to online mode. Disposes local critters, hooks network listeners,
+   * and starts rendering remote state. The room must already be connected.
+   */
+  public enterOnline(room: Room): void {
+    console.log('[Game] entering online mode');
+    clearMenuActions();
+    this.room = room;
+    this.phase = 'online';
+    this.lastServerPhase = '';
+    document.body.classList.add('match-active');
+
+    // Hide offline UI
+    hideTitleScreen();
+    hideCharacterSelect();
+    hideEndScreen();
+    hidePreview();
+    showMatchHud();
+    disposePortals();        // portals don't exist in online mode
+    clearPortalContext();
+
+    // Clear offline critters; online critters are driven by server state
+    for (const c of this.critters) c.dispose();
+    this.critters = [];
+    this.onlineCritters.clear();
+
+    // Reset arena to initial state (no collapse in Bloque A — server doesn't drive it)
+    this.arena.reset();
+
+    showOverlay('Waiting for opponent...');
+
+    // Colyseus schema v3: use getStateCallbacks to register listeners.
+    // $ (root callback proxy) mirrors the state tree and supports onAdd/onRemove
+    // that also fires for items ALREADY present when the callback is attached.
+    const $ = getStateCallbacks(room);
+    $(room.state).players.onAdd((playerState: any, sessionId: string) => {
+      this.spawnOnlineCritter(sessionId, playerState);
+    });
+    $(room.state).players.onRemove((_playerState: any, sessionId: string) => {
+      const c = this.onlineCritters.get(sessionId);
+      if (c) {
+        c.dispose();
+        this.onlineCritters.delete(sessionId);
+      }
+    });
+
+    // Ability fire events → trigger client-side VFX + audio
+    onAbilityFired(room, (ev: AbilityFiredEvent) => this.handleAbilityFired(ev));
+
+    // Attach leave handler — if opponent disconnects, we get here
+    room.onLeave(() => {
+      console.log('[Game] disconnected from room');
+      if (this.phase === 'online') {
+        showOverlay('Disconnected', 'Press T to return to title');
+      }
+    });
+  }
+
+  private spawnOnlineCritter(sessionId: string, playerState: any): void {
+    // Fixed to Sergei in Bloque A
+    const config = CRITTER_PRESETS.find(p => p.name === 'Sergei') ?? CRITTER_PRESETS[0];
+    const critter = new Critter(config, this.scene);
+    critter.skipPhysics = true;  // server is authoritative
+    critter.x = playerState.x ?? 0;
+    critter.z = playerState.z ?? 0;
+    this.onlineCritters.set(sessionId, critter);
+    console.log('[Game] spawned online critter for', sessionId);
+
+    // The local player is the first added whose sessionId matches room.sessionId
+    if (this.room && sessionId === this.room.sessionId) {
+      this.player = critter;
+      this.critters = [critter]; // for HUD compatibility
+      initAbilityHUD(this.player.abilityStates);
+      initAllLivesHUD([critter]);
+    }
+  }
+
+  /**
+   * Apply server state to local critters + drive phase UI (countdown, end).
+   * Called each frame while phase === 'online'.
+   */
+  private updateOnline(dt: number): void {
+    if (!this.room) return;
+
+    // Send current input to server (throttled implicitly by frame rate)
+    const move = getMoveVector();
+    sendInput(this.room, {
+      moveX: move.x,
+      moveZ: move.z,
+      headbutt: isHeld('headbutt'),
+      ability1: isHeld('ability1'),
+      ability2: isHeld('ability2'),
+      ultimate: isHeld('ultimate'),
+    });
+
+    // Apply server state to each critter
+    const state = this.room.state as any;
+    const allPlayers: Array<{ sessionId: string; alive: boolean }> = [];
+    state.players.forEach((p: any, sid: string) => {
+      allPlayers.push({ sessionId: sid, alive: p.alive });
+      const c = this.onlineCritters.get(sid);
+      if (!c) return;
+      // Lerp positions for smoothness (local player snaps for responsiveness)
+      if (sid === this.room?.sessionId) {
+        c.x = p.x;
+        c.z = p.z;
+      } else {
+        c.x += (p.x - c.x) * Math.min(1, dt * 15);
+        c.z += (p.z - c.z) * Math.min(1, dt * 15);
+      }
+      c.mesh.rotation.y = p.rotationY;
+      c.vx = p.vx;
+      c.vz = p.vz;
+      c.alive = p.alive;
+      c.falling = p.falling;
+      c.mesh.position.y = p.fallY ?? 0;
+      c.mesh.visible = p.alive;
+      c.immunityTimer = p.immunityTimer;
+      c.isHeadbutting = p.isHeadbutting;
+      (c as any).headbuttAnticipating = p.headbuttAnticipating;
+      c.lives = p.lives;
+      // Update ability states from server (for HUD)
+      for (let i = 0; i < p.abilities.length && i < c.abilityStates.length; i++) {
+        const src = p.abilities[i];
+        const dst = c.abilityStates[i];
+        dst.active = src.active;
+        dst.cooldownLeft = src.cooldownLeft;
+        dst.durationLeft = src.durationLeft;
+        dst.windUpLeft = src.windUpLeft;
+        dst.effectFired = src.effectFired;
+      }
+      // Run visual updates
+      c.update(dt);
+    });
+
+    // Handle server phase transitions
+    const serverPhase = state.phase as string;
+    if (serverPhase !== this.lastServerPhase) {
+      console.log('[Game] server phase:', this.lastServerPhase, '→', serverPhase);
+      this.lastServerPhase = serverPhase;
+      if (serverPhase === 'playing') {
+        hideOverlay();
+      } else if (serverPhase === 'waiting') {
+        showOverlay('Waiting for opponent...');
+      } else if (serverPhase === 'ended') {
+        const winnerSid = state.winnerSessionId;
+        const localSid = this.room.sessionId;
+        const reason = state.endReason;
+        let title = 'DRAW';
+        let subtitle = 'No winner';
+        let result: EndResult = 'draw';
+        if (winnerSid === localSid) {
+          result = 'win'; title = 'VICTORY'; subtitle = 'You won';
+          playSoundEffect('victory');
+        } else if (winnerSid && winnerSid !== localSid) {
+          result = 'lose'; title = 'DEFEATED';
+          subtitle = reason === 'opponent_left' ? 'You won by default' : 'Opponent won';
+        }
+        hideOverlay();
+        showEndScreen(result, title, subtitle, false);
+      }
+    }
+
+    // Overlay for countdown
+    if (serverPhase === 'countdown') {
+      const sec = Math.max(0, Math.ceil(state.countdownLeft));
+      showOverlay(`${sec > 0 ? sec : 'GO!'}`);
+    }
+
+    // HUD updates
+    if (serverPhase === 'playing' && this.player) {
+      const alive = allPlayers.filter(p => p.alive).length;
+      updateHUD(alive, Math.max(0, state.matchTimer));
+      updateAbilityHUD(this.player.abilityStates);
+      updateAllLivesHUD([...this.onlineCritters.values()]);
+    }
+  }
+
+  private handleAbilityFired(ev: AbilityFiredEvent): void {
+    const c = this.onlineCritters.get(ev.sessionId);
+    if (!c) return;
+    // Reuse offline VFX primitives for consistency
+    if (ev.type === 'charge_rush') {
+      applyDashFeedback(c);
+      triggerCameraShake(0.15);
+      playSoundEffect('abilityFire');
+    }
+    // ground_pound + frenzy VFX reserved for Bloque B
   }
 
   private enterEnded(result: EndResult, title: string, subtitle: string): void {
@@ -436,6 +641,19 @@ export class Game {
         }
         break;
       }
+
+      case 'online':
+        this.updateOnline(dt);
+        // T returns to title, dropping the online connection
+        if (consumeMenuAction('back')) {
+          this.room?.leave().catch(() => { /* ignore */ });
+          this.room = null;
+          for (const c of this.onlineCritters.values()) c.dispose();
+          this.onlineCritters.clear();
+          this.critters = [];
+          this.enterTitle();
+        }
+        break;
 
       case 'ended':
         // Finish any pending fall animations so eliminated critters disappear
