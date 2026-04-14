@@ -37,15 +37,15 @@ const incomingUsername = params.get('username') || null;
 const EXIT_POS = new THREE.Vector3(6, 0, -6);
 const START_POS = new THREE.Vector3(-6, 0, -6);
 const PORTAL_RADIUS = 1.2;
-const TRIGGER_DIST_MIN = 0.8;   // hitbox when minimized (tight, avoids combat accidents)
-const TRIGGER_DIST_MAX = 1.5;   // hitbox when expanded (generous, easy to hit)
-const GRACE_PERIOD = 5.0;       // seconds before start portal activates
+const TRIGGER_DIST = 1.5;              // active hitbox (only when expanded)
+const TRIGGER_EXPANSION_THRESHOLD = 0.7; // portal must be this expanded to be usable
+const GRACE_PERIOD = 5.0;              // seconds before start portal activates
 
 const EXIT_COLOR = 0x44ff88;
 const START_COLOR = 0xff8844;
 
 // Expansion state: smoothed 0..1 value for scale/opacity/emissive lerp.
-// Portals start minimized (discreet). Toggled by P key or mobile button.
+// Portals start minimized (purely cosmetic, NOT usable). Toggled by P or button.
 const EXPAND_LERP_SPEED = 8;    // higher = snappier transition
 
 // ---------------------------------------------------------------------------
@@ -207,8 +207,10 @@ export function updatePortals(playerX: number, playerZ: number, dt: number): 'ex
   const k = Math.min(1, dt * EXPAND_LERP_SPEED);
   expansionT += (target - expansionT) * k;
 
-  // Dynamic hitbox: tight when minimized, generous when expanded
-  const triggerDist = TRIGGER_DIST_MIN + (TRIGGER_DIST_MAX - TRIGGER_DIST_MIN) * expansionT;
+  // Portals are ONLY usable when expanded (above threshold). Minimized portals
+  // are purely cosmetic — walking through them does nothing. This avoids
+  // accidental redirects from combat knockback.
+  const isUsable = expansionT > TRIGGER_EXPANSION_THRESHOLD;
 
   // Animate
   if (exitPortal) animatePortal(exitPortal, dt);
@@ -219,11 +221,13 @@ export function updatePortals(playerX: number, playerZ: number, dt: number): 'ex
     graceTimer -= dt;
   }
 
+  if (!isUsable) return null;
+
   // Check exit portal collision
   if (exitPortal) {
     const dx = playerX - EXIT_POS.x;
     const dz = playerZ - EXIT_POS.z;
-    if (Math.sqrt(dx * dx + dz * dz) < triggerDist) {
+    if (Math.sqrt(dx * dx + dz * dz) < TRIGGER_DIST) {
       redirected = true;
       console.debug('[Portal] exit portal triggered');
       redirectToPortalHub();
@@ -235,7 +239,7 @@ export function updatePortals(playerX: number, playerZ: number, dt: number): 'ex
   if (startPortal && graceTimer <= 0 && refUrl) {
     const dx = playerX - START_POS.x;
     const dz = playerZ - START_POS.z;
-    if (Math.sqrt(dx * dx + dz * dz) < triggerDist) {
+    if (Math.sqrt(dx * dx + dz * dz) < TRIGGER_DIST) {
       redirected = true;
       console.debug('[Portal] start portal triggered → returning to', refUrl);
       redirectToRef();
@@ -267,9 +271,9 @@ export function disposePortals(): void {
 function createPortalMesh(color: number, label: string): THREE.Group {
   const group = new THREE.Group();
 
-  // Outer ring — torus tilted slightly toward the camera (75°)
-  // so the "hole" of the portal reads clearly from the isometric view.
-  const TILT = Math.PI / 2; // perpendicular to ground (standing like a door)
+  // Outer ring — torus vertical like a door. TorusGeometry default lies
+  // in the XY plane with its "hole" along +Z, which is already a standing
+  // door. No rotation needed — the critter walks through horizontally.
   const torusGeo = new THREE.TorusGeometry(PORTAL_RADIUS, 0.12, 12, 32);
   const torusMat = new THREE.MeshStandardMaterial({
     color,
@@ -279,11 +283,10 @@ function createPortalMesh(color: number, label: string): THREE.Group {
     opacity: 0.9,
   });
   const torus = new THREE.Mesh(torusGeo, torusMat);
-  torus.rotation.x = TILT;
-  torus.position.y = PORTAL_RADIUS + 0.15;
+  torus.position.y = PORTAL_RADIUS + 0.1;  // bottom of ring touches ground
   group.add(torus);
 
-  // Inner disc — semitransparent fill
+  // Inner disc — semitransparent fill in the door hole
   const discGeo = new THREE.CircleGeometry(PORTAL_RADIUS * 0.85, 24);
   const discMat = new THREE.MeshStandardMaterial({
     color,
@@ -294,8 +297,7 @@ function createPortalMesh(color: number, label: string): THREE.Group {
     side: THREE.DoubleSide,
   });
   const disc = new THREE.Mesh(discGeo, discMat);
-  disc.rotation.x = TILT;
-  disc.position.y = PORTAL_RADIUS + 0.15;
+  disc.position.y = PORTAL_RADIUS + 0.1;
   group.add(disc);
 
   // Ground glow ring
