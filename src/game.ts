@@ -26,7 +26,7 @@ import { preloadModels } from './model-loader';
 import {
   isFromPortal, resolvePortalCharacter, setPortalPlayerInfo,
   initPortals, updatePortals, disposePortals,
-  getPortalExitUrl, getPortalReturnUrl,
+  getPortalExitUrl, getPortalReturnUrl, clearPortalContext,
 } from './portal';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended';
@@ -143,6 +143,7 @@ export class Game {
     this.phase = 'title';
     document.body.classList.remove('match-active');
     disposePortals();
+    clearPortalContext(); // exit portal mode: no start portal, no P/B prompts
     showTitleScreen();
     hideCharacterSelect();
     hideEndScreen();

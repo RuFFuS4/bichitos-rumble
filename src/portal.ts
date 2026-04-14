@@ -23,8 +23,8 @@ import { CRITTER_PRESETS } from './critter';
 // ---------------------------------------------------------------------------
 
 const params = new URLSearchParams(window.location.search);
-const isPortalEntry = params.get('portal') === 'true';
-const refUrl = params.get('ref') || null;
+let portalActive = params.get('portal') === 'true';
+let refUrl = params.get('ref') || null;
 const incomingUsername = params.get('username') || null;
 
 // ---------------------------------------------------------------------------
@@ -58,9 +58,31 @@ let playerSpeed = 10;
 // Public API
 // ---------------------------------------------------------------------------
 
-/** Whether the game was loaded via a portal entry (?portal=true). */
+/** Whether the game is currently in portal mode. */
 export function isFromPortal(): boolean {
-  return isPortalEntry;
+  return portalActive;
+}
+
+/**
+ * Clear portal context: the game reverts to normal mode.
+ * Called when the player explicitly returns to title (T key).
+ * Also strips portal params from the URL bar via replaceState
+ * so a page refresh doesn't re-enter portal mode.
+ */
+export function clearPortalContext(): void {
+  if (!portalActive) return;
+  portalActive = false;
+  refUrl = null;
+
+  // Clean URL bar without reload
+  const url = new URL(window.location.href);
+  url.searchParams.delete('portal');
+  url.searchParams.delete('ref');
+  url.searchParams.delete('username');
+  url.searchParams.delete('color');
+  url.searchParams.delete('speed');
+  history.replaceState(null, '', url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : ''));
+  console.debug('[Portal] context cleared, URL cleaned');
 }
 
 /**
@@ -125,8 +147,8 @@ export function initPortals(scene: THREE.Scene): void {
   scene.add(exitPortal);
   console.debug('[Portal] exit portal created at', EXIT_POS.x, EXIT_POS.z);
 
-  // Start portal — only if arriving from another game with a ref URL
-  if (isPortalEntry && refUrl) {
+  // Start portal — only if in portal mode with a ref URL
+  if (portalActive && refUrl) {
     startPortal = createPortalMesh(START_COLOR);
     startPortal.position.copy(START_POS);
     scene.add(startPortal);
