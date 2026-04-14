@@ -263,6 +263,22 @@ function animatePortal(portal: THREE.Group, _dt: number): void {
 }
 
 // ---------------------------------------------------------------------------
+// Redirect URLs (used by game.ts end screen)
+// ---------------------------------------------------------------------------
+
+/** Full URL for "next game" in the webring. Always available. */
+export function getPortalExitUrl(): string {
+  return `https://vibej.am/portal/2026?${buildParams()}`;
+}
+
+/** Full URL to return to the game that sent the player, or null. */
+export function getPortalReturnUrl(): string | null {
+  if (!refUrl) return null;
+  const separator = refUrl.includes('?') ? '&' : '?';
+  return `${refUrl}${separator}${buildParams()}&portal=true`;
+}
+
+// ---------------------------------------------------------------------------
 // Redirect logic
 // ---------------------------------------------------------------------------
 

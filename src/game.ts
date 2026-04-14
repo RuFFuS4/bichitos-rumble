@@ -26,6 +26,7 @@ import { preloadModels } from './model-loader';
 import {
   isFromPortal, resolvePortalCharacter, setPortalPlayerInfo,
   initPortals, updatePortals, disposePortals,
+  getPortalExitUrl, getPortalReturnUrl,
 } from './portal';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended';
@@ -120,6 +121,8 @@ export class Game {
         this.enterCountdown();
       }
     });
+
+    this.initPortalKeys();
 
     // Portal entry: skip title + character select, go straight to match
     if (isFromPortal()) {
@@ -240,7 +243,7 @@ export class Game {
     this.phase = 'ended';
     document.body.classList.remove('match-active');
     hideOverlay();
-    showEndScreen(result, title, subtitle);
+    showEndScreen(result, title, subtitle, isFromPortal());
     if (result === 'win') {
       playSound('victory');
     }
@@ -267,6 +270,24 @@ export class Game {
     const config = CRITTER_PRESETS.find(p => p.name === entry.displayName)
       ?? previewConfigFromRoster(entry);
     swapPreviewCritter(config);
+  }
+
+  // Edge-detected key check for portal redirects. Self-contained listener,
+  // not part of the input abstraction (portal is a jam feature, not gameplay).
+  private portalFreshKeys = new Set<string>();
+  private portalKeyPressed(code: string): boolean {
+    if (this.portalFreshKeys.has(code)) {
+      this.portalFreshKeys.delete(code);
+      return true;
+    }
+    return false;
+  }
+  private initPortalKeys(): void {
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyP' || e.code === 'KeyB') {
+        if (!e.repeat) this.portalFreshKeys.add(e.code);
+      }
+    });
   }
 
   /** Pick a respawn position near center that's inside the current arena. */
@@ -417,6 +438,18 @@ export class Game {
         }
         if (consumeMenuAction('back')) {
           this.enterTitle();
+        }
+        // Portal redirects (P = next game, B = return to previous)
+        // Reads raw key state — intentionally outside the input abstraction
+        // since these are navigation actions, not gameplay.
+        if (isFromPortal()) {
+          if (this.portalKeyPressed('KeyP')) {
+            window.location.href = getPortalExitUrl();
+          }
+          const returnUrl = getPortalReturnUrl();
+          if (returnUrl && this.portalKeyPressed('KeyB')) {
+            window.location.href = returnUrl;
+          }
         }
         break;
     }

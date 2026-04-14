@@ -417,10 +417,13 @@ function appendAbilityRow(key: string, name: string, desc: string, planned: bool
 
 export type EndResult = 'win' | 'lose' | 'draw';
 
-export function showEndScreen(result: EndResult, title: string, subtitle: string): void {
+export function showEndScreen(result: EndResult, title: string, subtitle: string, showPortalOptions = false): void {
   endResultEl.textContent = title;
   endResultEl.className = 'end-result ' + result;
   endSubtitleEl.textContent = subtitle;
+  // Show portal prompt only for players who arrived via portal
+  const portalPrompt = document.getElementById('end-portal-prompt');
+  if (portalPrompt) portalPrompt.style.display = showPortalOptions ? '' : 'none';
   endScreen.classList.remove('hidden');
   // Keep the match HUD visible behind the end screen so player sees final state
   setMatchHudVisible(true);
