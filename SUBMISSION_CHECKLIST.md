@@ -1,10 +1,14 @@
 # Submission Checklist — Bichitos Rumble
 
+## ⚠️ Pending user action
+
+- [ ] **SUBMIT VIA GOOGLE FORM before May 1, 2026 @ 13:37 UTC** → https://forms.gle/bGG4e3uD9PUUJKUc7
+
 ## Jam Info
 - **Deadline**: May 1, 2026 @ 13:37 UTC
 - **Submission form**: https://forms.gle/bGG4e3uD9PUUJKUc7
 - **Official site**: https://vibej.am/2026/
-- **Portal (optional)**: https://vibej.am/portal/2026
+- **Portal hub**: https://vibej.am/portal/2026
 
 ## Required for Jam Submission
 - [x] Game runs in browser without install
@@ -47,13 +51,21 @@
 ## Deployment
 - [x] `vercel.json` with SPA rewrites config
 - [x] `vite.config.ts` with `base: './'` (relative asset paths)
-- [x] Build verified locally (`npm run build` → 624 KB JS, 163 KB gzip)
+- [x] Build verified locally (`npm run build` → 622 KB JS, 163 KB gzip)
 - [x] Vercel project connected (auto-deploy from GitHub)
 - [x] Custom domain `www.bichitosrumble.com` aliased to production
 - [x] GitHub ↔ Vercel auto-deploy (dev → preview, main → production)
 - [x] Mobile support (virtual joystick, 4 action buttons, landscape lock)
-- [x] Merge dev → main with current features (2026-04-13, 15 commits)
+- [x] Merge dev → main with current features
 - [x] Verify production after merge (bichitosrumble.com verified)
-- [ ] Portal integration (optional)
-- [ ] Submit via Google Form
+- [x] Portal integration (exit + start portals, webring-ready)
 - [ ] Full cross-device playtest
+
+## Portal Feature (implemented)
+- [x] Exit portal (green) redirects to vibej.am/portal/2026 with params
+- [x] Start portal (orange) redirects back to ref URL (grace period 5s)
+- [x] Minimized by default, expand with P key / mobile toggle button
+- [x] Only usable when expanded (prevents combat accidents)
+- [x] HUD legend showing what each portal color means
+- [x] Portal entry (?portal=true) skips title/select, goes straight to match
+- [x] Character resolved data-driven from roster (random playable)

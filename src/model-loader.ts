@@ -13,17 +13,24 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
 // ---------------------------------------------------------------------------
 // Singleton loader setup
 // ---------------------------------------------------------------------------
-
-const dracoLoader = new DRACOLoader();
-dracoLoader.setDecoderPath('./draco/');
+//
+// Draco compression is NOT currently used — our optimize-models.mjs pipeline
+// only applies geometry simplification, no Draco encoding. To enable Draco
+// in the future:
+//   1. Add draco() step to scripts/optimize-models.mjs
+//   2. Copy decoder from node_modules/three/examples/jsm/libs/draco/ to
+//      public/draco/
+//   3. Import DRACOLoader and wire:
+//        const dracoLoader = new DRACOLoader();
+//        dracoLoader.setDecoderPath('./draco/');
+//        gltfLoader.setDRACOLoader(dracoLoader);
+// ---------------------------------------------------------------------------
 
 const gltfLoader = new GLTFLoader();
-gltfLoader.setDRACOLoader(dracoLoader);
 
 // ---------------------------------------------------------------------------
 // Cache: path → { original scene, in-flight promise }

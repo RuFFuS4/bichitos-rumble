@@ -34,6 +34,8 @@ Project: `ruffus4s-projects/bichitos-rumble`.
 | J | Ability 1 |
 | K | Ability 2 |
 | L | Ultimate (if available) |
+| P | Expand/minimize portals (in match) · Next game (end screen, portal visitors) |
+| B | Return to previous game (end screen, portal visitors only) |
 | R | Restart / confirm |
 | T / Esc | Back to title |
 
@@ -56,9 +58,13 @@ Top-right buttons: toggle SFX / music (state persists in localStorage).
 
 ## Status
 
-9-character roster with 3D GLB models. Sergei (gorilla) is the first fully
-playable real character with 3 abilities including an ultimate. 4 placeholder
-critters remain for bot matches. Character select shows the real roster with
-WIP badges for characters without gameplay yet.
+9-character roster shown in character select. Sergei (gorilla) is the first
+fully playable real character with 3D GLB model and 3 abilities including
+an ultimate. 8 remaining characters are marked WIP and not yet confirmable.
+4 procedural placeholders are used internally as bot opponents.
+
+Vibe Jam portal integration is live: exit portal (webring) and return portal
+are minimized by default and expand with P key or mobile toggle. Players
+arriving via `?portal=true` skip menus and drop straight into a match.
 
 See [BUILD_LOG.md](BUILD_LOG.md) for sprint history.

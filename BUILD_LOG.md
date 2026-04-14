@@ -1120,3 +1120,50 @@ now live.
 - 4 internal placeholders for bot matches
 - Widget: vibej.am/2026/widget.js (verified)
 - Bundle: 624 KB JS (163 KB gzip) + 425 KB Sergei GLB + 1.1 MB Draco decoder
+
+---
+
+## 2026-04-14 — Portal feature closed + operational cleanup
+
+### Portal feature — final state
+Full arc of commits for the Vibe Jam portal (`3fe20d8` → `6df5c15`):
+- `3fe20d8` feat: portal integration (exit + start portal scaffolding)
+- `26193e8` feat: portal end-screen P/B flow + exit/return URLs
+- `4f4b4dc` fix: clear portal context when returning to title (T)
+- `1c69c95` polish: portal visuals + end screen + countdown pop
+- `4f49d3f` feat: portal minimize/expand system + HUD legend
+- `5a8fb06` fix: vertical door orientation + usable only when expanded
+- `6df5c15` fix: particles orbit vertical ring + bump count to 28
+
+Closing summary:
+- Exit portal (green): always present, redirects to vibej.am/portal/2026
+- Start portal (orange): only when arriving via `?portal=true&ref=...`
+- Both minimized by default (0.5× scale, dim, tight hitbox disabled)
+- Expand with P (desktop) or mobile toggle button
+- Usable only when expanded (expansionT > 0.7), preventing combat accidents
+- HUD legend panel top-left explaining portal colors + P key hint
+- URL context cleanup on T (back to title) via history.replaceState
+- 17 days to deadline, no further portal iterations unless bug
+
+### Operational cleanup (2026-04-14)
+- Removed `public/draco/` (unused decoder, 1.1 MB). Sergei GLB is not
+  Draco-compressed and optimize-models.mjs doesn't apply Draco. Decoder
+  files were not being fetched at runtime so initial load was unaffected,
+  but they were dead storage on deploy.
+- Removed DRACOLoader instantiation from `model-loader.ts`. Documented
+  how to re-enable in a block comment if Draco is added later.
+- Committed `CHARACTER_DESIGN.md` (was untracked — design reference for
+  the 9-character roster).
+- Updated docs to match reality post-merge:
+  - SUBMISSION_CHECKLIST: Portal marked done, Submit Google Form moved
+    to top as pending user action.
+  - README: Status section mentions portal + minimize/expand. Controls
+    table adds P and B keys with their phase-dependent behavior.
+  - MEMORY: Next Priorities rewritten for the last 17 days — prioritize
+    Google Form submission, Lighthouse measurement, 2-3 more playable
+    characters with real GLBs.
+
+### Bundle after cleanup
+- 622 KB JS (163 KB gzip)
+- 425 KB Sergei GLB
+- Draco decoder removed → no longer in deploy

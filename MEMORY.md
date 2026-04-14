@@ -166,10 +166,20 @@ Future restructure ideas (NOT yet implemented):
 - Capability detection via `hasTouchSupport()` + `isNarrowViewport()` +
   `isLikelyMobile()` (no user-agent sniffing)
 
-## Next Priorities
-- Optimize remaining 8 GLBs and tune transforms per model
-- Procedural animation for GLB models (idle bob, movement tilt, squash-stretch)
-- Separate visual scale per character (modelScale vs physicsRadius)
-- Ability icon/logo system (data-driven, circular logos per ability)
-- Portal integration (optional, link to vibej.am/portal/2026)
-- Submit via Google Form before May 1, 2026 13:37 UTC
+## Next Priorities (17 days to deadline, ordered by ROI)
+1. **Submit via Google Form** before May 1, 2026 13:37 UTC (user task)
+2. **Measure production load with Lighthouse** — document startup time
+3. **Expand real playable roster**: optimize 2-3 more GLBs (Trunk, Kurama, one more)
+   and give them gameplay kits (reuse charge_rush + ground_pound with per-critter tuning)
+4. **Tune transforms** of new GLBs using `__tune()` in dev
+5. **Light procedural animation on GLBs**: movement tilt + ability wind-up
+   applied to the GLB group (currently only procedural spheres get these)
+
+## Deferred (post-deadline or if time permits)
+- Full 9-character kits with unique abilities
+- Ability icons / logos
+- Warp animation + SFX on portal transition
+- Stats display in end screen
+- HUD restructure for mobile
+- Skeletal animation / rigging (against style lock)
+- Multiplayer (explicitly out of scope, risk too high)
