@@ -13,14 +13,18 @@ Health check: `curl http://localhost:2567/health` → `{"status":"ok",...}`
 
 ## Deploy to Railway (recommended)
 
-Railway uses Nixpacks to auto-detect Node projects. Procedure:
+This directory ships a multi-stage `Dockerfile` that Railway detects
+automatically and uses instead of Nixpacks/Railpack. It produces a
+~150 MB runtime image (vs ~400+ MB with devDeps included) which avoids
+`importing to docker` timeouts on free/hobby plans.
+
+Procedure:
 
 1. Log in at https://railway.com → "New Project" → "Deploy from GitHub Repo"
 2. Pick this repo (`RuFFuS4/bichitos-rumble`)
 3. In the created service, go to **Settings**:
    - **Root Directory**: `server`
-   - **Build Command**: `npm run build` (auto-detected)
-   - **Start Command**: `npm run start` (auto-detected)
+   - Build system: auto-detected as Dockerfile (no need to override)
 4. Railway assigns a random `PORT` env var; `src/index.ts` reads it
 5. Go to **Networking** → **Generate Domain** → copy the public URL
    (e.g. `bichitos-rumble-server.up.railway.app`)
