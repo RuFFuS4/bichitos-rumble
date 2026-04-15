@@ -328,13 +328,18 @@ export class Game {
     this.onlineCritters.set(sessionId, critter);
     console.log('[Game] spawned online critter for', sessionId);
 
-    // The local player is the first added whose sessionId matches room.sessionId
+    // Local-player-only HUD init (abilities + HUD/win-check compat)
     if (this.room && sessionId === this.room.sessionId) {
       this.player = critter;
-      this.critters = [critter]; // for HUD compatibility
+      this.critters = [critter];
       initAbilityHUD(this.player.abilityStates);
-      initAllLivesHUD([critter]);
     }
+
+    // Lives HUD: rebuild every spawn with ALL critters currently known.
+    // Local may spawn before remote or vice-versa; rebuilding ensures both
+    // rows exist once both players are in. Without this, only 1 row is
+    // created and the second player's lives never appear in the HUD.
+    initAllLivesHUD([...this.onlineCritters.values()]);
   }
 
   /**
@@ -444,10 +449,10 @@ export class Game {
       showOverlay(`${sec > 0 ? sec : 'GO!'}`);
     }
 
-    // HUD updates
-    if (serverPhase === 'playing' && this.player) {
+    // HUD updates — active during countdown + playing, not waiting/ended
+    if (this.player && (serverPhase === 'countdown' || serverPhase === 'playing')) {
       const alive = allPlayers.filter(p => p.alive).length;
-      updateHUD(alive, Math.max(0, state.matchTimer));
+      updateHUD(alive, Math.max(0, state.matchTimer ?? 0));
       updateAbilityHUD(this.player.abilityStates);
       updateAllLivesHUD([...this.onlineCritters.values()]);
     }
