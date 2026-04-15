@@ -174,16 +174,25 @@ Future restructure ideas (NOT yet implemented):
 **Major direction shift**: online multiplayer is NO LONGER deferred. It is
 a hard target for this jam. The risk is placed up front, not at the end.
 
-### Bloque A — Multiplayer vertical slice (in progress)
-Authoritative server, Colyseus, no prediction. Scope:
-1. Server workspace in `/server` (Node + TS + Colyseus)
-2. 2 players per room, both Sergei (fixed for now)
-3. Sync: movement, headbutt, collision/knockback, falls, respawn, match timer, win/lose
-4. Sync: charge_rush ability (only one in Bloque A, generic arch ready for more)
-5. Local develop + real deploy (Fly.io or Railway) + remote test
-6. Offline mode stays intact as alternate path (no regression)
+### Bloque A — Multiplayer vertical slice (CLOSED 2026-04-15)
+Authoritative server, Colyseus, no prediction. Delivered:
+1. Server workspace in `/server` (Node + TS + Colyseus 0.16 + schema v3)
+2. Deployed to Railway via multi-stage Dockerfile (multiplayer.bichitosrumble.com equivalent)
+3. 2 players per room, both Sergei (fixed)
+4. Synchronized end-to-end: movement, headbutt, collision/knockback, falls, respawn,
+   lives per player, match timer, win/lose, charge_rush (J) ability
+5. Feature-gated: PLAY ONLINE only visible in production when VITE_SERVER_URL is set
+6. ground_pound (K) visually marked SOON in online mode (no silent no-op)
+7. Offline mode intact as alternate path
 
-Closed only after remote test with two real clients (ideally including mobile).
+Bugs resolved during closing:
+- PlayerSchema anti-pattern (mixed sync + non-sync fields) → moved non-sync data
+  to BrawlRoom's private Map<sessionId, InternalPlayerData>
+- First-frame updateOnline crashed on state.players.forEach before MapSchema
+  hydrated → guard added
+- Lives HUD showed one row regardless of player count → rebuild on every spawn
+
+Remote verified with two real clients. Latency playable; no client prediction yet.
 
 ### Bloque B — Complete online gameplay (after A validated)
 - Frenzy + ground_pound sync (arch ready from A)

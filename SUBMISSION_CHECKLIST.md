@@ -59,6 +59,9 @@
 - [x] Merge dev → main with current features
 - [x] Verify production after merge (bichitosrumble.com verified)
 - [x] Portal integration (exit + start portals, webring-ready)
+- [x] Online multiplayer Bloque A: 2-player room, sync movement + headbutt +
+      collision + knockback + falls + respawn + match flow + charge_rush
+      (Colyseus server on Railway, feature-gated PLAY ONLINE button)
 - [ ] Full cross-device playtest
 
 ## Portal Feature (implemented)
