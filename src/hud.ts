@@ -107,15 +107,23 @@ export function hideOverlay(): void {
 // Ability cooldown HUD
 // ---------------------------------------------------------------------------
 
-let slotEls: { root: HTMLElement; fill: HTMLElement }[] = [];
+let slotEls: { root: HTMLElement; fill: HTMLElement; unavailable: boolean }[] = [];
 
-export function initAbilityHUD(states: AbilityState[]): void {
+/**
+ * Build the ability HUD slots.
+ * @param states  ability states to render (one slot per entry)
+ * @param unavailable optional set of indices to render as disabled + "SOON".
+ *                   Used in online mode for abilities not yet wired server-side.
+ */
+export function initAbilityHUD(states: AbilityState[], unavailable?: Set<number>): void {
   abilityContainer.innerHTML = '';
   slotEls = [];
 
-  for (const s of states) {
+  for (let i = 0; i < states.length; i++) {
+    const s = states[i];
+    const isUnavailable = unavailable?.has(i) ?? false;
     const slot = document.createElement('div');
-    slot.className = 'ability-slot';
+    slot.className = 'ability-slot' + (isUnavailable ? ' unavailable' : '');
 
     const keyLabel = document.createElement('div');
     keyLabel.className = 'ability-key';
@@ -136,9 +144,16 @@ export function initAbilityHUD(states: AbilityState[]): void {
     slot.appendChild(keyLabel);
     slot.appendChild(nameLabel);
     slot.appendChild(fillBg);
-    abilityContainer.appendChild(slot);
 
-    slotEls.push({ root: slot, fill });
+    if (isUnavailable) {
+      const soon = document.createElement('div');
+      soon.className = 'ability-soon-badge';
+      soon.textContent = 'SOON';
+      slot.appendChild(soon);
+    }
+
+    abilityContainer.appendChild(slot);
+    slotEls.push({ root: slot, fill, unavailable: isUnavailable });
   }
 }
 
@@ -146,6 +161,9 @@ export function updateAbilityHUD(states: AbilityState[]): void {
   for (let i = 0; i < states.length && i < slotEls.length; i++) {
     const s = states[i];
     const el = slotEls[i];
+
+    // Unavailable slots stay visually disabled — skip live updates.
+    if (el.unavailable) continue;
 
     if (s.active) {
       el.root.className = 'ability-slot active';

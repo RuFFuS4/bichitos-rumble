@@ -135,6 +135,22 @@
     .ability-slot.on-cooldown .ability-key {
       opacity: 0.5;
     }
+    /* Ability visible but not yet implemented in this mode (e.g. online Bloque A) */
+    .ability-slot.unavailable {
+      opacity: 0.35;
+      position: relative;
+    }
+    .ability-slot.unavailable .ability-fill {
+      background: #555;
+    }
+    .ability-soon-badge {
+      margin-top: 2px;
+      font-size: 8px;
+      font-weight: bold;
+      letter-spacing: 1.2px;
+      color: #ffcc00;
+      text-transform: uppercase;
+    }
     /* Lives panel */
     #hud-lives {
       display: flex;
@@ -712,6 +728,12 @@
     .touch-btn-l {
       top: 0;
       left: 0;
+    }
+    /* Online Bloque A: ground_pound (K) is not yet implemented server-side.
+       Disable the touch button so users don't press a no-op. */
+    body.online-mode .touch-btn-k {
+      opacity: 0.3;
+      pointer-events: none;
     }
   </style>
 </head>

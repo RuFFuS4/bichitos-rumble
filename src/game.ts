@@ -158,6 +158,7 @@ export class Game {
     clearMenuActions();
     this.phase = 'title';
     document.body.classList.remove('match-active');
+    document.body.classList.remove('online-mode');
     disposePortals();
     clearPortalContext(); // exit portal mode: no start portal, no P/B prompts
     showTitleScreen();
@@ -271,6 +272,7 @@ export class Game {
     this.phase = 'online';
     this.lastServerPhase = '';
     document.body.classList.add('match-active');
+    document.body.classList.add('online-mode'); // CSS hides unavailable touch buttons
 
     // Hide offline UI
     hideTitleScreen();
@@ -332,7 +334,10 @@ export class Game {
     if (this.room && sessionId === this.room.sessionId) {
       this.player = critter;
       this.critters = [critter];
-      initAbilityHUD(this.player.abilityStates);
+      // Bloque A: ground_pound (index 1) has no server effect yet. Render
+      // the slot as unavailable with SOON badge instead of letting the
+      // user press a key that does nothing.
+      initAbilityHUD(this.player.abilityStates, new Set([1]));
     }
 
     // Lives HUD: rebuild every spawn with ALL critters currently known.
@@ -356,7 +361,9 @@ export class Game {
       moveZ: move.z,
       headbutt: isHeld('headbutt'),
       ability1: isHeld('ability1'),
-      ability2: isHeld('ability2'),
+      // Bloque A: ability2 (ground_pound) not wired server-side yet. Do not
+      // send the input so keyboard K presses are no-ops in online mode.
+      ability2: false,
       ultimate: isHeld('ultimate'),
     });
 
