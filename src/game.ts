@@ -97,6 +97,9 @@ export class Game {
   private room: Room | null = null;
   private onlineCritters = new Map<string, Critter>(); // sessionId → visual
   private lastServerPhase: string = '';                 // for transition detection
+  /** When true, confirming the character select connects to server instead
+   *  of starting a local match. Set by enterOnlineCharacterSelect(). */
+  private selectForOnline: boolean = false;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -115,7 +118,11 @@ export class Game {
       if (!entry || entry.status === 'locked') return;
       if (idx === this.selectedIdx && entry.status === 'playable') {
         // Tap on already-selected playable slot → confirm
-        this.enterCountdown();
+        if (this.selectForOnline) {
+          this.connectOnlineWith(entry.displayName);
+        } else {
+          this.enterCountdown();
+        }
       } else {
         // Tap on different slot → select it for preview (playable or WIP)
         this.selectedIdx = idx;
@@ -158,6 +165,7 @@ export class Game {
   private enterTitle(): void {
     clearMenuActions();
     this.phase = 'title';
+    this.selectForOnline = false;
     document.body.classList.remove('match-active');
     document.body.classList.remove('online-mode');
     disposePortals();
@@ -263,6 +271,39 @@ export class Game {
   // -------------------------------------------------------------------------
 
   /**
+   * Enter character select in "online" mode. Reuses the offline select UI.
+   * Confirming a playable character connects to the server with that name.
+   */
+  public enterOnlineCharacterSelect(): void {
+    this.selectForOnline = true;
+    this.enterCharacterSelect();
+  }
+
+  /**
+   * Connect to the multiplayer server using the given character and jump
+   * into the online match. Called from the character-select confirm flow
+   * when selectForOnline is true.
+   */
+  private async connectOnlineWith(critterName: string): Promise<void> {
+    try {
+      hideCharacterSelect();
+      hidePreview();
+      showOverlay('Connecting...');
+      const { connectToBrawl, getDefaultServerUrl } = await import('./network');
+      const room = await connectToBrawl(getDefaultServerUrl(), { critterName });
+      this.enterOnline(room);
+    } catch (err) {
+      console.error('[Game] online connect failed:', err);
+      hideOverlay();
+      this.selectForOnline = false;
+      this.enterTitle();
+      alert('Could not connect to multiplayer server.\n\n' +
+            'In dev: make sure the server is running (cd server && npm run dev).\n' +
+            'In prod: contact the site owner.');
+    }
+  }
+
+  /**
    * Switch to online mode. Disposes local critters, hooks network listeners,
    * and starts rendering remote state. The room must already be connected.
    */
@@ -322,14 +363,19 @@ export class Game {
   }
 
   private spawnOnlineCritter(sessionId: string, playerState: any): void {
-    // Fixed to Sergei in Bloque A
-    const config = CRITTER_PRESETS.find(p => p.name === 'Sergei') ?? CRITTER_PRESETS[0];
+    // Resolve the character from server-authoritative state. If unknown
+    // (shouldn't happen — server validates before sending), fall back to
+    // the first playable from the roster.
+    const critterName: string = playerState.critterName ?? 'Sergei';
+    const config = CRITTER_PRESETS.find(p => p.name === critterName)
+      ?? CRITTER_PRESETS.find(p => p.name === 'Sergei')
+      ?? CRITTER_PRESETS[0];
     const critter = new Critter(config, this.scene);
     critter.skipPhysics = true;  // server is authoritative
     critter.x = playerState.x ?? 0;
     critter.z = playerState.z ?? 0;
     this.onlineCritters.set(sessionId, critter);
-    console.log('[Game] spawned online critter for', sessionId);
+    console.log('[Game] spawned online critter for', sessionId, 'as', critterName);
 
     // Local-player-only HUD init (abilities + HUD/win-check compat)
     if (this.room && sessionId === this.room.sessionId) {
@@ -571,11 +617,16 @@ export class Game {
         if (consumeMenuAction('confirm')) {
           const sel = this.displayRoster[this.selectedIdx];
           if (sel?.status === 'playable') {
-            this.enterCountdown();
+            if (this.selectForOnline) {
+              this.connectOnlineWith(sel.displayName);
+            } else {
+              this.enterCountdown();
+            }
           }
           // WIP/locked → ignore confirm
         }
         if (consumeMenuAction('back')) {
+          this.selectForOnline = false; // back cancels online intent
           this.enterTitle();
         }
         break;

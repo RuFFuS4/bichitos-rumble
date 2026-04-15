@@ -79,14 +79,48 @@ export const SIM = {
   },
 } as const;
 
-// Sergei preset (only playable character in Bloque A)
-export const SERGEI_CONFIG = {
-  name: 'Sergei',
-  speed: 10,
-  mass: 1.1,
-  headbuttForce: 15,
-  radius: 0.55,
-} as const;
+// Per-critter config table. MUST stay in sync with client's CRITTER_PRESETS.
+// Adding a new playable character = add an entry here + abilities entry below.
+export interface CritterConfigServer {
+  name: string;
+  speed: number;
+  mass: number;
+  headbuttForce: number;
+  radius: number;
+}
+
+export const CRITTER_CONFIGS: Record<string, CritterConfigServer> = {
+  Sergei: {
+    name: 'Sergei',
+    speed: 10,
+    mass: 1.1,
+    headbuttForce: 15,
+    radius: 0.55,
+  },
+  Trunk: {
+    name: 'Trunk',
+    speed: 7,
+    mass: 1.4,
+    headbuttForce: 17,
+    radius: 0.55,
+  },
+};
+
+export const DEFAULT_CRITTER = 'Sergei';
+
+/** Resolve a critter name to its config, falling back to Sergei. */
+export function getCritterConfig(name: string): CritterConfigServer {
+  return CRITTER_CONFIGS[name] ?? CRITTER_CONFIGS[DEFAULT_CRITTER];
+}
+
+/** True if name is a valid playable critter on this server. */
+export function isPlayableCritter(name: string): boolean {
+  return name in CRITTER_CONFIGS;
+}
+
+/** Legacy export — still used by physics/abilities. Will be removed once */
+/** those modules read config via player.critterName. */
+export const SERGEI_CONFIG = CRITTER_CONFIGS.Sergei;
 
 // Spawn positions for up to 4 players (we use first 2 in Bloque A)
 export const SPAWN_POSITIONS: ReadonlyArray<[number, number]> = [

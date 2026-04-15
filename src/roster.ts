@@ -55,16 +55,13 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Trunk',
     glbPath: './models/critters/trunk.glb',
     baseColor: 0x8c8c8c,
-    scale: 2.0, rotation: Math.PI, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.05,
-    status: 'wip',
+    // Same transform defaults as Sergei initially — tune with __tune() in dev
+    // once we see it rendered. Tripo3D exports tend to share orientation.
+    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0.98,
+    status: 'playable',
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
-    plannedAbilities: [
-      { name: 'Charge Rush', key: 'J', description: 'Frontal dash that rams enemies aside' },
-      { name: 'Trunk Grip', key: 'K', description: 'Grabs a nearby enemy and flings them' },
-      { name: 'Ground Pound', key: 'L', description: 'Stomps the ground, stunning all nearby' },
-    ],
   },
   {
     id: 'kurama',

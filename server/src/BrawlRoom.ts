@@ -16,7 +16,7 @@
 import { Client, Room } from 'colyseus';
 import { GameState } from './state/GameState.js';
 import { PlayerSchema } from './state/PlayerSchema.js';
-import { SIM, SPAWN_POSITIONS } from './sim/config.js';
+import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER } from './sim/config.js';
 import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed } from './sim/physics.js';
 import { createAbilityStates, tickPlayerAbilities } from './sim/abilities.js';
 
@@ -25,8 +25,12 @@ interface InputMessage {
   moveZ: number;      // -1..1
   headbutt: boolean;
   ability1: boolean;  // charge_rush
-  ability2: boolean;  // ground_pound (Bloque B)
-  ultimate: boolean;  // frenzy (Bloque B)
+  ability2: boolean;  // ground_pound
+  ultimate: boolean;  // frenzy / other (character-dependent)
+}
+
+interface JoinOptions {
+  critterName?: string;
 }
 
 /**
@@ -87,19 +91,27 @@ export class BrawlRoom extends Room<GameState> {
     console.log(`[BrawlRoom] created, tickRate=${SIM.tickRate}Hz`);
   }
 
-  onJoin(client: Client, _options: unknown) {
+  onJoin(client: Client, options: JoinOptions = {}) {
     const idx = this.state.players.size; // 0 or 1
     const spawn = SPAWN_POSITIONS[idx % SPAWN_POSITIONS.length];
+
+    // Validate critterName against the playable table; fall back on unknown.
+    const requested = options.critterName ?? DEFAULT_CRITTER;
+    const critterName = isPlayableCritter(requested) ? requested : DEFAULT_CRITTER;
+    if (requested !== critterName) {
+      console.log(`[BrawlRoom] ${client.sessionId} requested unknown critter "${requested}", using ${critterName}`);
+    }
+
     const p = new PlayerSchema();
     p.sessionId = client.sessionId;
-    p.critterName = 'Sergei';
+    p.critterName = critterName;
     p.x = spawn[0];
     p.z = spawn[1];
     p.rotationY = Math.atan2(-spawn[0], -spawn[1]); // face arena center
     p.lives = SIM.lives.default;
     p.alive = true;
 
-    const abilities = createAbilityStates();
+    const abilities = createAbilityStates(critterName);
     for (const a of abilities) p.abilities.push(a);
 
     this.state.players.set(client.sessionId, p);

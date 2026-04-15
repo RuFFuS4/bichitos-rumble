@@ -219,6 +219,29 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     }),
     makeFrenzy({ description: 'Enters berserk mode: +speed, +power' }),
   ],
+
+  // Trunk — elephant Bruiser: slow, heavy, devastating
+  // Kit built from base factories with heavy tuning. No ultimate in Bloque B;
+  // adding one later is a pure data change.
+  Trunk: [
+    makeChargeRush({
+      name: 'Trunk Ram',
+      description: 'Unstoppable forward dash with tusks',
+      impulse: 14,
+      duration: 0.40,
+      cooldown: 5.0,
+      speedMultiplier: 2.0,
+      massMultiplier: 3.0,
+    }),
+    makeGroundPound({
+      name: 'Earthquake',
+      description: 'Foot stomp that shakes the arena',
+      radius: 4.2,
+      force: 34,
+      windUp: 0.5,
+      cooldown: 8.5,
+    }),
+  ],
 };
 
 // ---------------------------------------------------------------------------

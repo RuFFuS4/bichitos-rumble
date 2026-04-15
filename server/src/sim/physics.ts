@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PlayerSchema } from '../state/PlayerSchema.js';
-import { SIM, SERGEI_CONFIG } from './config.js';
+import { SIM, getCritterConfig } from './config.js';
 
 /**
  * Minimal shape for the per-player internal data used here.
@@ -23,20 +23,21 @@ interface InternalLike {
  * Applies knockback based on who is headbutting and mass ratios.
  */
 export function resolveCollisions(players: PlayerSchema[]): void {
-  const radius = SERGEI_CONFIG.radius;
   for (let i = 0; i < players.length; i++) {
     const a = players[i];
     if (!a.alive || a.falling) continue;
+    const aCfg = getCritterConfig(a.critterName);
     for (let j = i + 1; j < players.length; j++) {
       const b = players[j];
       if (!b.alive || b.falling) continue;
+      const bCfg = getCritterConfig(b.critterName);
 
       const eitherImmune = a.immunityTimer > 0 || b.immunityTimer > 0;
 
       const dx = b.x - a.x;
       const dz = b.z - a.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      const minDist = radius + radius;
+      const minDist = aCfg.radius + bCfg.radius;
 
       if (dist < minDist && dist > 0.001) {
         const nx = dx / dist;
@@ -54,10 +55,10 @@ export function resolveCollisions(players: PlayerSchema[]): void {
         const massA = effectiveMass(a);
         const massB = effectiveMass(b);
 
-        // Knockback force — headbutt multiplies
+        // Knockback force — headbutt multiplies. Use the attacker's config.
         let force = SIM.collision.normalPushForce;
-        if (a.isHeadbutting) force = SERGEI_CONFIG.headbuttForce * SIM.collision.headbuttMultiplier;
-        else if (b.isHeadbutting) force = SERGEI_CONFIG.headbuttForce * SIM.collision.headbuttMultiplier;
+        if (a.isHeadbutting) force = aCfg.headbuttForce * SIM.collision.headbuttMultiplier;
+        else if (b.isHeadbutting) force = bCfg.headbuttForce * SIM.collision.headbuttMultiplier;
 
         const ratioA = massB / (massA + massB);
         const ratioB = massA / (massA + massB);
@@ -127,7 +128,7 @@ export function updateFalling(
 
 /** Effective mass = base mass × active buff multipliers. */
 export function effectiveMass(p: PlayerSchema): number {
-  let m = SERGEI_CONFIG.mass;
+  let m = getCritterConfig(p.critterName).mass;
   for (const a of p.abilities) {
     if (a.active && a.windUpLeft <= 0) {
       if (a.abilityType === 'charge_rush') m *= SIM.chargeRush.massMultiplier;
@@ -139,7 +140,7 @@ export function effectiveMass(p: PlayerSchema): number {
 
 /** Effective speed = base speed × active buff multipliers. */
 export function effectiveSpeed(p: PlayerSchema): number {
-  let s = SERGEI_CONFIG.speed;
+  let s = getCritterConfig(p.critterName).speed;
   for (const a of p.abilities) {
     if (a.active && a.windUpLeft <= 0) {
       if (a.abilityType === 'charge_rush') s *= SIM.chargeRush.speedMultiplier;

@@ -163,22 +163,11 @@ if (btnOnline && !hasServerUrl) {
   btnOnline.remove();
   console.info('[Main] online mode disabled (no VITE_SERVER_URL)');
 } else if (btnOnline) {
-  btnOnline.addEventListener('click', async (e) => {
+  btnOnline.addEventListener('click', (e) => {
     e.stopPropagation(); // don't trigger the title tap handler
-    btnOnline.setAttribute('disabled', 'true');
-    btnOnline.textContent = 'Connecting...';
-    try {
-      const { connectToBrawl, getDefaultServerUrl } = await import('./network');
-      const room = await connectToBrawl(getDefaultServerUrl());
-      game.enterOnline(room);
-    } catch (err) {
-      console.error('[Main] online connect failed:', err);
-      btnOnline.removeAttribute('disabled');
-      btnOnline.textContent = '🌐 Play Online (2P)';
-      alert('Could not connect to multiplayer server.\n\n' +
-            'In dev: make sure the server is running (cd server && npm run dev).\n' +
-            'In prod: contact the site owner.');
-    }
+    // Open character select in "online" mode. Confirming a playable
+    // character there connects to the server with that critterName.
+    game.enterOnlineCharacterSelect();
   });
 }
 

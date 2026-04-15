@@ -28,15 +28,20 @@ export interface AbilityFiredEvent {
   rotationY: number;
 }
 
+export interface JoinBrawlOptions {
+  critterName?: string;
+}
+
 /**
  * Connect to a Colyseus server and join or create a brawl room.
  * Returns the Room instance (state auto-syncs via Colyseus patches).
+ * `options.critterName` is forwarded to the server's onJoin; the server
+ * validates it against its playable table and falls back if unknown.
  */
-export async function connectToBrawl(serverUrl: string): Promise<Room> {
-  console.log('[Network] connecting to', serverUrl);
+export async function connectToBrawl(serverUrl: string, options: JoinBrawlOptions = {}): Promise<Room> {
+  console.log('[Network] connecting to', serverUrl, 'with options', options);
   const client = new Client(serverUrl);
-  // joinOrCreate guarantees matching: first client creates, second joins
-  const room = await client.joinOrCreate('brawl');
+  const room = await client.joinOrCreate('brawl', options);
   console.log('[Network] joined room', room.roomId, 'as', room.sessionId);
   return room;
 }

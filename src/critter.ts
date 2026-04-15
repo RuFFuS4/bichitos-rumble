@@ -53,6 +53,15 @@ export const CRITTER_PRESETS: CritterConfig[] = [
     role: 'Balanced',
     tagline: 'Strong and agile. No weakness.',
   },
+  // --- Second real roster character: elephant Bruiser ---
+  // Stats modelled after Verde (Crusher) — slow, heavy, devastating —
+  // but with real identity + GLB + roster visibility.
+  {
+    name: 'Trunk', color: 0x8c8c8c,
+    speed: 7, mass: 1.4, headbuttForce: 17,
+    role: 'Bruiser',
+    tagline: 'Huge and unstoppable.',
+  },
 ];
 
 const BODY_RADIUS = 0.5;

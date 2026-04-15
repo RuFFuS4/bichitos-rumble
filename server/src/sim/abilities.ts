@@ -26,31 +26,32 @@ export interface AbilityDef {
   windUp: number;
 }
 
-// Lookup table for Sergei's kit. Same for all online players in Bloque A.
-export const SERGEI_ABILITIES: readonly AbilityDef[] = [
-  {
-    type: 'charge_rush',
-    cooldown: 4.5,
-    duration: 0.32,
-    windUp: 0.06,
-  },
-  {
-    type: 'ground_pound',
-    cooldown: 6.5,
-    duration: 0.05,
-    windUp: 0.35,
-  },
-  {
-    type: 'frenzy',
-    cooldown: SIM.frenzy.cooldown,
-    duration: SIM.frenzy.duration,
-    windUp: SIM.frenzy.windUp,
-  },
-] as const;
+// Per-critter ability kits. MUST stay in sync with client's CRITTER_ABILITIES.
+// Server-side kits include only the fields the simulation needs (type,
+// cooldown, duration, windUp). Visual names/descriptions live on the client.
+const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
+  Sergei: [
+    { type: 'charge_rush', cooldown: 4.5, duration: 0.32, windUp: 0.06 },
+    { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.35 },
+    { type: 'frenzy', cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+  ],
+  Trunk: [
+    { type: 'charge_rush', cooldown: 5.0, duration: 0.40, windUp: 0.06 },
+    { type: 'ground_pound', cooldown: 8.5, duration: 0.05, windUp: 0.5 },
+    // No ultimate yet for Trunk — 2 abilities only
+  ],
+};
 
-/** Create initial ability state array for a new player. */
-export function createAbilityStates(): AbilityStateSchema[] {
-  return SERGEI_ABILITIES.map((def) => {
+const DEFAULT_KIT = CRITTER_ABILITY_KITS.Sergei;
+
+/** Resolve the ability kit for a critter name (falls back to Sergei's). */
+export function getAbilityKit(critterName: string): readonly AbilityDef[] {
+  return CRITTER_ABILITY_KITS[critterName] ?? DEFAULT_KIT;
+}
+
+/** Create initial ability state array for a new player by critter name. */
+export function createAbilityStates(critterName: string): AbilityStateSchema[] {
+  return getAbilityKit(critterName).map((def) => {
     const s = new AbilityStateSchema();
     s.abilityType = def.type;
     s.cooldownLeft = 0;
@@ -106,6 +107,7 @@ export function tickPlayerAbilities(
   inputs: AbilityInputs,
 ): AbilityFiredEvent[] {
   const events: AbilityFiredEvent[] = [];
+  const kit = getAbilityKit(player.critterName);
 
   // Activation attempts from input (one-shot: input flag consumed by handler)
   // Order must match PlayerSchema.abilities array order.
@@ -117,7 +119,7 @@ export function tickPlayerAbilities(
 
   for (let i = 0; i < player.abilities.length; i++) {
     const state = player.abilities[i];
-    const def = SERGEI_ABILITIES[i];
+    const def = kit[i];
     if (!def) continue;
 
     if (inputFlags[i] && !state.active) {
