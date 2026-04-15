@@ -11,6 +11,14 @@ import type { PlayerSchema } from '../state/PlayerSchema.js';
 import { SIM, SERGEI_CONFIG } from './config.js';
 
 /**
+ * Minimal shape for the per-player internal data used here.
+ * Kept separate from PlayerSchema (anti-pattern to mix sync + non-sync).
+ */
+interface InternalLike {
+  respawnTimer: number;
+}
+
+/**
  * Resolve pairwise collisions between all alive/non-falling players.
  * Applies knockback based on who is headbutting and mass ratios.
  */
@@ -76,14 +84,15 @@ export function resolveCollisions(players: PlayerSchema[]): void {
 }
 
 /** Check if a player is off the arena and transition to falling state. */
-export function checkFalloff(players: PlayerSchema[]): void {
+export function checkFalloff(players: PlayerSchema[], internal: Map<string, InternalLike>): void {
   const R = SIM.arena.radius;
   for (const p of players) {
     if (!p.alive || p.falling || p.immunityTimer > 0) continue;
     if (Math.sqrt(p.x * p.x + p.z * p.z) > R) {
       p.falling = true;
       p.lives -= 1;
-      p.respawnTimer = SIM.lives.respawnDelay;
+      const data = internal.get(p.sessionId);
+      if (data) data.respawnTimer = SIM.lives.respawnDelay;
     }
   }
 }
@@ -92,13 +101,19 @@ export function checkFalloff(players: PlayerSchema[]): void {
  * Advance falling animation + respawn countdown. Returns sessionIds of
  * players that should be respawned this tick (caller picks position).
  */
-export function updateFalling(players: PlayerSchema[], dt: number): string[] {
+export function updateFalling(
+  players: PlayerSchema[],
+  internal: Map<string, InternalLike>,
+  dt: number,
+): string[] {
   const toRespawn: string[] = [];
   for (const p of players) {
     if (!p.falling) continue;
     p.fallY -= SIM.lives.fallSpeed * dt;
-    p.respawnTimer -= dt;
-    if (p.respawnTimer <= 0) {
+    const data = internal.get(p.sessionId);
+    if (!data) continue;
+    data.respawnTimer -= dt;
+    if (data.respawnTimer <= 0) {
       if (p.lives > 0) {
         toRespawn.push(p.sessionId);
       } else {

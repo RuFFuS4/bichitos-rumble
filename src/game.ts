@@ -355,41 +355,51 @@ export class Game {
       ultimate: isHeld('ultimate'),
     });
 
-    // Apply server state to each critter
+    // Apply server state to each critter. Every access is guarded because
+    // Colyseus schema v3 can deliver partial snapshots during join: a player
+    // may be present but some fields (rotationY, abilities[]) may not have
+    // their patch applied yet on this client tick.
     const state = this.room.state as any;
     const allPlayers: Array<{ sessionId: string; alive: boolean }> = [];
     state.players.forEach((p: any, sid: string) => {
-      allPlayers.push({ sessionId: sid, alive: p.alive });
+      if (!p) return; // defensive: shouldn't happen but some schema edges do this
+      allPlayers.push({ sessionId: sid, alive: !!p.alive });
       const c = this.onlineCritters.get(sid);
       if (!c) return;
-      // Lerp positions for smoothness (local player snaps for responsiveness)
+      // Position — snap local, lerp remote
+      const px = p.x ?? c.x;
+      const pz = p.z ?? c.z;
       if (sid === this.room?.sessionId) {
-        c.x = p.x;
-        c.z = p.z;
+        c.x = px;
+        c.z = pz;
       } else {
-        c.x += (p.x - c.x) * Math.min(1, dt * 15);
-        c.z += (p.z - c.z) * Math.min(1, dt * 15);
+        c.x += (px - c.x) * Math.min(1, dt * 15);
+        c.z += (pz - c.z) * Math.min(1, dt * 15);
       }
-      c.mesh.rotation.y = p.rotationY;
-      c.vx = p.vx;
-      c.vz = p.vz;
-      c.alive = p.alive;
-      c.falling = p.falling;
+      if (typeof p.rotationY === 'number') c.mesh.rotation.y = p.rotationY;
+      c.vx = p.vx ?? 0;
+      c.vz = p.vz ?? 0;
+      c.alive = p.alive ?? true;
+      c.falling = p.falling ?? false;
       c.mesh.position.y = p.fallY ?? 0;
-      c.mesh.visible = p.alive;
-      c.immunityTimer = p.immunityTimer;
-      c.isHeadbutting = p.isHeadbutting;
-      (c as any).headbuttAnticipating = p.headbuttAnticipating;
-      c.lives = p.lives;
-      // Update ability states from server (for HUD)
-      for (let i = 0; i < p.abilities.length && i < c.abilityStates.length; i++) {
-        const src = p.abilities[i];
-        const dst = c.abilityStates[i];
-        dst.active = src.active;
-        dst.cooldownLeft = src.cooldownLeft;
-        dst.durationLeft = src.durationLeft;
-        dst.windUpLeft = src.windUpLeft;
-        dst.effectFired = src.effectFired;
+      c.mesh.visible = c.alive;
+      c.immunityTimer = p.immunityTimer ?? 0;
+      c.isHeadbutting = !!p.isHeadbutting;
+      (c as any).headbuttAnticipating = !!p.headbuttAnticipating;
+      c.lives = p.lives ?? 3;
+      // Update ability states from server (for HUD) — guard ArraySchema access
+      if (p.abilities && typeof p.abilities.length === 'number') {
+        const count = Math.min(p.abilities.length, c.abilityStates.length);
+        for (let i = 0; i < count; i++) {
+          const src = p.abilities[i];
+          const dst = c.abilityStates[i];
+          if (!src || !dst) continue;
+          dst.active = !!src.active;
+          dst.cooldownLeft = src.cooldownLeft ?? 0;
+          dst.durationLeft = src.durationLeft ?? 0;
+          dst.windUpLeft = src.windUpLeft ?? 0;
+          dst.effectFired = !!src.effectFired;
+        }
       }
       // Run visual updates
       c.update(dt);

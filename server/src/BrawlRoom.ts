@@ -29,25 +29,55 @@ interface InputMessage {
   ultimate: boolean;  // frenzy (Bloque B)
 }
 
+/**
+ * Per-player non-synced state. Lives OUTSIDE the schema to avoid polluting
+ * the MapSchema<PlayerSchema> with mutations that don't need to be broadcast.
+ * In Colyseus schema v3, mixing synced and non-synced fields in the same
+ * class can interfere with binary patch propagation over real proxies.
+ */
+interface InternalPlayerData {
+  // Client input (set from onMessage, read by sim)
+  inputMoveX: number;
+  inputMoveZ: number;
+  inputHeadbutt: boolean;
+  inputAbility1: boolean;
+  inputAbility2: boolean;
+  inputUltimate: boolean;
+  // Sim-only timers
+  respawnTimer: number;
+  anticipationTimer: number;
+  headbuttTimer: number;
+  hasInput: boolean;
+}
+
+function newInternal(): InternalPlayerData {
+  return {
+    inputMoveX: 0, inputMoveZ: 0,
+    inputHeadbutt: false, inputAbility1: false, inputAbility2: false, inputUltimate: false,
+    respawnTimer: 0, anticipationTimer: 0, headbuttTimer: 0, hasInput: false,
+  };
+}
+
 export class BrawlRoom extends Room<GameState> {
   maxClients = 2;
   state = new GameState();
 
   private tickInterval: number = 0;
   private tickHandle: NodeJS.Timeout | null = null;
+  private internal = new Map<string, InternalPlayerData>();
 
   onCreate(_options: unknown) {
     this.tickInterval = 1000 / SIM.tickRate;
 
     this.onMessage('input', (client, msg: InputMessage) => {
-      const p = this.state.players.get(client.sessionId);
-      if (!p) return;
-      p.inputMoveX = clamp(msg.moveX ?? 0, -1, 1);
-      p.inputMoveZ = clamp(msg.moveZ ?? 0, -1, 1);
-      p.inputHeadbutt = !!msg.headbutt;
-      p.inputAbility1 = !!msg.ability1;
-      p.inputAbility2 = !!msg.ability2;
-      p.inputUltimate = !!msg.ultimate;
+      const data = this.internal.get(client.sessionId);
+      if (!data) return;
+      data.inputMoveX = clamp(msg.moveX ?? 0, -1, 1);
+      data.inputMoveZ = clamp(msg.moveZ ?? 0, -1, 1);
+      data.inputHeadbutt = !!msg.headbutt;
+      data.inputAbility1 = !!msg.ability1;
+      data.inputAbility2 = !!msg.ability2;
+      data.inputUltimate = !!msg.ultimate;
     });
 
     // Ignore any client request to restart for Bloque A (server drives flow)
@@ -73,7 +103,8 @@ export class BrawlRoom extends Room<GameState> {
     for (const a of abilities) p.abilities.push(a);
 
     this.state.players.set(client.sessionId, p);
-    console.log(`[BrawlRoom] ${client.sessionId} joined (${this.state.players.size}/${this.maxClients})`);
+    this.internal.set(client.sessionId, newInternal());
+    console.log(`[BrawlRoom] ${client.sessionId} joined roomId=${this.roomId} (${this.state.players.size}/${this.maxClients})`);
 
     // Start countdown once both players are in
     if (this.state.players.size >= 2 && this.state.phase === 'waiting') {
@@ -85,6 +116,7 @@ export class BrawlRoom extends Room<GameState> {
 
   onLeave(client: Client, _consented: boolean) {
     this.state.players.delete(client.sessionId);
+    this.internal.delete(client.sessionId);
     console.log(`[BrawlRoom] ${client.sessionId} left (${this.state.players.size} remaining)`);
 
     // If a player leaves mid-match, end it (Bloque A: no reconnection)
@@ -121,7 +153,8 @@ export class BrawlRoom extends Room<GameState> {
         for (const p of this.state.players.values()) {
           p.vx = 0;
           p.vz = 0;
-          p.inputHeadbutt = false;
+          const data = this.internal.get(p.sessionId);
+          if (data) data.inputHeadbutt = false;
         }
         break;
 
@@ -142,6 +175,8 @@ export class BrawlRoom extends Room<GameState> {
     // 1. Process per-player input → intent (movement, headbutt trigger)
     for (const p of players) {
       if (!p.alive || p.falling) continue;
+      const data = this.internal.get(p.sessionId);
+      if (!data) continue;
 
       // Immunity countdown
       if (p.immunityTimer > 0) p.immunityTimer = Math.max(0, p.immunityTimer - dt);
@@ -151,32 +186,32 @@ export class BrawlRoom extends Room<GameState> {
 
       // Headbutt state machine
       if (p.headbuttAnticipating) {
-        p.anticipationTimer -= dt;
-        if (p.anticipationTimer <= 0) {
+        data.anticipationTimer -= dt;
+        if (data.anticipationTimer <= 0) {
           p.headbuttAnticipating = false;
           p.isHeadbutting = true;
-          p.headbuttTimer = SIM.headbutt.lunge;
+          data.headbuttTimer = SIM.headbutt.lunge;
           const a = p.rotationY;
           p.vx += Math.sin(a) * SIM.headbutt.velocityBoost;
           p.vz += Math.cos(a) * SIM.headbutt.velocityBoost;
         }
       } else if (p.isHeadbutting) {
-        p.headbuttTimer -= dt;
-        if (p.headbuttTimer <= 0) {
+        data.headbuttTimer -= dt;
+        if (data.headbuttTimer <= 0) {
           p.isHeadbutting = false;
           p.headbuttCooldown = SIM.headbutt.cooldown;
         }
-      } else if (p.inputHeadbutt && p.headbuttCooldown <= 0 && p.immunityTimer <= 0) {
+      } else if (data.inputHeadbutt && p.headbuttCooldown <= 0 && p.immunityTimer <= 0) {
         p.headbuttAnticipating = true;
-        p.anticipationTimer = SIM.headbutt.anticipation;
+        data.anticipationTimer = SIM.headbutt.anticipation;
       }
 
       // Movement: apply input → velocity
-      const inputMag = Math.sqrt(p.inputMoveX * p.inputMoveX + p.inputMoveZ * p.inputMoveZ);
-      let mx = p.inputMoveX;
-      let mz = p.inputMoveZ;
+      const inputMag = Math.sqrt(data.inputMoveX * data.inputMoveX + data.inputMoveZ * data.inputMoveZ);
+      let mx = data.inputMoveX;
+      let mz = data.inputMoveZ;
       if (inputMag > 1) { mx /= inputMag; mz /= inputMag; }
-      p.hasInput = inputMag > 0.01;
+      data.hasInput = inputMag > 0.01;
 
       const speed = effectiveSpeed(p);
       const accel = speed * SIM.movement.accelerationScale;
@@ -187,7 +222,13 @@ export class BrawlRoom extends Room<GameState> {
     // 2. Tick abilities (generic dispatcher) and broadcast fire events
     for (const p of players) {
       if (!p.alive || p.falling) continue;
-      const events = tickPlayerAbilities(p, players, dt);
+      const data = this.internal.get(p.sessionId);
+      if (!data) continue;
+      const events = tickPlayerAbilities(p, players, dt, {
+        ability1: data.inputAbility1,
+        ability2: data.inputAbility2,
+        ultimate: data.inputUltimate,
+      });
       for (const ev of events) {
         this.broadcast('abilityFired', ev);
       }
@@ -196,11 +237,13 @@ export class BrawlRoom extends Room<GameState> {
     // 3. Integrate position + friction + dead zone + max speed cap + facing
     for (const p of players) {
       if (!p.alive || p.falling) continue;
+      const data = this.internal.get(p.sessionId);
+      if (!data) continue;
 
       p.x += p.vx * dt;
       p.z += p.vz * dt;
 
-      const halfLife = p.hasInput ? SIM.movement.frictionHalfLife : SIM.movement.idleFrictionHalfLife;
+      const halfLife = data.hasInput ? SIM.movement.frictionHalfLife : SIM.movement.idleFrictionHalfLife;
       const friction = Math.pow(0.5, dt / halfLife);
       p.vx *= friction;
       p.vz *= friction;
@@ -223,10 +266,10 @@ export class BrawlRoom extends Room<GameState> {
     resolveCollisions(players);
 
     // 5. Falloff detection
-    checkFalloff(players);
+    checkFalloff(players, this.internal);
 
     // 6. Falling animation + respawn countdown
-    const toRespawn = updateFalling(players, dt);
+    const toRespawn = updateFalling(players, this.internal, dt);
     for (const sid of toRespawn) {
       const p = this.state.players.get(sid);
       if (!p) continue;

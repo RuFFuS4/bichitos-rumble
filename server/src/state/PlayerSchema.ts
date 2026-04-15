@@ -4,6 +4,12 @@ import { AbilityStateSchema } from './AbilityStateSchema.js';
 /**
  * Per-player authoritative state. All simulation runs on server.
  * Client reads this (via automatic Colyseus patches) and renders.
+ *
+ * ONLY @type-decorated fields are allowed here. Mixing non-sync instance
+ * fields with sync fields is an anti-pattern in Colyseus schema v3 that
+ * can break binary patch propagation over real-world WebSocket proxies.
+ * Non-sync internal state (inputs, timers) lives in BrawlRoom's private
+ * Map<sessionId, InternalPlayerData>.
  */
 export class PlayerSchema extends Schema {
   @type('string') sessionId: string = '';
@@ -23,26 +29,11 @@ export class PlayerSchema extends Schema {
   @type('number') fallY: number = 0; // descent offset (client renders)
   @type('number') immunityTimer: number = 0;
 
-  // Headbutt
+  // Headbutt (state visible to clients for VFX)
   @type('boolean') isHeadbutting: boolean = false;
   @type('boolean') headbuttAnticipating: boolean = false;
   @type('number') headbuttCooldown: number = 0;
 
   // Abilities (ordered: 0=charge_rush, 1=ground_pound, 2=frenzy)
   @type([AbilityStateSchema]) abilities = new ArraySchema<AbilityStateSchema>();
-
-  // Client input (set via room.onMessage, read by sim)
-  // NOT synced to clients — server internal only
-  inputMoveX: number = 0;
-  inputMoveZ: number = 0;
-  inputHeadbutt: boolean = false;
-  inputAbility1: boolean = false; // charge_rush
-  inputAbility2: boolean = false; // ground_pound (Bloque B)
-  inputUltimate: boolean = false; // frenzy (Bloque B)
-
-  // Internal (not synced)
-  respawnTimer: number = 0;
-  anticipationTimer: number = 0;
-  headbuttTimer: number = 0;
-  hasInput: boolean = false;
 }

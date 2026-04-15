@@ -86,6 +86,16 @@ function tryActivate(state: AbilityStateSchema, def: AbilityDef): boolean {
 }
 
 /**
+ * Inputs passed in from the caller (BrawlRoom) since abilities are no longer
+ * stored on the PlayerSchema (schema v3 anti-pattern to mix sync + non-sync).
+ */
+export interface AbilityInputs {
+  ability1: boolean;
+  ability2: boolean;
+  ultimate: boolean;
+}
+
+/**
  * Tick all abilities for a player. Handles activation, wind-up,
  * effect firing, and cooldown. Returns events fired this tick.
  */
@@ -93,15 +103,16 @@ export function tickPlayerAbilities(
   player: PlayerSchema,
   allPlayers: PlayerSchema[],
   dt: number,
+  inputs: AbilityInputs,
 ): AbilityFiredEvent[] {
   const events: AbilityFiredEvent[] = [];
 
   // Activation attempts from input (one-shot: input flag consumed by handler)
   // Order must match PlayerSchema.abilities array order.
-  const inputs = [
-    player.inputAbility1,
-    player.inputAbility2,
-    player.inputUltimate,
+  const inputFlags = [
+    inputs.ability1,
+    inputs.ability2,
+    inputs.ultimate,
   ];
 
   for (let i = 0; i < player.abilities.length; i++) {
@@ -109,7 +120,7 @@ export function tickPlayerAbilities(
     const def = SERGEI_ABILITIES[i];
     if (!def) continue;
 
-    if (inputs[i] && !state.active) {
+    if (inputFlags[i] && !state.active) {
       tryActivate(state, def);
     }
 
