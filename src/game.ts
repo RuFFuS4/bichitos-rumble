@@ -359,7 +359,12 @@ export class Game {
     // Colyseus schema v3 can deliver partial snapshots during join: a player
     // may be present but some fields (rotationY, abilities[]) may not have
     // their patch applied yet on this client tick.
+    //
+    // IMPORTANT: on the first frame(s) after join, state.players may exist
+    // as a plain object before the MapSchema instance is reconstructed.
+    // Skip the tick rather than crash — next frame will likely have it.
     const state = this.room.state as any;
+    if (!state || typeof state.players?.forEach !== 'function') return;
     const allPlayers: Array<{ sessionId: string; alive: boolean }> = [];
     state.players.forEach((p: any, sid: string) => {
       if (!p) return; // defensive: shouldn't happen but some schema edges do this

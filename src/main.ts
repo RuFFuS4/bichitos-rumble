@@ -217,10 +217,18 @@ requestAnimationFrame(loop);
 //   __tune()                          — print current values
 //   __game                            — access Game instance
 // ---------------------------------------------------------------------------
+// Expose __game for diagnostics whenever online mode is available
+// (dev OR prod with VITE_SERVER_URL). Online multiplayer bugs are hard
+// to reproduce without being able to inspect the Game + Room from the
+// console. __tune stays DEV-only since it's a content-authoring tool.
+if (import.meta.env.DEV || import.meta.env.VITE_SERVER_URL) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__game = game;
+}
+
 if (import.meta.env.DEV) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const w = window as any;
-  w.__game = game;
   w.__tune = (opts?: {
     scale?: number; rotation?: number; pivotY?: number;
     offsetX?: number; offsetZ?: number;
