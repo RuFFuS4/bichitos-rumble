@@ -34,8 +34,9 @@ import type { Room } from 'colyseus.js';
 import { getStateCallbacks } from 'colyseus.js';
 import { sendInput, onAbilityFired, type AbilityFiredEvent } from './network';
 import { getMoveVector, isHeld } from './input';
-import { triggerCameraShake, applyDashFeedback } from './gamefeel';
+import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
+import { spawnShockwaveRing } from './abilities';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended' | 'online';
 
@@ -334,10 +335,8 @@ export class Game {
     if (this.room && sessionId === this.room.sessionId) {
       this.player = critter;
       this.critters = [critter];
-      // Bloque A: ground_pound (index 1) has no server effect yet. Render
-      // the slot as unavailable with SOON badge instead of letting the
-      // user press a key that does nothing.
-      initAbilityHUD(this.player.abilityStates, new Set([1]));
+      // Bloque B: all 3 abilities are live (charge_rush + ground_pound + frenzy)
+      initAbilityHUD(this.player.abilityStates);
     }
 
     // Lives HUD: rebuild every spawn with ALL critters currently known.
@@ -361,9 +360,7 @@ export class Game {
       moveZ: move.z,
       headbutt: isHeld('headbutt'),
       ability1: isHeld('ability1'),
-      // Bloque A: ability2 (ground_pound) not wired server-side yet. Do not
-      // send the input so keyboard K presses are no-ops in online mode.
-      ability2: false,
+      ability2: isHeld('ability2'),
       ultimate: isHeld('ultimate'),
     });
 
@@ -473,8 +470,16 @@ export class Game {
       applyDashFeedback(c);
       triggerCameraShake(0.15);
       playSoundEffect('abilityFire');
+    } else if (ev.type === 'ground_pound') {
+      // Shockwave ring at the caster's position + shake + hit stop + sound.
+      // Victims' knockback comes via state sync (server applied velocity).
+      spawnShockwaveRing(this.scene, ev.x, ev.z, FEEL.groundPound.radius);
+      triggerCameraShake(FEEL.shake.groundPound);
+      triggerHitStop(FEEL.hitStop.groundPound);
+      playSoundEffect('groundPound');
     }
-    // ground_pound + frenzy VFX reserved for Bloque B
+    // frenzy VFX: the glow already comes from updateVisuals() reading
+    // c.abilityStates[2].active, which is state-synced. No extra event needed.
   }
 
   private enterEnded(result: EndResult, title: string, subtitle: string): void {

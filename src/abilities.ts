@@ -401,7 +401,7 @@ export function getMassMultiplier(states: AbilityState[]): number {
  *  - inner white flash that expands fast and fades quickly
  *  - outer red torus that expands to maxRadius with a thicker tube
  */
-function spawnShockwaveRing(scene: THREE.Scene, x: number, z: number, maxRadius: number): void {
+export function spawnShockwaveRing(scene: THREE.Scene, x: number, z: number, maxRadius: number): void {
   const duration = 450; // ms
   const startTime = performance.now();
 

@@ -175,8 +175,7 @@ function fireEffect(
       fireChargeRush(player);
       break;
     case 'ground_pound':
-      // Bloque B: radial knockback to nearby players
-      fireGroundPoundStub(player, allPlayers);
+      fireGroundPound(player, allPlayers);
       break;
     case 'frenzy':
       // Bloque B: buff only — multipliers already handled in physics.ts
@@ -192,8 +191,25 @@ function fireChargeRush(player: PlayerSchema): void {
   player.vz += Math.cos(angle) * SIM.chargeRush.impulse;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function fireGroundPoundStub(_player: PlayerSchema, _allPlayers: PlayerSchema[]): void {
-  // Bloque B will implement radial force. Leaving stub so the dispatch
-  // compiles and we can test activation → fire event round trip.
+/**
+ * Ground pound: radial knockback on all nearby alive players within radius.
+ * Same math as client's fireGroundPound: linear falloff by distance.
+ * Immune players receive no knockback (server honors immunity timer).
+ */
+function fireGroundPound(caster: PlayerSchema, allPlayers: PlayerSchema[]): void {
+  const radius = SIM.groundPound.radius;
+  const force = SIM.groundPound.force;
+  for (const other of allPlayers) {
+    if (other === caster) continue;
+    if (!other.alive || other.falling || other.immunityTimer > 0) continue;
+    const dx = other.x - caster.x;
+    const dz = other.z - caster.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist >= radius || dist < 0.01) continue;
+    const nx = dx / dist;
+    const nz = dz / dist;
+    const falloff = 1 - dist / radius;
+    other.vx += nx * force * falloff;
+    other.vz += nz * force * falloff;
+  }
 }
