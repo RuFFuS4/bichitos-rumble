@@ -84,12 +84,18 @@ export function resolveCollisions(players: PlayerSchema[]): void {
   }
 }
 
-/** Check if a player is off the arena and transition to falling state. */
-export function checkFalloff(players: PlayerSchema[], internal: Map<string, InternalLike>): void {
-  const R = SIM.arena.radius;
+/**
+ * Check if a player is off the arena and transition to falling state.
+ * `radius` is dynamic — in Bloque B 3a it shrinks as rings collapse.
+ */
+export function checkFalloff(
+  players: PlayerSchema[],
+  internal: Map<string, InternalLike>,
+  radius: number,
+): void {
   for (const p of players) {
     if (!p.alive || p.falling || p.immunityTimer > 0) continue;
-    if (Math.sqrt(p.x * p.x + p.z * p.z) > R) {
+    if (Math.sqrt(p.x * p.x + p.z * p.z) > radius) {
       p.falling = true;
       p.lives -= 1;
       const data = internal.get(p.sessionId);

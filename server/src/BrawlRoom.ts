@@ -19,6 +19,7 @@ import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER } from './sim/config.js';
 import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed } from './sim/physics.js';
 import { createAbilityStates, tickPlayerAbilities } from './sim/abilities.js';
+import { ArenaSim } from './sim/arena.js';
 
 interface InputMessage {
   moveX: number;      // -1..1
@@ -69,6 +70,7 @@ export class BrawlRoom extends Room<GameState> {
   private tickInterval: number = 0;
   private tickHandle: NodeJS.Timeout | null = null;
   private internal = new Map<string, InternalPlayerData>();
+  private arenaSim = new ArenaSim();
 
   onCreate(_options: unknown) {
     this.tickInterval = 1000 / SIM.tickRate;
@@ -210,6 +212,14 @@ export class BrawlRoom extends Room<GameState> {
     this.state.matchTimer -= dt;
     const players = [...this.state.players.values()];
 
+    // Arena collapse simulation (authoritative). Tick first so falloff
+    // checks below use the freshly updated radius, then mirror into state
+    // for clients to render identical visuals.
+    this.arenaSim.tick(dt);
+    this.state.arenaRadius = this.arenaSim.currentRadius;
+    this.state.arenaCollapsedRings = this.arenaSim.collapsedRings;
+    this.state.warningRingIndex = this.arenaSim.warningRingIndex;
+
     // 1. Process per-player input → intent (movement, headbutt trigger)
     for (const p of players) {
       if (!p.alive || p.falling) continue;
@@ -303,17 +313,18 @@ export class BrawlRoom extends Room<GameState> {
     // 4. Collisions + knockback (player vs player)
     resolveCollisions(players);
 
-    // 5. Falloff detection
-    checkFalloff(players, this.internal);
+    // 5. Falloff detection — uses the authoritative, shrinking radius
+    checkFalloff(players, this.internal, this.arenaSim.currentRadius);
 
     // 6. Falling animation + respawn countdown
     const toRespawn = updateFalling(players, this.internal, dt);
     for (const sid of toRespawn) {
       const p = this.state.players.get(sid);
       if (!p) continue;
-      // Respawn at arena center-ish (match client's pickRespawnPos logic)
+      // Respawn at arena center-ish. Use the CURRENT radius so that when
+      // rings have collapsed we still land on solid ground.
       const angle = Math.random() * Math.PI * 2;
-      const r = SIM.arena.radius * 0.4;
+      const r = this.arenaSim.currentRadius * 0.4;
       p.x = Math.cos(angle) * r;
       p.z = Math.sin(angle) * r;
       p.vx = 0;

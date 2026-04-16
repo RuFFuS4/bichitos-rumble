@@ -448,6 +448,17 @@ export class Game {
     // Skip the tick rather than crash — next frame will likely have it.
     const state = this.room.state as any;
     if (!state || typeof state.players?.forEach !== 'function') return;
+
+    // Mirror the authoritative arena collapse state. Drives visibility,
+    // warning blink, and the radius used for any future client-side checks.
+    if (typeof state.arenaRadius === 'number') {
+      this.arena.syncFromServer(
+        state.arenaRadius,
+        state.arenaCollapsedRings ?? 0,
+        state.warningRingIndex ?? -1,
+      );
+    }
+
     const allPlayers: Array<{ sessionId: string; alive: boolean }> = [];
     state.players.forEach((p: any, sid: string) => {
       if (!p) return; // defensive: shouldn't happen but some schema edges do this

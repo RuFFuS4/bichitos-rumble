@@ -173,6 +173,68 @@ export class Arena {
     return Math.sqrt(x * x + z * z) <= this.currentRadius;
   }
 
+  /**
+   * Mirror authoritative collapse state from the server (online mode).
+   * Drives visibility (collapsedRings) and warning blink (warningRingIndex).
+   * The blink cadence stays client-local since it's pure visual noise —
+   * both clients use Date.now() so they stay in near-lockstep anyway.
+   *
+   *   radius          — current standable radius (used for isOnArena)
+   *   collapsedRings  — how many rings have fully disappeared (0..ringCount)
+   *   warningRingIndex — index of the ring currently blinking red, -1 if none
+   */
+  syncFromServer(radius: number, collapsedRings: number, warningRingIndex: number): void {
+    this.currentRadius = radius;
+
+    for (let i = 0; i < this.rings.length; i++) {
+      const ring = this.rings[i];
+      // Rings with index > (ringCount-1 - collapsedRings) have collapsed.
+      // Equivalently: hidden when i >= ringCount - collapsedRings.
+      const collapsed = i >= this.rings.length - collapsedRings;
+      ring.visible = !collapsed;
+
+      if (collapsed) continue;
+
+      if (i === warningRingIndex) {
+        // Apply the same blink pattern the offline path computes locally.
+        // Server does NOT send timer; we approximate intensity at peak
+        // (t≈1) since Bloque B 3a only warns for 1.5s — close enough.
+        const rate = WARNING_PEAK_RATE;
+        const phase = (Date.now() * 0.001 * rate) % 1;
+        const on = phase < 0.5;
+        const intensity = on ? 1.0 : 0.0;
+        const color = on ? 0xff3333 : 0x5c2020;
+        ring.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            const mat = child.material as THREE.MeshStandardMaterial;
+            mat.color.setHex(color);
+            mat.emissive.setHex(on ? 0xff1111 : 0x000000);
+            mat.emissiveIntensity = intensity;
+          }
+        });
+      } else {
+        // Base color — alternating green bands like the initial build.
+        const baseColor = i % 2 === 0 ? 0x4a6741 : 0x5c8a50;
+        ring.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            const mat = child.material as THREE.MeshStandardMaterial;
+            if (child.position.y === 0) {
+              mat.color.setHex(baseColor);
+            } else if (child.position.y === -ARENA_HEIGHT) {
+              mat.color.setHex(0x2a3a22);
+            } else {
+              mat.color.setHex(0x3a5331);
+            }
+            if (mat.emissiveIntensity !== 0) {
+              mat.emissive.setHex(0x000000);
+              mat.emissiveIntensity = 0;
+            }
+          }
+        });
+      }
+    }
+  }
+
   reset(): void {
     this.collapseIndex = 0;
     this.collapseTimer = 0;
