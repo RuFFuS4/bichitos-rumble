@@ -100,6 +100,8 @@ export class Game {
   /** When true, confirming the character select connects to server instead
    *  of starting a local match. Set by enterOnlineCharacterSelect(). */
   private selectForOnline: boolean = false;
+  /** Guard so the online portal hit only triggers once per match. */
+  private portalRedirecting: boolean = false;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -313,6 +315,7 @@ export class Game {
     this.room = room;
     this.phase = 'online';
     this.lastServerPhase = '';
+    this.portalRedirecting = false;
     document.body.classList.add('match-active');
     document.body.classList.add('online-mode'); // CSS hides unavailable touch buttons
 
@@ -322,8 +325,6 @@ export class Game {
     hideEndScreen();
     hidePreview();
     showMatchHud();
-    disposePortals();        // portals don't exist in online mode
-    clearPortalContext();
 
     // Clear offline critters; online critters are driven by server state
     for (const c of this.critters) c.dispose();
@@ -332,6 +333,15 @@ export class Game {
 
     // Reset arena to initial state (no collapse in Bloque A — server doesn't drive it)
     this.arena.reset();
+
+    // Portals: individual per-client. Using the exit portal in online mode
+    // sends a 'portal' message to the server (authoritative forfeit) and
+    // then redirects locally. Using a portal does NOT pause the other
+    // players — they keep playing until alive count drops to 1.
+    initPortals(this.scene);
+    setPortalLegend(hasStartPortal());
+    // Player info for the portal redirect query params is set after the
+    // local critter spawns (needs config). See spawnOnlineCritter.
 
     showOverlay('Waiting for opponent...');
 
@@ -383,6 +393,8 @@ export class Game {
       this.critters = [critter];
       // Bloque B: all 3 abilities are live (charge_rush + ground_pound + frenzy)
       initAbilityHUD(this.player.abilityStates);
+      // Portal redirect params — name/color/speed come from the resolved config
+      setPortalPlayerInfo(config.name, config.color, config.speed);
     }
 
     // Lives HUD: rebuild every spawn with ALL critters currently known.
@@ -398,6 +410,22 @@ export class Game {
    */
   private updateOnline(dt: number): void {
     if (!this.room) return;
+
+    // P key toggles portal minimize/expand (same UX as offline)
+    if (this.portalKeyPressed('KeyP')) {
+      togglePortalExpanded();
+    }
+
+    // Portal check: if the local player walks into an expanded portal, send
+    // the server a 'portal' forfeit message and redirect. The server marks
+    // us dead authoritatively; the remaining player gets a proper victory.
+    if (this.player && this.player.alive && !this.portalRedirecting) {
+      const hit = updatePortals(this.player.x, this.player.z, dt);
+      if (hit) {
+        this.triggerOnlinePortalExit(hit);
+        return; // skip further state processing this tick
+      }
+    }
 
     // Send current input to server (throttled implicitly by frame rate)
     const move = getMoveVector();
@@ -506,6 +534,46 @@ export class Game {
       updateAbilityHUD(this.player.abilityStates);
       updateAllLivesHUD([...this.onlineCritters.values()]);
     }
+  }
+
+  /**
+   * Online portal hit: forfeit via server, then redirect locally.
+   *
+   * Flow:
+   *   1. Mark the local guard so the detection doesn't re-trigger
+   *   2. Send 'portal' to server — it marks our PlayerSchema.alive=false
+   *      synchronously in the handler and re-evaluates win condition.
+   *      Patch is broadcast to the remaining client in the same tick.
+   *   3. Show a brief "Leaving..." overlay (cosmetic, avoids a frozen
+   *      unresponsive frame between send and redirect)
+   *   4. Short wait (~120ms) to give the server's broadcast time to reach
+   *      the other client BEFORE our WebSocket close frame lands. Without
+   *      this the other player might see a disconnect instead of a victory.
+   *   5. Redirect using the same exit/ref URL as offline portals.
+   */
+  private triggerOnlinePortalExit(which: 'exit' | 'start'): void {
+    if (!this.room || this.portalRedirecting) return;
+    this.portalRedirecting = true;
+
+    console.log('[Game] online portal exit via', which);
+    try {
+      this.room.send('portal');
+    } catch (err) {
+      console.warn('[Game] portal send failed:', err);
+    }
+
+    showOverlay('Leaving...');
+
+    const redirectUrl = which === 'start'
+      ? (getPortalReturnUrl() ?? getPortalExitUrl())
+      : getPortalExitUrl();
+
+    // Small delay lets the server broadcast alive=false to the opponent
+    // before our WS close frame arrives. 120ms is well under any sane
+    // Colyseus patch rate (default 50ms patches).
+    setTimeout(() => {
+      window.location.href = redirectUrl;
+    }, 120);
   }
 
   private handleAbilityFired(ev: AbilityFiredEvent): void {

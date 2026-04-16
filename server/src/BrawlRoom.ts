@@ -87,6 +87,32 @@ export class BrawlRoom extends Room<GameState> {
     // Ignore any client request to restart for Bloque A (server drives flow)
     this.onMessage('ready', () => { /* no-op */ });
 
+    // Voluntary forfeit: player walked into a Vibe Jam portal. Treat as an
+    // immediate, authoritative retirement. The player is marked dead (not
+    // "falling") so no respawn countdown runs and no ghost lingers in the
+    // sim. If only one player remains alive, the match ends with that
+    // player as winner. The leaving client does its own redirect locally.
+    this.onMessage('portal', (client) => {
+      // Guards: only valid mid-match, only for alive players
+      if (this.state.phase !== 'playing') return;
+      const p = this.state.players.get(client.sessionId);
+      if (!p || !p.alive) return;
+
+      p.alive = false;
+      p.falling = false;
+      p.isHeadbutting = false;
+      p.headbuttAnticipating = false;
+      console.log(`[BrawlRoom] ${client.sessionId} forfeited via portal`);
+
+      // Re-evaluate win condition immediately (don't wait for next tick)
+      const alive = [...this.state.players.values()].filter(pl => pl.alive);
+      if (alive.length <= 1) {
+        this.state.phase = 'ended';
+        this.state.endReason = alive.length === 1 ? 'opponent_left' : 'draw';
+        this.state.winnerSessionId = alive[0]?.sessionId ?? '';
+      }
+    });
+
     this.setSimulationInterval(() => this.tick(this.tickInterval / 1000), this.tickInterval);
     console.log(`[BrawlRoom] created, tickRate=${SIM.tickRate}Hz`);
   }
