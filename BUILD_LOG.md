@@ -1167,3 +1167,44 @@ Closing summary:
 - 622 KB JS (163 KB gzip)
 - 425 KB Sergei GLB
 - Draco decoder removed → no longer in deploy
+
+---
+
+## 2026-04-16 — Fix: arena visual desync (Bloque B 3a follow-up)
+
+### What was fixed
+Bug: "outer ring stays rendered on one client even after server shrunk the radius."
+Diagnosed by the previous commit (diagnostic logging). Root cause: `syncFromServer`
+was using `collapsedRings` counter to determine ring visibility, but `collapsedRings`
+could arrive in a partial or delayed state relative to `arenaRadius`.
+
+### Fix
+Replaced counter-based visibility with a **geometric check**:
+
+```
+const outerEdge = (i + 1) * ringWidth;
+ring.visible = outerEdge <= radius + 0.1;
+```
+
+`arenaRadius` is the most reliable field — it already drives player falloff on both
+clients. If a client correctly falls off the shrunken arena, its `radius` is correct,
+and the ring will now also correctly disappear.
+
+The epsilon (0.1) keeps the outermost ring visible during the warning phase (when
+radius is still at max but the ring is blinking, not yet removed).
+
+### Optimization added
+`syncFromServer` no longer runs material traversals every frame. It tracks the
+last synced `radius` and `warningRingIndex`:
+- Visibility updates: only on `radius` change (every ~20s in normal play)
+- Blink traversal: every frame only while a ring is warning
+- Color restoration: only once on the frame when `warningRingIndex` transitions
+
+This eliminates ~15 material.color/emissive writes per frame in stable state.
+
+### Files changed
+- `src/arena.ts` — `syncFromServer` rewritten, `reset()` clears sync tracking
+- `src/game.ts` — removed diagnostic logs, simplified `syncFromServer` call
+
+### Bundle
+- 769 KB JS (209 KB gzip) — includes Colyseus; pre-existing chunking advisory

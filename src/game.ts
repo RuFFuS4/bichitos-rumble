@@ -102,10 +102,7 @@ export class Game {
   private selectForOnline: boolean = false;
   /** Guard so the online portal hit only triggers once per match. */
   private portalRedirecting: boolean = false;
-  // Bloque B 3a debug: log arena sync transitions to help diagnose
-  // the "one client ring doesn't disappear" bug. Only logs on CHANGE
-  // so the console stays clean.
-  private lastArenaSync: string = '';
+
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -456,23 +453,11 @@ export class Game {
     // Mirror the authoritative arena collapse state. Drives visibility,
     // warning blink, and the radius used for any future client-side checks.
     if (typeof state.arenaRadius === 'number') {
-      const radius = state.arenaRadius;
-      const collapsed = state.arenaCollapsedRings ?? 0;
-      const warning = state.warningRingIndex ?? -1;
-      this.arena.syncFromServer(radius, collapsed, warning);
-      // Log only on CHANGE to keep console clean. Both clients should
-      // log identical transitions; divergence here reveals which side
-      // is missing patches.
-      const key = `r=${radius} c=${collapsed} w=${warning}`;
-      if (key !== this.lastArenaSync) {
-        this.lastArenaSync = key;
-        console.log('[arena-sync]', key, `sid=${this.room?.sessionId ?? '?'}`);
-      }
-    } else if (!this.lastArenaSync) {
-      // First few frames may have undefined arena fields — log once so we
-      // know the client noticed the gap.
-      this.lastArenaSync = 'pending';
-      console.log('[arena-sync] state.arenaRadius not yet synced');
+      this.arena.syncFromServer(
+        state.arenaRadius,
+        state.arenaCollapsedRings ?? 0,
+        state.warningRingIndex ?? -1,
+      );
     }
 
     const allPlayers: Array<{ sessionId: string; alive: boolean }> = [];
