@@ -13,6 +13,12 @@
 - [x] **Bloque B #3 (portal)** — Portal as individual forfeit (server-authoritative)
 - [x] **Bloque B #3a** — Arena collapse sync (server-authoritative rings)
 - [x] **Bloque B #3b** — Irregular fragment collapse (seed-deterministic sectors)
+- [x] **3b polish pass 1** — fragment Y alignment, longer warning (3s), stretched
+  timing (~97s full collapse), band-aligned batches (no cross-band visual gaps)
+- [x] **Title menu redesign** — explicit "vs Bots" and "Online Multiplayer"
+  buttons, no auto-start on SPACE, arrow keys + ENTER / mouse click to confirm
+- [x] **Online restart** — end-screen R/tap now re-queues for a new online match
+  with same critter instead of launching an offline bot match
 
 ### Next up (priority order)
 
