@@ -24,10 +24,20 @@
 ### NOT yet validated in production (next priority)
 - [ ] Two-browser remote test on bichitosrumble.com with the most recent
       commit to confirm:
-      - Restart online reconnects cleanly into a fresh match
+      - Restart online reconnects cleanly into a fresh match (no Disconnected flash)
       - No flicker on transitions (title ↔ match in either direction)
-      - Visible fragment == walkable fragment (both directions)
+      - Visible fragment == walkable fragment (both directions) — **critical
+        rotation bug fixed in c4ad1c4**, needs re-test
       - Collapse pattern feels different across 3+ consecutive matches
+
+### Critical bug fixed in c4ad1c4
+Fragment meshes used rotation.x = -π/2 which mirrors shape-Y onto world-Z.
+Physics `pointInFragment` uses atan2(z, x) without mirror → visual and
+physics diverged on opposite halves of the arena. Symptoms (matching user
+remote test): "visible fragment not walkable" + "invisible terrain walkable",
+both happening at mirrored angles. Fix: rotate by +π/2 (no mirror). Also
+removed the compensating position.y = -h since +π/2 extrudes downward
+naturally.
 
 ### Blocked on production validation (DO NOT start before passing above)
 - [ ] Frenzy feedback (L) — visual+audio for Sergei's ultimate
