@@ -445,10 +445,13 @@ export class Game {
     // Ability fire events → trigger client-side VFX + audio
     onAbilityFired(room, (ev: AbilityFiredEvent) => this.handleAbilityFired(ev));
 
-    // Attach leave handler — if opponent disconnects, we get here
+    // Attach leave handler — if the server drops us unexpectedly we
+    // surface it. Intentional leaves (restartMatch, back-to-title)
+    // set this.restartInProgress / this.room=null first, so those
+    // paths don't flash the Disconnected overlay.
     room.onLeave(() => {
       console.log('[Game] disconnected from room');
-      if (this.phase === 'online') {
+      if (this.phase === 'online' && this.room === room && !this.restartInProgress) {
         showOverlay('Disconnected', 'Press T to return to title');
       }
     });

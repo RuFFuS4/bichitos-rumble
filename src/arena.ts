@@ -103,12 +103,22 @@ function createFragmentMesh(f: FragmentDef): THREE.Group {
     side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  // ExtrudeGeometry: shape in XY, extruded +Z. After rotating -π/2 around X,
-  // the +Z extrusion points UP (+Y), so the fragment would float above the
-  // ground plane. Shift down by `h` so the top face sits at y=0 (matching
-  // the immune center) and the body extends down to y=-h.
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.y = -h;
+  // CRITICAL: rotation direction matters here.
+  //
+  // ExtrudeGeometry places the shape in XY and extrudes along +Z. To lay
+  // it flat on XZ we rotate around X, but the SIGN of that rotation
+  // decides how shape-angle maps to world-angle:
+  //
+  //   rot X by -π/2:  (x, y, z) → (x, z, -y)   ← MIRRORS shape Y onto -Z
+  //   rot X by +π/2:  (x, y, z) → (x, -z, y)   ← shape Y → world +Z
+  //
+  // The physics `pointInFragment` uses atan2(z, x) without mirroring, so
+  // it expects shape-angle π/2 to be at world +Z. With -π/2 rotation the
+  // mesh is drawn at world -Z — visual and physics diverge. Bug reported
+  // as "visible terrain not walkable / invisible terrain walkable".
+  // Fix: use +π/2. That also extrudes DOWN naturally (back face at y=-h,
+  // front face at y=0), so no position offset is needed.
+  mesh.rotation.x = Math.PI / 2;
   mesh.receiveShadow = true;
   group.add(mesh);
 
