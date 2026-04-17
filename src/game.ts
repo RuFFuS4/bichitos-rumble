@@ -948,4 +948,18 @@ export class Game {
         break;
     }
   }
+
+  // --- Diagnostics (window.__arena.checkPlayer) -------------------------
+
+  /**
+   * Current local player world position + liveness, for debug helpers.
+   * Works in both online and offline — `this.player` is updated every
+   * frame with the server position in online mode.
+   * Returns null between matches or before spawn.
+   */
+  public getLocalPlayerPos(): { x: number; z: number; alive: boolean; critterName: string } | null {
+    const p = this.player;
+    if (!p) return null;
+    return { x: p.x, z: p.z, alive: !!p.alive, critterName: p.config?.name ?? '?' };
+  }
 }

@@ -41,12 +41,14 @@ naturally. Full post-mortem in ERROR_LOG.md.
 
 ### Diagnostic tools (always available in dev AND prod with server URL)
 Open DevTools → console on a live match:
+- `__arena.checkPlayer()` — use THIS FIRST after any "visible but fall"
+  or "void but walk" event. Reads the local player position and reports
+  which fragment physics picks + whether that mesh is rendered. No need
+  to estimate x,z by eye.
+- `__arena.check(x, z)` — same check at an arbitrary point.
 - `__arena.compass()` — toggle N/S/E/W world-axis markers to verify the
   rotation mirror hasn't reappeared (Red=N at +Z, Blue=S at -Z, Green=E
   at +X, Yellow=W at -X).
-- `__arena.check(x, z)` — for a world point, report which fragment the
-  physics thinks covers it and whether that mesh is rendered there.
-  Catches visual/physics drift silently.
 - `__arena.dump()` — list all fragments grouped by band with alive and
   visible flags. Any row flagged `MISMATCH` = sync bug.
 - `__arena.logCollapses()` — toggle per-batch console log of collapses

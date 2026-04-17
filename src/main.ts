@@ -213,14 +213,21 @@ if (import.meta.env.DEV || import.meta.env.VITE_SERVER_URL) {
   // Direct helpers for the arena collapse diagnostics — no need to chain
   // through __game.arena. Easy to reactivate if the render vs physics
   // mismatch ever reappears. Console usage:
+  //   __arena.checkPlayer()           — physics/visual agreement AT the local player
+  //   __arena.check(x, z)             — same at an arbitrary point
   //   __arena.dump()                  — list fragments grouped by band
-  //   __arena.check(x, z)             — physics/visual agreement at point
   //   __arena.compass()               — toggle N/S/E/W world-axis markers
   //   __arena.logCollapses()          — toggle collapse/warning event log
   w.__arena = {
-    dump:       () => game.arena.dumpFragments(),
-    check:      (x: number, z: number) => game.arena.checkPoint(x, z),
-    compass:    () => game.arena.toggleDebugCompass(),
+    checkPlayer: () => {
+      const p = game.getLocalPlayerPos();
+      if (!p) { console.log('[Arena] no local player (not in a match)'); return; }
+      console.log(`[Arena] local ${p.critterName} alive=${p.alive} at (${p.x.toFixed(2)}, ${p.z.toFixed(2)})`);
+      game.arena.checkPoint(p.x, p.z);
+    },
+    check:        (x: number, z: number) => game.arena.checkPoint(x, z),
+    dump:         () => game.arena.dumpFragments(),
+    compass:      () => game.arena.toggleDebugCompass(),
     logCollapses: () => game.arena.toggleCollapseLog(),
   };
   console.info('[main] diagnostics: window.__game, window.__arena');
