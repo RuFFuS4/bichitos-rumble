@@ -63,12 +63,12 @@ export const FRAG = {
     { inner: 8.5, outer: 12,  baseSectors: 10 },
   ],
   sectorJitter: 0.25,      // fraction of base angle width
-  // Batch sizes tuned to yield ~4 batches over 28 collapsible fragments
-  // (28 / 7 = 4 exact, 28 / 8 leaves a 4-piece remainder — still 4 batches).
-  batchSizeMin: 7,
-  batchSizeMax: 8,
-  // Total collapse target ≈ 97s of a 120s match, so ~23s of endgame on the
-  // immune center: 25 (first delay) + 3 (warn) + 3 × (20 + 3) = 97.
+  // Timing target: full collapse by t≈97s of a 120s match (~23s endgame on
+  // immune center). Four batches, band-aligned:
+  //   Batch 0: 5-6 of band 3  (delay = firstBatchDelay)
+  //   Batch 1: rest of band 3 (delay = batchDelay*)
+  //   Batch 2: all of band 2  (delay = batchDelay*)
+  //   Batch 3: all of band 1  (delay = batchDelay*)
   firstBatchDelay: 25,     // seconds into playing before first collapse
   batchDelayMin: 18,
   batchDelayMax: 22,
@@ -128,7 +128,14 @@ export function generateArenaLayout(seed: number): ArenaLayout {
     }
   }
 
-  // --- Collapse schedule: outer band first → inner ---------------------
+  // --- Collapse schedule: band-aligned batches, outer → inner -----------
+  // Each batch stays WITHIN a single band so the alive/dead state is always
+  // visually legible: the user never sees a ring with a single missing
+  // piece they might miss from the isometric camera angle. Structure:
+  //   - Band 3 (outer, 10 sectors): split into 2 batches of 5
+  //   - Band 2 (mid, 10 sectors):   1 batch of 10
+  //   - Band 1 (inner, 8 sectors):  1 batch of 8
+  // Total: 4 batches, pacing increases (5, 5, 10, 8 pieces).
 
   const byBand = new Map<number, number[]>();
   for (const f of fragments) {
@@ -138,26 +145,22 @@ export function generateArenaLayout(seed: number): ArenaLayout {
   }
   for (const indices of byBand.values()) shuffle(indices, rand);
 
-  const collapseOrder = [
-    ...(byBand.get(3) ?? []),
-    ...(byBand.get(2) ?? []),
-    ...(byBand.get(1) ?? []),
-  ];
+  const randDelay = () =>
+    FRAG.batchDelayMin + rand() * (FRAG.batchDelayMax - FRAG.batchDelayMin);
 
   const batches: BatchDef[] = [];
-  let cursor = 0;
-  let isFirst = true;
-  while (cursor < collapseOrder.length) {
-    const size = Math.min(
-      Math.floor(rand() * (FRAG.batchSizeMax - FRAG.batchSizeMin + 1)) + FRAG.batchSizeMin,
-      collapseOrder.length - cursor,
-    );
-    const delay = isFirst ? FRAG.firstBatchDelay
-      : FRAG.batchDelayMin + rand() * (FRAG.batchDelayMax - FRAG.batchDelayMin);
-    batches.push({ indices: collapseOrder.slice(cursor, cursor + size), delay });
-    cursor += size;
-    isFirst = false;
+  const band3 = byBand.get(3) ?? [];
+  const band2 = byBand.get(2) ?? [];
+  const band1 = byBand.get(1) ?? [];
+
+  // Band 3 split in half — PRNG decides the exact cut point (5 or 6)
+  const b3Cut = 5 + Math.floor(rand() * 2); // 5 or 6
+  batches.push({ indices: band3.slice(0, b3Cut), delay: FRAG.firstBatchDelay });
+  if (band3.length > b3Cut) {
+    batches.push({ indices: band3.slice(b3Cut), delay: randDelay() });
   }
+  batches.push({ indices: band2, delay: randDelay() });
+  batches.push({ indices: band1, delay: randDelay() });
 
   return { seed, fragments, batches, immuneRadius: FRAG.immuneRadius, maxRadius: FRAG.maxRadius };
 }

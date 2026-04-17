@@ -153,7 +153,7 @@ export class Game {
 
     setEndTapHandler(() => {
       if (this.phase === 'ended') {
-        this.enterCountdown();
+        this.restartMatch();
       }
     });
 
@@ -298,6 +298,35 @@ export class Game {
   public enterOnlineCharacterSelect(): void {
     this.selectForOnline = true;
     this.enterCharacterSelect();
+  }
+
+  /**
+   * Restart from the end screen.
+   * - Offline: start a new local countdown against bots (same roster)
+   * - Online: leave the current room and re-queue with the same critter
+   *   (acts as a "rematch / find new opponent" button).
+   * Ignored if no critter is available or we're still redirecting via portal.
+   */
+  private restartMatch(): void {
+    if (this.portalRedirecting) return;
+    if (this.room) {
+      // Online: leave current room, clear remote state, re-queue with
+      // the same critter name. If the connect fails we land back on title.
+      const critterName = this.player?.config.name ?? '';
+      const prevRoom = this.room;
+      this.room = null;
+      for (const c of this.onlineCritters.values()) c.dispose();
+      this.onlineCritters.clear();
+      prevRoom.leave().catch(() => { /* server may already have disposed */ });
+      if (critterName) {
+        this.connectOnlineWith(critterName);
+      } else {
+        this.enterTitle();
+      }
+    } else {
+      // Offline: standard countdown restart
+      this.enterCountdown();
+    }
   }
 
   /**
@@ -855,9 +884,16 @@ export class Game {
         }
 
         if (consumeMenuAction('restart')) {
-          this.enterCountdown();
+          this.restartMatch();
         }
         if (consumeMenuAction('back')) {
+          // T: always hard-return to title (drops online room if any)
+          if (this.room) {
+            this.room.leave().catch(() => { /* ignore */ });
+            this.room = null;
+            for (const c of this.onlineCritters.values()) c.dispose();
+            this.onlineCritters.clear();
+          }
           this.enterTitle();
         }
         // Portal redirects (P = next game, B = return to previous)
