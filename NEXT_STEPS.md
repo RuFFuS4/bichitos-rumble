@@ -37,7 +37,20 @@ physics diverged on opposite halves of the arena. Symptoms (matching user
 remote test): "visible fragment not walkable" + "invisible terrain walkable",
 both happening at mirrored angles. Fix: rotate by +π/2 (no mirror). Also
 removed the compensating position.y = -h since +π/2 extrudes downward
-naturally.
+naturally. Full post-mortem in ERROR_LOG.md.
+
+### Diagnostic tools (always available in dev AND prod with server URL)
+Open DevTools → console on a live match:
+- `__arena.compass()` — toggle N/S/E/W world-axis markers to verify the
+  rotation mirror hasn't reappeared (Red=N at +Z, Blue=S at -Z, Green=E
+  at +X, Yellow=W at -X).
+- `__arena.check(x, z)` — for a world point, report which fragment the
+  physics thinks covers it and whether that mesh is rendered there.
+  Catches visual/physics drift silently.
+- `__arena.dump()` — list all fragments grouped by band with alive and
+  visible flags. Any row flagged `MISMATCH` = sync bug.
+- `__arena.logCollapses()` — toggle per-batch console log of collapses
+  and warning transitions.
 
 ### Blocked on production validation (DO NOT start before passing above)
 - [ ] Frenzy feedback (L) — visual+audio for Sergei's ultimate

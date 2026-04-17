@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import {
-  generateArenaLayout, isPointOnArena, FRAG,
+  generateArenaLayout, isPointOnArena, pointInFragment, FRAG,
   type ArenaLayout, type FragmentDef,
 } from './arena-fragments';
 
@@ -150,6 +150,10 @@ export class Arena {
   // Base colors for resetting after warning blink
   private baseColors: number[] = [];
 
+  // Diagnostic helpers — null unless toggled on via the window.__arena API
+  private debugCompass: THREE.Group | null = null;
+  private debugLogCollapses: boolean = false;
+
   constructor(scene: THREE.Scene) {
     this.group = new THREE.Group();
 
@@ -260,6 +264,9 @@ export class Arena {
           this.alive[idx] = false;
           this.fragmentGroups[idx].visible = false;
         }
+        if (this.debugLogCollapses) {
+          console.log(`[Arena] collapse level=${l + 1}  batch indices=[${batch.indices.join(',')}]  radius→${this.currentRadius.toFixed(2)}`);
+        }
       }
       this.syncedLevel = collapseLevel;
       this.updateRadius();
@@ -271,13 +278,124 @@ export class Arena {
       if (this.syncedWarning >= 0 && this.syncedWarning < (this.layout?.batches.length ?? 0)) {
         this.restoreBatch(this.layout!.batches[this.syncedWarning].indices);
       }
+      if (this.debugLogCollapses) {
+        console.log(`[Arena] warning ${this.syncedWarning} → ${warningBatch}`);
+      }
       this.syncedWarning = warningBatch;
     }
 
     if (warningBatch >= 0 && warningBatch < (this.layout?.batches.length ?? 0)) {
       this.blinkBatch(this.layout!.batches[warningBatch].indices);
     }
+
+    // Optional collapse logging — emits one line per batch transition
+    // so the console clearly shows what collapsed and when.
+    if (this.debugLogCollapses && collapseLevel > 0 && this.syncedLevel === collapseLevel) {
+      // nothing new; avoid duplicate logs
+    }
   }
+
+  // --- Diagnostic helpers (toggled via window.__arena / window.__game.arena)
+
+  /**
+   * Add/remove visible N/S/E/W axis markers on the arena.
+   * Used to VERIFY render and physics agree on orientation:
+   *  +X = East (green box)   -X = West (yellow box)
+   *  +Z = North (red box)    -Z = South (blue box)
+   * Physics uses atan2(z, x), so angle 0 must point east (+X) and angle
+   * +π/2 must point north (+Z). If the markers end up swapped after a
+   * geometric change, the rotation bug is back.
+   */
+  toggleDebugCompass(): boolean {
+    if (this.debugCompass) {
+      this.group.remove(this.debugCompass);
+      this.debugCompass.traverse(c => {
+        if (c instanceof THREE.Mesh) {
+          c.geometry.dispose();
+          if (c.material instanceof THREE.Material) c.material.dispose();
+        }
+      });
+      this.debugCompass = null;
+      return false;
+    }
+    const g = new THREE.Group();
+    const r = FRAG.maxRadius + 1.2;
+    const markers: Array<[string, number, number, number]> = [
+      ['E', +r, 0, 0x00ff00],
+      ['W', -r, 0, 0xffff00],
+      ['N', 0, +r, 0xff0000],
+      ['S', 0, -r, 0x00aaff],
+    ];
+    for (const [_label, x, z, color] of markers) {
+      const mat = new THREE.MeshBasicMaterial({ color });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), mat);
+      mesh.position.set(x, 0.6, z);
+      g.add(mesh);
+    }
+    this.debugCompass = g;
+    this.group.add(g);
+    return true;
+  }
+
+  /** Dump fragment state to console. */
+  dumpFragments(): void {
+    if (!this.layout) { console.log('[Arena] no layout (not in a match)'); return; }
+    console.log(`[Arena] seed=${this.syncedSeed} radius=${this.currentRadius.toFixed(2)} syncedLevel=${this.syncedLevel} syncedWarn=${this.syncedWarning}`);
+    const byBand = new Map<number, string[]>();
+    for (let i = 0; i < this.layout.fragments.length; i++) {
+      const f = this.layout.fragments[i];
+      const alive = this.alive[i];
+      const visible = this.fragmentGroups[i]?.visible ?? false;
+      const start = (f.startAngle * 180 / Math.PI).toFixed(0);
+      const end = (f.endAngle * 180 / Math.PI).toFixed(0);
+      const marker = alive === visible
+        ? (alive ? '✓' : '·')
+        : `MISMATCH(alive=${alive} visible=${visible})`;
+      const line = `[${i}] ${marker} ${start}°→${end}°`;
+      if (!byBand.has(f.band)) byBand.set(f.band, []);
+      byBand.get(f.band)!.push(line);
+    }
+    for (const band of [...byBand.keys()].sort()) {
+      const prefix = band === 0 ? 'band 0 (immune)' : `band ${band}`;
+      console.log(`  ${prefix}:`);
+      for (const l of byBand.get(band)!) console.log(`    ${l}`);
+    }
+  }
+
+  /**
+   * Given a world point, report whether physics AND visual agree.
+   * Prints the fragment the physics selects, and confirms its mesh
+   * is actually rendered there. If they disagree the rotation bug
+   * would reappear silently — this catches it.
+   */
+  checkPoint(x: number, z: number): void {
+    if (!this.layout) { console.log('[Arena] no layout'); return; }
+    const r = Math.sqrt(x * x + z * z);
+    const angleDeg = Math.atan2(z, x) * 180 / Math.PI;
+    console.log(`[Arena] check point (${x.toFixed(2)}, ${z.toFixed(2)})  r=${r.toFixed(2)}  angle=${angleDeg.toFixed(1)}°`);
+    let anyFound = false;
+    for (let i = 0; i < this.layout.fragments.length; i++) {
+      const f = this.layout.fragments[i];
+      if (!pointInFragment(x, z, f)) continue;
+      anyFound = true;
+      const alive = this.alive[i];
+      const visible = this.fragmentGroups[i]?.visible ?? false;
+      const tag = alive === visible ? 'OK' : '*** VISUAL/PHYSICS MISMATCH ***';
+      console.log(`  fragment ${i} band=${f.band} alive=${alive} visible=${visible} ${tag}`);
+    }
+    if (!anyFound) console.log('  no fragment contains this point (void)');
+    console.log(`  isOnArena: ${this.isOnArena(x, z)}`);
+  }
+
+  /** Toggle per-collapse console log. Off by default. */
+  toggleCollapseLog(): boolean {
+    this.debugLogCollapses = !this.debugLogCollapses;
+    console.log(`[Arena] collapse log ${this.debugLogCollapses ? 'ON' : 'OFF'}`);
+    return this.debugLogCollapses;
+  }
+
+  /** True if collapse log is ON; used by internal transitions to decide printing. */
+  get __collapseLogEnabled(): boolean { return this.debugLogCollapses; }
 
   // --- Shared helpers ----------------------------------------------------
 

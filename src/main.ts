@@ -208,7 +208,22 @@ requestAnimationFrame(loop);
 // console. __tune stays DEV-only since it's a content-authoring tool.
 if (import.meta.env.DEV || import.meta.env.VITE_SERVER_URL) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).__game = game;
+  const w = window as any;
+  w.__game = game;
+  // Direct helpers for the arena collapse diagnostics — no need to chain
+  // through __game.arena. Easy to reactivate if the render vs physics
+  // mismatch ever reappears. Console usage:
+  //   __arena.dump()                  — list fragments grouped by band
+  //   __arena.check(x, z)             — physics/visual agreement at point
+  //   __arena.compass()               — toggle N/S/E/W world-axis markers
+  //   __arena.logCollapses()          — toggle collapse/warning event log
+  w.__arena = {
+    dump:       () => game.arena.dumpFragments(),
+    check:      (x: number, z: number) => game.arena.checkPoint(x, z),
+    compass:    () => game.arena.toggleDebugCompass(),
+    logCollapses: () => game.arena.toggleCollapseLog(),
+  };
+  console.info('[main] diagnostics: window.__game, window.__arena');
 }
 
 if (import.meta.env.DEV) {
