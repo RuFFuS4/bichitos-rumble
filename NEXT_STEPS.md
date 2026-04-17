@@ -22,13 +22,21 @@
     adaptive timing (total ≈96s across all seed variations)
 
 ### NOT yet validated in production (next priority)
-- [ ] Two-browser remote test on bichitosrumble.com with the most recent
-      commit to confirm:
-      - Restart online reconnects cleanly into a fresh match (no Disconnected flash)
-      - No flicker on transitions (title ↔ match in either direction)
-      - Visible fragment == walkable fragment (both directions) — **critical
-        rotation bug fixed in c4ad1c4**, needs re-test
-      - Collapse pattern feels different across 3+ consecutive matches
+- [ ] Two-browser remote test on bichitosrumble.com to confirm the 4
+      fixes landed in the state-machine / gating pass:
+      - **R in online end-screen** actually re-queues (previously only
+        wired for offline `phase === 'ended'`; now wired inside the
+        `'online'` case when serverPhase is `'ended'` and also on tap)
+      - **SPACE spam during Connecting / searching** no longer bugs the
+        screen (confirm-action is gated behind `connectInProgress` flag;
+        `connectOnlineWith` is re-entry-protected)
+      - **No placeholder flicker** between "Online Multiplayer" click and
+        Waiting-for-opponent overlay (idle critters + arena are disposed
+        BEFORE the network `await`, not after `enterOnline` returns)
+      - **Variety across matches**: now 2 macro patterns selected by seed
+        (A ≈55%: band sweep outer→inner; B ≈45%: axis-split, sideA full
+        sweep then sideB full sweep). Verified 52/48 across 40 seeds,
+        total collapse in 93-104s for both.
 
 ### Critical bug fixed in c4ad1c4
 Fragment meshes used rotation.x = -π/2 which mirrors shape-Y onto world-Z.

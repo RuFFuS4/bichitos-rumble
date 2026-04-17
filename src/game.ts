@@ -104,6 +104,10 @@ export class Game {
   private portalRedirecting: boolean = false;
   /** Prevents double-fire of the async restart flow (R pressed twice fast). */
   private restartInProgress: boolean = false;
+  /** True while connectOnlineWith is awaiting server join. Prevents
+   *  second SPACE from spawning a parallel connect and leaving the
+   *  client with two half-initialised rooms. */
+  private connectInProgress: boolean = false;
   /** Currently highlighted mode on the title screen (keyboard navigation). */
   private titleMode: 'bots' | 'online' = 'bots';
 
@@ -148,14 +152,25 @@ export class Game {
       },
       (mode) => {
         if (this.phase !== 'title') return;
+        // Block click-confirm while a previous connect/restart is still in flight.
+        if (this.connectInProgress || this.restartInProgress) return;
         if (mode === 'online') this.enterOnlineCharacterSelect();
         else this.enterCharacterSelect();
       },
     );
 
     setEndTapHandler(() => {
+      // Fires from the end-screen DOM click. Works in both offline
+      // ('ended' phase) and online (phase 'online' + server phase 'ended').
+      // restartMatch itself decides offline-vs-online reconnect flow.
+      if (this.restartInProgress || this.connectInProgress) return;
       if (this.phase === 'ended') {
         this.restartMatch();
+        return;
+      }
+      if (this.phase === 'online') {
+        const serverPhase = (this.room?.state as any)?.phase;
+        if (serverPhase === 'ended') this.restartMatch();
       }
     });
 
@@ -369,10 +384,22 @@ export class Game {
    * when selectForOnline is true.
    */
   private async connectOnlineWith(critterName: string): Promise<void> {
+    if (this.connectInProgress) return;
+    this.connectInProgress = true;
     try {
       hideCharacterSelect();
       hidePreview();
+      // Dispose background idle critters + clear the arena BEFORE the
+      // network await. Otherwise the "Connecting..." overlay shows over
+      // the lingering title-screen placeholders for ~100-500ms — that
+      // "flicker of placeholders" the user reported.
+      for (const c of this.critters) c.dispose();
+      this.critters = [];
+      this.onlineCritters.forEach(c => c.dispose());
+      this.onlineCritters.clear();
+      this.arena.reset();
       showOverlay('Connecting...');
+
       const { connectToBrawl, getDefaultServerUrl } = await import('./network');
       const room = await connectToBrawl(getDefaultServerUrl(), { critterName });
       this.enterOnline(room);
@@ -384,6 +411,8 @@ export class Game {
       alert('Could not connect to multiplayer server.\n\n' +
             'In dev: make sure the server is running (cd server && npm run dev).\n' +
             'In prod: contact the site owner.');
+    } finally {
+      this.connectInProgress = false;
     }
   }
 
@@ -512,16 +541,23 @@ export class Game {
       }
     }
 
-    // Send current input to server (throttled implicitly by frame rate)
-    const move = getMoveVector();
-    sendInput(this.room, {
-      moveX: move.x,
-      moveZ: move.z,
-      headbutt: isHeld('headbutt'),
-      ability1: isHeld('ability1'),
-      ability2: isHeld('ability2'),
-      ultimate: isHeld('ultimate'),
-    });
+    // Gameplay input only while the server is actually playing. During
+    // waiting/countdown/ended the server ignores inputs anyway, but
+    // sending them is noise and risks side-effects when the local
+    // critter isn't ready (e.g. before first spawn patch arrives).
+    const phaseForInput = (this.room.state as any)?.phase;
+    const inputsActive = phaseForInput === 'playing' && !!this.player;
+    if (inputsActive) {
+      const move = getMoveVector();
+      sendInput(this.room, {
+        moveX: move.x,
+        moveZ: move.z,
+        headbutt: isHeld('headbutt'),
+        ability1: isHeld('ability1'),
+        ability2: isHeld('ability2'),
+        ultimate: isHeld('ultimate'),
+      });
+    }
 
     // Apply server state to each critter. Every access is guarded because
     // Colyseus schema v3 can deliver partial snapshots during join: a player
@@ -770,7 +806,7 @@ export class Game {
             updateTitleModeSelection(this.titleMode);
           }
         }
-        if (consumeMenuAction('confirm')) {
+        if (consumeMenuAction('confirm') && !this.connectInProgress && !this.restartInProgress) {
           if (this.titleMode === 'online') this.enterOnlineCharacterSelect();
           else this.enterCharacterSelect();
         }
@@ -789,7 +825,7 @@ export class Game {
           updateCharacterSelect(this.selectedIdx);
           this.swapPreviewForEntry(this.displayRoster[this.selectedIdx]);
         }
-        if (consumeMenuAction('confirm')) {
+        if (consumeMenuAction('confirm') && !this.connectInProgress && !this.restartInProgress) {
           const sel = this.displayRoster[this.selectedIdx];
           if (sel?.status === 'playable') {
             if (this.selectForOnline) {
@@ -900,9 +936,20 @@ export class Game {
         break;
       }
 
-      case 'online':
+      case 'online': {
         this.updateOnline(dt);
-        // T returns to title, dropping the online connection
+
+        // When the server has ended the current match, the end screen is up.
+        // R requeues for a new match; T returns to title. Both must work
+        // from `this.phase === 'online'` — the offline `case 'ended'` below
+        // never runs in multiplayer.
+        const serverState = this.room?.state as any;
+        const onServerEndScreen = serverState?.phase === 'ended';
+        if (onServerEndScreen && consumeMenuAction('restart') && !this.restartInProgress && !this.connectInProgress) {
+          this.restartMatch();
+          break;
+        }
+
         if (consumeMenuAction('back')) {
           this.room?.leave().catch(() => { /* ignore */ });
           this.room = null;
@@ -912,6 +959,7 @@ export class Game {
           this.enterTitle();
         }
         break;
+      }
 
       case 'ended':
         // Finish any pending fall animations so eliminated critters disappear

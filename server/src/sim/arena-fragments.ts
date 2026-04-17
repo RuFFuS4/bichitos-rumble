@@ -74,6 +74,9 @@ export const FRAG = {
     2: 0.5,  // mid splits half the time
     1: 0.3,  // inner splits occasionally
   },
+  /** Probability a given match uses the axis-split macro pattern instead
+   *  of the outer→inner band sweep. Keeps macro feel fresh between plays. */
+  patternBProbability: 0.45,
   // Timing model: distribute remaining delays adaptively so total collapse
   // duration fits a constant budget regardless of batch count.
   firstBatchDelay: 25,
@@ -137,11 +140,22 @@ export function generateArenaLayout(seed: number): ArenaLayout {
     }
   }
 
-  // --- Collapse schedule: band-aligned batches, outer → inner -----------
-  // Each batch stays WITHIN a single band so the alive/dead state is always
-  // visually legible. A band may split into 2 batches based on its
-  // splitProbability — keeps the collapse cadence fresh across matches.
-  // Result: 4-6 batches total, always band-aligned.
+  // --- Collapse schedule ------------------------------------------------
+  // Two macro patterns, selected per match by the seed so repeat plays
+  // don't all feel identical:
+  //
+  //   Pattern A (≈55%): band-aligned sweep outer → inner. A band may
+  //     split into two batches (see splitProbability). Classic, steady.
+  //
+  //   Pattern B (≈45%): axis-split sweep. Pick a random world axis; the
+  //     arena is divided into two halves by that axis. Each half is
+  //     collapsed OUTER → INNER as its own mini-sweep. Produces an
+  //     asymmetric "one-half-eaten-first" feel that is clearly legible
+  //     (no island states — sideA's band-1 is still attached to the
+  //     immune center, and the immune center itself never falls).
+  //
+  // Both patterns keep every batch band-aligned WITHIN a side, so the
+  // alive/dead state stays visually legible at every moment.
 
   const byBand = new Map<number, number[]>();
   for (const f of fragments) {
@@ -151,23 +165,58 @@ export function generateArenaLayout(seed: number): ArenaLayout {
   }
   for (const indices of byBand.values()) shuffle(indices, rand);
 
-  // Collect batch-groups (still as arrays of indices) in outer→inner order.
-  // We don't assign delays yet — we need to know the total batch count
-  // first so the timing fits in ~95-100s regardless of count.
+  const usePatternB = rand() < FRAG.patternBProbability;
+
   const groups: number[][] = [];
-  for (const bandIdx of [3, 2, 1]) {
-    const indices = byBand.get(bandIdx) ?? [];
-    if (indices.length === 0) continue;
-    const splitProb = FRAG.splitProbability[bandIdx as 1 | 2 | 3] ?? 0;
-    const shouldSplit = indices.length >= 6 && rand() < splitProb;
-    if (shouldSplit) {
-      // Split at roughly half, with small jitter so the cut isn't always 50/50
-      const mid = Math.floor(indices.length / 2);
-      const cut = mid + (rand() < 0.5 ? 0 : 1);
-      groups.push(indices.slice(0, cut));
-      groups.push(indices.slice(cut));
-    } else {
-      groups.push(indices);
+
+  if (usePatternB) {
+    // Pattern B: axis-split. Pick axis, split each band into two halves
+    // by the signed angle delta from the axis (mod 2π).
+    const axis = rand() * TWO_PI;
+    const TWO = TWO_PI;
+    const splitByAxis = (indices: number[]): [number[], number[]] => {
+      const a: number[] = [];
+      const b: number[] = [];
+      for (const i of indices) {
+        const f = fragments[i];
+        const mid = (f.startAngle + f.endAngle) / 2;
+        let delta = ((mid - axis) % TWO + TWO) % TWO;
+        if (delta < Math.PI) a.push(i); else b.push(i);
+      }
+      return [a, b];
+    };
+    const [aOuter, bOuter] = splitByAxis(byBand.get(3) ?? []);
+    const [aMid,   bMid]   = splitByAxis(byBand.get(2) ?? []);
+    const [aInner, bInner] = splitByAxis(byBand.get(1) ?? []);
+
+    // 50/50 coin flip: do sideA first or sideB first. More variety.
+    const aFirst = rand() < 0.5;
+    const [firstOuter, firstMid, firstInner, secondOuter, secondMid, secondInner] =
+      aFirst
+        ? [aOuter, aMid, aInner, bOuter, bMid, bInner]
+        : [bOuter, bMid, bInner, aOuter, aMid, aInner];
+
+    // 6 batches: each batch is ONE side of ONE band. ~4-6 pieces each.
+    // Any zero-length slice is skipped (defensive — shouldn't happen with
+    // current sector counts).
+    for (const g of [firstOuter, firstMid, firstInner, secondOuter, secondMid, secondInner]) {
+      if (g.length > 0) groups.push(g);
+    }
+  } else {
+    // Pattern A: band-aligned outer → inner, with optional intra-band split.
+    for (const bandIdx of [3, 2, 1]) {
+      const indices = byBand.get(bandIdx) ?? [];
+      if (indices.length === 0) continue;
+      const splitProb = FRAG.splitProbability[bandIdx as 1 | 2 | 3] ?? 0;
+      const shouldSplit = indices.length >= 6 && rand() < splitProb;
+      if (shouldSplit) {
+        const mid = Math.floor(indices.length / 2);
+        const cut = mid + (rand() < 0.5 ? 0 : 1);
+        groups.push(indices.slice(0, cut));
+        groups.push(indices.slice(cut));
+      } else {
+        groups.push(indices);
+      }
     }
   }
 
