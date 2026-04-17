@@ -8,16 +8,18 @@ export class GameState extends Schema {
   @type('string') phase: MatchPhase = 'waiting';
   @type('number') countdownLeft: number = 0;
   @type('number') matchTimer: number = 0;
-  @type('string') winnerSessionId: string = ''; // empty = no winner yet
-  @type('string') endReason: string = ''; // 'eliminated' | 'timeout' | 'draw' | 'opponent_left'
+  @type('string') winnerSessionId: string = '';
+  @type('string') endReason: string = '';
 
-  // Arena collapse (Bloque B 3a) — authoritative state mirrored by the client
-  /** Current standable radius. Falloff uses this; client mirrors it. */
+  // Arena (Bloque B 3b — irregular fragments)
+  /** Deterministic seed — both clients generate identical layout from this. */
+  @type('number') arenaSeed: number = 0;
+  /** Approximate current playable radius (max outer edge of alive fragments). */
   @type('number') arenaRadius: number = SIM.arena.radius;
-  /** Number of rings that have fully disappeared (0..collapseRings). */
-  @type('number') arenaCollapsedRings: number = 0;
-  /** Index of the ring currently warning red (-1 if none). */
-  @type('number') warningRingIndex: number = -1;
+  /** Number of batches that have fully collapsed (0 .. totalBatches). */
+  @type('number') arenaCollapseLevel: number = 0;
+  /** Batch index currently blinking red (-1 if none). */
+  @type('number') arenaWarningBatch: number = -1;
 
   @type({ map: PlayerSchema }) players = new MapSchema<PlayerSchema>();
 }

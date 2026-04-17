@@ -1,107 +1,97 @@
 // ---------------------------------------------------------------------------
-// Server-side arena collapse simulation (Bloque B 3a)
+// Server-side arena simulation (Bloque B 3b — irregular fragments)
 // ---------------------------------------------------------------------------
-//
-// Authoritative collapse timeline. Replicates the client's src/arena.ts logic
-// WITHOUT Three.js — pure numeric state. The client stops driving its own
-// timer in online mode and instead mirrors three fields from the server:
-//
-//   - arenaRadius       (current standable radius, used for falloff)
-//   - arenaCollapsedRings (how many rings have fully disappeared)
-//   - warningRingIndex    (-1, or the index of the ring blinking red)
-//
-// Ring index convention matches the client: 0 = innermost, ringCount-1 =
-// outermost. Collapses always start from the outermost still-standing ring.
+// Authoritative collapse timeline driven by a deterministic seed. Both
+// clients generate the identical layout from the same seed; the server only
+// broadcasts: seed, collapseLevel (completed batches), warningBatch (-1 or
+// current batch index), and an approximate radius for quick checks.
 // ---------------------------------------------------------------------------
 
-import { SIM } from './config.js';
-
-interface WarningState {
-  /** Index in the original rings array — 0=innermost, ringCount-1=outermost. */
-  ringIndex: number;
-  /** Seconds remaining until this ring actually disappears. */
-  timer: number;
-}
+import { generateArenaLayout, isPointOnArena, FRAG,
+         type ArenaLayout } from './arena-fragments.js';
 
 export class ArenaSim {
-  readonly maxRadius: number;
-  readonly ringCount: number;
-  readonly ringWidth: number;
-  readonly warningDuration: number;
+  readonly seed: number;
+  private layout: ArenaLayout;
+  private alive: boolean[];
 
-  currentRadius: number;
-  /** Rings scheduled for collapse so far (includes those currently warning). */
-  private collapseIndex: number = 0;
-  private collapseTimer: number = 0;
-  private warnings: WarningState[] = [];
+  // Collapse progression
+  private level = 0;               // completed batches
+  private timer = 0;               // time accumulator (since match start or last batch)
+  private warningActive = false;
+  private warningTimer = 0;
 
-  constructor(
-    maxRadius: number = SIM.arena.radius,
-    ringCount: number = SIM.arena.collapseRings,
-    warningDuration: number = SIM.arena.warningDuration,
-  ) {
-    this.maxRadius = maxRadius;
-    this.ringCount = ringCount;
-    this.ringWidth = maxRadius / ringCount;
-    this.warningDuration = warningDuration;
-    this.currentRadius = maxRadius;
+  constructor(seed: number) {
+    this.seed = seed;
+    this.layout = generateArenaLayout(seed);
+    this.alive = this.layout.fragments.map(() => true);
   }
 
-  /** Rings that have already fully disappeared (not the ones currently warning). */
-  get collapsedRings(): number {
-    return this.collapseIndex - this.warnings.length;
-  }
+  // --- Getters for state sync -------------------------------------------
 
-  /**
-   * Index of the ring currently warning (blinking red) or -1 if none.
-   * Only one ring warns at a time in Bloque B 3a since collapseInterval
-   * (20s) is always greater than warningDuration (1.5s). If multiple ever
-   * overlap we return the outermost, matching the "most urgent" semantics.
-   */
-  get warningRingIndex(): number {
-    if (this.warnings.length === 0) return -1;
-    let maxIdx = this.warnings[0].ringIndex;
-    for (let i = 1; i < this.warnings.length; i++) {
-      if (this.warnings[i].ringIndex > maxIdx) maxIdx = this.warnings[i].ringIndex;
-    }
-    return maxIdx;
+  /** How many batches have fully collapsed (0 .. batches.length). */
+  get collapseLevel(): number { return this.level; }
+
+  /** Batch index currently warning (-1 if none). */
+  get warningBatch(): number {
+    return this.warningActive ? this.level : -1;
   }
 
   /**
-   * Advance simulation by dt seconds. Schedules a new collapse when the
-   * interval elapses and finalises any warnings whose timer has expired.
+   * Approximate current playable radius — max outer edge of alive non-immune
+   * fragments. Used as a fast bounding-box check before the expensive
+   * per-fragment test, and synced to clients for camera framing.
    */
-  tick(dt: number, intervalSec: number = SIM.match.collapseInterval): void {
-    this.collapseTimer += dt;
-    if (this.collapseTimer >= intervalSec) {
-      this.collapseTimer = 0;
-      this.scheduleNextCollapse();
+  get currentRadius(): number {
+    let maxR = this.layout.immuneRadius;
+    for (let i = 0; i < this.layout.fragments.length; i++) {
+      if (this.alive[i] && !this.layout.fragments[i].immune) {
+        maxR = Math.max(maxR, this.layout.fragments[i].outerR);
+      }
     }
+    return maxR;
+  }
 
-    for (let i = this.warnings.length - 1; i >= 0; i--) {
-      const w = this.warnings[i];
-      w.timer -= dt;
-      if (w.timer <= 0) {
-        this.currentRadius = Math.max(0, this.currentRadius - this.ringWidth);
-        this.warnings.splice(i, 1);
+  // --- Simulation -------------------------------------------------------
+
+  tick(dt: number): void {
+    if (this.level >= this.layout.batches.length) return; // all collapsed
+
+    this.timer += dt;
+
+    if (this.warningActive) {
+      this.warningTimer -= dt;
+      if (this.warningTimer <= 0) {
+        // Collapse the batch
+        const batch = this.layout.batches[this.level];
+        for (const idx of batch.indices) this.alive[idx] = false;
+        this.level++;
+        this.warningActive = false;
+        this.timer = 0; // reset for next batch delay
+      }
+    } else {
+      // Check if it's time to start next warning
+      const batch = this.layout.batches[this.level];
+      if (this.timer >= batch.delay) {
+        this.warningActive = true;
+        this.warningTimer = FRAG.warningDuration;
       }
     }
   }
 
-  /** Schedule the next outer ring for collapse. Returns false when all gone. */
-  private scheduleNextCollapse(): boolean {
-    if (this.collapseIndex >= this.ringCount) return false;
-    const outerIdx = this.ringCount - 1 - this.collapseIndex;
-    this.warnings.push({ ringIndex: outerIdx, timer: this.warningDuration });
-    this.collapseIndex++;
-    return true;
+  // --- Spatial queries --------------------------------------------------
+
+  /** True if (x, z) stands on any alive fragment or the immune center. */
+  isOnArena(x: number, z: number): boolean {
+    return isPointOnArena(x, z, this.layout.fragments, this.alive);
   }
 
-  /** Reset to the initial state (full arena, no warnings, timer zeroed). */
   reset(): void {
-    this.collapseIndex = 0;
-    this.collapseTimer = 0;
-    this.currentRadius = this.maxRadius;
-    this.warnings.length = 0;
+    this.layout = generateArenaLayout(this.seed);
+    this.alive = this.layout.fragments.map(() => true);
+    this.level = 0;
+    this.timer = 0;
+    this.warningActive = false;
+    this.warningTimer = 0;
   }
 }

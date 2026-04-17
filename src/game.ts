@@ -210,8 +210,9 @@ export class Game {
     const playerConfig = CRITTER_PRESETS.find(p => p.name === entry?.displayName)
       ?? CRITTER_PRESETS[0]; // safety fallback
 
-    // Rebuild the roster: player first, bots from full CRITTER_PRESETS pool
+    // Rebuild the arena with a fresh random seed (offline)
     this.arena.reset();
+    this.arena.buildFromSeed((Math.random() * 0xFFFFFFFF) | 0);
     const roster = buildMatchRoster(
       playerConfig,
       CRITTER_PRESETS,
@@ -332,7 +333,7 @@ export class Game {
     this.critters = [];
     this.onlineCritters.clear();
 
-    // Reset arena to initial state (no collapse in Bloque A — server doesn't drive it)
+    // Reset arena — fragment layout will be built once the server sends the seed
     this.arena.reset();
 
     // Portals: individual per-client. Using the exit portal in online mode
@@ -450,13 +451,15 @@ export class Game {
     const state = this.room.state as any;
     if (!state || typeof state.players?.forEach !== 'function') return;
 
-    // Mirror the authoritative arena collapse state. Drives visibility,
-    // warning blink, and the radius used for any future client-side checks.
-    if (typeof state.arenaRadius === 'number') {
+    // Mirror the authoritative arena collapse state. The seed triggers
+    // fragment layout generation on first call; subsequent calls drive
+    // visibility and warning blink from server collapse level.
+    const seed = state.arenaSeed;
+    if (typeof seed === 'number' && seed !== 0) {
       this.arena.syncFromServer(
-        state.arenaRadius,
-        state.arenaCollapsedRings ?? 0,
-        state.warningRingIndex ?? -1,
+        seed,
+        state.arenaCollapseLevel ?? 0,
+        state.arenaWarningBatch ?? -1,
       );
     }
 
@@ -782,8 +785,8 @@ export class Game {
           c.respawnAt(rx, rz);
         }
 
-        // 7. Arena collapse
-        this.arena.update(effectiveDt, FEEL.match.collapseInterval);
+        // 7. Arena collapse (fragment-based, self-driven in offline)
+        this.arena.update(effectiveDt);
 
         // 8. Update HUD
         updateHUD(this.activeCount, Math.max(0, this.matchTimer));

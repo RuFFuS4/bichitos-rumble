@@ -65,10 +65,6 @@ export const SIM = {
   match: {
     duration: 120,
     countdown: 3,
-    // Interval between arena ring collapses. MUST match client's
-    // FEEL.match.collapseInterval — otherwise players would see
-    // collapse timing drift between server and visuals.
-    collapseInterval: 20,
   },
 
   lives: {
@@ -80,12 +76,8 @@ export const SIM = {
 
   arena: {
     radius: 12,
-    // Number of concentric rings that collapse one at a time.
-    // MUST match client's COLLAPSE_RINGS in src/arena.ts.
-    collapseRings: 6,
-    // Time a ring stays blinking red before it actually disappears.
-    // MUST match client's WARNING_DURATION in src/arena.ts.
-    warningDuration: 1.5,
+    // Fragment-specific tuning is in arena-fragments.ts (FRAG config)
+    // shared identically between server and client.
   },
 } as const;
 

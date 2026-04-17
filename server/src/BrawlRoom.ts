@@ -70,7 +70,7 @@ export class BrawlRoom extends Room<GameState> {
   private tickInterval: number = 0;
   private tickHandle: NodeJS.Timeout | null = null;
   private internal = new Map<string, InternalPlayerData>();
-  private arenaSim = new ArenaSim();
+  private arenaSim!: ArenaSim;
 
   onCreate(_options: unknown) {
     this.tickInterval = 1000 / SIM.tickRate;
@@ -148,6 +148,14 @@ export class BrawlRoom extends Room<GameState> {
 
     // Start countdown once both players are in
     if (this.state.players.size >= 2 && this.state.phase === 'waiting') {
+      // Generate deterministic arena seed — clients use this to build
+      // the identical fragment layout. Seed set BEFORE phase change so
+      // the value is included in the same patch that transitions to countdown.
+      const seed = (Math.random() * 0xFFFFFFFF) | 0;
+      this.arenaSim = new ArenaSim(seed);
+      this.state.arenaSeed = seed;
+      this.state.arenaRadius = this.arenaSim.currentRadius;
+
       this.state.phase = 'countdown';
       this.state.countdownLeft = SIM.match.countdown;
       this.state.matchTimer = SIM.match.duration;
@@ -213,12 +221,12 @@ export class BrawlRoom extends Room<GameState> {
     const players = [...this.state.players.values()];
 
     // Arena collapse simulation (authoritative). Tick first so falloff
-    // checks below use the freshly updated radius, then mirror into state
-    // for clients to render identical visuals.
+    // checks below use the freshly updated fragments, then mirror into
+    // state for clients to render identical visuals.
     this.arenaSim.tick(dt);
     this.state.arenaRadius = this.arenaSim.currentRadius;
-    this.state.arenaCollapsedRings = this.arenaSim.collapsedRings;
-    this.state.warningRingIndex = this.arenaSim.warningRingIndex;
+    this.state.arenaCollapseLevel = this.arenaSim.collapseLevel;
+    this.state.arenaWarningBatch = this.arenaSim.warningBatch;
 
     // 1. Process per-player input → intent (movement, headbutt trigger)
     for (const p of players) {
@@ -313,8 +321,8 @@ export class BrawlRoom extends Room<GameState> {
     // 4. Collisions + knockback (player vs player)
     resolveCollisions(players);
 
-    // 5. Falloff detection — uses the authoritative, shrinking radius
-    checkFalloff(players, this.internal, this.arenaSim.currentRadius);
+    // 5. Falloff detection — uses the authoritative fragment layout
+    checkFalloff(players, this.internal, (x, z) => this.arenaSim.isOnArena(x, z));
 
     // 6. Falling animation + respawn countdown
     const toRespawn = updateFalling(players, this.internal, dt);

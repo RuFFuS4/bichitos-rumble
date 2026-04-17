@@ -85,17 +85,17 @@ export function resolveCollisions(players: PlayerSchema[]): void {
 }
 
 /**
- * Check if a player is off the arena and transition to falling state.
- * `radius` is dynamic — in Bloque B 3a it shrinks as rings collapse.
+ * Falloff check using the authoritative ArenaSim fragment layout.
+ * A player falls if they're NOT on any alive fragment (including immune center).
  */
 export function checkFalloff(
   players: PlayerSchema[],
   internal: Map<string, InternalLike>,
-  radius: number,
+  isOnArena: (x: number, z: number) => boolean,
 ): void {
   for (const p of players) {
     if (!p.alive || p.falling || p.immunityTimer > 0) continue;
-    if (Math.sqrt(p.x * p.x + p.z * p.z) > radius) {
+    if (!isOnArena(p.x, p.z)) {
       p.falling = true;
       p.lives -= 1;
       const data = internal.get(p.sessionId);
