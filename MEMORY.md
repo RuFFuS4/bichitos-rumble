@@ -18,14 +18,15 @@
 - Public deploy: https://www.bichitosrumble.com (Vercel, auto-deploy from main).
 
 ## Known Physics Values
-- Arena radius: 12 units, 6 rings
+- Arena radius: 12 units, 29 fragments (1 immune + 28 collapsible)
+- Immune center radius: 2.5 units (never collapses)
 - Friction: frame-independent, halfLife 0.08s (input) / 0.03s (idle), deadZone 0.15
 - Max speed: 20
 - Acceleration scale: 1.6x
 - Rojo base speed: 10
 - Headbutt: anticipation 0.12s, lunge 0.15s, cooldown 0.45s, velocityBoost 4.0, recoil 0.35x
 - Collision: normalPush 3.0, headbuttMult 3.5 (Rojo: 14×3.5=49, contrast 16x vs normal)
-- Match duration: 120s, collapse interval: 20s (6 rings = arena gone at 120s)
+- Match duration: 120s, arena full collapse by ~53s
 
 ## Ability System Architecture
 - Config-driven: `AbilityDef` objects in `CRITTER_ABILITIES` record (`src/abilities.ts`)
@@ -41,11 +42,13 @@
 - Hit stop: headbutt 0.07s, groundPound 0.09s, generic 0.04s
 - Bot ability chance: ~2% per frame (Ability 1), ~1.5% per frame (Ability 2), bot accel factor 0.55
 
-## Future: Organic Arena Collapse
-- Replace circular rings with procedural irregular sectors
-- Collapse biased outside→inside but with randomness per match
-- Each match feels different, stays readable
-- Do NOT implement until game feel and combat are mature
+## Implemented: Organic Arena Collapse (Bloque B 3b)
+- ~~Replace circular rings with procedural irregular sectors~~ DONE
+- 29 fragments: 1 immune center (r=2.5) + 28 collapsible sectors (3 bands)
+- Seed-deterministic: both server and client generate identical layout from the same seed
+- Collapse: outer→inner, batches of 4-8 pieces, 8-10s timing, 2s warning blink
+- Server authoritative: arenaSeed + arenaCollapseLevel + arenaWarningBatch
+- Shared generator: `src/arena-fragments.ts` + `server/src/sim/arena-fragments.ts`
 
 ## Future: Reusable PreviewScene for menus
 - The `src/preview.ts` system (a second isolated WebGL renderer + scene)
@@ -127,12 +130,13 @@ Future restructure ideas (NOT yet implemented):
 - Top-right 🔊/🔇 button toggles mute, reflects state visually
 - AudioContext lazily created on first `play()` call (respects autoplay policies)
 
-## Arena Collapse (updated)
-- 6 rings, one collapses every 20s starting at ring 0 (outermost)
-- 1.5s warning BEFORE disappearance: ring blinks red with accelerating rate
-  (WARNING_BASE_RATE 4 → WARNING_PEAK_RATE 16 blinks/s)
-- Ring is STANDABLE during warning — `currentRadius` only shrinks when the
-  ring actually disappears, so players have real margin to step off
+## Arena Collapse (Bloque B 3b — fragments)
+- 29 irregular sectors: immune center (r=0-2.5) + 3 radial bands with angular jitter
+- Collapse in 4-5 batches (outer→inner), 4-8 fragments per batch
+- Timing: first batch at 20s, then 8-10s between batches, 2s warning blink per batch
+- Total collapse ~53s into a 120s match → ~67s endgame on immune center
+- Both offline and online use the same seed-deterministic system
+- Tuning centralised in FRAG config (`arena-fragments.ts`)
 
 ## Immunity Blink
 - Materials MUST be initialized with `transparent: true` from the start.

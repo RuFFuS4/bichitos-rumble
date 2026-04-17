@@ -1208,3 +1208,46 @@ This eliminates ~15 material.color/emissive writes per frame in stable state.
 
 ### Bundle
 - 769 KB JS (209 KB gzip) — includes Colyseus; pre-existing chunking advisory
+
+---
+
+## 2026-04-17 — Bloque B #3b: Irregular Fragment Collapse
+
+### What changed
+Replaced the uniform 6-ring collapse system with seed-deterministic irregular
+sector fragments. Both offline and online modes now use the same fragment system.
+
+### Architecture
+- **Shared generator** (`src/arena-fragments.ts` + `server/src/sim/arena-fragments.ts`):
+  mulberry32 PRNG seeded per match. Generates 29 fragments: 1 immune center
+  (r=0..2.5) + 28 collapsible sectors across 3 radial bands with angular jitter (25%).
+  Collapse schedule: outer band → inner, shuffled within each band, 4-5 batches of
+  4-8 pieces. Mixed timing: first batch at 20s, then 8-10s between.
+- **Server ArenaSim**: seed-based, tracks alive[], collapseLevel, warningBatch.
+  `isOnArena(x,z)` checks all alive fragments (polar sector test).
+- **Client Arena**: ExtrudeGeometry sectors + CircleGeometry immune center.
+  `buildFromSeed(seed)` for deterministic mesh generation. Offline: `update(dt)`.
+  Online: `syncFromServer(seed, level, warningBatch)`.
+
+### State sync (GameState)
+- `arenaSeed`: sent once per match (deterministic layout generation)
+- `arenaCollapseLevel`: completed batch count (0..totalBatches)
+- `arenaWarningBatch`: batch currently blinking (-1 if none)
+- `arenaRadius`: approximate max playable radius (for camera/respawn)
+
+### Verified behaviour
+- 120s simulation: 4 batches collapse by t≈53s, center immune persists
+- isOnArena spatial queries correct (center=true, void=false)
+- Both compilation targets clean, bundle +32KB (800 KB total)
+
+### Files created
+- `src/arena-fragments.ts`, `server/src/sim/arena-fragments.ts`
+
+### Files changed
+- `src/arena.ts` — full rewrite (fragment meshes, buildFromSeed, syncFromServer)
+- `src/game.ts` — offline: buildFromSeed on countdown; online: seed-based sync
+- `server/src/sim/arena.ts` — full rewrite (fragment-based ArenaSim)
+- `server/src/state/GameState.ts` — new fields (arenaSeed, arenaCollapseLevel, etc.)
+- `server/src/sim/physics.ts` — checkFalloff now receives isOnArena callback
+- `server/src/BrawlRoom.ts` — seed generation on countdown, fragment state sync
+- `server/src/sim/config.ts` — removed ring-specific values
