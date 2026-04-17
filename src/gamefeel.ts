@@ -73,8 +73,9 @@ export const FEEL = {
   // --- Match ---
   match: {
     duration: 120,            // seconds total (raised from 90 for 3-life matches)
-    collapseInterval: 20,     // seconds between arena ring collapses (raised from 15)
     countdown: 3,             // seconds before match starts
+    // Arena collapse timing lives in `arena-fragments.ts` FRAG config
+    // (replaces the old ring-based collapseInterval).
   },
 
   // --- Lives & Respawn ---

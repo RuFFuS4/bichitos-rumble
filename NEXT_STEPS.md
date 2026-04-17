@@ -7,42 +7,32 @@
 ## Current status (2026-04-17)
 
 ### Completed
-- [x] **Bloque A** — Multiplayer vertical slice (Colyseus, 2 players, Sergei, deploy)
+- [x] **Bloque A** — Multiplayer vertical slice (Colyseus, 2 players, deploy)
 - [x] **Bloque B #1** — ground_pound (K) end-to-end online
 - [x] **Bloque B #2** — Character select online + Trunk as 2nd playable
-- [x] **Bloque B #3 (portal)** — Portal as individual forfeit (server-authoritative)
-- [x] **Bloque B #3a** — Arena collapse sync (server-authoritative rings)
+- [x] **Bloque B #3 (portal)** — Portal as individual forfeit
+- [x] **Bloque B #3a** — Arena collapse sync (server-authoritative rings, now superseded)
 - [x] **Bloque B #3b** — Irregular fragment collapse (seed-deterministic sectors)
-- [x] **3b polish pass 1** — fragment Y alignment, longer warning (3s), stretched
-  timing (~97s full collapse), band-aligned batches (no cross-band visual gaps)
-- [x] **Title menu redesign** — explicit "vs Bots" and "Online Multiplayer"
-  buttons, no auto-start on SPACE, arrow keys + ENTER / mouse click to confirm
-- [x] **Online restart** — end-screen R/tap now re-queues for a new online match
-  with same critter instead of launching an offline bot match
+- [x] **Title menu redesign** — "vs Bots" vs "Online Multiplayer" explicit buttons
+- [x] **3b hardening (remote-test feedback)**:
+  - Online restart actually reconnects (server room lock + client await-leave)
+  - Clean transitions to title (arena.reset + idle critter rebuild)
+  - Per-band distinct colors (no more visual merge when middle band collapses)
+  - Collapse variety: 4-6 batches per match, randomised sector counts,
+    adaptive timing (total ≈96s across all seed variations)
 
-### Next up (priority order)
+### NOT yet validated in production (next priority)
+- [ ] Two-browser remote test on bichitosrumble.com with the most recent
+      commit to confirm:
+      - Restart online reconnects cleanly into a fresh match
+      - No flicker on transitions (title ↔ match in either direction)
+      - Visible fragment == walkable fragment (both directions)
+      - Collapse pattern feels different across 3+ consecutive matches
 
-1. **Validate 3b in production** — Open 2 tabs on bichitosrumble.com, play online,
-   verify fragments collapse identically on both clients. Check: immune center stays,
-   outer fragments go first, warning blink visible, falloff works on collapsed areas.
-
-2. **Frenzy feedback** (if cheap) — L key ability. Server already buffs speed/mass.
-   Client needs visual: emissive glow + camera pulse + sound. Skip if >2h.
-
-3. **Reconnection** (if cheap) — Colyseus `allowReconnection(client, seconds)`.
-   Client auto-reconnects on disconnect. Skip if >3h.
-
-4. **Polish pass** — Fragment visual gaps between bands (thin void strips for readability),
-   camera framing adjusts to currentRadius as arena shrinks, end-game endReason
-   precision (portal_exit vs disconnect vs eliminated vs timeout).
-
-5. **More playable characters** — 9 roster characters have GLB files in Downloads.
-   Pipeline: optimize-models.mjs → public/models/critters/ → CRITTER_PRESETS entry +
-   abilities + server config. Priority: characters with distinct mass/speed from
-   Sergei and Trunk.
-
-6. **Submission prep** — Google Form (user task), Lighthouse measurement on prod URL,
-   SUBMISSION_CHECKLIST review.
+### Blocked on production validation (DO NOT start before passing above)
+- [ ] Frenzy feedback (L) — visual+audio for Sergei's ultimate
+- [ ] More playable characters (GLB models ready, need config + ability kits)
+- [ ] Reconnection support (Colyseus `allowReconnection`)
 
 ### Skipped / deferred (with reason)
 
@@ -57,16 +47,55 @@
 | Advanced cosmetics | Non-goal for early phase | Post-jam |
 | Warp animation on portal | Pure polish, low priority | If time |
 | Stats display in end screen | Nice-to-have only | If time |
+| More complex irregular terrain | Explicit deferral — current fragment system considered "temporary but safe" | After MVP validation |
 
-### Key architecture notes for dispatch sessions
+## Technical debt snapshot (after 3b hardening)
 
-- **Branch**: work on `dev`, merge to `main` for deploy. Both Vercel (client) and
-  Railway (server) auto-deploy from `main`.
-- **Server path**: `server/` — Colyseus 0.16, schema v3, multi-stage Dockerfile for Railway.
-- **Arena fragments**: `src/arena-fragments.ts` and `server/src/sim/arena-fragments.ts`
-  must be kept **identical** (shared deterministic generator, duplicated because no
-  shared package in the monorepo).
-- **Colyseus schema anti-pattern**: NEVER put non-synced fields on Schema classes.
-  Use `BrawlRoom.internal` Map for server-only per-player data.
-- **Offline mode must not regress**: all online features must leave the offline
-  bot-match path working.
+### Clean to leave as is
+- Fragment generator duplicated between client and server: this is the
+  explicit "simple modularity" pattern (CLAUDE.md favours no shared package
+  for MVP). Kept in sync by copy-on-edit.
+- Colyseus v3 state callback pattern via `getStateCallbacks()`: quirky
+  but established and working; don't refactor.
+- `BrawlRoom.internal` Map for non-synced per-player data: this is the
+  anti-pattern fix from Bloque A; keep.
+
+### Worth cleaning NOW (quick, quirky to touch later)
+- None right now. After the 3b rewrite, the arena module is clean.
+
+### Known debt to accept for the jam
+- **Patch latency on fragment collapse**: the server broadcasts alive/dead
+  transitions at tick rate (30Hz). On a collapse boundary, a client may
+  render a piece for 1-2 frames AFTER the server marks it dead. Not worth
+  fixing — warning blink gives 3s notice, and the practical impact is a
+  visual glitch not a game-feel issue.
+- **Batch structure fixed to outer→inner**: we could vary the direction
+  (e.g. sometimes inner-first) but it breaks the "encroaching destruction"
+  game-design fantasy. Intentionally out of scope.
+- **Offline and online generate seeds separately**: no common abstraction.
+  Fine for the jam; post-MVP we could extract a shared seeded engine.
+
+### .md files to update later (not urgent)
+- `MEMORY.md` — already updated in prev commit, will need another pass
+  post-jam to prune "Future:" sections that are now implemented.
+- `BUILD_LOG.md` — chronological, no action needed.
+- `SUBMISSION_CHECKLIST.md` — review close to deadline (Lighthouse, Google
+  form, deployment URL confirmation).
+- `CHARACTER_DESIGN.md` / `GAME_DESIGN.md` — will need content pass when
+  more characters ship (not now).
+
+## Key architecture notes for dispatch sessions
+
+- **Branch**: work on `dev`, merge to `main` for deploy. Both Vercel (client)
+  and Railway (server) auto-deploy from `main`.
+- **Server path**: `server/` — Colyseus 0.16, schema v3, multi-stage
+  Dockerfile for Railway.
+- **Arena fragments**: `src/arena-fragments.ts` and
+  `server/src/sim/arena-fragments.ts` MUST be kept **byte-identical**
+  (`sed 's/CLIENT copy/SERVER copy/' src/arena-fragments.ts > server/...`).
+- **Colyseus schema anti-pattern**: NEVER put non-synced fields on Schema
+  classes. Use `BrawlRoom.internal` Map for server-only per-player data.
+- **Match-end on server**: always go through `BrawlRoom.endMatch()` — it
+  sets phase + reason + winner AND locks the room so restart works.
+- **Offline mode must not regress**: all online features must leave the
+  offline bot-match path working.
