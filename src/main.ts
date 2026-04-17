@@ -157,18 +157,14 @@ const game = new Game(scene);
 // available. In dev: always shown (defaults to ws://localhost:2567).
 // In prod: requires VITE_SERVER_URL to be set at build time, otherwise
 // the button is removed from the DOM so users never see a broken path.
+// The online mode button is feature-gated: only visible if a server URL
+// is configured. In dev we always show it (defaults to ws://localhost:2567).
+// Click handling for both title buttons lives in hud.ts via setTitleModeHandlers.
 const btnOnline = document.getElementById('btn-online');
 const hasServerUrl = !!(import.meta.env.VITE_SERVER_URL) || !!import.meta.env.DEV;
 if (btnOnline && !hasServerUrl) {
   btnOnline.remove();
   console.info('[Main] online mode disabled (no VITE_SERVER_URL)');
-} else if (btnOnline) {
-  btnOnline.addEventListener('click', (e) => {
-    e.stopPropagation(); // don't trigger the title tap handler
-    // Open character select in "online" mode. Confirming a playable
-    // character there connects to the server with that critterName.
-    game.enterOnlineCharacterSelect();
-  });
 }
 
 // Game loop

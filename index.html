@@ -301,24 +301,39 @@
       background-clip: text;
       color: transparent;
     }
-    #title-screen .title-mode-btn {
+    #title-screen .title-mode-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
       margin-top: 24px;
-      padding: 10px 22px;
-      font-size: 15px;
+      align-items: center;
+      pointer-events: auto;
+    }
+    #title-screen .title-mode-btn {
+      min-width: 320px;
+      padding: 12px 26px;
+      font-size: 16px;
       font-weight: 600;
       letter-spacing: 1px;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.25);
-      color: rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.06);
+      border: 2px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.78);
       border-radius: 6px;
       cursor: pointer;
       pointer-events: auto;
-      transition: background 0.15s, border-color 0.15s;
+      transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.08s;
       font-family: inherit;
     }
     #title-screen .title-mode-btn:hover {
-      background: rgba(255,255,255,0.15);
-      border-color: rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.45);
+      color: rgba(255,255,255,0.95);
+    }
+    #title-screen .title-mode-btn.selected {
+      background: rgba(231, 76, 60, 0.22);
+      border-color: #e74c3c;
+      color: #ffffff;
+      box-shadow: 0 0 18px rgba(231, 76, 60, 0.35);
     }
     #title-screen .title-mode-btn:active {
       transform: scale(0.97);
@@ -763,9 +778,12 @@
   <div id="title-screen" class="full-overlay hidden">
     <h1 class="game-title">BICHITOS<br><span class="rumble">RUMBLE</span></h1>
     <p class="tagline">HEADBUTT YOUR RIVALS INTO THE VOID</p>
-    <div class="prompt desktop-only">Press <kbd>SPACE</kbd> to start</div>
-    <div class="prompt touch-only">Tap to start</div>
-    <button id="btn-online" class="title-mode-btn">🌐 Play Online (2P)</button>
+    <div class="title-mode-buttons">
+      <button id="btn-vs-bots" class="title-mode-btn selected" data-mode="bots">🤖 vs Bots</button>
+      <button id="btn-online" class="title-mode-btn" data-mode="online">🌐 Online Multiplayer (2P)</button>
+    </div>
+    <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> switch · <kbd>ENTER</kbd> confirm</div>
+    <div class="prompt touch-only">Tap a mode to play</div>
     <div class="controls-hint desktop-only">WASD move · SPACE headbutt · J/K abilities · R restart</div>
     <div class="controls-hint touch-only">Joystick to move · buttons for headbutt and abilities</div>
   </div>

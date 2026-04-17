@@ -219,27 +219,67 @@ export function setSlotClickHandler(handler: (idx: number) => void): void {
   slotClickHandler = handler;
 }
 
-// Tap-anywhere handlers on full-screen overlays — mobile menu UX.
-// Registered once at module init; the callbacks can be swapped by game.ts.
-let titleTapHandler: (() => void) | null = null;
+// Tap-anywhere handler on the end screen — mobile menu UX.
+// Title screen uses explicit mode buttons, not tap-anywhere, to avoid
+// starting a match accidentally.
 let endTapHandler: (() => void) | null = null;
 
-export function setTitleTapHandler(handler: () => void): void {
-  titleTapHandler = handler;
-}
 export function setEndTapHandler(handler: () => void): void {
   endTapHandler = handler;
 }
 
-titleScreen.addEventListener('click', () => {
-  titleTapHandler?.();
-});
 endScreen.addEventListener('click', (e) => {
   // Don't trigger if clicking on the kbd hint elements (let them be passive)
   const target = e.target as HTMLElement;
   if (target.closest('kbd')) return;
   endTapHandler?.();
 });
+
+// --- Title screen mode buttons -------------------------------------------
+
+const btnVsBots = document.getElementById('btn-vs-bots') as HTMLButtonElement | null;
+const btnOnline = document.getElementById('btn-online') as HTMLButtonElement | null;
+
+export type TitleMode = 'bots' | 'online';
+
+let titleModeSelectHandler: ((mode: TitleMode) => void) | null = null;
+let titleModeConfirmHandler: ((mode: TitleMode) => void) | null = null;
+
+/**
+ * Wire the title screen's mode buttons.
+ *  onSelect  — fired when the user hovers/focuses a mode (arrow keys too)
+ *  onConfirm — fired when the user clicks a mode or presses Enter
+ */
+export function setTitleModeHandlers(
+  onSelect: (mode: TitleMode) => void,
+  onConfirm: (mode: TitleMode) => void,
+): void {
+  titleModeSelectHandler = onSelect;
+  titleModeConfirmHandler = onConfirm;
+}
+
+btnVsBots?.addEventListener('click', () => {
+  titleModeSelectHandler?.('bots');
+  titleModeConfirmHandler?.('bots');
+});
+btnOnline?.addEventListener('click', () => {
+  titleModeSelectHandler?.('online');
+  titleModeConfirmHandler?.('online');
+});
+// Hover on desktop highlights the mode (keyboard focus stays in sync)
+btnVsBots?.addEventListener('mouseenter', () => titleModeSelectHandler?.('bots'));
+btnOnline?.addEventListener('mouseenter', () => titleModeSelectHandler?.('online'));
+
+/** Visually mark which title-mode button is currently selected. */
+export function updateTitleModeSelection(mode: TitleMode): void {
+  btnVsBots?.classList.toggle('selected', mode === 'bots');
+  btnOnline?.classList.toggle('selected', mode === 'online');
+}
+
+/** True if the online button is present (feature-gated by main.ts). */
+export function isOnlineModeAvailable(): boolean {
+  return !!btnOnline && btnOnline.isConnected;
+}
 
 /** Cached roster + presets for repaint calls. */
 let cachedRoster: RosterEntry[] = [];

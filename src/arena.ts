@@ -85,9 +85,12 @@ function createFragmentMesh(f: FragmentDef): THREE.Group {
     side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  // ExtrudeGeometry: shape in XY, extruded +Z. Rotate so the shape
-  // lies in XZ (horizontal) with thickness going DOWN (-Y).
+  // ExtrudeGeometry: shape in XY, extruded +Z. After rotating -π/2 around X,
+  // the +Z extrusion points UP (+Y), so the fragment would float above the
+  // ground plane. Shift down by `h` so the top face sits at y=0 (matching
+  // the immune center) and the body extends down to y=-h.
   mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = -h;
   mesh.receiveShadow = true;
   group.add(mesh);
 

@@ -14,7 +14,7 @@ import {
   showCharacterSelect, updateCharacterSelect, hideCharacterSelect,
   showEndScreen, hideEndScreen,
   showMatchHud,
-  setSlotClickHandler, setTitleTapHandler, setEndTapHandler,
+  setSlotClickHandler, setTitleModeHandlers, updateTitleModeSelection, isOnlineModeAvailable, setEndTapHandler,
   setPortalLegend, setPortalToggleHandler,
   type EndResult,
 } from './hud';
@@ -102,6 +102,8 @@ export class Game {
   private selectForOnline: boolean = false;
   /** Guard so the online portal hit only triggers once per match. */
   private portalRedirecting: boolean = false;
+  /** Currently highlighted mode on the title screen (keyboard navigation). */
+  private titleMode: 'bots' | 'online' = 'bots';
 
 
   constructor(scene: THREE.Scene) {
@@ -134,11 +136,20 @@ export class Game {
       }
     });
 
-    setTitleTapHandler(() => {
-      if (this.phase === 'title') {
-        this.enterCharacterSelect();
-      }
-    });
+    // Title screen mode buttons — click directly confirms that mode.
+    // Hover/arrow keys only HIGHLIGHT; Enter confirms the highlighted one.
+    setTitleModeHandlers(
+      (mode) => {
+        if (this.phase !== 'title') return;
+        this.titleMode = mode;
+        updateTitleModeSelection(mode);
+      },
+      (mode) => {
+        if (this.phase !== 'title') return;
+        if (mode === 'online') this.enterOnlineCharacterSelect();
+        else this.enterCharacterSelect();
+      },
+    );
 
     setEndTapHandler(() => {
       if (this.phase === 'ended') {
@@ -178,6 +189,12 @@ export class Game {
     hideEndScreen();
     hideOverlay();
     hidePreview();
+    // Ensure the mode highlight matches the current state (default: bots)
+    // If online isn't available (no server URL), force-select bots.
+    if (!isOnlineModeAvailable() && this.titleMode === 'online') {
+      this.titleMode = 'bots';
+    }
+    updateTitleModeSelection(this.titleMode);
   }
 
   private enterCharacterSelect(): void {
@@ -679,8 +696,17 @@ export class Game {
       case 'title':
         // Let critters idle (bob animation, no input)
         for (const c of this.critters) c.update(dt);
+        // Arrow left/right toggles mode highlight. If online isn't
+        // available, left/right are ignored (only one mode exists).
+        if (consumeMenuAction('left') || consumeMenuAction('right')) {
+          if (isOnlineModeAvailable()) {
+            this.titleMode = this.titleMode === 'bots' ? 'online' : 'bots';
+            updateTitleModeSelection(this.titleMode);
+          }
+        }
         if (consumeMenuAction('confirm')) {
-          this.enterCharacterSelect();
+          if (this.titleMode === 'online') this.enterOnlineCharacterSelect();
+          else this.enterCharacterSelect();
         }
         break;
 

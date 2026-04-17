@@ -63,12 +63,16 @@ export const FRAG = {
     { inner: 8.5, outer: 12,  baseSectors: 10 },
   ],
   sectorJitter: 0.25,      // fraction of base angle width
-  batchSizeMin: 4,
+  // Batch sizes tuned to yield ~4 batches over 28 collapsible fragments
+  // (28 / 7 = 4 exact, 28 / 8 leaves a 4-piece remainder — still 4 batches).
+  batchSizeMin: 7,
   batchSizeMax: 8,
-  firstBatchDelay: 20,      // seconds into playing before first collapse
-  batchDelayMin: 8,
-  batchDelayMax: 10,
-  warningDuration: 2.0,     // seconds of blinking before disappear
+  // Total collapse target ≈ 97s of a 120s match, so ~23s of endgame on the
+  // immune center: 25 (first delay) + 3 (warn) + 3 × (20 + 3) = 97.
+  firstBatchDelay: 25,     // seconds into playing before first collapse
+  batchDelayMin: 18,
+  batchDelayMax: 22,
+  warningDuration: 3.0,    // seconds of blinking before disappear
   arenaHeight: 1.2,
   warningBaseRate: 4,
   warningPeakRate: 16,
