@@ -26,12 +26,10 @@ const BAND_COLORS: Record<number, number> = {
   2: 0x4a6741, // mid band
   3: 0x3a5331, // outer band — darkest
 };
-const BAND_SIDE_COLORS: Record<number, number> = {
-  0: 0x46704b,
-  1: 0x3a5331,
-  2: 0x2e4428,
-  3: 0x253820,
-};
+// Only the immune center uses a dedicated side-wall color. Extruded
+// sectors use a single material for top + sides (lighting + DoubleSide
+// gives enough visual variation).
+const IMMUNE_SIDE_COLOR = 0x46704b;
 
 // --- Fragment mesh builder -----------------------------------------------
 
@@ -49,7 +47,7 @@ function createFragmentMesh(f: FragmentDef): THREE.Group {
     group.add(top);
 
     const sideGeo = new THREE.CylinderGeometry(f.outerR, f.outerR, h, CENTER_SEGMENTS, 1, true);
-    const sideMat = new THREE.MeshStandardMaterial({ color: BAND_SIDE_COLORS[0], side: THREE.DoubleSide });
+    const sideMat = new THREE.MeshStandardMaterial({ color: IMMUNE_SIDE_COLOR, side: THREE.DoubleSide });
     const side = new THREE.Mesh(sideGeo, sideMat);
     side.position.y = -h / 2;
     group.add(side);
@@ -287,12 +285,6 @@ export class Arena {
     if (warningBatch >= 0 && warningBatch < (this.layout?.batches.length ?? 0)) {
       this.blinkBatch(this.layout!.batches[warningBatch].indices);
     }
-
-    // Optional collapse logging — emits one line per batch transition
-    // so the console clearly shows what collapsed and when.
-    if (this.debugLogCollapses && collapseLevel > 0 && this.syncedLevel === collapseLevel) {
-      // nothing new; avoid duplicate logs
-    }
   }
 
   // --- Diagnostic helpers (toggled via window.__arena / window.__game.arena)
@@ -393,9 +385,6 @@ export class Arena {
     console.log(`[Arena] collapse log ${this.debugLogCollapses ? 'ON' : 'OFF'}`);
     return this.debugLogCollapses;
   }
-
-  /** True if collapse log is ON; used by internal transitions to decide printing. */
-  get __collapseLogEnabled(): boolean { return this.debugLogCollapses; }
 
   // --- Shared helpers ----------------------------------------------------
 

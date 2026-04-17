@@ -120,10 +120,6 @@ export function isPlayableCritter(name: string): boolean {
   return name in CRITTER_CONFIGS;
 }
 
-/** Legacy export — still used by physics/abilities. Will be removed once */
-/** those modules read config via player.critterName. */
-export const SERGEI_CONFIG = CRITTER_CONFIGS.Sergei;
-
 // Spawn positions for up to 4 players (we use first 2 in Bloque A)
 export const SPAWN_POSITIONS: ReadonlyArray<[number, number]> = [
   [0, -6],
