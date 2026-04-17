@@ -57,22 +57,30 @@ export interface ArenaLayout {
 export const FRAG = {
   maxRadius: 12,
   immuneRadius: 2.5,
+  // Each band has a sector-count range. The PRNG picks a value in [min, max]
+  // per band per match — small density variations keep repeat plays fresh
+  // without changing the overall cake-slice feel.
   bands: [
-    { inner: 2.5, outer: 5.5, baseSectors: 8 },
-    { inner: 5.5, outer: 8.5, baseSectors: 10 },
-    { inner: 8.5, outer: 12,  baseSectors: 10 },
+    { inner: 2.5, outer: 5.5, sectorMin: 7, sectorMax: 9  }, // band 1 inner
+    { inner: 5.5, outer: 8.5, sectorMin: 9, sectorMax: 11 }, // band 2 mid
+    { inner: 8.5, outer: 12,  sectorMin: 9, sectorMax: 11 }, // band 3 outer
   ],
-  sectorJitter: 0.25,      // fraction of base angle width
-  // Timing target: full collapse by t≈97s of a 120s match (~23s endgame on
-  // immune center). Four batches, band-aligned:
-  //   Batch 0: 5-6 of band 3  (delay = firstBatchDelay)
-  //   Batch 1: rest of band 3 (delay = batchDelay*)
-  //   Batch 2: all of band 2  (delay = batchDelay*)
-  //   Batch 3: all of band 1  (delay = batchDelay*)
-  firstBatchDelay: 25,     // seconds into playing before first collapse
-  batchDelayMin: 18,
-  batchDelayMax: 22,
-  warningDuration: 3.0,    // seconds of blinking before disappear
+  sectorJitter: 0.28,      // fraction of base angle width
+  // Collapse schedule: outer band first, then mid, then inner. Each band
+  // may optionally split into 2 batches (probability below) so match length
+  // can vary between 4 and 6 batches. Target is still ≈97s full collapse.
+  splitProbability: {
+    3: 1.0,  // outer always splits (too big for one batch visually)
+    2: 0.5,  // mid splits half the time
+    1: 0.3,  // inner splits occasionally
+  },
+  // Timing model: distribute remaining delays adaptively so total collapse
+  // duration fits a constant budget regardless of batch count.
+  firstBatchDelay: 25,
+  targetTotalDuration: 96, // seconds to full collapse (≈ 24s endgame)
+  delayJitter: 0.2,        // ±20% jitter around the computed mean
+  minBatchDelay: 8,        // hard floor so batches are never too close
+  warningDuration: 3.0,
   arenaHeight: 1.2,
   warningBaseRate: 4,
   warningPeakRate: 16,
@@ -98,13 +106,14 @@ export function generateArenaLayout(seed: number): ArenaLayout {
     immune: true,
   });
 
-  // Bands 1-3: collapsible sectors with angular jitter
+  // Bands 1-3: collapsible sectors with angular jitter. Sector count is
+  // randomised per band so each match has a slightly different density.
   for (let b = 0; b < FRAG.bands.length; b++) {
     const band = FRAG.bands[b];
-    const n = band.baseSectors;
+    const range = band.sectorMax - band.sectorMin + 1;
+    const n = band.sectorMin + Math.floor(rand() * range);
     const baseAngle = TWO_PI / n;
 
-    // Generate jittered boundary angles
     const angles: number[] = [];
     for (let s = 0; s < n; s++) {
       const jitter = (rand() - 0.5) * baseAngle * FRAG.sectorJitter;
@@ -130,12 +139,9 @@ export function generateArenaLayout(seed: number): ArenaLayout {
 
   // --- Collapse schedule: band-aligned batches, outer → inner -----------
   // Each batch stays WITHIN a single band so the alive/dead state is always
-  // visually legible: the user never sees a ring with a single missing
-  // piece they might miss from the isometric camera angle. Structure:
-  //   - Band 3 (outer, 10 sectors): split into 2 batches of 5
-  //   - Band 2 (mid, 10 sectors):   1 batch of 10
-  //   - Band 1 (inner, 8 sectors):  1 batch of 8
-  // Total: 4 batches, pacing increases (5, 5, 10, 8 pieces).
+  // visually legible. A band may split into 2 batches based on its
+  // splitProbability — keeps the collapse cadence fresh across matches.
+  // Result: 4-6 batches total, always band-aligned.
 
   const byBand = new Map<number, number[]>();
   for (const f of fragments) {
@@ -145,22 +151,46 @@ export function generateArenaLayout(seed: number): ArenaLayout {
   }
   for (const indices of byBand.values()) shuffle(indices, rand);
 
-  const randDelay = () =>
-    FRAG.batchDelayMin + rand() * (FRAG.batchDelayMax - FRAG.batchDelayMin);
-
-  const batches: BatchDef[] = [];
-  const band3 = byBand.get(3) ?? [];
-  const band2 = byBand.get(2) ?? [];
-  const band1 = byBand.get(1) ?? [];
-
-  // Band 3 split in half — PRNG decides the exact cut point (5 or 6)
-  const b3Cut = 5 + Math.floor(rand() * 2); // 5 or 6
-  batches.push({ indices: band3.slice(0, b3Cut), delay: FRAG.firstBatchDelay });
-  if (band3.length > b3Cut) {
-    batches.push({ indices: band3.slice(b3Cut), delay: randDelay() });
+  // Collect batch-groups (still as arrays of indices) in outer→inner order.
+  // We don't assign delays yet — we need to know the total batch count
+  // first so the timing fits in ~95-100s regardless of count.
+  const groups: number[][] = [];
+  for (const bandIdx of [3, 2, 1]) {
+    const indices = byBand.get(bandIdx) ?? [];
+    if (indices.length === 0) continue;
+    const splitProb = FRAG.splitProbability[bandIdx as 1 | 2 | 3] ?? 0;
+    const shouldSplit = indices.length >= 6 && rand() < splitProb;
+    if (shouldSplit) {
+      // Split at roughly half, with small jitter so the cut isn't always 50/50
+      const mid = Math.floor(indices.length / 2);
+      const cut = mid + (rand() < 0.5 ? 0 : 1);
+      groups.push(indices.slice(0, cut));
+      groups.push(indices.slice(cut));
+    } else {
+      groups.push(indices);
+    }
   }
-  batches.push({ indices: band2, delay: randDelay() });
-  batches.push({ indices: band1, delay: randDelay() });
+
+  // Adaptive delays so total collapse duration ≈ FRAG.targetTotalDuration
+  // regardless of batch count (4-6). Without this, more batches would
+  // over-run the match length.
+  //   totalWarnings = nBatches * warningDuration
+  //   budgetForDelays = target - firstBatchDelay - totalWarnings
+  //   meanDelay = budgetForDelays / (nBatches - 1)   ← applied to non-first
+  //   actualDelay = meanDelay * (1 ± jitter), clamped to >= minBatchDelay
+  const nBatches = groups.length;
+  const delayBudget =
+    FRAG.targetTotalDuration - FRAG.firstBatchDelay - nBatches * FRAG.warningDuration;
+  const meanDelay = nBatches > 1
+    ? Math.max(FRAG.minBatchDelay, delayBudget / (nBatches - 1))
+    : 0;
+
+  const batches: BatchDef[] = groups.map((indices, i) => {
+    if (i === 0) return { indices, delay: FRAG.firstBatchDelay };
+    const jitter = 1 + (rand() - 0.5) * 2 * FRAG.delayJitter;
+    const delay = Math.max(FRAG.minBatchDelay, meanDelay * jitter);
+    return { indices, delay };
+  });
 
   return { seed, fragments, batches, immuneRadius: FRAG.immuneRadius, maxRadius: FRAG.maxRadius };
 }

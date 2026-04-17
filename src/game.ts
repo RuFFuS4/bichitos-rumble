@@ -102,6 +102,8 @@ export class Game {
   private selectForOnline: boolean = false;
   /** Guard so the online portal hit only triggers once per match. */
   private portalRedirecting: boolean = false;
+  /** Prevents double-fire of the async restart flow (R pressed twice fast). */
+  private restartInProgress: boolean = false;
   /** Currently highlighted mode on the title screen (keyboard navigation). */
   private titleMode: 'bots' | 'online' = 'bots';
 
@@ -184,6 +186,20 @@ export class Game {
     document.body.classList.remove('online-mode');
     disposePortals();
     clearPortalContext(); // exit portal mode: no start portal, no P/B prompts
+
+    // Clear any lingering arena/critters from a previous match. Without
+    // this, returning from a finished match (online or offline) leaves
+    // the previous fragments painted under the title overlay for a
+    // frame or two — "dirty transition" feel.
+    this.arena.reset();
+    this.onlineCritters.forEach(c => c.dispose());
+    this.onlineCritters.clear();
+    // Rebuild the idle background critters the title expects. enterOnline
+    // disposes them, so we must restore them when returning to title.
+    if (this.critters.length === 0) {
+      this.rebuildCritters(CRITTER_PRESETS.slice(0, MAX_CRITTERS_PER_MATCH));
+    }
+
     showTitleScreen();
     hideCharacterSelect();
     hideEndScreen();
@@ -303,29 +319,47 @@ export class Game {
   /**
    * Restart from the end screen.
    * - Offline: start a new local countdown against bots (same roster)
-   * - Online: leave the current room and re-queue with the same critter
-   *   (acts as a "rematch / find new opponent" button).
-   * Ignored if no critter is available or we're still redirecting via portal.
+   * - Online: leave the current room, WAIT for the leave to propagate
+   *   (otherwise joinOrCreate matches the old locked room and we're
+   *   stuck), then re-queue with the same critter.
    */
-  private restartMatch(): void {
+  private async restartMatch(): Promise<void> {
     if (this.portalRedirecting) return;
-    if (this.room) {
-      // Online: leave current room, clear remote state, re-queue with
-      // the same critter name. If the connect fails we land back on title.
-      const critterName = this.player?.config.name ?? '';
-      const prevRoom = this.room;
-      this.room = null;
-      for (const c of this.onlineCritters.values()) c.dispose();
-      this.onlineCritters.clear();
-      prevRoom.leave().catch(() => { /* server may already have disposed */ });
-      if (critterName) {
-        this.connectOnlineWith(critterName);
+    if (this.restartInProgress) return;
+    this.restartInProgress = true;
+
+    try {
+      if (this.room) {
+        const critterName = this.player?.config.name ?? '';
+        const prevRoom = this.room;
+        this.room = null;
+
+        // Clean visual state BEFORE we start waiting on the network so
+        // the user sees a clean "Connecting..." screen instead of the
+        // previous match's arena/critters.
+        for (const c of this.onlineCritters.values()) c.dispose();
+        this.onlineCritters.clear();
+        this.arena.reset();
+        showOverlay('Connecting...');
+
+        // Properly await leave so the server fully removes us before we
+        // matchmake again. Server also calls lock() on match end, so
+        // joinOrCreate will never match the finished room — but waiting
+        // here also avoids a brief double-connection on the client.
+        try {
+          await prevRoom.leave();
+        } catch (_e) { /* server may have already disposed */ }
+
+        if (!critterName) {
+          this.enterTitle();
+          return;
+        }
+        await this.connectOnlineWith(critterName);
       } else {
-        this.enterTitle();
+        this.enterCountdown();
       }
-    } else {
-      // Offline: standard countdown restart
-      this.enterCountdown();
+    } finally {
+      this.restartInProgress = false;
     }
   }
 

@@ -109,9 +109,10 @@ export class BrawlRoom extends Room<GameState> {
       // Re-evaluate win condition immediately (don't wait for next tick)
       const alive = [...this.state.players.values()].filter(pl => pl.alive);
       if (alive.length <= 1) {
-        this.state.phase = 'ended';
-        this.state.endReason = alive.length === 1 ? 'opponent_left' : 'draw';
-        this.state.winnerSessionId = alive[0]?.sessionId ?? '';
+        this.endMatch(
+          alive.length === 1 ? 'opponent_left' : 'draw',
+          alive[0]?.sessionId ?? '',
+        );
       }
     });
 
@@ -169,16 +170,28 @@ export class BrawlRoom extends Room<GameState> {
 
     // If a player leaves mid-match, end it (Bloque A: no reconnection)
     if (this.state.phase === 'playing' || this.state.phase === 'countdown') {
-      this.state.phase = 'ended';
-      this.state.endReason = 'opponent_left';
       const remaining = [...this.state.players.values()][0];
-      this.state.winnerSessionId = remaining?.sessionId ?? '';
+      this.endMatch('opponent_left', remaining?.sessionId ?? '');
     }
   }
 
   onDispose() {
     if (this.tickHandle) clearInterval(this.tickHandle);
     console.log(`[BrawlRoom] disposed`);
+  }
+
+  /**
+   * Finalise the match and lock the room so new joinOrCreate calls never
+   * match an already-finished room. Idempotent — safe to call multiple
+   * times (e.g. both from tick win-check and onLeave opponent-left).
+   */
+  private endMatch(reason: string, winnerSessionId: string = ''): void {
+    if (this.state.phase === 'ended') return;
+    this.state.phase = 'ended';
+    this.state.endReason = reason;
+    this.state.winnerSessionId = winnerSessionId;
+    this.lock().catch(() => { /* already locked or disposing */ });
+    console.log(`[BrawlRoom] match ended reason=${reason} winner=${winnerSessionId} (locked)`);
   }
 
   // -------------------------------------------------------------------------
@@ -349,18 +362,13 @@ export class BrawlRoom extends Room<GameState> {
     const aliveCount = players.filter(p => p.alive).length;
     if (aliveCount <= 1 && players.length >= 2 && !players.some(p => p.falling)) {
       const winner = players.find(p => p.alive);
-      this.state.phase = 'ended';
-      this.state.endReason = winner ? 'eliminated' : 'draw';
-      this.state.winnerSessionId = winner?.sessionId ?? '';
+      this.endMatch(winner ? 'eliminated' : 'draw', winner?.sessionId ?? '');
     } else if (this.state.matchTimer <= 0) {
-      this.state.phase = 'ended';
       const alive = players.filter(p => p.alive);
       if (alive.length === 1) {
-        this.state.endReason = 'timeout';
-        this.state.winnerSessionId = alive[0].sessionId;
+        this.endMatch('timeout', alive[0].sessionId);
       } else {
-        this.state.endReason = 'draw';
-        this.state.winnerSessionId = '';
+        this.endMatch('draw', '');
       }
     }
   }

@@ -14,8 +14,24 @@ import {
   type ArenaLayout, type FragmentDef,
 } from './arena-fragments';
 
-const ARC_SEGMENTS = 12;       // arc resolution per fragment shape edge
+const ARC_SEGMENTS = 16;       // arc resolution per fragment shape edge
 const CENTER_SEGMENTS = 32;    // circle segments for the immune center
+
+// Per-band base colors. Distinct enough that the user can SEE where one
+// band ends and the next begins (even when bands are concentric rings of
+// the same green family). Immune center is the brightest.
+const BAND_COLORS: Record<number, number> = {
+  0: 0x6fa35f, // immune center — brightest green
+  1: 0x5c8a50, // inner band
+  2: 0x4a6741, // mid band
+  3: 0x3a5331, // outer band — darkest
+};
+const BAND_SIDE_COLORS: Record<number, number> = {
+  0: 0x46704b,
+  1: 0x3a5331,
+  2: 0x2e4428,
+  3: 0x253820,
+};
 
 // --- Fragment mesh builder -----------------------------------------------
 
@@ -26,14 +42,14 @@ function createFragmentMesh(f: FragmentDef): THREE.Group {
   if (f.immune) {
     // Immune center: simple circle + cylinder side + bottom circle
     const topGeo = new THREE.CircleGeometry(f.outerR, CENTER_SEGMENTS);
-    const topMat = new THREE.MeshStandardMaterial({ color: 0x5c8a50, side: THREE.DoubleSide });
+    const topMat = new THREE.MeshStandardMaterial({ color: BAND_COLORS[0], side: THREE.DoubleSide });
     const top = new THREE.Mesh(topGeo, topMat);
     top.rotation.x = -Math.PI / 2;
     top.receiveShadow = true;
     group.add(top);
 
     const sideGeo = new THREE.CylinderGeometry(f.outerR, f.outerR, h, CENTER_SEGMENTS, 1, true);
-    const sideMat = new THREE.MeshStandardMaterial({ color: 0x3a5331, side: THREE.DoubleSide });
+    const sideMat = new THREE.MeshStandardMaterial({ color: BAND_SIDE_COLORS[0], side: THREE.DoubleSide });
     const side = new THREE.Mesh(sideGeo, sideMat);
     side.position.y = -h / 2;
     group.add(side);
@@ -78,8 +94,10 @@ function createFragmentMesh(f: FragmentDef): THREE.Group {
     depth: h,
     bevelEnabled: false,
   });
-  // Alternating band colors
-  const baseColor = f.band % 2 === 0 ? 0x5c8a50 : 0x4a6741;
+  // Per-band distinct colors — important for visual legibility when
+  // a middle band collapses and the user needs to tell inner from outer
+  // alive fragments at a glance.
+  const baseColor = BAND_COLORS[f.band] ?? 0x4a6741;
   const mat = new THREE.MeshStandardMaterial({
     color: baseColor,
     side: THREE.DoubleSide,
@@ -180,11 +198,8 @@ export class Arena {
       const mesh = createFragmentMesh(f);
       this.fragmentGroups.push(mesh);
       this.group.add(mesh);
-
-      // Store base color for restoring after warning blink
-      const baseColor = f.immune ? 0x5c8a50
-        : f.band % 2 === 0 ? 0x5c8a50 : 0x4a6741;
-      this.baseColors.push(baseColor);
+      // Store base color so we can restore it after a warning blink ends.
+      this.baseColors.push(BAND_COLORS[f.band] ?? 0x4a6741);
     }
   }
 
