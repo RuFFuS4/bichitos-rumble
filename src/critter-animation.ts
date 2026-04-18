@@ -10,12 +10,14 @@
 //
 // This layer is PRESENTATION ONLY. It never writes to fields that drive
 // gameplay or networking:
-//   - reads: vx, vz, abilityStates, skipPhysics
-//   - writes: body.position.y, glbMesh.position.y, glbMesh.rotation.x
+//   - reads: vx, vz, abilityStates, isHeadbutting, headbuttAnticipating,
+//            skipPhysics
+//   - writes: body.position.y, glbMesh.position.y, glbMesh.rotation.x,
+//             glbMesh.rotation.z, glbMesh.scale.{x,y,z}
 //
 // Works identically in online and offline. In online mode Critter.update()
-// runs with skipPhysics=true; vx/vz are set from the server each tick, so
-// the motion layer picks up the right "is running" signal without any
+// runs with skipPhysics=true; vx/vz/isHeadbutting are set from the server
+// each tick, so the motion layer picks up the right signal without any
 // extra code.
 //
 // Future (Tripo3D, skeletal clips, etc.) can layer on TOP of this:
@@ -40,6 +42,8 @@ export interface AnimationPersonality {
   runBounceAmp: number;
   /** Forward pitch at full-speed run (radians). Faster → lean harder. */
   leanRadians: number;
+  /** Side-to-side sway amplitude while running (radians). */
+  runSwayRadians: number;
   /** Multiplier on the charge_rush forward stretch. Faster → snappier. */
   chargeStretchMult: number;
 }
@@ -48,8 +52,8 @@ export interface AnimationPersonality {
  * Derive animation parameters from a critter's gameplay stats. No new
  * config fields needed — personality is a pure function of (mass, speed).
  *
- * Heavy (mass ≥ 1.3): slow deep breathing, heavy footfalls, small lean.
- * Light (mass ≤ 0.85): fast shallow breathing, snappy bounce, big lean.
+ * Heavy (mass ≥ 1.3): slow deep breathing, heavy footfalls, small lean, tiny sway.
+ * Light (mass ≤ 0.85): fast shallow breathing, snappy bounce, big lean, lively sway.
  * Fast (speed ≥ 11): quicker run cadence, aggressive lean.
  * Slow (speed ≤ 8):  sedate cadence, minimal lean.
  */
@@ -59,25 +63,21 @@ export function deriveAnimationPersonality(
   const m = config.mass;
   const s = config.speed;
 
-  // Map mass 0.7..1.5 → relative factor 0.7..1.5, clamp-safe
   const mRel = Math.max(0.7, Math.min(1.5, m));
   const sRel = Math.max(6, Math.min(13, s));
 
-  // Heavier → slower breath (down to 0.7 Hz), lighter → faster (up to 1.3 Hz)
   const idleBobHz = 1.3 - (mRel - 0.85) * 0.8;
-  // Heavier → deeper bob (0.06..0.09), lighter → shallower (0.03..0.05)
   const idleBobAmp = 0.03 + (mRel - 0.7) * 0.08;
 
-  // Faster → quicker footfalls
   const runBounceHz = 1.8 + (sRel - 6) * 0.2;
-  // Heavier → bigger bounce on each step
   const runBounceAmp = 0.08 + (mRel - 0.7) * 0.10;
 
-  // Faster → deeper forward lean (8°..18°)
   const leanRadians = 0.12 + (sRel - 8) * 0.018;
 
-  // Charge stretch scales with speed stat — Cheeto/Kurama stretch snappily,
-  // Shelly/Trunk barely flex.
+  // Light critters sway their body noticeably while running; heavy ones
+  // barely move laterally. Range ≈ 0.02..0.09 rad (1..5°).
+  const runSwayRadians = 0.09 - (mRel - 0.7) * 0.07;
+
   const chargeStretchMult = 0.6 + (sRel - 6) * 0.09;
 
   return {
@@ -86,19 +86,27 @@ export function deriveAnimationPersonality(
     runBounceHz,
     runBounceAmp,
     leanRadians,
+    runSwayRadians,
     chargeStretchMult,
   };
 }
 
-// Body sphere is centred at y=BODY_RADIUS (see Critter). Constant kept in
-// sync with critter.ts; if that constant ever moves we'll notice because
-// the procedural fallback will visibly float or clip.
 const BODY_BASE_Y = 0.5;
 const SPEED_NORM = 15;       // velocity magnitude that maps to run intensity = 1
 const SPEED_DEADZONE = 0.3;  // below this we still apply idle-only bob
 
-// Cached lean target per critter, interpolated smoothly
-const LEAN_LERP_PER_SEC = 10;
+// Headbutt motion targets — applied to glbMesh.rotation.x / scale.y / position.y
+// Calibrated against FEEL.headbutt anticipation/lunge durations (0.12s + 0.15s)
+// so the wind-up feels like a real coil and the lunge reads as a decisive thrust.
+const HEADBUTT_ANTICIP_PITCH = -0.22;  // backward pitch during wind-up (rad)
+const HEADBUTT_LUNGE_PITCH   = +0.38;  // forward pitch during lunge (rad)
+const HEADBUTT_ANTICIP_SQUASH = 0.86;  // vertical squash during wind-up
+const HEADBUTT_LUNGE_STRETCH  = 1.08;  // vertical stretch during lunge
+const HEADBUTT_LUNGE_FORWARD  = 0.14;  // small forward Y drop + Z offset on lunge
+
+// Lerp speeds (per second). Higher = snappier transitions.
+const LEAN_LERP_RUN = 10;
+const LEAN_LERP_HEADBUTT = 30;
 
 /**
  * Main tick. Call every frame from Critter.update() BEFORE updateVisuals
@@ -112,20 +120,52 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
   const moving = vMag > SPEED_DEADZONE;
   const runIntensity = moving ? Math.min(vMag / SPEED_NORM, 1) : 0;
 
-  // Idle breath — always present, softened (not eliminated) while moving
-  const idleBob = Math.sin(t * p.idleBobHz * Math.PI * 2) * p.idleBobAmp;
+  // --- Ability envelopes ---
+  let chargeActive = 0;       // 0..1 triangular envelope during charge_rush active
+  let groundPoundWindUp = 0;  // 0..1 while ground_pound is winding up (crouch)
+  for (const s of critter.abilityStates) {
+    if (!s.active) continue;
+    if (s.def.type === 'charge_rush' && s.windUpLeft <= 0) {
+      const total = s.def.duration || 0.0001;
+      const elapsed = total - s.durationLeft;
+      const halfway = total / 2;
+      const env = 1 - Math.abs(elapsed - halfway) / halfway;
+      chargeActive = Math.max(chargeActive, env);
+    }
+    if (s.def.type === 'ground_pound' && s.windUpLeft > 0) {
+      const total = s.def.windUp || 0.0001;
+      const prog = Math.min(1, 1 - s.windUpLeft / total);
+      groundPoundWindUp = Math.max(groundPoundWindUp, prog);
+    }
+  }
 
-  // Run bounce — asymmetric, using |sin| so it's a series of footfalls
-  // rather than a symmetric wave. Only contributes while actually moving.
+  // --- Headbutt phase ---
+  // critter.isHeadbutting and critter.headbuttAnticipating are public in
+  // the Critter class; in online mode both are set from server state
+  // before update() runs, so this reads correctly in both modes.
+  const antBlend = critter.headbuttAnticipating ? 1 : 0;
+  const lungeBlend = critter.isHeadbutting ? 1 : 0;
+  const headbuttActive = antBlend + lungeBlend > 0;
+
+  // --- Vertical bob (idle + run) + ability/headbutt offsets ---
+  const idleBob = Math.sin(t * p.idleBobHz * Math.PI * 2) * p.idleBobAmp;
   const runBounce =
     Math.abs(Math.sin(t * p.runBounceHz * Math.PI)) *
     p.runBounceAmp *
     runIntensity;
 
-  const yOffset = idleBob * (1 - runIntensity * 0.6) + runBounce;
+  // Ground-pound wind-up drops the body (crouch before slam)
+  const gpDrop = groundPoundWindUp * FEEL.groundPound.windUpHeadDrop; // negative
+  // Headbutt: tiny drop as the critter steps into the lunge
+  const headbuttDrop = -HEADBUTT_LUNGE_FORWARD * lungeBlend * 0.4;
 
-  // Procedural body (always present as fallback). Body radius defines
-  // the base y; the animation offsets on top of it.
+  // When headbutting we want a clean pose, so dampen the idle/run bob
+  const bobScale = headbuttActive ? 0.15 : 1;
+  const yOffset =
+    (idleBob * (1 - runIntensity * 0.6) + runBounce) * bobScale +
+    gpDrop +
+    headbuttDrop;
+
   critter.body.position.y = BODY_BASE_Y + yOffset;
 
   if (!critter.glbMesh) return;
@@ -133,34 +173,53 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
   const pivotY = critter.rosterEntry?.pivotY ?? 0;
   critter.glbMesh.position.y = pivotY + yOffset;
 
-  // Forward lean while running. Smoothly interpolate to avoid snapping
-  // on direction change. Applied as rotation.x of the GLB mesh.
-  // The outer Critter mesh rotates around Y based on velocity heading,
-  // so rotation.x on the inner glbMesh tilts "forward" in that heading.
-  const leanTarget = runIntensity * p.leanRadians;
-  const k = Math.min(1, dt * LEAN_LERP_PER_SEC);
-  critter.glbMesh.rotation.x += (leanTarget - critter.glbMesh.rotation.x) * k;
+  // --- Forward pitch (lean) ---
+  // Priority: headbutt lunge > headbutt anticipation > run lean
+  const headbuttPitchTarget =
+    HEADBUTT_ANTICIP_PITCH * antBlend + HEADBUTT_LUNGE_PITCH * lungeBlend;
+  const runPitchTarget = runIntensity * p.leanRadians;
+  const pitchTarget = headbuttActive ? headbuttPitchTarget : runPitchTarget;
 
-  // Charge-rush stretch: during the active phase (not wind-up), scale
-  // along Z forward. Reads the ability state the same way updateVisuals
-  // does, so the timing stays locked to the real gameplay state.
-  let chargeActive = 0;
-  for (const s of critter.abilityStates) {
-    if (!s.active || s.windUpLeft > 0 || s.def.type !== 'charge_rush') continue;
-    // Fade in/out based on how much of the duration has elapsed
-    const total = s.def.duration;
-    const elapsed = total - s.durationLeft;
-    const halfway = total / 2;
-    // Triangular envelope: 0 → 1 → 0
-    const env = 1 - Math.abs(elapsed - halfway) / halfway;
-    chargeActive = Math.max(chargeActive, env);
-  }
-  const stretch = 1 + chargeActive * 0.22 * p.chargeStretchMult;
-  critter.glbMesh.scale.z = critter.rosterEntry!.scale * stretch;
-  // X/Y stay at the entry.scale — no lateral distortion, only forward stretch.
+  const pitchLerp = Math.min(
+    1,
+    dt * (headbuttActive ? LEAN_LERP_HEADBUTT : LEAN_LERP_RUN),
+  );
+  critter.glbMesh.rotation.x +=
+    (pitchTarget - critter.glbMesh.rotation.x) * pitchLerp;
 
-  // Safety: chargeStretchMult comes from FEEL-adjacent tuning; if FEEL is
-  // ever hot-swapped at runtime we don't rebuild personality. Deliberate
-  // acceptance for jam scope — it's a constant at construction time.
-  void FEEL; // keep import tethered so tree-shaking respects the guarantee
+  // --- Side-to-side sway while running (rotation.z) ---
+  // Subtle body roll at the run bounce cadence. Zero during headbutt so
+  // the pose stays crisp.
+  const swayTarget =
+    Math.sin(t * p.runBounceHz * Math.PI * 2) *
+    p.runSwayRadians *
+    runIntensity *
+    (1 - Math.min(1, antBlend + lungeBlend));
+  const swayLerp = Math.min(1, dt * LEAN_LERP_RUN);
+  critter.glbMesh.rotation.z +=
+    (swayTarget - critter.glbMesh.rotation.z) * swayLerp;
+
+  // --- Scale (x, y, z) ---
+  const baseScale = critter.rosterEntry!.scale;
+
+  // Z stretch: charge_rush active envelope
+  const stretchZ = 1 + chargeActive * 0.22 * p.chargeStretchMult;
+
+  // Y squash/stretch: ground_pound windUp crouch + headbutt anticip/lunge.
+  // Factors are multiplied so compound states work correctly:
+  //   idle:              1   × 1    = 1.00
+  //   anticip:           1   × 0.86 = 0.86
+  //   lunge:             1   × 1.08 = 1.08
+  //   gp windUp:         0.50× 1    = 0.50
+  // Using Math.min instead of * would clip the >1 stretch at 1.
+  const gpSquash = 1 - (1 - FEEL.groundPound.windUpSquash) * groundPoundWindUp;
+  const headbuttY =
+    1 -
+    (1 - HEADBUTT_ANTICIP_SQUASH) * antBlend +
+    (HEADBUTT_LUNGE_STRETCH - 1) * lungeBlend;
+  const squashY = gpSquash * headbuttY;
+
+  critter.glbMesh.scale.x = baseScale;
+  critter.glbMesh.scale.y = baseScale * squashY;
+  critter.glbMesh.scale.z = baseScale * stretchZ;
 }

@@ -132,7 +132,8 @@ export class Critter {
   headbuttCooldown = 0;
   isHeadbutting = false;
   private headbuttTimer = 0;
-  private headbuttAnticipating = false;
+  /** Public so the procedural animation layer can read it for pose drive. */
+  headbuttAnticipating = false;
   private anticipationTimer = 0;
 
   body: THREE.Mesh;
