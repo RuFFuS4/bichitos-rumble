@@ -250,7 +250,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Kurama: [
     makeChargeRush({
       name: 'Fox Dash', description: 'Blink-fast feint forward',
-      impulse: 23, duration: 0.26, cooldown: 3.2,
+      impulse: 23, duration: 0.26, cooldown: 3.2, windUp: 0.05,
       speedMultiplier: 2.8, massMultiplier: 1.3,
     }),
     makeGroundPound({
@@ -263,7 +263,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Shelly: [
     makeChargeRush({
       name: 'Shell Charge', description: 'Slow rolling ram',
-      impulse: 12, duration: 0.45, cooldown: 5.5,
+      impulse: 12, duration: 0.45, cooldown: 5.5, windUp: 0.08,
       speedMultiplier: 1.8, massMultiplier: 3.2,
     }),
     makeGroundPound({
@@ -288,7 +288,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Sihans: [
     makeChargeRush({
       name: 'Burrow Rush', description: 'Underground charge resurfacing ahead',
-      impulse: 15, duration: 0.35, cooldown: 4.5,
+      impulse: 15, duration: 0.35, cooldown: 4.5, windUp: 0.08,
       speedMultiplier: 2.1, massMultiplier: 2.0,
     }),
     makeGroundPound({
@@ -312,7 +312,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Cheeto: [
     makeChargeRush({
       name: 'Pounce', description: 'Lightning-fast predator lunge',
-      impulse: 26, duration: 0.24, cooldown: 2.8,
+      impulse: 26, duration: 0.24, cooldown: 2.8, windUp: 0.04,
       speedMultiplier: 3.0, massMultiplier: 1.2,
     }),
     makeGroundPound({

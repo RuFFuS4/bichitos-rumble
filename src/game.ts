@@ -22,7 +22,7 @@ import { applyHitStop, FEEL } from './gamefeel';
 import { showPreview, swapPreviewCritter, hidePreview } from './preview';
 import { play as playSound } from './audio';
 import { recordPick, recordOutcome, recordFall } from './stats';
-import { getDisplayRoster, getRosterEntry, type RosterEntry } from './roster';
+import { getDisplayRoster, getRosterEntry, getPlayableNames, type RosterEntry } from './roster';
 import { preloadModels } from './model-loader';
 import {
   isFromPortal, resolvePortalCharacter, setPortalPlayerInfo,
@@ -49,19 +49,40 @@ const SPAWN_POSITIONS: [number, number][] = [
 const MAX_CRITTERS_PER_MATCH = SPAWN_POSITIONS.length;
 
 /**
- * Build the match roster: player config first, then bots from a pool.
- * Bots are drawn round-robin from the pool, skipping the player's config.
+ * Build the match roster: player config first, then bots drawn from the
+ * REAL playable critters (the 9-character roster), never the legacy
+ * internal Rojo/Azul/Verde/Morado placeholders. Shuffled per match so
+ * two consecutive matches don't produce the same bot lineup.
+ *
+ * If the pool has fewer uniques than the requested botCount, we wrap
+ * around. That's only possible in degenerate configurations (<=1
+ * playable); not a concern with the current 9-critter roster.
  */
 function buildMatchRoster(
   playerConfig: CritterConfig,
-  botPool: CritterConfig[],
   botCount: number,
 ): CritterConfig[] {
   const roster: CritterConfig[] = [playerConfig];
-  const available = botPool.filter(c => c.name !== playerConfig.name);
-  if (available.length === 0) return roster;
+
+  // Real-roster pool: CRITTER_PRESETS entries whose name is in the
+  // playable roster list, minus the player's own critter so they
+  // never mirror-match themselves when other options exist.
+  const playable = new Set(getPlayableNames());
+  const pool = CRITTER_PRESETS.filter(
+    c => playable.has(c.name) && c.name !== playerConfig.name,
+  );
+
+  if (pool.length === 0) return roster;
+
+  // Fisher-Yates shuffle for visible match-to-match variety.
+  const shuffled = pool.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
   for (let i = 0; i < botCount; i++) {
-    roster.push(available[i % available.length]);
+    roster.push(shuffled[i % shuffled.length]);
   }
   return roster;
 }
@@ -263,7 +284,6 @@ export class Game {
     this.arena.buildFromSeed((Math.random() * 0xFFFFFFFF) | 0);
     const roster = buildMatchRoster(
       playerConfig,
-      CRITTER_PRESETS,
       MAX_CRITTERS_PER_MATCH - 1,
     );
     this.rebuildCritters(roster);
