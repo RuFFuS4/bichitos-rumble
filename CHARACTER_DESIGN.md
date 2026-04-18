@@ -1,4 +1,88 @@
-Plantilla para definir cada bichito
+# Character Design
+
+## Gap entre kits temporales y habilidades definitivas (2026-04-17)
+
+IMPORTANTE — lo que hay en el juego ahora **no** es todavía el set final de
+habilidades diseñadas más abajo. Para cerrar el roster completo sin pararnos
+en rediseño por personaje, todos los bichitos comparten 3 factories base:
+
+- `charge_rush` — dash frontal con impulso + escala de masa/velocidad
+- `ground_pound` — empuje radial con radio, fuerza y windup tunables
+- `frenzy` — buff temporal de velocidad y masa (ultimate, opcional)
+
+Cada personaje recibe un **kit temporal** reutilizando esas factories con
+tuning distinto (impulse/radius/force/cooldown/multipliers) y un nombre
+descriptivo. Solo Sergei coincide realmente con su diseño final.
+
+El siguiente bloque de habilidades no debe hacerse a ciegas: esta tabla
+marca exactamente qué sigue siendo placeholder.
+
+### Tabla de estado real
+
+| Personaje  | Rol temporal | Kit temporal actual (tipos `+ nombre`) | Hab 1 definitiva diseño | Hab 2 definitiva diseño | ULTI definitiva diseño | Gap real |
+|------------|--------------|-----------------------------------------|-------------------------|--------------------------|--------------------------|----------|
+| **Sergei** | Balanced     | CR `Gorilla Rush` + GP `Shockwave` + F `Frenzy` | Charge Rush (dash) | Shockwave (onda área, no stun) | Frenzy (buff velocidad + daño) | **Alineado**. Sergei es el único personaje donde el kit temporal coincide en tipo y sensación con el diseño. |
+| **Trunk**  | Bruiser      | CR `Trunk Ram` + GP `Earthquake`        | Charge Rush (dash frontal) | **Trunk Grip** (agarra + lanza en dirección — targeted grab) | **Ground Pound** (pisotón con STUN de área) | H2 totalmente placeholder (grab/throw no existe). ULTI reusa GP pero sin stun — sólo knockback radial. Sin Frenzy. |
+| **Kurama** | Trickster    | CR `Fox Dash` + GP `Mirror Burst` + F `Frenzy` | Charge Rush | **Mirror Trick** (deja copia 2s que absorbe daño) | **Copycat** (copia la ULTI del último enemigo golpeado) | H2 y ULTI totalmente placeholder. No hay sistema de ilusiones ni de copia de abilities; Frenzy se usa como relleno de ULTI. |
+| **Shelly** | Tank         | CR `Shell Charge` + GP `Shell Slam` + F `Frenzy` | Charge Rush (caparazón rodando) | **Shell Shield** (invulnerable + inmóvil + refleja daño) | **Mega Shell** (roda gigante empujando todo) | H2 requiere sistema de invulnerabilidad + reflect. ULTI pide movimiento rodante continuo. Ambos placeholder. Frenzy rellena ULTI. |
+| **Kermit** | Controller   | CR `Leap Forward` + GP `Poison Cloud`   | Charge Rush (salto con patas) | **Poison Cloud** (nube que oculta visión de los que están dentro) | **Hypnosapo** (invierte controles de enemigos tocados) | H2 comparte nombre pero el efecto real (zona bloqueadora de visión) no está — es solo knockback radial. ULTI totalmente placeholder (invertir inputs de otros). Sin Frenzy. |
+| **Sihans** | Trapper      | CR `Burrow Rush` + GP `Tremor`          | Charge Rush (bajo tierra + emerge) | **Tunnel** (teleport con zonas lentas en entrada/salida) | **Diggy Diggy Hole** (crea hoyo permanente en el mapa) | H2 requiere teleport + efecto de terreno persistente. ULTI requiere modificar la mesh del arena en runtime. Ambos totalmente placeholder. Sin Frenzy. |
+| **Kowalski** | Mage       | CR `Ice Slide` + GP `Arctic Burst`      | Charge Rush (deslizar panza) | **Snowball** (proyectil a distancia con slow 50%) | **Ice Age** (congela suelo área grande, enemigos resbalan) | Sin sistema de proyectiles (H2 es placeholder). Sin sistema de slipping surface (ULTI placeholder). Sin Frenzy. |
+| **Cheeto** | Assassin     | CR `Pounce` + GP `Paw Stomp`            | Charge Rush (salto felino) | **Shadow Step** (teleport detrás del enemigo más cercano + golpe) | **Tiger Roar** (empuje cónico, no radial) | H2 requiere target-selection + teleport. ULTI pide cono direccional, ahora es radial. Ambos placeholder. Sin Frenzy. |
+| **Sebastian** | Glass Cannon | CR `Claw Rush` + GP `Big Claw Slam`  | Charge Rush (desplazamiento lateral + pinza) | **Claw Sweep** (barrido en abanico frontal) | **Crab Slash** (carga lateral que mata o se cae del mapa) | H1 casi pero no es lateral. H2 pide cono direccional, ahora es radial. ULTI requiere detección "o mato o muero". Todo placeholder funcional. Sin Frenzy. |
+
+### Qué está realmente implementado hoy
+
+- **3 factories base** (`charge_rush`, `ground_pound`, `frenzy`) con per-kit overrides cliente/servidor.
+- **Stats distintivos** por personaje (speed/mass/headbuttForce + per-ability
+  impulse/radius/force/multipliers/cooldown/windUp).
+- **Sensación diferencial entre personajes** lograda por tuning, no por
+  mecánicas únicas.
+
+### Qué NO está implementado todavía
+
+Sistemas mecánicos necesarios para las habilidades definitivas que aún no
+existen en el motor:
+
+- **Grab & throw** (Trunk H2): coger un enemigo específico y lanzarlo.
+- **Ilusiones / decoys** (Kurama H2): spawnear copia que recibe daño.
+- **Copia de ability ajena** (Kurama ULTI): instrospección del kit del otro.
+- **Invulnerabilidad + damage reflect** (Shelly H2).
+- **Movimiento continuo controlado** (Shelly ULTI — mega shell rodante).
+- **Zonas de efecto persistente con visión bloqueada** (Kermit H2).
+- **Input inversion** sobre otros jugadores (Kermit ULTI).
+- **Teleport con marcador de terreno persistente** (Sihans H2).
+- **Modificación del arena en runtime** para crear hoyos (Sihans ULTI).
+- **Proyectiles con slow-on-hit** (Kowalski H2).
+- **Superficies alteradas (hielo resbaladizo)** (Kowalski ULTI).
+- **Teleport target-seleccionado** (Cheeto H2).
+- **Conos direccionales** (Cheeto ULTI, Sebastian H2).
+- **Detección de éxito/fallo direccional** (Sebastian ULTI).
+
+Cada uno de estos es un bloque de trabajo no trivial. El plan actual es
+NO abrirlos hasta después de animaciones procedurales + sonido/feedback +
+balance real. Este documento debe consultarse antes de entrar a ese
+bloque para no confundir "tengo algo con ese nombre" con "la mecánica
+final está implementada".
+
+### Qué hacer si la urgencia dicta avanzar antes
+
+Priorización natural por complejidad (de menor a mayor coste de
+ingeniería), útil si en algún momento queremos un "primer upgrade"
+real por personaje sin abrir todo el frente:
+
+1. **Sergei** — ya está.
+2. **Trunk Ground Pound con stun** — añadir estado `stunned` + timer (pequeña extensión del sistema actual).
+3. **Cono direccional** (Cheeto ULTI, Sebastian H2) — geometría + test
+   angular, reusa el código de `ground_pound`.
+4. **Proyectil simple** (Kowalski Snowball) — entidad cliente-servidor nueva.
+5. **Teleport simple** (Cheeto H2, Sihans H2) — instantáneo, reusa respawn sin immunity.
+6. **Invulnerabilidad + reflect** (Shelly Shell Shield) — flag + condición en physics.
+7. **Ilusiones, copycat, input inversion, modificación de terreno, superficies resbaladizas** — sistemas nuevos grandes; dejar para el final o descartar para la jam.
+
+---
+
+## Plantilla para definir cada bichito
 1. Nombre del bichito
 
 Ejemplo: Elefante, Hormiga, Cerdo, Erizo, Cuervo...

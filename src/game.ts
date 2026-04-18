@@ -324,12 +324,20 @@ export class Game {
     for (const c of this.critters) c.dispose();
     this.critters = [];
 
-    // Instantiate fresh critters from the roster, clipped to spawn slots
+    // Instantiate fresh critters from the roster, clipped to spawn slots.
+    // Each critter is rotated to face the arena centre so they spawn
+    // oriented "inward" regardless of which cardinal slot they land on
+    // (fixes bots that were facing the void at +Z/−X/+X spawns).
     const count = Math.min(roster.length, SPAWN_POSITIONS.length);
     for (let i = 0; i < count; i++) {
       const critter = new Critter(roster[i], this.scene);
-      critter.x = SPAWN_POSITIONS[i][0];
-      critter.z = SPAWN_POSITIONS[i][1];
+      const [sx, sz] = SPAWN_POSITIONS[i];
+      critter.x = sx;
+      critter.z = sz;
+      // atan2(-x, -z) produces the angle whose forward (+Z after rotation)
+      // points from (sx, sz) toward the origin. Matches Critter.update()'s
+      // atan2(vx, vz) convention.
+      critter.mesh.rotation.y = Math.atan2(-sx, -sz);
       this.critters.push(critter);
     }
 

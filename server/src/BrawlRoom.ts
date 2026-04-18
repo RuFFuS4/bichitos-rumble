@@ -348,6 +348,9 @@ export class BrawlRoom extends Room<GameState> {
       const r = this.arenaSim.currentRadius * 0.4;
       p.x = Math.cos(angle) * r;
       p.z = Math.sin(angle) * r;
+      // Face the centre after respawn — consistent with initial spawn
+      // so the player never re-enters the arena staring at the void.
+      p.rotationY = Math.atan2(-p.x, -p.z);
       p.vx = 0;
       p.vz = 0;
       p.fallY = 0;

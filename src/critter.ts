@@ -548,6 +548,9 @@ export class Critter {
     this.z = z;
     this.vx = 0;
     this.vz = 0;
+    // Face the arena centre — same rule as initial spawn, so a respawned
+    // critter never looks toward the void.
+    this.mesh.rotation.y = Math.atan2(-x, -z);
     this.mesh.position.y = 0;
     this.immunityTimer = FEEL.lives.immunityDuration;
     playSound('respawn');
