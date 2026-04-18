@@ -124,10 +124,29 @@ Ya implementada en `src/critter-animation.ts`:
 Esta capa sigue vigente debajo de las animaciones distintivas por personaje
 (Fase 3) — las distintivas se superponen.
 
-### Lab tool `/tools.html`
-Herramienta interna accesible en producción tipeando `/tools.html`.
-Matchup tuner + arena inspector + animation sliders + playback controls.
+### Lab tool `/tools.html` (v2 — 2026-04-18)
+Herramienta interna accesible en producción tipeando `/tools.html`. No
+linkada desde el juego, `<meta robots="noindex,nofollow">` aplicado.
+
+Arquitectura: `DevApi` (`src/tools/dev-api.ts`) centraliza toda la
+superficie de debug. El sidebar habla solo con DevApi y Game conserva
+sus 5 métodos `debug*` originales sin crecer más.
+
+Paneles:
+- **Matchup** + **Arena inspector** (seed/pattern/batches)
+- **Bots** — dropdown por bot (normal/idle/passive/aggressive/chase/
+  ability_only) + aplicar a todos. Respaldado por
+  `Critter.debugBotBehaviour`, leído cada frame en `bot.ts`.
+- **Gameplay** — event log en vivo (headbutt/ability/fall/respawn/
+  eliminate/collapse) + cooldowns del player + Reset CDs + Force J/K/L
+  + teleport player/bots a presets.
+- **Animation** (7 sliders) + **Playback** (speed/pause/slow) + **Info**
+- **Performance** — FPS, frame ms, drawcalls, tris, geometries, textures,
+  critters, fragments alive/total.
+- **Input** — move vector, held actions, teclas activas, gamepad list.
+
 Sticky-key fix aplicado (window.blur + sidebar pointerdown/focusin).
+Consola: `__devApi` expuesto además de `__game`.
 
 ### Temporary-but-real roster identity
 | Critter   | Role         | Kit          | Speed / Mass / HB |
@@ -173,15 +192,6 @@ Post-mortem del bug de rotación en `ERROR_LOG.md` entry 2026-04-17.
 
 ---
 
-## Developer tool
-
-**`/tools.html`** — abierto tecleando la URL. No visible desde el juego.
-Matchup tuner (9 playables dropdown) + arena inspector (seed/pattern/
-batches) + animation tuner (7 sliders en vivo) + playback (pause/slow-mo/
-end match) + info panel. Útil para balance y debug rápido.
-
----
-
 ## Key architecture notes (dispatch sessions)
 
 - Work on `dev`, merge to `main` for deploy. Vercel (client) y Railway
@@ -192,3 +202,9 @@ end match) + info panel. Útil para balance y debug rápido.
 - Match-end en server: siempre vía `BrawlRoom.endMatch()` (locka la room).
 - Offline mode NO debe regresar con ningún cambio online.
 - `/tools.html` = 2º entry de Vite, servido estático antes del SPA rewrite.
+- **Lab debug API**: todo lo nuevo del lab va en `DevApi` (`src/tools/
+  dev-api.ts`). `Game` no debe crecer más métodos `debug*` — los 5 que
+  tiene (speedScale, startOfflineMatch, forceArenaSeed, getArenaInfo,
+  endMatchImmediately) son los pilares, DevApi envuelve el resto.
+- `Critter.debugBotBehaviour` es el único campo "debug-only" en la clase
+  gameplay. Default `'normal'` = comportamiento de producción intacto.

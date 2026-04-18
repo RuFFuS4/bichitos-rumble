@@ -74,6 +74,32 @@ export function consumeMenuAction(action: MenuAction): boolean {
   return false;
 }
 
+/**
+ * Read-only snapshot of the keyboard backend's currently-pressed KeyboardEvent
+ * codes. Used ONLY by the /tools.html lab Input panel. Not part of the
+ * gameplay input contract — game code must read via getMoveVector/isHeld.
+ */
+export function getHeldKeyCodes(): string[] {
+  const out: string[] = [];
+  for (const code of Object.keys(keyState)) {
+    if (keyState[code]) out.push(code);
+  }
+  return out;
+}
+
+/**
+ * Read-only snapshot of every held abstract action. Same lab-only audience
+ * as getHeldKeyCodes — game code uses isHeld(action) per-action.
+ */
+export function getHeldActionsSnapshot(): Record<HeldAction, boolean> {
+  return {
+    headbutt: heldActions.headbutt,
+    ability1: heldActions.ability1,
+    ability2: heldActions.ability2,
+    ultimate: heldActions.ultimate,
+  };
+}
+
 /** Drop all pending edge-detected actions (use on phase transitions). */
 export function clearMenuActions(): void {
   freshMenuActions.clear();

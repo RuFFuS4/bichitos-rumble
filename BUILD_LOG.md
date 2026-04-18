@@ -1251,3 +1251,94 @@ sector fragments. Both offline and online modes now use the same fragment system
 - `server/src/sim/physics.ts` — checkFalloff now receives isOnArena callback
 - `server/src/BrawlRoom.ts` — seed generation on countdown, fragment state sync
 - `server/src/sim/config.ts` — removed ring-specific values
+
+---
+
+## 2026-04-18 — Lab v2: DevApi layer + bots/gameplay/perf/input panels
+
+### Why
+The v1 lab (matchup tuner + arena inspector + animation sliders + playback)
+was useful but the sidebar was calling `game.debug*` directly and any new
+capability was heading straight into `Game`. With 5 days to jam and more
+debug tools planned (bots, events, cooldown injection, perf, input,
+gamepad) that was going to bloat `Game` fast. Added a DevApi layer.
+
+### Architecture change
+- **New file `src/tools/dev-api.ts`** (~270 LOC): `DevApi` class wrapping
+  `Game` + `WebGLRenderer`. Owns every new lab capability. Game keeps only
+  its 5 existing `debug*` primitives (speedScale, startOfflineMatch,
+  forceArenaSeed, getArenaInfo, endMatchImmediately) — no new ones added.
+- Sidebar (`src/tools/sidebar.ts`) now receives `DevApi` instead of `Game`.
+- `src/tools/main.ts` instantiates DevApi once, passes to sidebar, ticks
+  it each frame after render so `renderer.info` perf counters reflect the
+  current frame.
+
+### Debug surface delivered
+1. **Bot AI panel (priority 1)** — per-bot behaviour dropdown (normal / idle
+   / passive / aggressive / chase / ability_only) + bulk "all bots" control.
+   Backed by new `Critter.debugBotBehaviour` field read each frame in
+   `bot.ts`. Defaults to `normal` in production so nothing changes there.
+2. **Gameplay panel (priority 2)** — live event log (headbutt, ability
+   cast/end, fall, respawn, eliminate, collapse warn/batch, match start/end)
+   via edge-detection polling (no engine patching), player cooldown bars,
+   Reset-CDs / Force J / Force K / Force L buttons, teleport player to
+   centre, teleport bots to presets (center/corners/line/bunch).
+3. **Performance panel (priority 3)** — FPS (30-sample rolling average),
+   frame ms, draw calls, triangles, geometries, textures, critter count,
+   arena fragments alive/total. All from `renderer.info` + `DevApi` arena
+   math.
+4. **Input panel (priority 4)** — live move vector, held-actions chips
+   (headbutt/ability1/ability2/ultimate), held KeyboardEvent codes,
+   gamepad list via `navigator.getGamepads()`. Base ready for future
+   gamepad + touch debug.
+
+### Discarded / deferred on purpose
+- **Online / netcode debug (priority 5)** — not implemented. The current
+  online path only has 2-player rooms and the safety cost of adding
+  mutable hooks to real rooms is too high for this jam. The DevApi note
+  at the bottom of the file spells out the contract: online debug must be
+  read-only by default; any mutation requires an explicit "connect as
+  debug observer" opt-in.
+- **Replay from mid-collapse** — skipped, covered well enough via
+  `Force Seed` + `Replay Last` for deterministic reproduction.
+- **Reaction-speed toggle on bots** — skipped, aggressive/passive/
+  ability_only already cover the axes we actually wanted to isolate.
+
+### Safety posture on `tools.html`
+- `<meta name="robots" content="noindex, nofollow">` +
+  `<meta name="googlebot" content="noindex, nofollow">` added.
+- Banner "INTERNAL DEV TOOL · not for players" at top of sidebar.
+- Title tag → "Bichitos Rumble — Lab (internal)".
+- No link from the game UI at any point. Access via direct URL only.
+- All mutations target the LOCAL game instance; no server/room write paths
+  are exposed.
+
+### Files created
+- `src/tools/dev-api.ts`
+
+### Files changed
+- `src/tools/sidebar.ts` — rewritten to take `DevApi`; 4 new panels added.
+- `src/tools/main.ts` — instantiates `DevApi`, ticks it each frame.
+- `tools.html` — noindex meta + updated title.
+- `src/critter.ts` — new `debugBotBehaviour: BotBehaviourTag = 'normal'` field.
+- `src/bot.ts` — honours `bot.debugBotBehaviour` (idle/passive/aggressive/
+  chase/ability_only/normal). Zero effect in production (default 'normal').
+- `src/input.ts` — exports `getHeldKeyCodes()` and `getHeldActionsSnapshot()`
+  for the Input panel. Game code still reads via `getMoveVector`/`isHeld`.
+
+### Bundle impact
+- `dist/assets/tools-*.js`: 10.04 kB → 25.58 kB (gzip 3.94 → 8.21 kB).
+  Internal-only bundle, acceptable.
+- `dist/assets/index-*.js` (main game): unchanged at 3.07 kB.
+- `dist/assets/input-touch-*.js` (shared): +0.21 kB (two input exports).
+
+### How to use (lab-side, console)
+- `__devApi.setAllBotsBehaviour('idle')` — freeze every bot in place.
+- `__devApi.setBotBehaviour(1, 'aggressive')` — bot at index 1 gets 3×
+  ability fire rate + lower headbutt threshold.
+- `__devApi.forceAbility(0)` — fire the player's J slot ignoring CD.
+- `__devApi.resetPlayerCooldowns()` — all player cooldowns back to 0.
+- `__devApi.teleportBotsPreset('corners')` — scatter bots to the 4 corners.
+- `__devApi.getEventLog()` — last 60 events (timestamp + type + actor).
+
+Sidebar surfaces all of the above as buttons/dropdowns too.

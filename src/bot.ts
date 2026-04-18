@@ -6,21 +6,28 @@ import { FEEL } from './gamefeel';
  * Placeholder bot AI: chase the nearest alive critter, headbutt when close,
  * and use abilities based on their SEMANTIC TAGS (not on their slot index).
  *
- * The bot is intentionally dumb. Its only job is to not crash with new
- * ability types and to use abilities in roughly sensible contexts. Any
- * real intelligence is out of scope — the bot is itself a placeholder
- * and will likely be rewritten once the final roster is in.
+ * Respects `bot.debugBotBehaviour` so the /tools.html dev lab can isolate
+ * behaviour components without touching this file. In production all bots
+ * run with the default 'normal' tag and this code path is a no-op extra.
  *
- * Decisions:
- *   - A 'mobility' ability gets used to close mid-range gaps (dist 3..6)
- *   - An 'aoe_push' ability gets used when surrounded (>= 2 enemies nearby)
- *
- * If an ability has neither of those tags, the bot simply doesn't touch
- * it — the player will, and we don't care about bot optimality with
- * unknown abilities right now.
+ * Behaviour modes:
+ *   - normal       : full AI (chase + headbutt + abilities)
+ *   - idle         : freeze in place, don't touch anything
+ *   - passive      : chase only, never headbutt or fire abilities
+ *   - aggressive   : ~3× ability fire rate, headbutt sooner
+ *   - chase        : chase only, no headbutt, no abilities
+ *   - ability_only : skip headbutt, still fires abilities
  */
 export function updateBot(bot: Critter, allCritters: Critter[], dt: number): void {
   if (!bot.alive) return;
+
+  const mode = bot.debugBotBehaviour;
+
+  // 'idle' = freeze in place. No input, no abilities, nothing.
+  if (mode === 'idle') {
+    bot.hasInput = false;
+    return;
+  }
 
   // Find nearest alive enemy + count enemies within 4 units
   let nearest: Critter | null = null;
@@ -65,10 +72,18 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
     bot.vz += nz * accel * dt;
   }
 
-  // --- Basic headbutt when close
-  if (nearestDist < 2.0) {
+  // Early-out paths that disable offensive actions ------------------------
+  if (mode === 'passive' || mode === 'chase') return;
+
+  // --- Headbutt when close (unless ability_only) ---
+  const skipHeadbutt = mode === 'ability_only';
+  const headbuttRange = mode === 'aggressive' ? 2.5 : 2.0;
+  if (!skipHeadbutt && nearestDist < headbuttRange) {
     bot.startHeadbutt();
   }
+
+  // Ability fire rate multiplier (aggressive mode fires more often)
+  const aggroMul = mode === 'aggressive' ? 3.0 : 1.0;
 
   // --- Mobility ability: use at mid-range to close the gap
   const mobilityAbility = findAbilityByTag(bot.abilityStates, 'mobility');
@@ -78,8 +93,7 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
     nearestDist > 3.0 &&
     nearestDist < 6.0
   ) {
-    // ~40% chance per second at 60fps
-    if (Math.random() < 0.02) {
+    if (Math.random() < 0.02 * aggroMul) {
       activateAbility(mobilityAbility, bot);
     }
   }
@@ -87,7 +101,7 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
   // --- AoE push ability: use when surrounded
   const aoeAbility = findAbilityByTag(bot.abilityStates, 'aoe_push');
   if (aoeAbility && canActivateAbility(aoeAbility) && nearbyCount >= 2) {
-    if (Math.random() < 0.015) {
+    if (Math.random() < 0.015 * aggroMul) {
       activateAbility(aoeAbility, bot);
     }
   }
@@ -95,7 +109,7 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
   // --- Buff ability (e.g. Frenzy): activate when close to an enemy
   const buffAbility = findAbilityByTag(bot.abilityStates, 'buff');
   if (buffAbility && canActivateAbility(buffAbility) && nearestDist < 3.5) {
-    if (Math.random() < 0.008) {
+    if (Math.random() < 0.008 * aggroMul) {
       activateAbility(buffAbility, bot);
     }
   }

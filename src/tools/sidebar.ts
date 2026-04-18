@@ -3,16 +3,27 @@
 // ---------------------------------------------------------------------------
 //
 // Ugly-but-useful fixed panel on the right side of the canvas. Plain DOM,
-// no framework. Every control writes DIRECTLY into the existing Game or
-// Critter fields. No tool-specific state machine — if a control stops
-// working after a game refactor, the failure mode is obvious in the code.
+// no framework. Every control goes through DevApi (src/tools/dev-api.ts) so
+// the game engine never gets poked from UI code directly. If a panel stops
+// working after a refactor, the failure lives in DevApi, not here.
+//
+// Panels (top to bottom):
+//   0. INTERNAL banner (visible reminder this page is a dev surface)
+//   1. Matchup     — pick player + up to 3 bots, start/restart/randomize
+//   2. Arena       — seed + pattern + batches + force/replay seed
+//   3. Bots        — per-bot behaviour dropdown + bulk apply
+//   4. Gameplay    — event log + cooldowns + force ability + teleports
+//   5. Animation   — live sliders on the player's animPersonality
+//   6. Performance — FPS / frameMs / drawcalls / tris / geo / tex / entities
+//   7. Input       — keys held + held actions + gamepad list
+//   8. Playback    — speedScale, pause/slow, end-match
+//   9. Player info — raw stat readout for the current critter
 // ---------------------------------------------------------------------------
 
-import type { Game } from '../game';
-import { CRITTER_PRESETS } from '../critter';
 import { getPlayableNames } from '../roster';
 import { deriveAnimationPersonality } from '../critter-animation';
 import { clearAllHeldInputs } from '../input';
+import type { DevApi, BotBehaviourTag, GameplayEvent } from './dev-api';
 
 const NONE = '(none)';
 
@@ -28,6 +39,12 @@ const ANIM_PARAMS = [
 
 type AnimKey = typeof ANIM_PARAMS[number]['key'];
 
+const BOT_BEHAVIOURS: BotBehaviourTag[] = [
+  'normal', 'idle', 'passive', 'aggressive', 'chase', 'ability_only',
+];
+
+const TELEPORT_PRESETS = ['center', 'corners', 'line', 'bunch'] as const;
+
 // ---------------------------------------------------------------------------
 // Styles — injected once, scoped under body.lab-mode via the #lab-sidebar id
 // ---------------------------------------------------------------------------
@@ -36,17 +53,29 @@ const CSS = `
 #lab-sidebar {
   position: fixed;
   top: 0; right: 0;
-  width: 320px;
+  width: 340px;
   max-height: 100vh;
   overflow-y: auto;
   padding: 12px 14px;
-  background: rgba(12, 14, 22, 0.88);
+  background: rgba(12, 14, 22, 0.9);
   color: #dde1ea;
   font: 12px/1.35 ui-monospace, Menlo, Consolas, monospace;
   border-left: 1px solid rgba(255,255,255,0.08);
   z-index: 10000;
   pointer-events: auto;
   user-select: none;
+}
+#lab-sidebar .lab-banner {
+  background: linear-gradient(90deg, #3b0f14, #1a0a10);
+  border: 1px solid #e74c3c;
+  color: #ffbbb2;
+  padding: 6px 10px;
+  border-radius: 3px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  margin-bottom: 12px;
 }
 #lab-sidebar h2 {
   font-size: 11px;
@@ -121,6 +150,117 @@ const CSS = `
   white-space: pre-wrap;
   font-variant-numeric: tabular-nums;
 }
+#lab-sidebar .lab-event-log {
+  background: #10131f;
+  padding: 6px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  color: #9ea4b8;
+  max-height: 160px;
+  overflow-y: auto;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+#lab-sidebar .lab-event-log .evt {
+  display: grid;
+  grid-template-columns: 40px 78px 1fr;
+  gap: 4px;
+}
+#lab-sidebar .lab-event-log .evt-t       { color: #5c6177; }
+#lab-sidebar .lab-event-log .evt-type    { color: #7fc8ff; text-transform: uppercase; font-size: 9px; }
+#lab-sidebar .lab-event-log .evt-actor   { color: #e8c77d; }
+#lab-sidebar .lab-event-log .evt-details { color: #9aa6c4; }
+#lab-sidebar .evt-headbutt   .evt-type { color: #ff9a5c; }
+#lab-sidebar .evt-fall       .evt-type { color: #e74c3c; }
+#lab-sidebar .evt-eliminate  .evt-type { color: #ff5577; }
+#lab-sidebar .evt-respawn    .evt-type { color: #4ade80; }
+#lab-sidebar .evt-ability_cast .evt-type { color: #b48bff; }
+#lab-sidebar .evt-ability_end  .evt-type { color: #7a6da6; }
+#lab-sidebar .evt-collapse_warn .evt-type { color: #ffcc00; }
+#lab-sidebar .evt-collapse_batch .evt-type { color: #ff8844; }
+#lab-sidebar .evt-match_started .evt-type { color: #4ade80; }
+#lab-sidebar .evt-match_ended  .evt-type { color: #9aa6c4; }
+#lab-sidebar .lab-bot-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+#lab-sidebar .lab-bot-row .bot-name { color: #e8c77d; }
+#lab-sidebar .lab-bot-row.dead .bot-name { color: #5c6177; text-decoration: line-through; }
+#lab-sidebar .lab-bot-row .bot-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #4ade80;
+}
+#lab-sidebar .lab-bot-row.dead .bot-dot { background: #5c6177; }
+#lab-sidebar .lab-cd-row {
+  display: grid;
+  grid-template-columns: 30px 1fr 70px;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  margin-bottom: 3px;
+}
+#lab-sidebar .lab-cd-row .cd-slot { color: #9aa6c4; }
+#lab-sidebar .lab-cd-row .cd-name { color: #dde1ea; }
+#lab-sidebar .lab-cd-row .cd-bar-bg {
+  height: 6px; background: #1a1e2c; border-radius: 3px; overflow: hidden;
+  grid-column: 2 / span 2;
+}
+#lab-sidebar .lab-cd-row .cd-bar {
+  height: 100%; background: #4ade80; border-radius: 3px;
+  transition: width 0.1s linear;
+}
+#lab-sidebar .lab-cd-row.on-cd .cd-bar    { background: #ff8844; }
+#lab-sidebar .lab-cd-row.active  .cd-bar  { background: #e74c3c; }
+#lab-sidebar .lab-cd-row .cd-val {
+  color: #b8becf; font-variant-numeric: tabular-nums; text-align: right; font-size: 10px;
+}
+#lab-sidebar .lab-perf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  background: #14182a;
+  padding: 6px 8px;
+  border-radius: 3px;
+}
+#lab-sidebar .lab-perf-grid .pk { color: #9aa6c4; }
+#lab-sidebar .lab-perf-grid .pv { color: #e8c77d; text-align: right; }
+#lab-sidebar .lab-input-box {
+  background: #14182a;
+  padding: 6px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+#lab-sidebar .lab-input-box .key {
+  display: inline-block;
+  background: #1a1e2c;
+  border: 1px solid #30364a;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin: 2px 2px 0 0;
+  color: #dde1ea;
+  font-size: 10px;
+}
+#lab-sidebar .lab-input-box .action {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin: 2px 2px 0 0;
+  font-size: 10px;
+  background: #1a1e2c;
+  color: #5c6177;
+  border: 1px solid #30364a;
+}
+#lab-sidebar .lab-input-box .action.on {
+  color: #000;
+  background: #ffdc5c;
+  border-color: #ffdc5c;
+}
 #lab-sidebar .lab-note {
   font-size: 10px;
   color: #6a7289;
@@ -135,7 +275,7 @@ body.lab-mode #end-screen { display: none !important; }
 // Mount
 // ---------------------------------------------------------------------------
 
-export function mountLabSidebar(game: Game): void {
+export function mountLabSidebar(devApi: DevApi): void {
   injectStyles();
 
   const root = document.createElement('div');
@@ -145,18 +285,22 @@ export function mountLabSidebar(game: Game): void {
   // Sticky-key guard: any interaction with the sidebar drops every held
   // input. A dropdown/slider stealing focus can cause a keyup to miss the
   // window listener, which leaves the critter drifting after release.
-  // Covers pointerdown (opening a dropdown / grabbing a slider / button
-  // press) and focusin (tab into a control).
   root.addEventListener('pointerdown', () => clearAllHeldInputs());
   root.addEventListener('focusin', () => clearAllHeldInputs());
 
-  // --- state ---
+  // ---- INTERNAL banner --------------------------------------------------
+  const banner = document.createElement('div');
+  banner.className = 'lab-banner';
+  banner.textContent = 'INTERNAL DEV TOOL · not for players';
+  root.appendChild(banner);
+
+  // ---- state ------------------------------------------------------------
   const names = getPlayableNames(); // 9 playables
   let playerPick = 'Sergei';
   let botPicks: string[] = ['Trunk', 'Kurama', 'Shelly'];
   let lastSeed: number | null = null;
 
-  // --- Matchup section ---
+  // ---- Matchup ----------------------------------------------------------
   const matchup = section(root, 'Matchup');
   const playerSel = select(matchup, 'Player', names, playerPick, (v) => { playerPick = v; });
   const bot1Sel = select(matchup, 'Bot 1', [NONE, ...names], botPicks[0] ?? NONE, (v) => { botPicks[0] = v === NONE ? '' : v; });
@@ -184,13 +328,13 @@ export function mountLabSidebar(game: Game): void {
   function startMatch(reuseSeed: boolean): void {
     const opts: { seed?: number } = {};
     if (reuseSeed && lastSeed !== null) opts.seed = lastSeed;
-    game.debugStartOfflineMatch(playerPick, currentBotNames(), opts);
-    const info = game.debugGetArenaInfo();
+    devApi.startMatch(playerPick, currentBotNames(), opts);
+    const info = devApi.getArenaInfo();
     if (info) lastSeed = info.seed;
-    refreshInfoPanel();
+    refreshAll();
   }
 
-  // --- Arena section ---
+  // ---- Arena ------------------------------------------------------------
   const arena = section(root, 'Arena');
   const arenaInfoEl = document.createElement('div');
   arenaInfoEl.className = 'lab-info';
@@ -209,20 +353,68 @@ export function mountLabSidebar(game: Game): void {
     if (!raw) return;
     const seed = parseInt(raw, 10) | 0;
     lastSeed = seed;
-    game.debugForceArenaSeed(seed);
-    refreshInfoPanel();
+    devApi.forceSeed(seed);
+    refreshArenaPanel();
   });
   button(arenaBtns, 'Replay Last', () => {
     if (lastSeed === null) return;
-    game.debugStartOfflineMatch(playerPick, currentBotNames(), { seed: lastSeed });
-    refreshInfoPanel();
+    devApi.startMatch(playerPick, currentBotNames(), { seed: lastSeed });
+    refreshAll();
   });
   button(arenaBtns, 'Copy Seed', () => {
-    const info = game.debugGetArenaInfo();
+    const info = devApi.getArenaInfo();
     if (info) navigator.clipboard.writeText(String(info.seed)).catch(() => {});
   });
 
-  // --- Animation tuner ---
+  // ---- Bots (priority #1) ----------------------------------------------
+  const bots = section(root, 'Bots');
+  const bulkRow = row(bots);
+  const bulkLabel = document.createElement('label');
+  bulkLabel.textContent = 'All bots';
+  bulkRow.appendChild(bulkLabel);
+  const bulkSel = document.createElement('select');
+  for (const b of BOT_BEHAVIOURS) {
+    const op = document.createElement('option');
+    op.value = b; op.textContent = b;
+    bulkSel.appendChild(op);
+  }
+  bulkSel.value = 'normal';
+  bulkSel.addEventListener('change', () => {
+    devApi.setAllBotsBehaviour(bulkSel.value as BotBehaviourTag);
+    refreshBotsPanel();
+  });
+  bulkRow.appendChild(bulkSel);
+  const botListEl = document.createElement('div');
+  bots.appendChild(botListEl);
+
+  // ---- Gameplay (priority #2) ------------------------------------------
+  const gameplay = section(root, 'Gameplay');
+  // Cooldowns live readout
+  const cdTitle = tinyLabel(gameplay, 'Cooldowns (player)');
+  void cdTitle;
+  const cdList = document.createElement('div');
+  gameplay.appendChild(cdList);
+  // Force/reset actions
+  const gpBtns = row(gameplay);
+  button(gpBtns, 'Reset CDs', () => { devApi.resetPlayerCooldowns(); refreshCooldownsPanel(); });
+  button(gpBtns, 'Force J', () => devApi.forceAbility(0));
+  button(gpBtns, 'Force K', () => devApi.forceAbility(1));
+  button(gpBtns, 'Force L', () => devApi.forceAbility(2));
+  // Teleports
+  const tpBtns = row(gameplay);
+  button(tpBtns, 'TP Player Centre', () => devApi.teleportPlayer(0, 0));
+  for (const preset of TELEPORT_PRESETS) {
+    button(tpBtns, `Bots→${preset}`, () => devApi.teleportBotsPreset(preset));
+  }
+  // Event log
+  tinyLabel(gameplay, 'Event log');
+  const eventLogEl = document.createElement('div');
+  eventLogEl.className = 'lab-event-log';
+  gameplay.appendChild(eventLogEl);
+  const evtBtns = row(gameplay);
+  button(evtBtns, 'Clear Log', () => { devApi.clearEventLog(); refreshEventLog(); });
+
+  // ---- Animation tuner -------------------------------------------------
   const anim = section(root, 'Animation (player)');
   const sliders = new Map<AnimKey, HTMLInputElement>();
   const valueLabels = new Map<AnimKey, HTMLSpanElement>();
@@ -242,7 +434,7 @@ export function mountLabSidebar(game: Game): void {
     slider.addEventListener('input', () => {
       const v = parseFloat(slider.value);
       val.textContent = v.toFixed(3);
-      const player = game.player;
+      const player = devApi.game.player;
       if (player?.animPersonality) {
         player.animPersonality[p.key] = v;
       }
@@ -254,21 +446,32 @@ export function mountLabSidebar(game: Game): void {
   }
   const animBtns = row(anim);
   button(animBtns, 'Reset Derived', () => {
-    const player = game.player;
+    const player = devApi.game.player;
     if (!player) return;
-    const derived = deriveAnimationPersonality(player.config);
-    player.animPersonality = derived;
+    player.animPersonality = deriveAnimationPersonality(player.config);
     syncSlidersFromPlayer();
   });
   button(animBtns, 'Copy Values', () => {
-    const player = game.player;
+    const player = devApi.game.player;
     if (!player) return;
     navigator.clipboard
       .writeText(JSON.stringify(player.animPersonality, null, 2))
       .catch(() => {});
   });
 
-  // --- Playback / quick actions ---
+  // ---- Performance (priority #3) ---------------------------------------
+  const perf = section(root, 'Performance');
+  const perfGrid = document.createElement('div');
+  perfGrid.className = 'lab-perf-grid';
+  perf.appendChild(perfGrid);
+
+  // ---- Input (priority #4) ---------------------------------------------
+  const inputSec = section(root, 'Input');
+  const inputBox = document.createElement('div');
+  inputBox.className = 'lab-input-box';
+  inputSec.appendChild(inputBox);
+
+  // ---- Playback --------------------------------------------------------
   const actions = section(root, 'Playback');
   const speedRow = row(actions);
   const speedLabel = document.createElement('label');
@@ -286,7 +489,7 @@ export function mountLabSidebar(game: Game): void {
   speedVal.textContent = '1.00';
   speedSlider.addEventListener('input', () => {
     const v = parseFloat(speedSlider.value);
-    game.debugSpeedScale = v;
+    devApi.setSpeed(v);
     speedVal.textContent = v.toFixed(2);
   });
   speedRow.appendChild(speedSlider);
@@ -294,23 +497,24 @@ export function mountLabSidebar(game: Game): void {
 
   const actionBtns = row(actions);
   button(actionBtns, 'Pause', () => {
-    game.debugSpeedScale = game.debugSpeedScale === 0 ? 1 : 0;
-    speedSlider.value = String(game.debugSpeedScale);
-    speedVal.textContent = game.debugSpeedScale.toFixed(2);
+    const next = devApi.getSpeed() === 0 ? 1 : 0;
+    devApi.setSpeed(next);
+    speedSlider.value = String(next);
+    speedVal.textContent = next.toFixed(2);
   });
   button(actionBtns, 'Slow 0.3×', () => {
-    game.debugSpeedScale = 0.3;
+    devApi.setSpeed(0.3);
     speedSlider.value = '0.3';
     speedVal.textContent = '0.30';
   });
   button(actionBtns, 'Normal 1×', () => {
-    game.debugSpeedScale = 1;
+    devApi.setSpeed(1);
     speedSlider.value = '1';
     speedVal.textContent = '1.00';
   });
-  button(actionBtns, 'End Match', () => game.debugEndMatchImmediately());
+  button(actionBtns, 'End Match', () => devApi.endMatch());
 
-  // --- Info panel ---
+  // ---- Player info -----------------------------------------------------
   const info = section(root, 'Player info');
   const infoEl = document.createElement('div');
   infoEl.className = 'lab-info';
@@ -318,12 +522,22 @@ export function mountLabSidebar(game: Game): void {
 
   const note = document.createElement('div');
   note.className = 'lab-note';
-  note.textContent = '/tools.html · internal · unlinked from production UI';
+  note.textContent = '/tools.html · internal · unlinked from production UI · noindex';
   root.appendChild(note);
 
-  // --- Polling loop for live panels ---
+  // ---- Live panels -----------------------------------------------------
+  function refreshAll(): void {
+    refreshArenaPanel();
+    refreshInfoPanel();
+    refreshBotsPanel();
+    refreshCooldownsPanel();
+    refreshEventLog();
+    refreshPerfPanel();
+    refreshInputPanel();
+  }
+
   function refreshInfoPanel(): void {
-    const p = game.player;
+    const p = devApi.game.player;
     if (!p) { infoEl.textContent = 'no player'; return; }
     const cfg = p.config;
     const ap = p.animPersonality;
@@ -347,7 +561,7 @@ export function mountLabSidebar(game: Game): void {
   }
 
   function refreshArenaPanel(): void {
-    const info = game.debugGetArenaInfo();
+    const info = devApi.getArenaInfo();
     if (!info) {
       arenaInfoEl.textContent = '(no arena — start a match)';
       return;
@@ -373,8 +587,222 @@ export function mountLabSidebar(game: Game): void {
     }
   }
 
+  function refreshBotsPanel(): void {
+    const list = devApi.getBotSnapshots();
+    botListEl.innerHTML = '';
+    if (list.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'lab-note';
+      empty.textContent = '(no bots in current match)';
+      botListEl.appendChild(empty);
+      return;
+    }
+    for (const b of list) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'lab-bot-row' + (b.alive ? '' : ' dead');
+      const dot = document.createElement('span');
+      dot.className = 'bot-dot';
+      rowEl.appendChild(dot);
+      const name = document.createElement('span');
+      name.className = 'bot-name';
+      name.textContent = `${b.index} · ${b.name}`;
+      rowEl.appendChild(name);
+      const sel = document.createElement('select');
+      for (const opt of BOT_BEHAVIOURS) {
+        const op = document.createElement('option');
+        op.value = opt; op.textContent = opt;
+        sel.appendChild(op);
+      }
+      sel.value = b.behaviour;
+      sel.addEventListener('change', () => {
+        devApi.setBotBehaviour(b.index, sel.value as BotBehaviourTag);
+      });
+      rowEl.appendChild(sel);
+      botListEl.appendChild(rowEl);
+    }
+  }
+
+  function refreshCooldownsPanel(): void {
+    const p = devApi.getPlayerSnapshot();
+    cdList.innerHTML = '';
+    if (!p) {
+      const empty = document.createElement('div');
+      empty.className = 'lab-note';
+      empty.textContent = '(no player)';
+      cdList.appendChild(empty);
+      return;
+    }
+    // Headbutt row
+    cdList.appendChild(renderCooldownRow('HB', 'headbutt', p.headbuttCooldown, 0.6, false));
+    // Ability rows
+    p.abilities.forEach((a, i) => {
+      const slot = ['J', 'K', 'L'][i] || `#${i}`;
+      let pct: number;
+      let cls: 'active' | 'on-cd' | '';
+      let display: string;
+      if (a.active) {
+        pct = 1;
+        cls = 'active';
+        display = a.windUpLeft > 0 ? `wind ${a.windUpLeft.toFixed(1)}` : `act ${a.durationLeft.toFixed(1)}`;
+      } else if (a.cooldownLeft > 0) {
+        pct = 1 - Math.min(1, a.cooldownLeft / (a.cooldown || 1));
+        cls = 'on-cd';
+        display = `${a.cooldownLeft.toFixed(1)}s`;
+      } else {
+        pct = 1;
+        cls = '';
+        display = 'ready';
+      }
+      cdList.appendChild(renderCooldownRowFull(slot, a.name, pct, cls, display));
+    });
+  }
+
+  function renderCooldownRow(slot: string, name: string, cdLeft: number, fullCd: number, _unused: boolean): HTMLDivElement {
+    const onCd = cdLeft > 0;
+    const pct = onCd ? 1 - Math.min(1, cdLeft / fullCd) : 1;
+    return renderCooldownRowFull(slot, name, pct, onCd ? 'on-cd' : '', onCd ? `${cdLeft.toFixed(1)}s` : 'ready');
+  }
+
+  function renderCooldownRowFull(slot: string, name: string, pct: number, cls: 'active' | 'on-cd' | '', display: string): HTMLDivElement {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'lab-cd-row' + (cls ? ' ' + cls : '');
+    const slotEl = document.createElement('span');
+    slotEl.className = 'cd-slot';
+    slotEl.textContent = slot;
+    rowEl.appendChild(slotEl);
+    const nameEl = document.createElement('span');
+    nameEl.className = 'cd-name';
+    nameEl.textContent = name;
+    rowEl.appendChild(nameEl);
+    const valEl = document.createElement('span');
+    valEl.className = 'cd-val';
+    valEl.textContent = display;
+    rowEl.appendChild(valEl);
+    const bg = document.createElement('div');
+    bg.className = 'cd-bar-bg';
+    const bar = document.createElement('div');
+    bar.className = 'cd-bar';
+    bar.style.width = `${Math.max(0, Math.min(1, pct)) * 100}%`;
+    bg.appendChild(bar);
+    rowEl.appendChild(bg);
+    return rowEl;
+  }
+
+  function refreshEventLog(): void {
+    const log = devApi.getEventLog();
+    // Render newest first, cap to ~20 visible for readability (full log is
+    // 60 events; extras are reachable via scroll below).
+    eventLogEl.innerHTML = '';
+    const now = performance.now();
+    for (let i = log.length - 1; i >= 0; i--) {
+      const e = log[i];
+      const dtSec = (now - e.t) / 1000;
+      const line = formatEventLine(e, dtSec);
+      eventLogEl.appendChild(line);
+    }
+  }
+
+  function formatEventLine(e: GameplayEvent, dtSec: number): HTMLDivElement {
+    const el = document.createElement('div');
+    el.className = `evt evt-${e.type}`;
+    const t = document.createElement('span');
+    t.className = 'evt-t';
+    t.textContent = `-${dtSec.toFixed(1)}s`;
+    const type = document.createElement('span');
+    type.className = 'evt-type';
+    type.textContent = e.type;
+    const rest = document.createElement('span');
+    const actor = document.createElement('span');
+    actor.className = 'evt-actor';
+    actor.textContent = e.actor ?? '';
+    rest.appendChild(actor);
+    if (e.details) {
+      rest.appendChild(document.createTextNode(' '));
+      const det = document.createElement('span');
+      det.className = 'evt-details';
+      det.textContent = e.details;
+      rest.appendChild(det);
+    }
+    el.appendChild(t);
+    el.appendChild(type);
+    el.appendChild(rest);
+    return el;
+  }
+
+  function refreshPerfPanel(): void {
+    const p = devApi.getPerf();
+    perfGrid.innerHTML = '';
+    const rows: Array<[string, string]> = [
+      ['fps',        p.fps.toFixed(0)],
+      ['frameMs',    p.frameMs.toFixed(1)],
+      ['drawCalls',  String(p.drawCalls)],
+      ['triangles',  p.triangles.toLocaleString('en-US')],
+      ['geometries', String(p.geometries)],
+      ['textures',   String(p.textures)],
+      ['critters',   String(p.critters)],
+      ['fragments',  `${p.arenaFragmentsAlive}/${p.arenaFragmentsTotal}`],
+    ];
+    for (const [k, v] of rows) {
+      const kk = document.createElement('span'); kk.className = 'pk'; kk.textContent = k;
+      const vv = document.createElement('span'); vv.className = 'pv'; vv.textContent = v;
+      perfGrid.appendChild(kk);
+      perfGrid.appendChild(vv);
+    }
+  }
+
+  function refreshInputPanel(): void {
+    const snap = devApi.getInputSnapshot();
+    inputBox.innerHTML = '';
+
+    const moveLine = document.createElement('div');
+    moveLine.textContent = `move (${snap.move.x.toFixed(2)}, ${snap.move.z.toFixed(2)})`;
+    inputBox.appendChild(moveLine);
+
+    const actionsLine = document.createElement('div');
+    for (const [name, on] of Object.entries(snap.held)) {
+      const chip = document.createElement('span');
+      chip.className = 'action' + (on ? ' on' : '');
+      chip.textContent = name;
+      actionsLine.appendChild(chip);
+    }
+    inputBox.appendChild(actionsLine);
+
+    const keysLine = document.createElement('div');
+    if (snap.keyboard.length === 0) {
+      const chip = document.createElement('span');
+      chip.className = 'key';
+      chip.textContent = '(no keys held)';
+      keysLine.appendChild(chip);
+    } else {
+      for (const k of snap.keyboard) {
+        const chip = document.createElement('span');
+        chip.className = 'key';
+        chip.textContent = k.code;
+        keysLine.appendChild(chip);
+      }
+    }
+    inputBox.appendChild(keysLine);
+
+    const gpLine = document.createElement('div');
+    gpLine.style.marginTop = '4px';
+    if (snap.gamepads.length === 0) {
+      const chip = document.createElement('span');
+      chip.className = 'action';
+      chip.textContent = 'no gamepad';
+      gpLine.appendChild(chip);
+    } else {
+      for (const gp of snap.gamepads) {
+        const chip = document.createElement('span');
+        chip.className = 'action' + (gp.connected ? ' on' : '');
+        chip.textContent = `GP${gp.index}: ${gp.id.slice(0, 24)}`;
+        gpLine.appendChild(chip);
+      }
+    }
+    inputBox.appendChild(gpLine);
+  }
+
   function syncSlidersFromPlayer(): void {
-    const player = game.player;
+    const player = devApi.game.player;
     if (!player?.animPersonality) return;
     for (const p of ANIM_PARAMS) {
       const slider = sliders.get(p.key)!;
@@ -384,34 +812,47 @@ export function mountLabSidebar(game: Game): void {
     }
   }
 
-  // Live refresh at 4 Hz — cheap enough, infrequent updates.
+  // Live refresh rates tuned per-panel cost:
+  //   - Fast (12 Hz): cooldowns, event log, perf, input — visible latency matters.
+  //   - Slow (4 Hz): arena + info + bots — updated when things change discretely.
+  setInterval(() => {
+    refreshCooldownsPanel();
+    refreshEventLog();
+    refreshPerfPanel();
+    refreshInputPanel();
+  }, 80);
   setInterval(() => {
     refreshArenaPanel();
     refreshInfoPanel();
+    refreshBotsPanel();
   }, 250);
   // First paint
   setTimeout(() => {
-    refreshArenaPanel();
-    refreshInfoPanel();
-    const info = game.debugGetArenaInfo();
+    refreshAll();
+    const info = devApi.getArenaInfo();
     if (info) {
       lastSeed = info.seed;
       seedInput.value = String(info.seed);
     }
   }, 100);
 
-  // Stash on window for manual tweaking from the console
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // Stash on window for manual tweaking from the console. We also keep the
+  // `__game` escape hatch from the previous version for backwards-compat
+  // with any debugging muscle memory.
   (window as unknown as { __lab: object }).__lab = {
-    game,
+    devApi,
+    game: devApi.game,
     startMatch,
-    setSpeed: (v: number) => { game.debugSpeedScale = v; speedSlider.value = String(v); speedVal.textContent = v.toFixed(2); },
+    setSpeed: (v: number) => {
+      devApi.setSpeed(v);
+      speedSlider.value = String(v);
+      speedVal.textContent = v.toFixed(2);
+    },
   };
 
-  // Keep player dropdown reactive
   playerSel.addEventListener('change', () => {
-    // If player changed, sync sliders to the new critter's derived values
-    // only if they're not in a match yet. Active matches keep current tuning.
+    // If player changed before pressing Start, nothing to sync yet. Active
+    // matches keep their current tuning.
   });
 }
 
@@ -435,6 +876,14 @@ function section(parent: HTMLElement, title: string): HTMLDivElement {
   wrap.appendChild(h);
   parent.appendChild(wrap);
   return wrap;
+}
+
+function tinyLabel(parent: HTMLElement, text: string): HTMLDivElement {
+  const el = document.createElement('div');
+  el.className = 'lab-note';
+  el.textContent = text;
+  parent.appendChild(el);
+  return el;
 }
 
 function row(parent: HTMLElement): HTMLDivElement {
@@ -476,7 +925,6 @@ function button(
   variant: 'default' | 'primary' = 'default',
 ): HTMLButtonElement {
   if (!parent.classList.contains('lab-btn-row')) {
-    // If parent isn't already a button row, wrap this button in one
     const r = document.createElement('div');
     r.className = 'lab-btn-row';
     parent.appendChild(r);

@@ -25,6 +25,7 @@ import { isLikelyMobile } from '../input';
 import { initTouchInput } from '../input-touch';
 import { loadMutedState } from '../audio';
 import { mountLabSidebar } from './sidebar';
+import { DevApi } from './dev-api';
 
 // --- WebGL sanity check ----------------------------------------------------
 const testCanvas = document.createElement('canvas');
@@ -76,14 +77,20 @@ loadMutedState();
 // --- Game instance ---------------------------------------------------------
 const game = new Game(scene);
 
+// DevApi centralises every lab-only capability. The sidebar only talks to
+// this layer — no direct game.debug* calls from UI code anymore. Keeps Game
+// from growing a pile of debug methods and lets us add inspection/mutation
+// features without touching gameplay files.
+const devApi = new DevApi(game, renderer);
+
 // Skip the normal title → character-select flow. Drop the title overlay so
 // the canvas + HUD are visible immediately; the sidebar will drive matches.
 game.debugEndMatchImmediately();
 // Kick off a default match so the tool is immediately useful.
-game.debugStartOfflineMatch('Sergei', ['Trunk', 'Kurama', 'Shelly']);
+devApi.startMatch('Sergei', ['Trunk', 'Kurama', 'Shelly']);
 
 // --- Mount the sidebar ------------------------------------------------------
-mountLabSidebar(game);
+mountLabSidebar(devApi);
 
 // --- Main loop (with debugSpeedScale for pause/slow-mo) --------------------
 let lastTime = performance.now();
@@ -98,11 +105,16 @@ function loop(now: number) {
   updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
   renderer.render(scene, camera);
   tickPreview(dt);
+  // Poll DevApi AFTER render so renderer.info counts reflect this frame's
+  // draw calls / triangles rather than the previous one.
+  devApi.tick(raw);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
-// Always expose __game in the lab, even in prod builds, since the whole
-// point of this entry point is debuggability.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as unknown as { __game: Game }).__game = game;
+// Always expose escape hatches for manual console tweaking in the lab. Both
+// the full Game instance and the DevApi layer are reachable — use DevApi
+// for structured helpers, use __game only when you really need to poke
+// engine internals.
+(window as unknown as { __game: Game; __devApi: DevApi }).__game = game;
+(window as unknown as { __game: Game; __devApi: DevApi }).__devApi = devApi;

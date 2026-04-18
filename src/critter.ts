@@ -7,6 +7,19 @@ import { getRosterEntry, type RosterEntry } from './roster';
 import { loadModel } from './model-loader';
 import { deriveAnimationPersonality, tickProceduralAnimation, type AnimationPersonality } from './critter-animation';
 
+/**
+ * Behaviour tag used ONLY by the /tools.html dev lab to isolate bot
+ * behaviour during testing. Production bots always run with 'normal'.
+ * See src/bot.ts for how each tag is interpreted.
+ */
+export type BotBehaviourTag =
+  | 'normal'       // default — full AI (chase + headbutt + abilities)
+  | 'idle'         // don't move, don't attack (freeze in place)
+  | 'passive'      // chase only, NEVER headbutt or use abilities
+  | 'aggressive'   // chase + much higher ability fire rate
+  | 'chase'        // chase only, no headbutt, no abilities (movement dummy)
+  | 'ability_only';// don't headbutt, only abilities
+
 export interface CritterConfig {
   name: string;
   color: number;
@@ -161,6 +174,13 @@ export class Critter {
    * once in the constructor; read every frame by tickProceduralAnimation.
    */
   animPersonality: AnimationPersonality;
+
+  /**
+   * Dev-lab behaviour override for bots. Only checked inside bot.ts when
+   * this critter is treated as a bot (i.e. NOT the local player).
+   * Default 'normal' = production behaviour. See BotBehaviourTag.
+   */
+  debugBotBehaviour: BotBehaviourTag = 'normal';
 
   constructor(config: CritterConfig, scene: THREE.Scene) {
     this.config = config;

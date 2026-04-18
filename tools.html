@@ -3,7 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bichitos Rumble — Lab</title>
+  <!-- Internal dev/lab page. Keep out of search engine indexes — there is
+       no link from the game, but a public URL is still reachable. The
+       page is safe (pure client lab, no server writes) but we don't want
+       it surfacing for players by accident. -->
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="googlebot" content="noindex, nofollow" />
+  <meta name="description" content="Internal dev/balance lab for Bichitos Rumble. Not a playable build." />
+  <title>Bichitos Rumble — Lab (internal)</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a18; }
