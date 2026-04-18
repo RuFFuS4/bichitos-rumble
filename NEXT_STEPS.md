@@ -4,55 +4,87 @@
 > Single source of truth for what to work on next.
 > Dispatch sessions: read this first.
 
-## Status (2026-04-17) — Bloque B CERRADO
+## Status — Bloques A, B y C CERRADOS
 
 ### Validated in production
 - [x] **Bloque A** — Multiplayer vertical slice (Colyseus, 2 players, deploy)
-- [x] **Bloque B #1** — ground_pound (K) end-to-end online
-- [x] **Bloque B #2** — Character select online + Trunk as 2nd playable
-- [x] **Bloque B #3 (portal)** — Portal as individual forfeit
-- [x] **Bloque B #3a+b** — Irregular fragment collapse (seed-deterministic)
-- [x] **Title menu** — "vs Bots" vs "Online Multiplayer" explicit buttons
-- [x] **Rotation fix** — fragment meshes no longer mirrored vs physics
-- [x] **Online restart (R) wired** — end-screen R/tap now re-queues in online
-- [x] **Input gating** — no parallel `connectOnlineWith`; `sendInput` only fires during server `'playing'` phase
-- [x] **Clean transition** — idle critters + arena disposed BEFORE network await
-- [x] **Collapse variety** — 2 macro patterns (A ≈55% outer→inner sweep, B ≈45% axis-split sideA/sideB)
+- [x] **Bloque B** — Online kit + arena fragment collapse + state-machine
+      hardening (restart, input gating, clean transitions, macro variety,
+      rotation-mirror fix). Full post-mortem of the visual/physics mirror
+      bug in `ERROR_LOG.md`.
 
-## Next block — PROPOSAL: more playable characters
+### Bloque C — Roster completo (9 playables)
+- [x] 9 optimised GLBs in `public/models/critters/` (sergei, trunk, kurama,
+      shelly, kermit, sihans, kowalski, cheeto, sebastian)
+- [x] Per-kit ability overrides on server (impulse/radius/force/multipliers)
+      so each critter feels different ONLINE, not just offline
+- [x] 7 new `CRITTER_PRESETS` + `CRITTER_ABILITIES` entries client-side
+- [x] 7 new `CRITTER_CONFIGS` + `CRITTER_ABILITY_KITS` entries server-side
+- [x] roster.ts status flipped `wip` → `playable` for all 7
+- [x] Verified in preview: all 9 selectable, Kermit test match runs clean
+      (GLB loaded, 2 abilities active, bots spawning, no console errors)
 
-Goal: ship at least **4 real playable critters** for the jam. Currently only
-Sergei and Trunk are confirmable. Content is directly visible to jam reviewers,
-and the pipeline is mature enough that each new character is ~30-60 min work.
+### Temporary-but-real roster identity
+Every critter gets distinct STATS + ABILITY TUNING, not unique ability TYPES.
+All reuse base factories (charge_rush / ground_pound / frenzy):
 
-Order (adjust based on which GLBs are ready):
-1. Audit GLB status in `public/models/critters/` — which of the 9 roster
-   entries have optimised models already.
-2. Pick the next 2 characters with the clearest stat/ability identity.
-3. For each:
-   - `src/critter.ts` — CRITTER_PRESETS entry (color, speed, mass, headbuttForce).
-   - `src/abilities.ts` — CRITTER_ABILITIES entry, reusing `charge_rush` /
-     `ground_pound` / `frenzy` factories with per-critter tuning.
-   - `server/src/sim/config.ts` — CRITTER_CONFIGS entry matching the client.
-   - `server/src/sim/abilities.ts` — CRITTER_ABILITY_KITS entry listing the
-     ability tags this critter has.
-   - `src/roster.ts` — mark status as `playable`.
-4. Test: pick the new character in character select, confirm match works
-   offline and online.
+| Critter   | Role         | Kit          | Stats                         |
+|-----------|--------------|--------------|-------------------------------|
+| Sergei    | Balanced     | CR + GP + F  | speed 10, mass 1.1, HB 15     |
+| Trunk     | Bruiser      | CR + GP      | speed 7, mass 1.4, HB 17      |
+| Kurama    | Trickster    | CR + GP + F  | speed 12, mass 0.8, HB 12     |
+| Shelly    | Tank         | CR + GP + F  | speed 6.5, mass 1.5, HB 16    |
+| Kermit    | Controller   | CR + GP      | speed 9, mass 1.0, HB 13      |
+| Sihans    | Trapper      | CR + GP      | speed 8, mass 1.15, HB 14     |
+| Kowalski  | Mage         | CR + GP      | speed 10, mass 0.9, HB 11     |
+| Cheeto    | Assassin     | CR + GP      | speed 13, mass 0.7, HB 11     |
+| Sebastian | Glass Cannon | CR + GP      | speed 10.5, mass 0.75, HB 18  |
 
-Each character added = **visible jam deliverable** + more distinct kit
-combinations to play against.
+Per-ability tuning (impulse/radius/force/cooldown/multipliers) differs per
+critter — kept identical between client and server so feel matches online.
+
+### Known cosmetic debt from Bloque C (NOT blocking)
+- The 7 new GLBs inherit default transforms (scale 2.0, rotation π, pivotY 0.05).
+  May need per-critter `__tune({rotation, scale, pivotY})` once seen rendered
+  in real play. Addressable one-by-one with no code risk via roster.ts.
+- No visual feedback yet for Frenzy (L). Characters that use it (Sergei,
+  Kurama, Shelly) show HUD cooldown but no screen VFX.
+
+## Next block — shared procedural animations
+
+Now that the roster is complete, the next real ROI is **shared procedural
+animations**. All 9 critters currently only have the bobbing + scale
+feedback + knockback tilt baked into critter.ts. Missing:
+
+- Idle pose (subtle head sway, breathing)
+- Walking/running squash
+- Pre-headbutt wind-up body lean (currently just position/scale)
+- Landing impact anticipation
+- Directional lean when turning
+
+Plan: keep it **shared/procedural**. No per-critter rig. All 9 use the
+same Animation class driven by speed magnitude, state flags, and dt.
+Ships in one pass for the whole roster.
+
+After that, in order:
+1. **Sound / feedback essential** — hit impact sound per critter mass
+   tier, ability fire sounds already half-wired, missing victory/defeat
+   stinger variations.
+2. **Real balance pass** — play test matches, tune stats that feel wrong.
+3. **Character-specific ultimates** — only then, Bloque D: replace the
+   temporary CR/GP/F reuse with unique per-critter final abilities.
 
 ## Blocked / explicitly deferred
 
 | Item | Reason | Revisit? |
 |------|--------|----------|
-| Frenzy feedback (L visuals/audio) | Polish, low ROI vs a new character | Post-content, if time |
-| Waiting-for-opponent screen polish | Cosmetic — current text overlay is functional | Post-jam or if time |
-| More complex/irregular arena collapse | Current system works and is legible — explicit deferral, considered stable/temporary | Post-jam |
-| Reconnection (`allowReconnection`) | Non-critical for a 2-player jam, match length ~2 min | Only if stability complaints |
+| Frenzy feedback (L visuals/audio) | Low ROI vs shared animations which buff ALL critters at once | Covered by next block |
+| Waiting-for-opponent screen polish | Cosmetic | Post-jam or if time |
+| More complex/irregular arena collapse | Stable/temporary version works — explicit post-jam item | Post-jam |
+| Reconnection (`allowReconnection`) | Non-critical for 2-player 2-min matches | Only if stability complaints |
 | Client-side prediction, rollback, matchmaking, login, ranking | All non-goals per CLAUDE.md | Post-jam |
 | Skeletal animations, advanced cosmetics | Against style lock | Post-jam |
+| Per-critter ultimate abilities | Temporary kit with base factories is sufficient for jam | After animations + sound |
 
 ## Accepted technical debt for the jam
 

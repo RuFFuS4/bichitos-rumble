@@ -9,6 +9,7 @@
 
 import type { PlayerSchema } from '../state/PlayerSchema.js';
 import { SIM, getCritterConfig } from './config.js';
+import { getAbilityKit } from './abilities.js';
 
 /**
  * Minimal shape for the per-player internal data used here.
@@ -132,25 +133,35 @@ export function updateFalling(
   return toRespawn;
 }
 
-/** Effective mass = base mass × active buff multipliers. */
+/** Effective mass = base mass × active buff multipliers (per-kit overrides). */
 export function effectiveMass(p: PlayerSchema): number {
   let m = getCritterConfig(p.critterName).mass;
-  for (const a of p.abilities) {
-    if (a.active && a.windUpLeft <= 0) {
-      if (a.abilityType === 'charge_rush') m *= SIM.chargeRush.massMultiplier;
-      if (a.abilityType === 'frenzy') m *= SIM.frenzy.massMultiplier;
+  const kit = getAbilityKit(p.critterName);
+  for (let i = 0; i < p.abilities.length; i++) {
+    const a = p.abilities[i];
+    const def = kit[i];
+    if (!def || !a.active || a.windUpLeft > 0) continue;
+    if (a.abilityType === 'charge_rush') {
+      m *= def.massMultiplier ?? SIM.chargeRush.massMultiplier;
+    } else if (a.abilityType === 'frenzy') {
+      m *= def.frenzyMassMult ?? SIM.frenzy.massMultiplier;
     }
   }
   return m;
 }
 
-/** Effective speed = base speed × active buff multipliers. */
+/** Effective speed = base speed × active buff multipliers (per-kit overrides). */
 export function effectiveSpeed(p: PlayerSchema): number {
   let s = getCritterConfig(p.critterName).speed;
-  for (const a of p.abilities) {
-    if (a.active && a.windUpLeft <= 0) {
-      if (a.abilityType === 'charge_rush') s *= SIM.chargeRush.speedMultiplier;
-      if (a.abilityType === 'frenzy') s *= SIM.frenzy.speedMultiplier;
+  const kit = getAbilityKit(p.critterName);
+  for (let i = 0; i < p.abilities.length; i++) {
+    const a = p.abilities[i];
+    const def = kit[i];
+    if (!def || !a.active || a.windUpLeft > 0) continue;
+    if (a.abilityType === 'charge_rush') {
+      s *= def.speedMultiplier ?? SIM.chargeRush.speedMultiplier;
+    } else if (a.abilityType === 'frenzy') {
+      s *= def.frenzySpeedMult ?? SIM.frenzy.speedMultiplier;
     }
   }
   return s;

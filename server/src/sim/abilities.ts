@@ -19,26 +19,105 @@ import { SIM } from './config.js';
 
 export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy';
 
+/**
+ * Per-ability tuning. The simulation falls back to SIM.* defaults when a
+ * field is omitted, but for character IDENTITY to read online, each kit
+ * should override the relevant per-type fields so different critters
+ * actually feel different on the server.
+ */
 export interface AbilityDef {
   type: AbilityType;
   cooldown: number;
   duration: number;
   windUp: number;
+  // charge_rush per-kit tuning (falls back to SIM.chargeRush.*)
+  impulse?: number;
+  speedMultiplier?: number;
+  massMultiplier?: number;
+  // ground_pound per-kit tuning (falls back to SIM.groundPound.*)
+  radius?: number;
+  force?: number;
+  // frenzy per-kit tuning (falls back to SIM.frenzy.*)
+  frenzySpeedMult?: number;
+  frenzyMassMult?: number;
 }
 
 // Per-critter ability kits. MUST stay in sync with client's CRITTER_ABILITIES.
-// Server-side kits include only the fields the simulation needs (type,
-// cooldown, duration, windUp). Visual names/descriptions live on the client.
+// Tuning values (impulse/radius/force/multipliers) must match the client's
+// factory overrides so offline and online feel identical per critter.
 const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Sergei: [
-    { type: 'charge_rush', cooldown: 4.5, duration: 0.32, windUp: 0.06 },
-    { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.35 },
-    { type: 'frenzy', cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+    { type: 'charge_rush',  cooldown: 4.5, duration: 0.32, windUp: 0.06,
+      impulse: 18, speedMultiplier: 2.4, massMultiplier: 2.2 },
+    { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.35,
+      radius: 3.2, force: 30 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
   Trunk: [
-    { type: 'charge_rush', cooldown: 5.0, duration: 0.40, windUp: 0.06 },
-    { type: 'ground_pound', cooldown: 8.5, duration: 0.05, windUp: 0.5 },
-    // No ultimate yet for Trunk — 2 abilities only
+    { type: 'charge_rush',  cooldown: 5.0, duration: 0.40, windUp: 0.06,
+      impulse: 14, speedMultiplier: 2.0, massMultiplier: 3.0 },
+    { type: 'ground_pound', cooldown: 8.5, duration: 0.05, windUp: 0.5,
+      radius: 4.2, force: 34 },
+  ],
+
+  // --- Bloque C: 7 remaining playables ---
+
+  // Kurama — Trickster: very fast, flighty, Frenzy ult fits the "sly" fantasy
+  Kurama: [
+    { type: 'charge_rush',  cooldown: 3.2, duration: 0.26, windUp: 0.05,
+      impulse: 23, speedMultiplier: 2.8, massMultiplier: 1.3 },
+    { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.25,
+      radius: 3.0, force: 22 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+  ],
+
+  // Shelly — Tank: slow heavy charger, wide slam, Frenzy for berserk
+  Shelly: [
+    { type: 'charge_rush',  cooldown: 5.5, duration: 0.45, windUp: 0.08,
+      impulse: 12, speedMultiplier: 1.8, massMultiplier: 3.2 },
+    { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.45,
+      radius: 4.5, force: 28 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+  ],
+
+  // Kermit — Controller: standard mobility, biggest AoE radius
+  Kermit: [
+    { type: 'charge_rush',  cooldown: 4.0, duration: 0.30, windUp: 0.06,
+      impulse: 16, speedMultiplier: 2.3, massMultiplier: 1.7 },
+    { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.35,
+      radius: 4.6, force: 24 },
+  ],
+
+  // Sihans — Trapper: slow stomping specialist, long windUp, high force
+  Sihans: [
+    { type: 'charge_rush',  cooldown: 4.5, duration: 0.35, windUp: 0.08,
+      impulse: 15, speedMultiplier: 2.1, massMultiplier: 2.0 },
+    { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.6,
+      radius: 3.5, force: 38 },
+  ],
+
+  // Kowalski — Mage: widest AoE, lowest force, ranged identity via area
+  Kowalski: [
+    { type: 'charge_rush',  cooldown: 4.2, duration: 0.30, windUp: 0.06,
+      impulse: 15, speedMultiplier: 2.4, massMultiplier: 1.5 },
+    { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.4,
+      radius: 5.0, force: 20 },
+  ],
+
+  // Cheeto — Assassin: fastest dash, mini AoE but dense
+  Cheeto: [
+    { type: 'charge_rush',  cooldown: 2.8, duration: 0.24, windUp: 0.04,
+      impulse: 26, speedMultiplier: 3.0, massMultiplier: 1.2 },
+    { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.22,
+      radius: 2.5, force: 30 },
+  ],
+
+  // Sebastian — Glass Cannon: small AoE, massive force, vicious charge
+  Sebastian: [
+    { type: 'charge_rush',  cooldown: 3.5, duration: 0.28, windUp: 0.06,
+      impulse: 22, speedMultiplier: 2.6, massMultiplier: 1.4 },
+    { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.3,
+      radius: 2.8, force: 40 },
   ],
 };
 
@@ -130,7 +209,7 @@ export function tickPlayerAbilities(
       if (state.windUpLeft > 0) {
         state.windUpLeft -= dt;
         if (state.windUpLeft <= 0 && !state.effectFired) {
-          fireEffect(state, player, allPlayers);
+          fireEffect(state, def, player, allPlayers);
           state.effectFired = true;
           events.push({
             sessionId: player.sessionId,
@@ -143,7 +222,7 @@ export function tickPlayerAbilities(
         continue;
       }
       if (!state.effectFired) {
-        fireEffect(state, player, allPlayers);
+        fireEffect(state, def, player, allPlayers);
         state.effectFired = true;
         events.push({
           sessionId: player.sessionId,
@@ -169,38 +248,38 @@ export function tickPlayerAbilities(
 /** Dispatch: apply the actual effect of an ability that just fired. */
 function fireEffect(
   state: AbilityStateSchema,
+  def: AbilityDef,
   player: PlayerSchema,
   allPlayers: PlayerSchema[],
 ): void {
   switch (state.abilityType) {
     case 'charge_rush':
-      fireChargeRush(player);
+      fireChargeRush(def, player);
       break;
     case 'ground_pound':
-      fireGroundPound(player, allPlayers);
+      fireGroundPound(def, player, allPlayers);
       break;
     case 'frenzy':
-      // Bloque B: buff only — multipliers already handled in physics.ts
-      // No direct effect at fire time
+      // Buff only — multipliers handled in physics.ts via effectiveSpeed/Mass
       break;
   }
 }
 
-function fireChargeRush(player: PlayerSchema): void {
-  // Impulse in facing direction (same as client's fireChargeRush)
+function fireChargeRush(def: AbilityDef, player: PlayerSchema): void {
+  const impulse = def.impulse ?? SIM.chargeRush.impulse;
   const angle = player.rotationY;
-  player.vx += Math.sin(angle) * SIM.chargeRush.impulse;
-  player.vz += Math.cos(angle) * SIM.chargeRush.impulse;
+  player.vx += Math.sin(angle) * impulse;
+  player.vz += Math.cos(angle) * impulse;
 }
 
 /**
  * Ground pound: radial knockback on all nearby alive players within radius.
- * Same math as client's fireGroundPound: linear falloff by distance.
- * Immune players receive no knockback (server honors immunity timer).
+ * Immune players receive no knockback. Per-kit radius/force override the
+ * global SIM defaults so each critter's AoE can feel different online.
  */
-function fireGroundPound(caster: PlayerSchema, allPlayers: PlayerSchema[]): void {
-  const radius = SIM.groundPound.radius;
-  const force = SIM.groundPound.force;
+function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: PlayerSchema[]): void {
+  const radius = def.radius ?? SIM.groundPound.radius;
+  const force = def.force ?? SIM.groundPound.force;
   for (const other of allPlayers) {
     if (other === caster) continue;
     if (!other.alive || other.falling || other.immunityTimer > 0) continue;

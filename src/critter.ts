@@ -62,6 +62,55 @@ export const CRITTER_PRESETS: CritterConfig[] = [
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
   },
+
+  // --- Bloque C: 7 remaining playables ---
+  // All share base ability factories (charge_rush / ground_pound / frenzy)
+  // but each kit is tuned per-critter. Server-side CRITTER_ABILITY_KITS
+  // carries the identical impulse/radius/force/multipliers so online play
+  // feels identical to offline.
+
+  { // Trickster — fast, light, evasive. Uses Frenzy as ult.
+    name: 'Kurama', color: 0xff6633,
+    speed: 12, mass: 0.8, headbuttForce: 12,
+    role: 'Trickster',
+    tagline: 'Fast, sly, unpredictable.',
+  },
+  { // Tank — slow, heavy, crushing. Uses Frenzy as ult (berserk).
+    name: 'Shelly', color: 0x2d8659,
+    speed: 6.5, mass: 1.5, headbuttForce: 16,
+    role: 'Tank',
+    tagline: 'Heavy and wise.',
+  },
+  { // Controller — standard stats, biggest AoE radius.
+    name: 'Kermit', color: 0x44cc44,
+    speed: 9, mass: 1.0, headbuttForce: 13,
+    role: 'Controller',
+    tagline: 'Venomous area denial.',
+  },
+  { // Trapper — grounded presence, highest windUp + force on AoE.
+    name: 'Sihans', color: 0x8b6914,
+    speed: 8, mass: 1.15, headbuttForce: 14,
+    role: 'Trapper',
+    tagline: 'Digs in. Controls ground.',
+  },
+  { // Mage — widest AoE radius, lowest force (area denial, not burst).
+    name: 'Kowalski', color: 0x1a1a3e,
+    speed: 10, mass: 0.9, headbuttForce: 11,
+    role: 'Mage',
+    tagline: 'Calculated ranged threat.',
+  },
+  { // Assassin — fastest dash, mini AoE, fragile.
+    name: 'Cheeto', color: 0xffaa22,
+    speed: 13, mass: 0.7, headbuttForce: 11,
+    role: 'Assassin',
+    tagline: 'Swift and lethal.',
+  },
+  { // Glass Cannon — tiny AoE with massive force, high headbutt.
+    name: 'Sebastian', color: 0xcc3333,
+    speed: 10.5, mass: 0.75, headbuttForce: 18,
+    role: 'Glass Cannon',
+    tagline: 'One giant claw. All in.',
+  },
 ];
 
 const BODY_RADIUS = 0.5;

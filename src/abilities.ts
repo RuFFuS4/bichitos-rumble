@@ -242,6 +242,96 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       cooldown: 8.5,
     }),
   ],
+
+  // --- Bloque C: 7 remaining playables ---
+  // Each kit mirrors server/src/sim/abilities.ts CRITTER_ABILITY_KITS
+  // (same impulse/radius/force/cooldown) so offline == online.
+
+  Kurama: [
+    makeChargeRush({
+      name: 'Fox Dash', description: 'Blink-fast feint forward',
+      impulse: 23, duration: 0.26, cooldown: 3.2,
+      speedMultiplier: 2.8, massMultiplier: 1.3,
+    }),
+    makeGroundPound({
+      name: 'Mirror Burst', description: 'Quick shockwave from a feint',
+      radius: 3.0, force: 22, windUp: 0.25, cooldown: 7.0,
+    }),
+    makeFrenzy({ description: 'Tails blaze: +speed, +presence' }),
+  ],
+
+  Shelly: [
+    makeChargeRush({
+      name: 'Shell Charge', description: 'Slow rolling ram',
+      impulse: 12, duration: 0.45, cooldown: 5.5,
+      speedMultiplier: 1.8, massMultiplier: 3.2,
+    }),
+    makeGroundPound({
+      name: 'Shell Slam', description: 'Heavy body drop, wide ring',
+      radius: 4.5, force: 28, windUp: 0.45, cooldown: 7.5,
+    }),
+    makeFrenzy({ description: 'Berserk shell: +speed, +mass' }),
+  ],
+
+  Kermit: [
+    makeChargeRush({
+      name: 'Leap Forward', description: 'Tongue-propelled lunge',
+      impulse: 16, duration: 0.30, cooldown: 4.0,
+      speedMultiplier: 2.3, massMultiplier: 1.7,
+    }),
+    makeGroundPound({
+      name: 'Poison Cloud', description: 'Wide toxic burst, area control',
+      radius: 4.6, force: 24, windUp: 0.35, cooldown: 7.0,
+    }),
+  ],
+
+  Sihans: [
+    makeChargeRush({
+      name: 'Burrow Rush', description: 'Underground charge resurfacing ahead',
+      impulse: 15, duration: 0.35, cooldown: 4.5,
+      speedMultiplier: 2.1, massMultiplier: 2.0,
+    }),
+    makeGroundPound({
+      name: 'Tremor', description: 'Long windup, devastating stomp',
+      radius: 3.5, force: 38, windUp: 0.6, cooldown: 7.5,
+    }),
+  ],
+
+  Kowalski: [
+    makeChargeRush({
+      name: 'Ice Slide', description: 'Slides forward on an ice trail',
+      impulse: 15, duration: 0.30, cooldown: 4.2,
+      speedMultiplier: 2.4, massMultiplier: 1.5,
+    }),
+    makeGroundPound({
+      name: 'Arctic Burst', description: 'Massive area blast, low force',
+      radius: 5.0, force: 20, windUp: 0.4, cooldown: 7.0,
+    }),
+  ],
+
+  Cheeto: [
+    makeChargeRush({
+      name: 'Pounce', description: 'Lightning-fast predator lunge',
+      impulse: 26, duration: 0.24, cooldown: 2.8,
+      speedMultiplier: 3.0, massMultiplier: 1.2,
+    }),
+    makeGroundPound({
+      name: 'Paw Stomp', description: 'Tight dense impact',
+      radius: 2.5, force: 30, windUp: 0.22, cooldown: 6.0,
+    }),
+  ],
+
+  Sebastian: [
+    makeChargeRush({
+      name: 'Claw Rush', description: 'Sideways scuttle charge',
+      impulse: 22, duration: 0.28, cooldown: 3.5,
+      speedMultiplier: 2.6, massMultiplier: 1.4,
+    }),
+    makeGroundPound({
+      name: 'Big Claw Slam', description: 'Small radius, brutal force',
+      radius: 2.8, force: 40, windUp: 0.3, cooldown: 6.5,
+    }),
+  ],
 };
 
 // ---------------------------------------------------------------------------

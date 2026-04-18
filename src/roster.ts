@@ -70,7 +70,7 @@ const ROSTER: RosterEntry[] = [
     baseColor: 0xff6633,
     scale: 2.0, rotation: Math.PI, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0.05,
-    status: 'wip',
+    status: 'playable',
     role: 'Trickster',
     tagline: 'Fast, sly, unpredictable.',
     plannedAbilities: [
@@ -100,7 +100,7 @@ const ROSTER: RosterEntry[] = [
     baseColor: 0x2d8659,
     scale: 2.0, rotation: Math.PI, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0.05,
-    status: 'wip',
+    status: 'playable',
     role: 'Tank',
     tagline: 'Heavy and wise.',
     plannedAbilities: [
@@ -116,7 +116,7 @@ const ROSTER: RosterEntry[] = [
     baseColor: 0x44cc44,
     scale: 2.0, rotation: Math.PI, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0.05,
-    status: 'wip',
+    status: 'playable',
     role: 'Controller',
     tagline: 'Venomous area denial.',
     plannedAbilities: [
@@ -132,7 +132,7 @@ const ROSTER: RosterEntry[] = [
     baseColor: 0x8b6914,
     scale: 2.0, rotation: Math.PI, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0.05,
-    status: 'wip',
+    status: 'playable',
     role: 'Trapper',
     tagline: 'Digs in. Controls ground.',
     plannedAbilities: [
@@ -148,7 +148,7 @@ const ROSTER: RosterEntry[] = [
     baseColor: 0x1a1a3e,
     scale: 2.0, rotation: Math.PI, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0.05,
-    status: 'wip',
+    status: 'playable',
     role: 'Mage',
     tagline: 'Calculated ranged threat.',
     plannedAbilities: [
@@ -164,7 +164,7 @@ const ROSTER: RosterEntry[] = [
     baseColor: 0xffaa22,
     scale: 2.0, rotation: Math.PI, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0.05,
-    status: 'wip',
+    status: 'playable',
     role: 'Assassin',
     tagline: 'Swift and lethal.',
     plannedAbilities: [
@@ -180,7 +180,7 @@ const ROSTER: RosterEntry[] = [
     baseColor: 0xcc3333,
     scale: 2.0, rotation: Math.PI, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0.05,
-    status: 'wip',
+    status: 'playable',
     role: 'Glass Cannon',
     tagline: 'One giant claw. All in.',
     plannedAbilities: [

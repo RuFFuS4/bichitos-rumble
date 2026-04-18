@@ -92,20 +92,17 @@ export interface CritterConfigServer {
 }
 
 export const CRITTER_CONFIGS: Record<string, CritterConfigServer> = {
-  Sergei: {
-    name: 'Sergei',
-    speed: 10,
-    mass: 1.1,
-    headbuttForce: 15,
-    radius: 0.55,
-  },
-  Trunk: {
-    name: 'Trunk',
-    speed: 7,
-    mass: 1.4,
-    headbuttForce: 17,
-    radius: 0.55,
-  },
+  Sergei:    { name: 'Sergei',    speed: 10,   mass: 1.1,  headbuttForce: 15, radius: 0.55 },
+  Trunk:     { name: 'Trunk',     speed: 7,    mass: 1.4,  headbuttForce: 17, radius: 0.55 },
+
+  // --- Bloque C: 7 remaining playables ---
+  Kurama:    { name: 'Kurama',    speed: 12,   mass: 0.8,  headbuttForce: 12, radius: 0.55 }, // Trickster
+  Shelly:    { name: 'Shelly',    speed: 6.5,  mass: 1.5,  headbuttForce: 16, radius: 0.55 }, // Tank
+  Kermit:    { name: 'Kermit',    speed: 9,    mass: 1.0,  headbuttForce: 13, radius: 0.55 }, // Controller
+  Sihans:    { name: 'Sihans',    speed: 8,    mass: 1.15, headbuttForce: 14, radius: 0.55 }, // Trapper
+  Kowalski:  { name: 'Kowalski',  speed: 10,   mass: 0.9,  headbuttForce: 11, radius: 0.55 }, // Mage
+  Cheeto:    { name: 'Cheeto',    speed: 13,   mass: 0.7,  headbuttForce: 11, radius: 0.55 }, // Assassin
+  Sebastian: { name: 'Sebastian', speed: 10.5, mass: 0.75, headbuttForce: 18, radius: 0.55 }, // Glass Cannon
 };
 
 export const DEFAULT_CRITTER = 'Sergei';
