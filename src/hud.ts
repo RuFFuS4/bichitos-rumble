@@ -330,6 +330,11 @@ export function showCharacterSelect(
     const entry = roster[i];
     const slot = document.createElement('div');
     slot.dataset.idx = String(i);
+    // Per-critter glow colour — picked up by the slot CSS (glow bg +
+    // hover + selected ring). Gives each slot its own visual identity
+    // without needing a per-critter style sheet.
+    const hex = '#' + entry.baseColor.toString(16).padStart(6, '0');
+    slot.style.setProperty('--slot-glow', hex);
 
     if (entry.status === 'playable') {
       slot.className = 'critter-slot' + (i === selectedIdx ? ' selected' : '');

@@ -37,11 +37,12 @@ function initSharedScene(): void {
 
   scene = new THREE.Scene();
 
-  // Tight framing: critter stands ~1m tall (bounds ±0.5 scaled 2×), camera
-  // leans in for a portrait-like shot that shows the face clearly.
+  // Critter stands ~2m tall (bounds ±0.5 scaled 2×). Camera is pulled back
+  // enough to frame the WHOLE body with some headroom so nothing gets
+  // clipped in the 128×128 thumbnail.
   camera = new THREE.PerspectiveCamera(32, 1, 0.1, 20);
-  camera.position.set(0, 1.25, 3.1);
-  camera.lookAt(0, 0.9, 0);
+  camera.position.set(0, 1.3, 4.5);
+  camera.lookAt(0, 1.0, 0);
 
   const ambient = new THREE.AmbientLight(0xffffff, 0.6);
   scene.add(ambient);

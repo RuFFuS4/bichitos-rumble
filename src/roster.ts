@@ -98,7 +98,9 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Shelly',
     glbPath: './models/critters/shelly.glb',
     baseColor: 0x2d8659,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    // Shelly's GLB was authored with her forward along -X instead of the
+    // usual +X, so rotation 0 (no Y rotation) already faces the camera.
+    scale: 2.0, rotation: 0, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0.98,
     status: 'playable',
     role: 'Tank',
