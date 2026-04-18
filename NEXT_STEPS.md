@@ -43,10 +43,20 @@ All reuse base factories (charge_rush / ground_pound / frenzy):
 Per-ability tuning (impulse/radius/force/cooldown/multipliers) differs per
 critter — kept identical between client and server so feel matches online.
 
-### Known cosmetic debt from Bloque C (NOT blocking)
-- The 7 new GLBs inherit default transforms (scale 2.0, rotation π, pivotY 0.05).
-  May need per-critter `__tune({rotation, scale, pivotY})` once seen rendered
-  in real play. Addressable one-by-one with no code risk via roster.ts.
+### Bloque C follow-up (validation pass)
+- [x] Visual inspection of the 7 new critters in character-select preview.
+      Found 5 with wrong transforms (Kurama, Shelly, Sihans, Kowalski, Sebastian)
+      + 2 that rendered ok on the pedestal but would have clipped below ground
+      in the arena (Kermit, Cheeto).
+- [x] All 7 transforms unified to `(rotation: -π/2, pivotY: 0.98)` to match
+      Sergei/Trunk. GLB bounds inspection confirmed every model has the same
+      `[-0.5, 0.5]` centred Y range — one canonical transform is correct.
+- [x] Character select grid: replaced coloured-circle `.slot-dot` with real
+      3D thumbnail avatars. New `src/slot-thumbnail.ts` module renders each
+      critter once via a shared offscreen WebGLRenderer, caches the data URL,
+      and hud.ts swaps it into `.slot-avatar` on grid build.
+
+### Known debt (NOT blocking)
 - No visual feedback yet for Frenzy (L). Characters that use it (Sergei,
   Kurama, Shelly) show HUD cooldown but no screen VFX.
 

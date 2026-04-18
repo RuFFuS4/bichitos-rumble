@@ -396,6 +396,16 @@
       border-radius: 50%;
       box-shadow: 0 3px 10px rgba(0,0,0,0.5), inset 0 -4px 8px rgba(0,0,0,0.3);
     }
+    /* 3D thumbnail replaces the circle for playable critters. Same footprint
+       so grid layout doesn't shift between the placeholder-colour and the
+       loaded render. */
+    .critter-slot .slot-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 10px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+      transition: background-image 0.18s ease-out;
+    }
     .critter-slot .slot-name {
       font-size: 12px;
       font-weight: bold;

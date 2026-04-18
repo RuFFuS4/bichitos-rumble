@@ -2,6 +2,7 @@ import type { AbilityState } from './abilities';
 import { createAbilityStates } from './abilities';
 import type { Critter, CritterConfig } from './critter';
 import type { RosterEntry } from './roster';
+import { getCritterThumbnail } from './slot-thumbnail';
 
 const aliveEl = document.getElementById('hud-alive')!;
 const timerEl = document.getElementById('hud-timer')!;
@@ -286,6 +287,32 @@ let cachedRoster: RosterEntry[] = [];
 let cachedPresets: CritterConfig[] = [];
 
 /**
+ * Build the slot avatar: a coloured placeholder circle that gets swapped
+ * for a real 3D thumbnail once the GLB thumbnail module has rendered it.
+ * If the critter has no GLB (internal placeholders), the placeholder
+ * stays as a solid colour.
+ */
+function buildSlotAvatar(entry: RosterEntry): HTMLDivElement {
+  const avatar = document.createElement('div');
+  avatar.className = 'slot-avatar';
+  // Placeholder colour while the thumbnail is rendering. Also the final
+  // appearance if the critter has no GLB (procedural bots don't reach
+  // this code path, so this is mostly dead-safe).
+  avatar.style.background = '#' + entry.baseColor.toString(16).padStart(6, '0');
+
+  getCritterThumbnail(entry).then((url) => {
+    if (!url) return;
+    avatar.style.backgroundImage = `url(${url})`;
+    avatar.style.backgroundSize = 'contain';
+    avatar.style.backgroundRepeat = 'no-repeat';
+    avatar.style.backgroundPosition = 'center';
+    avatar.style.backgroundColor = 'transparent';
+  });
+
+  return avatar;
+}
+
+/**
  * Build the character select grid. Roster entries control layout and status;
  * presets provide gameplay stats for the info pane (only playable characters).
  */
@@ -306,16 +333,11 @@ export function showCharacterSelect(
 
     if (entry.status === 'playable') {
       slot.className = 'critter-slot' + (i === selectedIdx ? ' selected' : '');
-
-      const dot = document.createElement('div');
-      dot.className = 'slot-dot';
-      dot.style.background = '#' + entry.baseColor.toString(16).padStart(6, '0');
+      slot.appendChild(buildSlotAvatar(entry));
 
       const name = document.createElement('div');
       name.className = 'slot-name';
       name.textContent = entry.displayName;
-
-      slot.appendChild(dot);
       slot.appendChild(name);
 
       const capturedIdx = i;
@@ -324,25 +346,20 @@ export function showCharacterSelect(
       });
     } else if (entry.status === 'wip') {
       slot.className = 'critter-slot wip' + (i === selectedIdx ? ' selected' : '');
-
-      const dot = document.createElement('div');
-      dot.className = 'slot-dot';
-      dot.style.background = '#' + entry.baseColor.toString(16).padStart(6, '0');
-      dot.style.opacity = '0.5';
+      const avatar = buildSlotAvatar(entry);
+      avatar.style.opacity = '0.5';
+      slot.appendChild(avatar);
 
       const name = document.createElement('div');
       name.className = 'slot-name';
       name.textContent = entry.displayName;
+      slot.appendChild(name);
 
       const badge = document.createElement('div');
       badge.className = 'slot-badge';
       badge.textContent = 'WIP';
-
-      slot.appendChild(dot);
-      slot.appendChild(name);
       slot.appendChild(badge);
 
-      // WIP slots can be highlighted (for preview) but not confirmed
       const capturedIdx = i;
       slot.addEventListener('click', () => {
         slotClickHandler?.(capturedIdx);
