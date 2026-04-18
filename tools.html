@@ -275,6 +275,19 @@
       0%, 100% { opacity: 0.9; }
       50% { opacity: 0.4; }
     }
+    .title-signature {
+      position: absolute;
+      bottom: 14px;
+      left: 18px;
+      font-size: 12px;
+      letter-spacing: 1px;
+      color: rgba(255, 255, 255, 0.45);
+      text-decoration: none;
+      pointer-events: auto;
+      transition: color 0.18s;
+    }
+    .title-signature:hover { color: rgba(255, 220, 92, 0.95); }
+    .title-signature .handle { font-weight: 700; color: inherit; }
     .controls-hint {
       position: absolute;
       bottom: 24px;
@@ -827,6 +840,12 @@
     <div class="prompt touch-only">Tap a mode to play</div>
     <div class="controls-hint desktop-only">WASD move · SPACE headbutt · J/K abilities · R restart</div>
     <div class="controls-hint touch-only">Joystick to move · buttons for headbutt and abilities</div>
+    <a class="title-signature"
+       href="https://x.com/RGomezR14"
+       target="_blank"
+       rel="noopener noreferrer">
+      by <span class="handle">@RGomezR14</span>
+    </a>
   </div>
 
   <div id="character-select" class="full-overlay hidden">

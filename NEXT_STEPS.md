@@ -1,202 +1,194 @@
 # Next Steps — Bichitos Rumble
 
 > **Deadline: May 1, 2026 @ 13:37 UTC**
-> Single source of truth for what to work on next.
-> Dispatch sessions: read this first.
+> **Game is LIVE on vibej.am** (user-confirmed submission 2026-04-18).
+> Single source of truth for what to work on next. Dispatch sessions:
+> read this first.
 
-## Status — Bloques A, B y C CERRADOS
+## Roadmap hasta la entrega
 
-### Validated in production
-- [x] **Bloque A** — Multiplayer vertical slice (Colyseus, 2 players, deploy)
-- [x] **Bloque B** — Online kit + arena fragment collapse + state-machine
-      hardening (restart, input gating, clean transitions, macro variety,
-      rotation-mirror fix). Full post-mortem of the visual/physics mirror
-      bug in `ERROR_LOG.md`.
+13 días restantes. Orden de trabajo decidido con scope honesto.
+Si una fase se atasca >2h, se corta y sigue la siguiente. Los 3
+innegociables (animaciones distintivas, habilidades finales, mejora
+de destrucción) son prioritarios; si algo cae por tiempo, es el
+último de los innegociables (destrucción iterada).
 
-### Bloque C — Roster completo (9 playables)
-- [x] 9 optimised GLBs in `public/models/critters/` (sergei, trunk, kurama,
-      shelly, kermit, sihans, kowalski, cheeto, sebastian)
-- [x] Per-kit ability overrides on server (impulse/radius/force/multipliers)
-      so each critter feels different ONLINE, not just offline
-- [x] 7 new `CRITTER_PRESETS` + `CRITTER_ABILITIES` entries client-side
-- [x] 7 new `CRITTER_CONFIGS` + `CRITTER_ABILITY_KITS` entries server-side
-- [x] roster.ts status flipped `wip` → `playable` for all 7
-- [x] Verified in preview: all 9 selectable, Kermit test match runs clean
-      (GLB loaded, 2 abilities active, bots spawning, no console errors)
+### Fase 1 · ESTA SEMANA (18-24 abril)
+- [x] Branding firma `@RGomezR14` en portada (bottom-left, link a X)
+- [ ] **Sonido / feedback esencial** (4-6h) — hit impact, ability fire,
+      victory stinger, music hooks. Ya en diseño.
+- [ ] Prompts Suno entregados → usuario genera música en paralelo
+- [ ] Integración de las 3 pistas cuando lleguen (~1h cada una)
+
+### Fase 2 · Semana del 25-27 abril
+- [ ] **4P online + bots de relleno** (6-8h con gating)
+  - maxClients 4
+  - 60s waiting timeout → spawna bots hasta 4
+  - Bot AI server-side (seek + headbutt + occasional ability)
+  - HUD: badge `🤖` para bots, counter `X/4` en waiting
+  - Si al 4h no está estable → revertir a 2P
+
+### Fase 3 · 28-30 abril — INNEGOCIABLES
+- [ ] **Animaciones distintivas per-character** (5-6h)
+  - NO bones, sí patrones procedurales divergentes por personaje
+  - Shelly balanceo lateral amplio (tortuga waddle)
+  - Trunk trompa que se eleva en anticipation
+  - Cheeto burst-accelerate-decelerate
+  - Kurama hint de múltiples colas procedurales
+  - Kowalski slide de panza en charge rush
+  - Sebastian desplazamiento lateral en charge rush
+  - Sihans emerge-from-ground mini-efecto
+  - Kermit pre-leap squash
+- [ ] **Top 4 habilidades distintivas** (8-12h, prioridad por impacto)
+  1. **Trunk Grip** — grab + throw (signature Bruiser)
+  2. **Shelly Shell Shield** — invulnerability pose + reflect
+  3. **Kowalski Snowball** — introduce sistema proyectiles (reutilizable)
+  4. **Cheeto Shadow Step** — introduce sistema teleport (reutilizable)
+  
+  Cada nuevo sistema base habilita otras Tier 2 abilities después.
+- [ ] **Destrucción iterada** (3-4h) — Pattern C con cortes no-radiales
+      + warning visual más claro. Si no entra, la actual queda.
+
+### Fase 4 · Última semana (28 abril - 1 mayo)
+- [ ] Gamepad support + toast detección (2-3h)
+- [ ] Lighthouse pass + mejoras si hace falta (1-2h)
+- [ ] Playtesting remoto en producción (2-3 sesiones cortas)
+- [ ] Screenshots promocionales para jam listing
+- [ ] **Freeze 24h** antes del deadline. Solo hotfix crítico.
+
+### Gating / cortes si hay presión
+
+- Si al **25 abril** no está cerrado el sonido → recortar Tier 1 abilities
+  de 4 a 2-3.
+- Si al **28 abril** no tenemos 4P estable → congelar a 2P.
+- Si al **30 abril** no hay destrucción nueva → la actual queda.
+- **Orden invariable**: branding → sonido → 4P → innegociables → polish → submission.
+  Nunca saltar estas prioridades.
+
+---
+
+## Standby list — nada se descarta
+
+Todo lo que hemos hablado sigue vivo. Si una fase acaba antes de tiempo,
+cualquiera de estas puede rescatarse / avanzarse:
+
+### Nivel 1 — rescatar si hay tiempo
+- **Tier 2 habilidades distintivas** (reutilizan sistemas ya creados):
+  - Kermit Poison Cloud (proyectil con zona AoE de slow)
+  - Sihans Tunnel (teleport + zona lenta)
+  - Cheeto Tiger Roar (cono direccional)
+  - Sebastian Claw Sweep (cono direccional)
+  - Kurama Mirror Trick (decoy, requiere sistema ilusión nuevo)
+  - Kowalski Ice Age (superficie resbaladiza, requiere sistema nuevo)
+- **Animaciones óseas via Tripo3D** para momentos específicos (victoria,
+  ability ultimate dramática) — post-procedural
+- **Frenzy VFX visual** exclusivo (Sergei/Kurama/Shelly tienen Frenzy
+  pero sin feedback visual dramático)
+- **Reconnect** (Colyseus `allowReconnection`) si aparecen quejas
+- **Waiting screen polish visual** más allá del contador funcional
+- **Victory poses** por personaje
+- **Stats display en end screen**
+- **Warp animation** en portal transitions
+
+### Nivel 2 — post-jam (no prometer)
+- Rediseño complejo del arena (fragmentos irregulares no-sectores)
+- Client-side prediction + rollback
+- Matchmaking / ranking / login / persistence
+- Full 9-character unique ability kits (Tier 2 extendido)
+- Pedestals por personaje (preview scene)
+- HUD mobile restructure
+- Selección ritualizada al estilo fighting game
+
+---
+
+## Estado cerrado — lo que ya funciona
+
+### Bloques A/B/C cerrados en producción
+- **A** — Multiplayer vertical slice (Colyseus 2P)
+- **B** — Online kit completo + arena fragmentos + state-machine hardening +
+  rotation-mirror fix (post-mortem en `ERROR_LOG.md`)
+- **C** — Roster 9 playables con GLB + per-kit server tuning + transforms correctos
+- **C follow-up** — 3D thumbnails en character select + per-critter glow
+- **Speed bump ×1.3** — 9 base speeds escaladas preservando ratios
+
+### Animación procedural shared (primera capa)
+Ya implementada en `src/critter-animation.ts`:
+- idle breath derivado de mass (más pesado = más lento + profundo)
+- run bounce derivado de speed
+- forward lean proporcional al speed durante carrera
+- run sway lateral proporcional a mass
+- headbutt pose (anticipación + lunge con squash/stretch)
+- charge rush stretch forward
+- ground pound crouch visible en GLB
+
+Esta capa sigue vigente debajo de las animaciones distintivas por personaje
+(Fase 3) — las distintivas se superponen.
+
+### Lab tool `/tools.html`
+Herramienta interna accesible en producción tipeando `/tools.html`.
+Matchup tuner + arena inspector + animation sliders + playback controls.
+Sticky-key fix aplicado (window.blur + sidebar pointerdown/focusin).
 
 ### Temporary-but-real roster identity
-Every critter gets distinct STATS + ABILITY TUNING, not unique ability TYPES.
-All reuse base factories (charge_rush / ground_pound / frenzy):
+| Critter   | Role         | Kit          | Speed / Mass / HB |
+|-----------|--------------|--------------|--------------------|
+| Sergei    | Balanced     | CR + GP + F  | 13 / 1.1 / 15      |
+| Trunk     | Bruiser      | CR + GP      | 9.1 / 1.4 / 17     |
+| Kurama    | Trickster    | CR + GP + F  | 15.6 / 0.8 / 12    |
+| Shelly    | Tank         | CR + GP + F  | 8.45 / 1.5 / 16    |
+| Kermit    | Controller   | CR + GP      | 11.7 / 1.0 / 13    |
+| Sihans    | Trapper      | CR + GP      | 10.4 / 1.15 / 14   |
+| Kowalski  | Mage         | CR + GP      | 13 / 0.9 / 11      |
+| Cheeto    | Assassin     | CR + GP      | 16.9 / 0.7 / 11    |
+| Sebastian | Glass Cannon | CR + GP      | 13.65 / 0.75 / 18  |
 
-| Critter   | Role         | Kit          | Stats                         |
-|-----------|--------------|--------------|-------------------------------|
-| Sergei    | Balanced     | CR + GP + F  | speed 10, mass 1.1, HB 15     |
-| Trunk     | Bruiser      | CR + GP      | speed 7, mass 1.4, HB 17      |
-| Kurama    | Trickster    | CR + GP + F  | speed 12, mass 0.8, HB 12     |
-| Shelly    | Tank         | CR + GP + F  | speed 6.5, mass 1.5, HB 16    |
-| Kermit    | Controller   | CR + GP      | speed 9, mass 1.0, HB 13      |
-| Sihans    | Trapper      | CR + GP      | speed 8, mass 1.15, HB 14     |
-| Kowalski  | Mage         | CR + GP      | speed 10, mass 0.9, HB 11     |
-| Cheeto    | Assassin     | CR + GP      | speed 13, mass 0.7, HB 11     |
-| Sebastian | Glass Cannon | CR + GP      | speed 10.5, mass 0.75, HB 18  |
+Kits temporales reutilizan factories base. Mapping final en
+`CHARACTER_DESIGN.md` — sección "Gap entre kits temporales y habilidades
+definitivas".
 
-Per-ability tuning (impulse/radius/force/cooldown/multipliers) differs per
-critter — kept identical between client and server so feel matches online.
+---
 
-### Bloque C follow-up (validation pass)
-- [x] Visual inspection of the 7 new critters in character-select preview.
-      Found 5 with wrong transforms (Kurama, Shelly, Sihans, Kowalski, Sebastian)
-      + 2 that rendered ok on the pedestal but would have clipped below ground
-      in the arena (Kermit, Cheeto).
-- [x] All 7 transforms unified to `(rotation: -π/2, pivotY: 0.98)` to match
-      Sergei/Trunk. GLB bounds inspection confirmed every model has the same
-      `[-0.5, 0.5]` centred Y range — one canonical transform is correct.
-- [x] Character select grid: replaced coloured-circle `.slot-dot` with real
-      3D thumbnail avatars. New `src/slot-thumbnail.ts` module renders each
-      critter once via a shared offscreen WebGLRenderer, caches the data URL,
-      and hud.ts swaps it into `.slot-avatar` on grid build.
+## Deuda técnica aceptada para la jam
 
-### Known debt (NOT blocking)
-- No visual feedback yet for Frenzy (L). Characters that use it (Sergei,
-  Kurama, Shelly) show HUD cooldown but no screen VFX.
+- **Fragment generator duplicado** client ↔ server (byte-identical via sed)
+- **Arena collapse = 2 patrones macro** (A outer→inner, B axis-split)
+- **Colyseus v3 state callbacks** via `getStateCallbacks()` — quirky pero funciona
+- **Patch latency de ~33ms** en transiciones de colapso (warning de 3s compensa)
+- **`BrawlRoom.internal` Map** para per-player non-synced data
+- **Offline y online generan seeds independientes** — sin abstracción común
 
-## Lab tool — `/tools.html`
+---
 
-Herramienta interna de productividad montada dentro del mismo repositorio.
-No visible desde el juego, accesible tecleando `/tools.html`. Pensada
-para acelerar balance/test/debug sin salir del código.
+## Diagnostic tools (en producción, solo si los invocas)
 
-Incluye:
-- **Matchup tuner**: selector de jugador + 3 bots (o mirror match / random).
-  Start / Restart same seed / Randomize bots.
-- **Arena inspector**: seed actual, pattern (A/B), batches con band+size+delay,
-  collapse level, warning, radius. Force seed / Replay last / Copy seed.
-- **Animation tuner**: 7 sliders en vivo sobre `animPersonality` del player
-  (idleBobHz/Amp, runBounceHz/Amp, leanRadians, runSwayRadians,
-  chargeStretchMult). Reset Derived, Copy Values (JSON).
-- **Playback**: slider de `debugSpeedScale` + Pause / 0.3× / 1× / End Match.
-- **Info panel**: nombre, rol, speed, mass, HB force, kit, lives.
+Consola del browser en partida viva:
 
-Arquitectura:
-- `tools.html` = copia de index.html con `<title>` diferente, `<body class="lab-mode">`,
-  y script a `src/tools/main.ts`. Las pantallas del juego (title/character-select/end-screen)
-  se ocultan vía CSS `body.lab-mode`.
-- `src/tools/main.ts` reproduce el bootstrap de `src/main.ts` (scene/renderer/camera/
-  input/audio/Game) y monta el sidebar; el loop respeta `game.debugSpeedScale`.
-- `src/tools/sidebar.ts` construye el panel programáticamente (plain DOM, sin framework).
-- Game expone 4 métodos nuevos: `debugStartOfflineMatch`, `debugForceArenaSeed`,
-  `debugGetArenaInfo`, `debugEndMatchImmediately` + field `debugSpeedScale`.
-- `vite.config.ts` con 2 entries; Vercel sirve `/tools.html` como estático
-  (antes del rewrite SPA).
+- `__arena.checkPlayer()` — primer probe si vuelve visible/física desync
+- `__arena.check(x, z)` — check geométrico en un punto
+- `__arena.compass()` — marcadores N/S/E/W mundo
+- `__arena.dump()` — lista fragments con alive/visible
+- `__arena.logCollapses()` — log por batch collapse/warning
 
-## Bloque D — Animación procedural shared (en curso)
+Post-mortem del bug de rotación en `ERROR_LOG.md` entry 2026-04-17.
 
-Primera capa puramente procedural para los 9 critters. No huesos, no
-clips, no rigging por personaje. Parámetros derivados de (mass, speed)
-en `src/critter-animation.ts`:
+---
 
-- **idleBobHz** y **idleBobAmp**: respiración. Pesados respiran lento
-  y profundo; ligeros rápido y superficial.
-- **runBounceHz** y **runBounceAmp**: rebote vertical al correr.
-- **leanRadians**: pitch forward al correr, lerp suave.
-- **chargeStretchMult**: estiramiento Z durante `charge_rush` activo.
+## Developer tool
 
-Escribe solo en `body.position.y`, `glbMesh.position.y`,
-`glbMesh.rotation.x` y `glbMesh.scale.z`. No toca `mesh.rotation.y`
-(movimiento) ni el resto de scale/positions que ya usan `updateVisuals`,
-`updateScaleFeedback`, `updateKnockbackTilt`, `updateHeadbuttRecovery`,
-`tickHitFlash`. Compatible online y offline (lee `vx/vz/abilityStates`
-que el servidor pobla cada tick).
+**`/tools.html`** — abierto tecleando la URL. No visible desde el juego.
+Matchup tuner (9 playables dropdown) + arena inspector (seed/pattern/
+batches) + animation tuner (7 sliders en vivo) + playback (pause/slow-mo/
+end match) + info panel. Útil para balance y debug rápido.
 
-### Tripo3D — nota para el futuro
-Tripo3D puede generar rig + clips para animaciones únicas concretas
-(por ejemplo: "grab" de Trunk H2, "shell shield" de Shelly). Ahora NO
-se usa; el pipeline de optimización actual (`scripts/optimize-models.mjs`
-+ `gltf-transform`) descarta rigs. Añadir clips óseos exigiría mixer,
-sync de clips entre cliente/servidor y cambios al pipeline — no
-compensa para jam. Cuando lleguemos a habilidades finales, Tripo3D es
-candidato válido para animaciones específicas que no tengan sentido
-procedural puro.
+---
 
-## Next block — shared procedural animations
+## Key architecture notes (dispatch sessions)
 
-Now that the roster is complete, the next real ROI is **shared procedural
-animations**. All 9 critters currently only have the bobbing + scale
-feedback + knockback tilt baked into critter.ts. Missing:
-
-- Idle pose (subtle head sway, breathing)
-- Walking/running squash
-- Pre-headbutt wind-up body lean (currently just position/scale)
-- Landing impact anticipation
-- Directional lean when turning
-
-Plan: keep it **shared/procedural**. No per-critter rig. All 9 use the
-same Animation class driven by speed magnitude, state flags, and dt.
-Ships in one pass for the whole roster.
-
-After that, in order:
-1. **Sound / feedback essential** — hit impact sound per critter mass
-   tier, ability fire sounds already half-wired, missing victory/defeat
-   stinger variations.
-2. **Real balance pass** — play test matches, tune stats that feel wrong.
-3. **Character-specific ultimates** — only then, Bloque D: replace the
-   temporary CR/GP/F reuse with unique per-critter final abilities.
-
-## Blocked / explicitly deferred
-
-| Item | Reason | Revisit? |
-|------|--------|----------|
-| Frenzy feedback (L visuals/audio) | Low ROI vs shared animations which buff ALL critters at once | Covered by next block |
-| Waiting-for-opponent screen polish | Cosmetic | Post-jam or if time |
-| More complex/irregular arena collapse | Stable/temporary version works — explicit post-jam item | Post-jam |
-| Reconnection (`allowReconnection`) | Non-critical for 2-player 2-min matches | Only if stability complaints |
-| Client-side prediction, rollback, matchmaking, login, ranking | All non-goals per CLAUDE.md | Post-jam |
-| Skeletal animations, advanced cosmetics | Against style lock | Post-jam |
-| Per-critter ultimate abilities | Temporary kit with base factories is sufficient for jam | After animations + sound |
-
-## Accepted technical debt for the jam
-
-- **Fragment generator duplicated** between `src/arena-fragments.ts` and
-  `server/src/sim/arena-fragments.ts`. Kept byte-identical via
-  `sed 's/CLIENT copy/SERVER copy/' src/arena-fragments.ts > server/...`
-  on every edit. Deliberately no shared package (CLAUDE.md simplicity).
-- **Arena collapse = 2 macro patterns only**. Visually varied enough for
-  MVP. A more complex irregular destruction is a known post-jam target.
-- **Colyseus v3 state callbacks via `getStateCallbacks()`** — quirky
-  pattern but works; don't refactor.
-- **Patch latency on fragment collapse** — 30Hz server tick means 1-2 render
-  frames of drift at the exact collapse moment. 3s warning blink masks it.
-- **`BrawlRoom.internal` Map** holds per-player non-synced data (inputs,
-  timers). Required to avoid the Colyseus-v3 schema anti-pattern we hit
-  in Bloque A. Keep.
-- **Offline and online seed generation are independent** — no common
-  abstraction. Fine for MVP.
-
-## Diagnostic tools (kept for real bugs, zero runtime overhead if unused)
-
-Open DevTools console on a live match:
-
-- `__arena.checkPlayer()` — first probe after any "visible but fall" /
-  "void but walk" suspicion. Prints local player's position and whether
-  physics and render agree there.
-- `__arena.check(x, z)` — same check at an arbitrary world point.
-- `__arena.compass()` — toggle N/S/E/W world-axis markers. If Red (N)
-  isn't at `+Z`, Blue (S) at `-Z`, Green (E) at `+X`, Yellow (W) at `-X`,
-  the rotation mirror has regressed.
-- `__arena.dump()` — list fragments per band with alive + visible flags.
-  Any `MISMATCH(alive=X visible=Y)` = sync bug.
-- `__arena.logCollapses()` — toggle per-batch collapse/warning log.
-
-Full bug post-mortem for the rotation bug: `ERROR_LOG.md` entry
-"[2026-04-17] Arena fragment render MIRRORED vs physics".
-
-## Key architecture notes (for dispatch sessions)
-
-- Work on `dev`, merge to `main` for deploy. Vercel (client) and Railway
-  (server) both auto-deploy from `main`.
-- Server in `server/`, Colyseus 0.16, schema v3, multi-stage Dockerfile.
-- Arena fragments generator MUST stay byte-identical client ↔ server.
-- NEVER put non-synced fields on Schema classes — use `BrawlRoom.internal`.
-- Match-end on server: always go through `BrawlRoom.endMatch()` (it locks
-  the room so clients can cleanly re-queue into fresh matches).
-- Offline mode must not regress with any online change.
+- Work on `dev`, merge to `main` for deploy. Vercel (client) y Railway
+  (server) auto-deploy desde `main`.
+- Server en `server/` — Colyseus 0.16, schema v3, multi-stage Dockerfile.
+- Arena fragments generator DEBE estar byte-identical cliente ↔ servidor.
+- NUNCA poner campos non-synced en clases Schema — usar `BrawlRoom.internal`.
+- Match-end en server: siempre vía `BrawlRoom.endMatch()` (locka la room).
+- Offline mode NO debe regresar con ningún cambio online.
+- `/tools.html` = 2º entry de Vite, servido estático antes del SPA rewrite.
