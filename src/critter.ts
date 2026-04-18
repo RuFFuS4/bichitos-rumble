@@ -5,6 +5,7 @@ import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, apply
 import { play as playSound } from './audio';
 import { getRosterEntry, type RosterEntry } from './roster';
 import { loadModel } from './model-loader';
+import { deriveAnimationPersonality, tickProceduralAnimation, type AnimationPersonality } from './critter-animation';
 
 export interface CritterConfig {
   name: string;
@@ -152,11 +153,17 @@ export class Critter {
   glbMesh: THREE.Group | null = null;  // public for debug tuning (make private after)
   /** Pre-collected MeshStandardMaterials from the GLB for fast visual updates. */
   private glbMaterials: THREE.MeshStandardMaterial[] = [];
+  /**
+   * Procedural animation parameters derived from (mass, speed). Written
+   * once in the constructor; read every frame by tickProceduralAnimation.
+   */
+  animPersonality: AnimationPersonality;
 
   constructor(config: CritterConfig, scene: THREE.Scene) {
     this.config = config;
     this.mesh = new THREE.Group();
     this.abilityStates = createAbilityStates(config.name);
+    this.animPersonality = deriveAnimationPersonality(config);
 
     // Body — small sphere
     // NOTE: transparent: true is set from the start so the immunity blink
@@ -247,10 +254,10 @@ export class Critter {
     // call from the network state. We still need bobbing, emissive, hit
     // flash, scale feedback, and knockback tilt for visual parity.
     if (this.skipPhysics) {
-      this.body.position.y = BODY_RADIUS + Math.sin(Date.now() * 0.005) * 0.05;
-      if (this.glbMesh) {
-        this.glbMesh.position.y = (this.rosterEntry?.pivotY ?? 0) + Math.sin(Date.now() * 0.005) * 0.05;
-      }
+      // Online mode: server is authoritative. Procedural animation still
+      // runs because it reads vx/vz/abilityStates (all set from server
+      // each tick before update() is called).
+      tickProceduralAnimation(this, dt);
       this.updateVisuals();
       const flashT = tickHitFlash(this, dt);
       if (flashT > 0) {
@@ -326,13 +333,12 @@ export class Critter {
       this.mesh.rotation.y = Math.atan2(this.vx, this.vz);
     }
 
-    // Bobbing animation
-    this.body.position.y = BODY_RADIUS + Math.sin(Date.now() * 0.005) * 0.05;
-    if (this.glbMesh) {
-      this.glbMesh.position.y = (this.rosterEntry?.pivotY ?? 0) + Math.sin(Date.now() * 0.005) * 0.05;
-    }
+    // Procedural animation layer (idle bob + run bounce + lean + charge stretch).
+    // Reads vx/vz/abilityStates; writes body.position.y / glbMesh.position.y /
+    // glbMesh.rotation.x / glbMesh.scale.z only. Safe alongside updateVisuals.
+    tickProceduralAnimation(this, dt);
 
-    // Visual feedback for ability states
+    // Visual feedback for ability states (emissive, body scale, head offset)
     this.updateVisuals();
 
     // Hit flash overrides the state emissive briefly (applied AFTER updateVisuals)

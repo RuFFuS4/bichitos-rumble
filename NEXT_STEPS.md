@@ -60,6 +60,35 @@ critter — kept identical between client and server so feel matches online.
 - No visual feedback yet for Frenzy (L). Characters that use it (Sergei,
   Kurama, Shelly) show HUD cooldown but no screen VFX.
 
+## Bloque D — Animación procedural shared (en curso)
+
+Primera capa puramente procedural para los 9 critters. No huesos, no
+clips, no rigging por personaje. Parámetros derivados de (mass, speed)
+en `src/critter-animation.ts`:
+
+- **idleBobHz** y **idleBobAmp**: respiración. Pesados respiran lento
+  y profundo; ligeros rápido y superficial.
+- **runBounceHz** y **runBounceAmp**: rebote vertical al correr.
+- **leanRadians**: pitch forward al correr, lerp suave.
+- **chargeStretchMult**: estiramiento Z durante `charge_rush` activo.
+
+Escribe solo en `body.position.y`, `glbMesh.position.y`,
+`glbMesh.rotation.x` y `glbMesh.scale.z`. No toca `mesh.rotation.y`
+(movimiento) ni el resto de scale/positions que ya usan `updateVisuals`,
+`updateScaleFeedback`, `updateKnockbackTilt`, `updateHeadbuttRecovery`,
+`tickHitFlash`. Compatible online y offline (lee `vx/vz/abilityStates`
+que el servidor pobla cada tick).
+
+### Tripo3D — nota para el futuro
+Tripo3D puede generar rig + clips para animaciones únicas concretas
+(por ejemplo: "grab" de Trunk H2, "shell shield" de Shelly). Ahora NO
+se usa; el pipeline de optimización actual (`scripts/optimize-models.mjs`
++ `gltf-transform`) descarta rigs. Añadir clips óseos exigiría mixer,
+sync de clips entre cliente/servidor y cambios al pipeline — no
+compensa para jam. Cuando lleguemos a habilidades finales, Tripo3D es
+candidato válido para animaciones específicas que no tengan sentido
+procedural puro.
+
 ## Next block — shared procedural animations
 
 Now that the roster is complete, the next real ROI is **shared procedural
