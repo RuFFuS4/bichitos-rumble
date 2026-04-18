@@ -12,6 +12,7 @@ import type { Game } from '../game';
 import { CRITTER_PRESETS } from '../critter';
 import { getPlayableNames } from '../roster';
 import { deriveAnimationPersonality } from '../critter-animation';
+import { clearAllHeldInputs } from '../input';
 
 const NONE = '(none)';
 
@@ -140,6 +141,14 @@ export function mountLabSidebar(game: Game): void {
   const root = document.createElement('div');
   root.id = 'lab-sidebar';
   document.body.appendChild(root);
+
+  // Sticky-key guard: any interaction with the sidebar drops every held
+  // input. A dropdown/slider stealing focus can cause a keyup to miss the
+  // window listener, which leaves the critter drifting after release.
+  // Covers pointerdown (opening a dropdown / grabbing a slider / button
+  // press) and focusin (tab into a control).
+  root.addEventListener('pointerdown', () => clearAllHeldInputs());
+  root.addEventListener('focusin', () => clearAllHeldInputs());
 
   // --- state ---
   const names = getPlayableNames(); // 9 playables

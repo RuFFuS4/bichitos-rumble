@@ -79,6 +79,23 @@ export function clearMenuActions(): void {
   freshMenuActions.clear();
 }
 
+/**
+ * Release every held action and zero the move vector. Intended as a
+ * safety net when a key's matching keyup could have been missed — e.g.
+ * the browser tab lost focus mid-press, or the user clicked a sidebar
+ * form control (dropdown, slider) which can intercept keyup events
+ * before the window handler sees them. Without this, a held WASD key
+ * would leave the critter drifting after the focus jumps away.
+ */
+export function clearAllHeldInputs(): void {
+  for (const k of Object.keys(keyState)) keyState[k] = false;
+  _setMove(0, 0);
+  _setHeld('headbutt', false);
+  _setHeld('ability1', false);
+  _setHeld('ability2', false);
+  _setHeld('ultimate', false);
+}
+
 // ---------------------------------------------------------------------------
 // Public write API (used by device backends)
 // ---------------------------------------------------------------------------
@@ -133,6 +150,17 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
   keyState[e.code] = false;
   updateContinuousFromKeyboard();
+});
+
+// Safety net: when the window/tab loses focus, any key held at that
+// moment may never fire keyup here (Alt+Tab, devtools focus steal,
+// sidebar dropdown opening, etc.). Clear everything so the critter
+// doesn't drift forever. The user just has to re-press to resume.
+window.addEventListener('blur', () => {
+  clearAllHeldInputs();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) clearAllHeldInputs();
 });
 
 function pushEdgeActionsForKey(code: string): void {
