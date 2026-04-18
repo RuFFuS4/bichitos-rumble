@@ -60,6 +60,35 @@ critter — kept identical between client and server so feel matches online.
 - No visual feedback yet for Frenzy (L). Characters that use it (Sergei,
   Kurama, Shelly) show HUD cooldown but no screen VFX.
 
+## Lab tool — `/tools.html`
+
+Herramienta interna de productividad montada dentro del mismo repositorio.
+No visible desde el juego, accesible tecleando `/tools.html`. Pensada
+para acelerar balance/test/debug sin salir del código.
+
+Incluye:
+- **Matchup tuner**: selector de jugador + 3 bots (o mirror match / random).
+  Start / Restart same seed / Randomize bots.
+- **Arena inspector**: seed actual, pattern (A/B), batches con band+size+delay,
+  collapse level, warning, radius. Force seed / Replay last / Copy seed.
+- **Animation tuner**: 7 sliders en vivo sobre `animPersonality` del player
+  (idleBobHz/Amp, runBounceHz/Amp, leanRadians, runSwayRadians,
+  chargeStretchMult). Reset Derived, Copy Values (JSON).
+- **Playback**: slider de `debugSpeedScale` + Pause / 0.3× / 1× / End Match.
+- **Info panel**: nombre, rol, speed, mass, HB force, kit, lives.
+
+Arquitectura:
+- `tools.html` = copia de index.html con `<title>` diferente, `<body class="lab-mode">`,
+  y script a `src/tools/main.ts`. Las pantallas del juego (title/character-select/end-screen)
+  se ocultan vía CSS `body.lab-mode`.
+- `src/tools/main.ts` reproduce el bootstrap de `src/main.ts` (scene/renderer/camera/
+  input/audio/Game) y monta el sidebar; el loop respeta `game.debugSpeedScale`.
+- `src/tools/sidebar.ts` construye el panel programáticamente (plain DOM, sin framework).
+- Game expone 4 métodos nuevos: `debugStartOfflineMatch`, `debugForceArenaSeed`,
+  `debugGetArenaInfo`, `debugEndMatchImmediately` + field `debugSpeedScale`.
+- `vite.config.ts` con 2 entries; Vercel sirve `/tools.html` como estático
+  (antes del rewrite SPA).
+
 ## Bloque D — Animación procedural shared (en curso)
 
 Primera capa puramente procedural para los 9 critters. No huesos, no

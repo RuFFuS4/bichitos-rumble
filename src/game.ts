@@ -1038,4 +1038,113 @@ export class Game {
     if (!p) return null;
     return { x: p.x, z: p.z, alive: !!p.alive, critterName: p.config?.name ?? '?' };
   }
+
+  // -------------------------------------------------------------------------
+  // Debug / Lab tool API
+  //
+  // These methods are ONLY consumed by the /tools.html dev tool. They keep
+  // the production flow (title → character select → countdown) intact while
+  // giving the tool a direct way to spawn arbitrary matches and inspect
+  // state.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Global dt multiplier. Read by the main game loop each frame. Set to 0
+   * to pause, <1 for slow-mo, >1 for fast-forward. Default 1.
+   */
+  public debugSpeedScale = 1;
+
+  /**
+   * Lab-only: spawn an offline match with an explicit player + bot lineup,
+   * bypassing title / character select. Optionally forces an arena seed for
+   * deterministic replay.
+   */
+  public debugStartOfflineMatch(
+    playerName: string,
+    botNames: string[],
+    options: { seed?: number } = {},
+  ): void {
+    const playerConfig = CRITTER_PRESETS.find(c => c.name === playerName);
+    if (!playerConfig) { console.warn('[Lab] unknown player:', playerName); return; }
+    const botConfigs = botNames
+      .map(n => CRITTER_PRESETS.find(c => c.name === n))
+      .filter((c): c is CritterConfig => !!c);
+
+    const roster = [playerConfig, ...botConfigs].slice(0, MAX_CRITTERS_PER_MATCH);
+
+    clearMenuActions();
+    this.phase = 'countdown';
+    document.body.classList.add('match-active');
+    hideTitleScreen();
+    hideCharacterSelect();
+    hideEndScreen();
+    hidePreview();
+    showMatchHud();
+
+    this.phaseTimer = FEEL.match.countdown;
+    this.matchTimer = FEEL.match.duration;
+
+    const seed = options.seed ?? ((Math.random() * 0xFFFFFFFF) | 0);
+    this.arena.reset();
+    this.arena.buildFromSeed(seed);
+
+    this.rebuildCritters(roster);
+
+    // Preload GLBs for the new lineup (non-blocking)
+    const glbPaths = roster
+      .map(c => getRosterEntry(c.name)?.glbPath)
+      .filter((p): p is string => typeof p === 'string');
+    if (glbPaths.length > 0) preloadModels(glbPaths);
+
+    initAllLivesHUD(this.critters);
+    initAbilityHUD(this.player.abilityStates);
+    hideOverlay();
+  }
+
+  /** Lab-only: rebuild the arena with a specific seed, keeping the current match. */
+  public debugForceArenaSeed(seed: number): void {
+    this.arena.reset();
+    this.arena.buildFromSeed(seed);
+  }
+
+  /** Lab-only: read-only snapshot of arena state for display panels. */
+  public debugGetArenaInfo(): {
+    seed: number;
+    batches: Array<{ band: number; size: number; delay: number }>;
+    collapseLevel: number;
+    warningBatch: number;
+    currentRadius: number;
+    patternLabel: 'A (outer→inner sweep)' | 'B (axis-split)' | 'unknown';
+  } | null {
+    const layout = (this.arena as unknown as { layout?: { seed: number; fragments: Array<{ band: number }>; batches: Array<{ indices: number[]; delay: number }> } }).layout;
+    if (!layout) return null;
+    const batches = layout.batches.map(b => {
+      const bands = [...new Set(b.indices.map(i => layout.fragments[i].band))];
+      return { band: bands.length === 1 ? bands[0] : -1, size: b.indices.length, delay: b.delay };
+    });
+    // Pattern heuristic: Pattern B always has 6 batches (3 per side).
+    // Pattern A has 3-5 batches, each one band.
+    const patternLabel: 'A (outer→inner sweep)' | 'B (axis-split)' | 'unknown' =
+      layout.batches.length >= 6 ? 'B (axis-split)' : 'A (outer→inner sweep)';
+    return {
+      seed: layout.seed,
+      batches,
+      collapseLevel: (this.arena as unknown as { syncedLevel: number }).syncedLevel,
+      warningBatch: (this.arena as unknown as { syncedWarning: number }).syncedWarning,
+      currentRadius: this.arena.currentRadius,
+      patternLabel,
+    };
+  }
+
+  /** Lab-only: tear down the current match and go back to an idle state. */
+  public debugEndMatchImmediately(): void {
+    for (const c of this.critters) c.dispose();
+    this.critters = [];
+    this.arena.reset();
+    this.phase = 'title';
+    hideEndScreen();
+    hideCharacterSelect();
+    hidePreview();
+    hideOverlay();
+  }
 }

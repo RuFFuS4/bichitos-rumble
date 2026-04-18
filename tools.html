@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bichitos Rumble — Lab</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a18; }
+    canvas { display: block; }
+    #hud {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #fff;
+    }
+    #hud-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 20px;
+      font-size: 18px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.7);
+      gap: 16px;
+    }
+    /* Left cluster: alive count + match timer */
+    #hud-top-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    #hud-timer {
+      font-variant-numeric: tabular-nums;
+      opacity: 0.9;
+    }
+    /* Right cluster: settings buttons (SFX + music). Lives panel in the center. */
+    #hud-settings {
+      display: flex;
+      gap: 6px;
+      pointer-events: auto;
+    }
+    .settings-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+      -webkit-tap-highlight-color: transparent;
+      padding: 0;
+      line-height: 1;
+    }
+    .settings-btn:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.4); }
+    .settings-btn.muted { opacity: 0.45; }
+    #overlay {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      font-size: 36px;
+      font-weight: bold;
+      text-shadow: 0 3px 8px rgba(0,0,0,0.8);
+      pointer-events: auto;
+    }
+    #overlay .sub {
+      font-size: 18px;
+      margin-top: 8px;
+      opacity: 0.8;
+    }
+    /* Countdown pop: apply class on content change, keyframe scales in quickly */
+    #overlay.pop {
+      animation: overlay-pop 0.25s ease-out;
+    }
+    @keyframes overlay-pop {
+      0%   { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
+      60%  { transform: translate(-50%, -50%) scale(0.95); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+    }
+    /* Ability cooldown bars */
+    #ability-bar-container {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 16px;
+      pointer-events: none;
+    }
+    .ability-slot {
+      width: 90px;
+      text-align: center;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    }
+    .ability-key {
+      font-size: 14px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      margin-bottom: 3px;
+    }
+    .ability-name {
+      font-size: 10px;
+      opacity: 0.7;
+      margin-bottom: 4px;
+    }
+    .ability-fill-bg {
+      width: 100%;
+      height: 6px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .ability-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.1s linear;
+      background: #4ade80;
+    }
+    .ability-slot.active .ability-fill {
+      background: #ff8800;
+      box-shadow: 0 0 6px #ff8800;
+    }
+    .ability-slot.active .ability-key {
+      color: #ff8800;
+    }
+    .ability-slot.on-cooldown .ability-fill {
+      background: #666;
+    }
+    .ability-slot.on-cooldown .ability-key {
+      opacity: 0.5;
+    }
+    /* Ability visible but not yet implemented in this mode (e.g. online Bloque A) */
+    .ability-slot.unavailable {
+      opacity: 0.35;
+      position: relative;
+    }
+    .ability-slot.unavailable .ability-fill {
+      background: #555;
+    }
+    .ability-soon-badge {
+      margin-top: 2px;
+      font-size: 8px;
+      font-weight: bold;
+      letter-spacing: 1.2px;
+      color: #ffcc00;
+      text-transform: uppercase;
+    }
+    /* Lives panel */
+    #hud-lives {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      align-items: center;
+    }
+    .lives-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 14px;
+      transition: opacity 0.3s;
+    }
+    .lives-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    .lives-hearts {
+      color: #e74c3c;
+      font-size: 13px;
+      letter-spacing: 1px;
+    }
+
+    /* ---------- Portal legend (HUD, top-left under timer) ---------- */
+    #portal-legend {
+      position: absolute;
+      top: 58px;
+      left: 20px;
+      display: none;
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.4px;
+      color: rgba(255,255,255,0.95);
+      text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+      pointer-events: none;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.25);
+      border-radius: 6px;
+      border-left: 2px solid rgba(255,255,255,0.2);
+    }
+    body.match-active #portal-legend { display: block; }
+    .portal-legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .portal-legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 10px currentColor;
+      flex-shrink: 0;
+    }
+    .portal-legend-dot-exit {
+      background: #44ff88;
+      color: #44ff88;
+    }
+    .portal-legend-dot-return {
+      background: #ff8844;
+      color: #ff8844;
+    }
+    .portal-legend-hint {
+      opacity: 0.7;
+      font-size: 12px;
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+    }
+    .portal-legend-hint kbd {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.35);
+      border-radius: 3px;
+      padding: 1px 6px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #ffdc5c;
+    }
+
+    /* Portal toggle button (mobile only, match-active only) */
+    #btn-portal-toggle { display: none; }
+    body.touch-mode.match-active #btn-portal-toggle { display: flex; }
+
+    /* ---------- Full-screen overlays (title / select / end) ---------- */
+    .full-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, rgba(10,10,24,0.75) 0%, rgba(10,10,24,0.92) 100%);
+      color: #fff;
+      pointer-events: auto;
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+    }
+    .full-overlay.hidden { display: none; }
+
+    .prompt {
+      font-size: 18px;
+      opacity: 0.85;
+      animation: pulse 1.4s ease-in-out infinite;
+      margin-top: 20px;
+    }
+    .prompt kbd {
+      display: inline-block;
+      background: rgba(255,255,255,0.15);
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 15px;
+      border: 1px solid rgba(255,255,255,0.35);
+      margin: 0 2px;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.9; }
+      50% { opacity: 0.4; }
+    }
+    .controls-hint {
+      position: absolute;
+      bottom: 24px;
+      font-size: 12px;
+      opacity: 0.45;
+      letter-spacing: 0.5px;
+    }
+
+    /* ---------- Title Screen ---------- */
+    #title-screen .game-title {
+      font-size: clamp(48px, 8vw, 96px);
+      font-weight: 900;
+      letter-spacing: 4px;
+      text-align: center;
+      line-height: 0.92;
+      text-shadow:
+        0 4px 28px rgba(0,0,0,0.9),
+        0 0 50px rgba(231, 76, 60, 0.35);
+      margin-bottom: 14px;
+    }
+    #title-screen .game-title .rumble {
+      background: linear-gradient(180deg, #ffdc5c 0%, #e74c3c 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    #title-screen .title-mode-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 24px;
+      align-items: center;
+      pointer-events: auto;
+    }
+    #title-screen .title-mode-btn {
+      min-width: 320px;
+      padding: 12px 26px;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      background: rgba(255,255,255,0.06);
+      border: 2px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.78);
+      border-radius: 6px;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.08s;
+      font-family: inherit;
+    }
+    #title-screen .title-mode-btn:hover {
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.45);
+      color: rgba(255,255,255,0.95);
+    }
+    #title-screen .title-mode-btn.selected {
+      background: rgba(231, 76, 60, 0.22);
+      border-color: #e74c3c;
+      color: #ffffff;
+      box-shadow: 0 0 18px rgba(231, 76, 60, 0.35);
+    }
+    #title-screen .title-mode-btn:active {
+      transform: scale(0.97);
+    }
+    #title-screen .tagline {
+      font-size: 16px;
+      opacity: 0.65;
+      margin-bottom: 44px;
+      letter-spacing: 1px;
+    }
+
+    /* ---------- Character Select ---------- */
+    #character-select h2 {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      margin-bottom: 24px;
+      opacity: 0.9;
+    }
+    #character-select .select-body {
+      display: flex;
+      gap: 40px;
+      align-items: center;
+      max-width: 1000px;
+      padding: 0 30px;
+    }
+    /* Left: 3x3 grid of slots */
+    #critter-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 12px;
+      width: 360px;
+    }
+    .critter-slot {
+      width: 108px;
+      height: 108px;
+      background: rgba(255,255,255,0.04);
+      border: 2px solid rgba(255,255,255,0.10);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      cursor: pointer;
+      transition: transform 0.18s, border-color 0.18s, background 0.18s, box-shadow 0.18s;
+      position: relative;
+      overflow: hidden;
+      /* Per-slot glow colour injected from JS via style="--slot-glow: #rrggbb".
+         Falls back to neutral white if not provided. */
+    }
+    /* Soft character-coloured halo behind the avatar — gives each slot a
+       visual identity matching the critter's signature colour. Sits behind
+       the avatar (z-index auto = default painting order). */
+    .critter-slot::before {
+      content: '';
+      position: absolute;
+      inset: -20%;
+      background: radial-gradient(circle at 50% 40%, var(--slot-glow, #ffffff) 0%, transparent 62%);
+      opacity: 0.14;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .critter-slot:hover {
+      border-color: var(--slot-glow, rgba(255,255,255,0.5));
+      transform: translateY(-2px);
+    }
+    .critter-slot:hover::before {
+      opacity: 0.25;
+    }
+    .critter-slot.selected {
+      border-color: #fff;
+      background: rgba(255,255,255,0.12);
+      transform: scale(1.08);
+      box-shadow: 0 0 22px var(--slot-glow, rgba(255,255,255,0.45)),
+                  0 6px 24px rgba(0,0,0,0.5);
+    }
+    .critter-slot.selected::before {
+      opacity: 0.42;
+    }
+    .critter-slot .slot-dot {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.5), inset 0 -4px 8px rgba(0,0,0,0.3);
+    }
+    /* 3D thumbnail replaces the circle for playable critters. Tall
+       portrait-like frame so the rendered character's full body fits. */
+    .critter-slot .slot-avatar {
+      width: 74px;
+      height: 74px;
+      border-radius: 10px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+      transition: background-image 0.18s ease-out, transform 0.18s;
+      position: relative; /* stay above the ::before glow */
+    }
+    .critter-slot:hover .slot-avatar {
+      transform: scale(1.04);
+    }
+    .critter-slot.selected .slot-avatar {
+      transform: scale(1.06);
+    }
+    .critter-slot .slot-name {
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 0.5px;
+    }
+    .critter-slot.locked {
+      cursor: default;
+      opacity: 0.45;
+      background: rgba(255,255,255,0.02);
+      border: 2px dashed rgba(255,255,255,0.12);
+    }
+    .critter-slot.locked .slot-name {
+      font-size: 9px;
+      font-weight: normal;
+      opacity: 0.7;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .critter-slot.locked .slot-lock {
+      font-size: 20px;
+      opacity: 0.5;
+    }
+    .critter-slot.wip {
+      opacity: 0.6;
+      border: 2px dashed rgba(255,255,255,0.18);
+    }
+    .critter-slot.wip.selected {
+      opacity: 0.85;
+      border-color: rgba(255,255,255,0.5);
+      transform: scale(1.04);
+    }
+    .slot-badge {
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      font-size: 8px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #ffcc00;
+      opacity: 0.7;
+    }
+
+    /* Right: 3D preview + info */
+    #preview-pane {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 360px;
+    }
+    #preview-canvas {
+      width: 320px;
+      height: 280px;
+      display: block;
+      cursor: grab;
+      touch-action: none;
+    }
+    #preview-canvas:active {
+      cursor: grabbing;
+    }
+    #critter-info {
+      text-align: center;
+      margin-top: 4px;
+      width: 100%;
+    }
+    #critter-info-name {
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 1px;
+    }
+    #critter-info-role {
+      font-size: 11px;
+      opacity: 0.65;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-top: 2px;
+    }
+    #critter-info-tagline {
+      font-size: 13px;
+      opacity: 0.7;
+      margin-top: 10px;
+      min-height: 18px;
+    }
+    #critter-info-stats {
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 80%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .stat-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 10px;
+      letter-spacing: 1px;
+      opacity: 0.85;
+    }
+    .stat-label {
+      width: 54px;
+      text-align: right;
+      text-transform: uppercase;
+      opacity: 0.7;
+    }
+    .stat-bar-bg {
+      flex: 1;
+      height: 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .stat-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #4ade80, #ffdc5c);
+      border-radius: 4px;
+      transition: width 0.35s ease-out;
+    }
+    #critter-info-abilities {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      width: 80%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .ability-info-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-size: 10px;
+      opacity: 0.85;
+    }
+    .ability-info-key {
+      font-weight: bold;
+      font-family: monospace;
+      font-size: 9px;
+      color: #4ade80;
+      min-width: 18px;
+    }
+    .ability-info-name {
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    .ability-info-desc {
+      opacity: 0.6;
+      font-size: 9px;
+    }
+    .ability-info-planned {
+      font-size: 8px;
+      color: #ffcc00;
+      opacity: 0.5;
+      margin-left: 2px;
+    }
+
+    /* ---------- End Screen ---------- */
+    #end-screen .end-result {
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 900;
+      letter-spacing: 3px;
+      text-align: center;
+      margin-bottom: 12px;
+      text-shadow: 0 4px 24px rgba(0,0,0,0.9);
+    }
+    #end-screen .end-result.win {
+      color: #4ade80;
+      text-shadow: 0 4px 28px rgba(74,222,128,0.55), 0 0 60px rgba(74,222,128,0.25);
+    }
+    #end-screen .end-result.lose {
+      color: #e74c3c;
+      text-shadow: 0 4px 28px rgba(231,76,60,0.55), 0 0 60px rgba(231,76,60,0.25);
+    }
+    #end-screen .end-result.draw {
+      color: #ffdc5c;
+    }
+    #end-screen .end-subtitle {
+      font-size: 16px;
+      opacity: 0.7;
+      margin-bottom: 24px;
+    }
+    /* Portal prompt on end screen — separated from match prompt */
+    #end-portal-prompt {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,0.15);
+      font-size: 16px;
+    }
+    #end-portal-prompt .kbd-portal-exit {
+      border-color: rgba(74, 222, 128, 0.7);
+      color: #4ade80;
+    }
+    #end-portal-prompt .kbd-portal-return {
+      border-color: rgba(255, 170, 68, 0.7);
+      color: #ffaa44;
+    }
+
+    /* ---------- Desktop/touch hint visibility ---------- */
+    /* Hints shown only when keyboard is the primary input */
+    body.touch-mode .desktop-only { display: none !important; }
+    /* Hints shown only on touch devices */
+    .touch-only { display: none; }
+    body.touch-mode .touch-only { display: inline; }
+
+    /* ---------- Landscape lock (portrait prompt) ---------- */
+    #rotate-prompt {
+      position: fixed;
+      inset: 0;
+      background: #0a0a18;
+      color: #fff;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 20px;
+      z-index: 9999;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      padding: 30px;
+      text-align: center;
+    }
+    #rotate-prompt .rotate-icon {
+      font-size: 64px;
+      animation: rotate-hint 2s ease-in-out infinite;
+    }
+    #rotate-prompt .rotate-text {
+      font-size: 18px;
+      letter-spacing: 1px;
+      opacity: 0.9;
+    }
+    #rotate-prompt .rotate-sub {
+      font-size: 13px;
+      opacity: 0.6;
+    }
+    @keyframes rotate-hint {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(90deg); }
+    }
+    /* Only activate the rotate prompt for touch devices in portrait */
+    @media (orientation: portrait) {
+      body.touch-mode #rotate-prompt { display: flex; }
+    }
+
+    /* ---------- Mobile touch controls ---------- */
+    #touch-controls {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 50;
+      display: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body.touch-mode.match-active #touch-controls { display: block; }
+
+    #touch-joystick {
+      position: absolute;
+      bottom: 28px;
+      left: 28px;
+      width: 140px;
+      height: 140px;
+      pointer-events: auto;
+      touch-action: none;
+    }
+    .joystick-base {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+    }
+    .joystick-handle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 62px;
+      height: 62px;
+      margin-left: -31px;
+      margin-top: -31px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.3);
+      border: 2px solid rgba(255, 255, 255, 0.55);
+      transition: background 0.1s;
+      will-change: transform;
+    }
+    #touch-joystick.active .joystick-handle {
+      background: rgba(255, 220, 92, 0.45);
+    }
+
+    #touch-actions {
+      position: absolute;
+      bottom: 28px;
+      right: 28px;
+      width: 200px;
+      height: 200px;
+      pointer-events: none;
+    }
+    .touch-button {
+      position: absolute;
+      width: 74px;
+      height: 74px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      color: #fff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-weight: bold;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.08s, background 0.08s, border-color 0.08s;
+    }
+    .touch-button:active,
+    .touch-button.pressed {
+      transform: scale(0.92);
+      background: rgba(255, 220, 92, 0.35);
+      border-color: rgba(255, 220, 92, 0.9);
+    }
+    /* Layout: 2×2 cluster, thumb-friendly. Headbutt is the larger primary
+       action in the bottom-right; J/K flank it for abilities; L (ultimate)
+       sits in the top-left slot. Populated only when a critter has a third
+       ability — for the current placeholder roster, L is a no-op. */
+    .touch-btn-headbutt {
+      bottom: 0;
+      right: 0;
+      width: 92px;
+      height: 92px;
+      font-size: 22px;
+    }
+    .touch-btn-j {
+      top: 0;
+      right: 0;
+    }
+    .touch-btn-k {
+      bottom: 0;
+      left: 0;
+    }
+    .touch-btn-l {
+      top: 0;
+      left: 0;
+    }
+  </style>
+</head>
+<body class="lab-mode">
+  <div id="hud">
+    <div id="hud-top">
+      <div id="hud-top-left">
+        <span id="hud-alive">Alive: 4</span>
+        <span id="hud-timer">2:00</span>
+      </div>
+      <div id="hud-lives"></div>
+      <div id="hud-settings">
+        <button id="btn-portal-toggle" class="settings-btn touch-only" title="Toggle portals" aria-label="Toggle portals">🌀</button>
+        <button id="btn-sfx" class="settings-btn" title="Disable sound effects" aria-pressed="false">🔊</button>
+        <button id="btn-music" class="settings-btn" title="Disable music" aria-pressed="false">🎶</button>
+      </div>
+    </div>
+    <div id="overlay" style="display:none;"></div>
+    <div id="ability-bar-container"></div>
+    <div id="portal-legend">
+      <div class="portal-legend-row">
+        <span class="portal-legend-dot portal-legend-dot-exit"></span>
+        <span>Vibe Jam Games Multiverse</span>
+      </div>
+      <div id="portal-legend-return" class="portal-legend-row" style="display:none;">
+        <span class="portal-legend-dot portal-legend-dot-return"></span>
+        <span>Return to previous world</span>
+      </div>
+      <div class="portal-legend-hint desktop-only">Press <kbd>P</kbd> to show</div>
+    </div>
+  </div>
+
+  <div id="title-screen" class="full-overlay hidden">
+    <h1 class="game-title">BICHITOS<br><span class="rumble">RUMBLE</span></h1>
+    <p class="tagline">HEADBUTT YOUR RIVALS INTO THE VOID</p>
+    <div class="title-mode-buttons">
+      <button id="btn-vs-bots" class="title-mode-btn selected" data-mode="bots">🤖 vs Bots</button>
+      <button id="btn-online" class="title-mode-btn" data-mode="online">🌐 Online Multiplayer (2P)</button>
+    </div>
+    <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> switch · <kbd>ENTER</kbd> confirm</div>
+    <div class="prompt touch-only">Tap a mode to play</div>
+    <div class="controls-hint desktop-only">WASD move · SPACE headbutt · J/K abilities · R restart</div>
+    <div class="controls-hint touch-only">Joystick to move · buttons for headbutt and abilities</div>
+  </div>
+
+  <div id="character-select" class="full-overlay hidden">
+    <h2>CHOOSE YOUR CRITTER</h2>
+    <div class="select-body">
+      <div id="critter-grid"></div>
+      <div id="preview-pane">
+        <canvas id="preview-canvas"></canvas>
+        <div id="critter-info">
+          <div id="critter-info-name"></div>
+          <div id="critter-info-role"></div>
+          <div id="critter-info-tagline"></div>
+          <div id="critter-info-stats"></div>
+          <div id="critter-info-abilities"></div>
+        </div>
+      </div>
+    </div>
+    <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate</div>
+    <div class="prompt touch-only">Tap a slot to select · tap again to confirm · drag preview to rotate</div>
+  </div>
+
+  <div id="end-screen" class="full-overlay hidden">
+    <div class="end-result" id="end-result">Result</div>
+    <div class="end-subtitle" id="end-subtitle"></div>
+    <div class="prompt desktop-only"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
+    <div class="prompt touch-only">Tap to play again</div>
+    <div id="end-portal-prompt" class="prompt desktop-only" style="display:none;">
+      <kbd class="kbd-portal-exit">P</kbd> next game 🌀 · <kbd class="kbd-portal-return">B</kbd> return to previous
+    </div>
+  </div>
+
+  <div id="rotate-prompt">
+    <div class="rotate-icon">📱</div>
+    <div class="rotate-text">Please rotate your device</div>
+    <div class="rotate-sub">Bichitos Rumble is designed for landscape</div>
+  </div>
+  <div id="touch-controls">
+    <div id="touch-joystick">
+      <div class="joystick-base"></div>
+      <div class="joystick-handle"></div>
+    </div>
+    <div id="touch-actions">
+      <button class="touch-button touch-btn-l" data-action="ultimate">L</button>
+      <button class="touch-button touch-btn-j" data-action="ability1">J</button>
+      <button class="touch-button touch-btn-headbutt" data-action="headbutt">⚡</button>
+      <button class="touch-button touch-btn-k" data-action="ability2">K</button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/tools/main.ts"></script>
+  <!-- Vibe Coding Game Jam 2026 widget (required for submission) -->
+  <script async src="https://vibej.am/2026/widget.js"></script>
+</body>
+</html>
