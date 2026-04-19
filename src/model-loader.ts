@@ -33,11 +33,15 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 const gltfLoader = new GLTFLoader();
 
 // ---------------------------------------------------------------------------
-// Cache: path → { original scene, in-flight promise }
+// Cache: path → { original scene, animations, in-flight promise }
 // ---------------------------------------------------------------------------
 
 interface CacheEntry {
   scene: THREE.Group;
+  /** Animation clips extracted from the GLB (empty if none). Clips are
+   *  immutable data and can safely be shared across cloned meshes — each
+   *  Critter gets its own AnimationMixer but binds to the same clips. */
+  animations: THREE.AnimationClip[];
 }
 
 const cache = new Map<string, CacheEntry>();
@@ -53,14 +57,37 @@ const inFlight = new Map<string, Promise<CacheEntry>>();
  * Concurrent calls for the same path share one fetch (deduplication).
  */
 export async function loadModel(glbPath: string): Promise<THREE.Group> {
-  // Cache hit: clone and return
+  const entry = await ensureEntry(glbPath);
+  return deepCloneWithMaterials(entry.scene);
+}
+
+/**
+ * Load a GLB model AND its animation clips. Same caching rules as loadModel.
+ * Returns a fresh scene clone each call + the SHARED clip array (clips are
+ * immutable and safely shareable across clones — the per-instance
+ * AnimationMixer handles binding them to the cloned skeleton).
+ *
+ * Animations are empty for models that don't ship clips — callers that don't
+ * care about animation data can keep using loadModel(). This entry point is
+ * specifically for Critter which wires the clips into SkeletalAnimator.
+ */
+export async function loadModelWithAnimations(glbPath: string): Promise<{
+  scene: THREE.Group;
+  animations: THREE.AnimationClip[];
+}> {
+  const entry = await ensureEntry(glbPath);
+  return {
+    scene: deepCloneWithMaterials(entry.scene),
+    animations: entry.animations,
+  };
+}
+
+async function ensureEntry(glbPath: string): Promise<CacheEntry> {
   const cached = cache.get(glbPath);
   if (cached) {
     console.debug('[ModelLoader] cache hit:', glbPath);
-    return deepCloneWithMaterials(cached.scene);
+    return cached;
   }
-
-  // Deduplicate in-flight loads
   let promise = inFlight.get(glbPath);
   if (!promise) {
     console.debug('[ModelLoader] loading:', glbPath);
@@ -69,9 +96,7 @@ export async function loadModel(glbPath: string): Promise<THREE.Group> {
   } else {
     console.debug('[ModelLoader] joining in-flight load:', glbPath);
   }
-
-  const entry = await promise;
-  return deepCloneWithMaterials(entry.scene);
+  return promise;
 }
 
 /**
@@ -106,10 +131,16 @@ export async function preloadModels(paths: string[]): Promise<void> {
 async function fetchAndCache(glbPath: string): Promise<CacheEntry> {
   try {
     const gltf = await gltfLoader.loadAsync(glbPath);
-    const entry: CacheEntry = { scene: gltf.scene };
+    const entry: CacheEntry = {
+      scene: gltf.scene,
+      animations: gltf.animations ?? [],
+    };
     cache.set(glbPath, entry);
     inFlight.delete(glbPath);
-    console.debug('[ModelLoader] cached:', glbPath);
+    const clipInfo = entry.animations.length > 0
+      ? ` (${entry.animations.length} clip${entry.animations.length === 1 ? '' : 's'}: ${entry.animations.map(a => a.name).join(', ')})`
+      : ' (no animation clips)';
+    console.debug('[ModelLoader] cached:', glbPath + clipInfo);
     return entry;
   } catch (err) {
     inFlight.delete(glbPath);

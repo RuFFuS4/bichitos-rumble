@@ -1857,3 +1857,117 @@ Triggers:
   Vite — same contents, Vite just uses the latest-added file's
   name when naming the shared chunk.
 - Manual validation pending from user with a physical controller.
+
+---
+
+## 2026-04-19 — Skeletal animation loader (ready for Mixamo/Tripo GLBs)
+
+Infrastructure to load AnimationClips shipped inside GLB files and
+play them per Critter. Ships disabled in practice until the user
+replaces a critter GLB with an animated version — the current .glb
+files have no clips, so `skeletal === null` on every critter and the
+procedural layer runs 100% like before.
+
+### New file: `src/critter-skeletal.ts`
+
+- `SkeletalAnimator` class wrapping a per-critter `AnimationMixer`.
+- `SkeletalState` type with 13 logical states: `idle`, `walk`, `run`,
+  `headbutt_anticip`, `headbutt_lunge`, `ability_1/2/3`, `victory`,
+  `defeat`, `fall`, `hit`, `respawn`.
+- `STATE_KEYWORDS` map resolves clip names by fuzzy match. Handles
+  Mixamo title-case ("Breathing Idle"), Tripo snake_case, and
+  handcrafted clip names. First keyword substring hit wins.
+- Loop states (idle/walk/run) play continuously; one-shot states use
+  `THREE.LoopOnce` with `clampWhenFinished` so the pose holds at the
+  last frame (useful for victory/defeat on the end screen).
+- `play(state, { fallback, crossfade })` — 0.15s default crossfade;
+  looping states dedupe self-triggers; one-shots auto-play the fallback
+  when they finish via a mixer `finished` listener.
+- `isHeavyClipActive()` — boolean flag used by the procedural layer
+  to suppress conflicting root transforms.
+
+### Changes: `src/model-loader.ts`
+
+- Cache entry now holds both `scene` and `animations`.
+- New public `loadModelWithAnimations(path)` returns both a cloned
+  scene and the shared clip array. `loadModel(path)` keeps its
+  existing signature — callers that don't need clips (slot-thumbnail,
+  preload) work unchanged.
+- Debug log now reports clip count and names when a GLB loads.
+
+### Changes: `src/critter.ts`
+
+- New field `skeletal: SkeletalAnimator | null` (default null).
+- `attachGlbMesh` now receives `animations`. If the array is non-empty,
+  instantiates `SkeletalAnimator` bound to the cloned group and kicks
+  off `idle`.
+- New proxy `playSkeletal(state, opts)` — safe on critters without
+  clips (no-op returns false).
+- New `tickSkeletal(dt)` — fires ability_N clip on the rising edge of
+  each ability's `active` flag, then auto-drives `idle` / `run` from
+  velocity when no heavy clip is playing and no headbutt pose is
+  active. Called before the procedural tick.
+- Event hooks: `startHeadbutt` → headbutt_anticip with fallback
+  lunge. Anticip→lunge transition → headbutt_lunge with idle fallback.
+  `startFalling` → fall. `respawnAt` → respawn → idle. `eliminate` →
+  defeat (pose locks).
+- `dispose()` disposes the mixer's actions (clips themselves are
+  shared cache-owned, do NOT dispose those).
+
+### Changes: `src/critter-animation.ts`
+
+- Reads `critter.skeletal?.isHeavyClipActive()` and skips root writes
+  (`rotation.x`, `rotation.z`, `scale.y`) when true. `scale.z` (charge
+  stretch) and `body.position.y` (bob) still apply — no clip writes
+  those channels.
+
+### Changes: `src/game.ts`
+
+- `enterEnded(result)` offline: surviving critters play `victory`
+  looping. Losers already in `defeat` pose via `eliminate()`.
+- `updateOnline` sync loop: detects `alive` true→false edge (online
+  doesn't route through `Critter.eliminate()`) and fires `defeat`.
+- On online `phase=ended`: surviving online critters play `victory`
+  with looping fallback.
+
+### How to use (for animated GLBs)
+
+1. Generate animations for a critter externally (Mixamo, Tripo Animate,
+   Cascadeur, etc.). Export as GLB with embedded clips.
+2. Rename the relevant states in the exported clip names so the
+   fuzzy resolver finds them. Mixamo's stock names ("Idle",
+   "Running", "Victory", "Dying", "Hit Reaction") already match.
+   Custom clips should contain at least one of the keywords from
+   `STATE_KEYWORDS` in `critter-skeletal.ts`.
+3. Replace `public/models/critters/<name>.glb` with the animated
+   version. No code change required.
+4. Reload. Console: `[Critter] skeletal animator attached: <Name>
+   | clips: Idle, Running, Victory, ...`
+5. The procedural layer remains active for lean/sway/scale on
+   non-heavy states, and automatically steps aside during victory /
+   defeat / ability / headbutt-lunge / fall / hit.
+
+Critters without animated GLBs continue rendering 100% procedurally
+with no behaviour change.
+
+### Files created
+- `src/critter-skeletal.ts`
+
+### Files changed
+- `src/model-loader.ts` — `loadModelWithAnimations` + cache extension.
+- `src/critter.ts` — skeletal field, `playSkeletal`, `tickSkeletal`,
+  hooks on `startHeadbutt` / anticip→lunge / `startFalling` /
+  `respawnAt` / `eliminate`, dispose.
+- `src/critter-animation.ts` — heavy-clip suppression of root writes.
+- `src/game.ts` — victory hooks on end (offline + online) + alive
+  edge → defeat (online).
+
+### Verification
+- Typecheck + build clean.
+- Shared chunk: 818.35 → 836.80 kB (+18.5 kB, gzip +5 kB) for the
+  AnimationMixer + SkeletalAnimator + Three.js animation code path.
+  Main game bundle still 3.08 kB.
+- No runtime changes to non-animated GLBs (tested by checking that
+  every critter still renders identically in offline mode).
+- Real-world validation waiting on the first animated GLB from the
+  user's Mixamo pipeline.

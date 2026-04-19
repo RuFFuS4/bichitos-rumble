@@ -658,7 +658,14 @@ export class Game {
       if (typeof p.rotationY === 'number') c.mesh.rotation.y = p.rotationY;
       c.vx = p.vx ?? 0;
       c.vz = p.vz ?? 0;
+      // Alive edge detection — online matches mark `alive=false` from
+      // server state, they don't call Critter.eliminate(), so we mirror
+      // the defeat skeletal hook here. No-op for critters without clips.
+      const wasAlive = c.alive;
       c.alive = p.alive ?? true;
+      if (wasAlive && !c.alive) {
+        c.playSkeletal('defeat', { fallback: 'defeat' });
+      }
       c.falling = p.falling ?? false;
       c.mesh.position.y = p.fallY ?? 0;
       c.mesh.visible = c.alive;
@@ -754,6 +761,13 @@ export class Game {
         }
         hideOverlay();
         showEndScreen(result, title, subtitle, false);
+
+        // Skeletal: surviving critters celebrate. Losers already locked
+        // into 'defeat' via the alive-edge hook above. No-op for critters
+        // without clips.
+        for (const c of this.onlineCritters.values()) {
+          if (c.alive) c.playSkeletal('victory', { fallback: 'victory' });
+        }
       }
     }
 
@@ -866,6 +880,14 @@ export class Game {
       // Loss or draw: drop back to the title loop so the end-screen feels
       // a beat less aggressive and matches the "returning to menu" vibe.
       playMusic('intro');
+    }
+
+    // Skeletal hook: any critter still alive performs their victory
+    // animation (fallback: loop so they keep celebrating on the end
+    // screen). Eliminated critters already locked into 'defeat' via
+    // Critter.eliminate(). No-op for critters without animation clips.
+    for (const c of this.critters) {
+      if (c.alive) c.playSkeletal('victory', { fallback: 'victory' });
     }
 
     // Stats: record the match outcome for the player's critter. Draws are

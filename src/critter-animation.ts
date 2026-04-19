@@ -111,10 +111,21 @@ const LEAN_LERP_HEADBUTT = 30;
 /**
  * Main tick. Call every frame from Critter.update() BEFORE updateVisuals
  * (so visual feedback can stack emissive on top without us overwriting it).
+ *
+ * When a skeletal animator is playing a HEAVY clip (victory, defeat,
+ * ability_N, headbutt_lunge, fall, hit), this function SKIPS writes to
+ * the root transforms that the clip's pose would own (rotation.x/z,
+ * scale.y). Scale.z (charge stretch) and body.position.y bob still
+ * apply because neither Mixamo nor Tripo clips ever write those.
  */
 export function tickProceduralAnimation(critter: Critter, dt: number): void {
   const p = critter.animPersonality;
   const t = performance.now() * 0.001;
+
+  // Skeletal suppression: when a "heavy" clip is active the procedural
+  // layer steps back from the root transforms it would otherwise fight
+  // for. Light states (idle/walk/run) coexist with lean/sway/scale.
+  const skeletalHeavy = critter.skeletal?.isHeavyClipActive() ?? false;
 
   const vMag = Math.sqrt(critter.vx * critter.vx + critter.vz * critter.vz);
   const moving = vMag > SPEED_DEADZONE;
@@ -174,30 +185,34 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
   critter.glbMesh.position.y = pivotY + yOffset;
 
   // --- Forward pitch (lean) ---
-  // Priority: headbutt lunge > headbutt anticipation > run lean
-  const headbuttPitchTarget =
-    HEADBUTT_ANTICIP_PITCH * antBlend + HEADBUTT_LUNGE_PITCH * lungeBlend;
-  const runPitchTarget = runIntensity * p.leanRadians;
-  const pitchTarget = headbuttActive ? headbuttPitchTarget : runPitchTarget;
+  // Priority: headbutt lunge > headbutt anticipation > run lean.
+  // Skipped when a heavy skeletal clip is active — the clip's pose owns
+  // the root rotation and we don't want to fight it with lerp drift.
+  if (!skeletalHeavy) {
+    const headbuttPitchTarget =
+      HEADBUTT_ANTICIP_PITCH * antBlend + HEADBUTT_LUNGE_PITCH * lungeBlend;
+    const runPitchTarget = runIntensity * p.leanRadians;
+    const pitchTarget = headbuttActive ? headbuttPitchTarget : runPitchTarget;
 
-  const pitchLerp = Math.min(
-    1,
-    dt * (headbuttActive ? LEAN_LERP_HEADBUTT : LEAN_LERP_RUN),
-  );
-  critter.glbMesh.rotation.x +=
-    (pitchTarget - critter.glbMesh.rotation.x) * pitchLerp;
+    const pitchLerp = Math.min(
+      1,
+      dt * (headbuttActive ? LEAN_LERP_HEADBUTT : LEAN_LERP_RUN),
+    );
+    critter.glbMesh.rotation.x +=
+      (pitchTarget - critter.glbMesh.rotation.x) * pitchLerp;
 
-  // --- Side-to-side sway while running (rotation.z) ---
-  // Subtle body roll at the run bounce cadence. Zero during headbutt so
-  // the pose stays crisp.
-  const swayTarget =
-    Math.sin(t * p.runBounceHz * Math.PI * 2) *
-    p.runSwayRadians *
-    runIntensity *
-    (1 - Math.min(1, antBlend + lungeBlend));
-  const swayLerp = Math.min(1, dt * LEAN_LERP_RUN);
-  critter.glbMesh.rotation.z +=
-    (swayTarget - critter.glbMesh.rotation.z) * swayLerp;
+    // --- Side-to-side sway while running (rotation.z) ---
+    // Subtle body roll at the run bounce cadence. Zero during headbutt so
+    // the pose stays crisp.
+    const swayTarget =
+      Math.sin(t * p.runBounceHz * Math.PI * 2) *
+      p.runSwayRadians *
+      runIntensity *
+      (1 - Math.min(1, antBlend + lungeBlend));
+    const swayLerp = Math.min(1, dt * LEAN_LERP_RUN);
+    critter.glbMesh.rotation.z +=
+      (swayTarget - critter.glbMesh.rotation.z) * swayLerp;
+  }
 
   // --- Scale (x, y, z) ---
   const baseScale = critter.rosterEntry!.scale;
@@ -220,6 +235,10 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
   const squashY = gpSquash * headbuttY;
 
   critter.glbMesh.scale.x = baseScale;
-  critter.glbMesh.scale.y = baseScale * squashY;
+  // scale.y owns the squash/stretch channel — suppressed under heavy
+  // skeletal clips so their pose reads with the intended proportions.
+  critter.glbMesh.scale.y = skeletalHeavy ? baseScale : baseScale * squashY;
+  // scale.z (charge stretch) stays — no known imported clip writes to it,
+  // and the charge_rush visual boost still reads correctly.
   critter.glbMesh.scale.z = baseScale * stretchZ;
 }

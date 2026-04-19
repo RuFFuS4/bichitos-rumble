@@ -4,7 +4,8 @@ import type { AbilityState } from './abilities';
 import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
 import { getRosterEntry, type RosterEntry } from './roster';
-import { loadModel } from './model-loader';
+import { loadModelWithAnimations } from './model-loader';
+import { SkeletalAnimator, type SkeletalState } from './critter-skeletal';
 import { deriveAnimationPersonality, tickProceduralAnimation, type AnimationPersonality } from './critter-animation';
 
 /**
@@ -191,6 +192,16 @@ export class Critter {
    */
   isBot = false;
 
+  /**
+   * Skeletal animation layer — non-null only when the GLB shipped clips.
+   * Coexists with the procedural layer: for light states (idle/walk/run)
+   * both run together; for heavy states (victory/defeat/ability/etc.) the
+   * procedural layer silences its root writes (see tickProceduralAnimation).
+   * Critters without clips keep `skeletal = null` and render 100% procedural
+   * just like before — zero breakage for unanimated models.
+   */
+  skeletal: SkeletalAnimator | null = null;
+
   constructor(config: CritterConfig, scene: THREE.Scene) {
     this.config = config;
     this.mesh = new THREE.Group();
@@ -248,8 +259,8 @@ export class Critter {
     if (this.rosterEntry?.glbPath) {
       const entry = this.rosterEntry;
       const path = entry.glbPath!;
-      loadModel(path)
-        .then(group => this.attachGlbMesh(group, entry))
+      loadModelWithAnimations(path)
+        .then(({ scene, animations }) => this.attachGlbMesh(scene, entry, animations))
         .catch(() => {
           console.debug('[Critter] GLB load failed, keeping procedural:', config.name);
         });
@@ -278,6 +289,9 @@ export class Critter {
     if (this.headbuttCooldown > 0 || this.isHeadbutting || this.headbuttAnticipating || this.isImmune) return;
     this.headbuttAnticipating = true;
     this.anticipationTimer = FEEL.headbutt.anticipation.duration;
+    // Skeletal hook — if the critter has a wind-up clip, fire it now.
+    // fallback: lunge clip takes over when anticip finishes (see update()).
+    this.playSkeletal('headbutt_anticip', { fallback: 'headbutt_lunge' });
   }
 
   update(dt: number): void {
@@ -289,6 +303,7 @@ export class Critter {
       // Online mode: server is authoritative. Procedural animation still
       // runs because it reads vx/vz/abilityStates (all set from server
       // each tick before update() is called).
+      this.tickSkeletal(dt);
       tickProceduralAnimation(this, dt);
       this.updateVisuals();
       const flashT = tickHitFlash(this, dt);
@@ -324,6 +339,9 @@ export class Critter {
         const angle = this.mesh.rotation.y;
         this.vx += Math.sin(angle) * FEEL.headbutt.lunge.velocityBoost;
         this.vz += Math.cos(angle) * FEEL.headbutt.lunge.velocityBoost;
+        // Skeletal hook for the lunge strike. Fallback to idle after the
+        // one-shot so the critter doesn't freeze in the mid-lunge pose.
+        this.playSkeletal('headbutt_lunge', { fallback: 'idle' });
       }
     }
 
@@ -364,6 +382,11 @@ export class Critter {
     if (Math.abs(this.vx) > 0.1 || Math.abs(this.vz) > 0.1) {
       this.mesh.rotation.y = Math.atan2(this.vx, this.vz);
     }
+
+    // Skeletal animation layer (no-op if this critter has no clips). Runs
+    // BEFORE procedural so procedural can read the skeletal state and
+    // silence conflicting root writes.
+    this.tickSkeletal(dt);
 
     // Procedural animation layer (idle bob + run bounce + lean + charge stretch).
     // Reads vx/vz/abilityStates; writes body.position.y / glbMesh.position.y /
@@ -476,7 +499,11 @@ export class Critter {
   // ---------------------------------------------------------------------------
 
   /** Attach a loaded GLB scene graph, hiding the procedural mesh. */
-  private attachGlbMesh(group: THREE.Group, entry: RosterEntry): void {
+  private attachGlbMesh(
+    group: THREE.Group,
+    entry: RosterEntry,
+    animations: THREE.AnimationClip[] = [],
+  ): void {
     // Guard: if critter was disposed/detached before GLB loaded, discard
     // the clone to prevent GPU resource leaks on rapid navigation.
     if (!this.mesh.parent) {
@@ -531,7 +558,81 @@ export class Critter {
 
     this.mesh.add(group);
     this.glbMesh = group;
+
+    // Skeletal animation setup — only if the GLB shipped clips. The mixer
+    // binds to the cloned group so each Critter has its own animation state.
+    // Clips themselves are shared across clones (immutable data — safe).
+    if (animations.length > 0) {
+      this.skeletal = new SkeletalAnimator(group, animations);
+      // Kick off an idle loop so the critter breathes while we wait for
+      // gameplay signals. Safe no-op if there's no idle clip resolved.
+      this.skeletal.play('idle');
+      console.debug(
+        '[Critter] skeletal animator attached:',
+        this.config.name,
+        '| clips:',
+        this.skeletal.availableClipNames.join(', '),
+      );
+    }
+
     console.debug('[Critter] GLB attached:', this.config.name, '| materials:', this.glbMaterials.length);
+  }
+
+  /**
+   * Convenience proxy: request a skeletal clip state. Safe to call whether
+   * or not the critter has a skeletal animator — callers don't need to
+   * guard. Returns true if the clip exists and is now playing.
+   */
+  playSkeletal(state: SkeletalState, opts?: { fallback?: SkeletalState; crossfade?: number; force?: boolean }): boolean {
+    return this.skeletal?.play(state, opts) ?? false;
+  }
+
+  /**
+   * Edge-detection memory for ability cast events, so `tickSkeletal` can
+   * fire a `playSkeletal('ability_N')` exactly once on the rising edge of
+   * each ability's `active` flag.
+   */
+  private lastAbilityActive: boolean[] = [false, false, false];
+
+  /**
+   * Advance the skeletal layer (if any) and auto-drive idle / run loops
+   * from current velocity. Called every frame before procedural.
+   *
+   * Auto-logic is conservative:
+   *   - Does nothing if the critter has no skeletal animator.
+   *   - Skips idle/run switching while a HEAVY state is active (victory,
+   *     defeat, ability, headbutt_lunge, fall, hit) — those clips own
+   *     the pose.
+   *   - Skips idle/run while headbutt anticip/lunge flags are set, so
+   *     the pose stays crisp.
+   *   - Fires ability_1 / ability_2 / ability_3 on the rising edge of
+   *     each ability's `active` flag.
+   */
+  private tickSkeletal(dt: number): void {
+    if (!this.skeletal) return;
+
+    // Ability cast edges — play the corresponding clip exactly once.
+    for (let i = 0; i < this.abilityStates.length && i < 3; i++) {
+      const active = this.abilityStates[i].active;
+      const prev = this.lastAbilityActive[i];
+      if (active && !prev) {
+        const slotState: SkeletalState = (['ability_1', 'ability_2', 'ability_3'] as const)[i];
+        this.skeletal.play(slotState);
+      }
+      this.lastAbilityActive[i] = active;
+    }
+
+    // Movement-driven idle/run, only if nothing "heavier" is playing and
+    // we're not in a headbutt pose window.
+    const heavy = this.skeletal.isHeavyClipActive();
+    const inHeadbuttPose = this.headbuttAnticipating || this.isHeadbutting;
+    if (this.alive && !heavy && !inHeadbuttPose) {
+      const vMag = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
+      const moving = vMag > FEEL.movement.velocityDeadZone * 2;
+      this.skeletal.play(moving ? 'run' : 'idle');
+    }
+
+    this.skeletal.update(dt);
   }
 
   /**
@@ -562,6 +663,10 @@ export class Critter {
     this.lives--;
     this.respawnTimer = FEEL.lives.respawnDelay;
     playSound('fall');
+    // Skeletal fall clip — kept until respawn (one-shot with defeat
+    // fallback so if there's no fall clip but there is defeat, it still
+    // reads as "going down" instead of idle during the drop).
+    this.playSkeletal('fall', { fallback: 'defeat' });
   }
 
   /** Update falling state. Returns true if critter should respawn now. */
@@ -601,6 +706,8 @@ export class Critter {
     this.mesh.visible = true;
     this.mesh.scale.set(1, 1, 1);
     this.body.scale.y = 1.0;
+    // Play a respawn clip if present; falls back to idle automatically.
+    this.playSkeletal('respawn', { fallback: 'idle' });
   }
 
   /** Permanently eliminated (no lives left). */
@@ -608,6 +715,9 @@ export class Critter {
     this.alive = false;
     this.falling = false;
     this.mesh.visible = false;
+    // Hold the defeat pose for the end-screen. clampWhenFinished keeps
+    // the last frame visible instead of snapping back to idle.
+    this.playSkeletal('defeat', { fallback: 'defeat' });
   }
 
   /**
@@ -618,6 +728,11 @@ export class Critter {
    */
   dispose(): void {
     if (this.mesh.parent) this.mesh.parent.remove(this.mesh);
+    // Skeletal animator: release the mixer's actions first. The
+    // underlying AnimationClip objects are SHARED across clones and must
+    // not be disposed here — the model-loader cache owns them.
+    this.skeletal?.dispose();
+    this.skeletal = null;
     // Dispose all GPU resources: procedural + GLB
     this.mesh.traverse((child) => {
       const m = child as THREE.Mesh;
