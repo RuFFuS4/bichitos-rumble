@@ -46,7 +46,21 @@ let musicMuted = false;
 
 const MASTER_VOLUME = 0.35;   // SFX bus level
 const MUSIC_VOLUME = 0.22;    // Music bus level (below SFX so combat stays legible)
-const CROSSFADE_SEC = 1.2;    // Default crossfade time between music tracks
+// Crossfade shape — split in two phases to reduce the "both tracks loud at
+// once" audible artifact:
+//   1. PRE_ROLL: outgoing track ducks from 1.0 → 0.7, incoming is silent.
+//   2. MAIN_FADE: outgoing rides 0.7 → epsilon (exponential), incoming
+//      rides epsilon → 1.0 (exponential). Both on curves that spend less
+//      time in the "overlapping-loud" zone than a linear ramp would.
+// Incoming track's AudioBufferSource is also delayed by PRE_ROLL so the
+// first 200ms of the file are preserved (important for tracks with a
+// percussive intro).
+const PRE_ROLL_SEC = 0.2;
+const MAIN_FADE_SEC = 1.0;
+const CROSSFADE_SEC = PRE_ROLL_SEC + MAIN_FADE_SEC;
+// Exponential ramps can't hit zero; we ramp to this instead and stop the
+// source shortly after.
+const MIN_GAIN = 0.0001;
 
 // Loaded music buffers (lazy, cached).
 const musicBuffers = new Map<MusicTrack, AudioBuffer>();
@@ -380,7 +394,9 @@ async function loadMusicBuffer(track: MusicTrack): Promise<AudioBuffer | null> {
 
 /**
  * Play a background track. If another track is already playing, crossfades
- * over CROSSFADE_SEC. If the SAME track is already playing, this is a no-op.
+ * over CROSSFADE_SEC with a shape designed to reduce the audible double
+ * (see PRE_ROLL_SEC / MAIN_FADE_SEC comments above). If the SAME track is
+ * already playing, this is a no-op.
  */
 export async function playMusic(track: MusicTrack): Promise<void> {
   if (!ensureContext() || !ctx || !musicGain) return;
@@ -389,39 +405,53 @@ export async function playMusic(track: MusicTrack): Promise<void> {
   const buffer = await loadMusicBuffer(track);
   if (!buffer || !ctx || !musicGain) return;
 
-  // New source with its own gain so we can fade it in while the previous
-  // fades out. Both gains funnel into musicGain (which is mute-controlled).
+  // New source with its own gain so we can fade it in independently.
   const gain = ctx.createGain();
-  gain.gain.value = 0;
+  gain.gain.value = MIN_GAIN;   // exponential ramps require > 0
   const source = ctx.createBufferSource();
   source.buffer = buffer;
   source.loop = true;
   source.connect(gain).connect(musicGain);
-  const startAt = ctx.currentTime;
-  source.start(startAt);
-  gain.gain.linearRampToValueAtTime(1.0, startAt + CROSSFADE_SEC);
 
-  // Fade out the previous track and stop it when the crossfade finishes.
+  const startAt = ctx.currentTime;
+  const preRollEnd = startAt + PRE_ROLL_SEC;
+  const fadeEnd    = startAt + CROSSFADE_SEC;
+
+  // Delay the source start by PRE_ROLL so the first 200ms of the file
+  // aren't wasted under zero gain — otherwise a track with a percussive
+  // intro would lose its first beat.
+  source.start(preRollEnd);
+  // Hold at silence for the pre-roll, then exponentially ramp to full.
+  gain.gain.setValueAtTime(MIN_GAIN, preRollEnd);
+  gain.gain.exponentialRampToValueAtTime(1.0, fadeEnd);
+
   const prev = currentMusic;
   currentMusic = { track, source, gain };
   if (prev) {
-    const endAt = startAt + CROSSFADE_SEC;
+    // Phase 1 (0 → PRE_ROLL): duck the outgoing track to 0.7 so the
+    // mixing "makes room" for the incoming track before it enters.
+    // Phase 2 (PRE_ROLL → END): exponential fade to near-silence.
+    const currentVal = Math.max(MIN_GAIN, prev.gain.gain.value);
+    const duckVal    = Math.max(MIN_GAIN, currentVal * 0.7);
     prev.gain.gain.cancelScheduledValues(startAt);
-    prev.gain.gain.setValueAtTime(prev.gain.gain.value, startAt);
-    prev.gain.gain.linearRampToValueAtTime(0, endAt);
-    try { prev.source.stop(endAt + 0.02); } catch { /* already stopped */ }
+    prev.gain.gain.setValueAtTime(currentVal, startAt);
+    prev.gain.gain.exponentialRampToValueAtTime(duckVal, preRollEnd);
+    prev.gain.gain.exponentialRampToValueAtTime(MIN_GAIN, fadeEnd);
+    try { prev.source.stop(fadeEnd + 0.05); } catch { /* already stopped */ }
   }
 }
 
-/** Fade out the current track (if any) over CROSSFADE_SEC and release it. */
+/** Fade out the current track (if any) and release it. Uses exponential
+ *  ramp for the same "cleaner than linear" reason as playMusic. */
 export function stopMusic(): void {
   if (!ctx || !currentMusic) return;
   const now = ctx.currentTime;
   const { source, gain } = currentMusic;
+  const currentVal = Math.max(MIN_GAIN, gain.gain.value);
   gain.gain.cancelScheduledValues(now);
-  gain.gain.setValueAtTime(gain.gain.value, now);
-  gain.gain.linearRampToValueAtTime(0, now + CROSSFADE_SEC);
-  try { source.stop(now + CROSSFADE_SEC + 0.02); } catch { /* already stopped */ }
+  gain.gain.setValueAtTime(currentVal, now);
+  gain.gain.exponentialRampToValueAtTime(MIN_GAIN, now + MAIN_FADE_SEC);
+  try { source.stop(now + MAIN_FADE_SEC + 0.05); } catch { /* already stopped */ }
   currentMusic = null;
 }
 

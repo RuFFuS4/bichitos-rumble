@@ -1724,3 +1724,53 @@ music starts as soon as the intro track plays. Fix:
   index.html +3.2 kB (CSS).
 - **Manual validation pending from the user** (browser testing).
 - No server changes this round — only client UX.
+
+---
+
+## 2026-04-19 — Music crossfade shape + STACK.md update (Suno + Tripo)
+
+### Smoother music transitions
+
+The previous crossfade was a flat 1.2s linear ramp in both directions,
+which let both tracks sit loud together during the middle of the
+transition. The user noticed the transitions "feel weird" when going
+from intro → ingame during countdown and from ingame → special on
+victory. Rewritten in two phases:
+
+- **Phase 1 (0 → 200ms, pre-roll)**: outgoing track ducks from 1.0 →
+  0.7 (makes room in the mix); incoming track stays silent with the
+  AudioBufferSource start deferred by 200ms so the beginning of the
+  new file isn't wasted under zero gain.
+- **Phase 2 (200ms → 1200ms, main fade)**: both tracks ride exponential
+  ramps — outgoing 0.7 → MIN_GAIN, incoming MIN_GAIN → 1.0. Exponential
+  curves spend less time in the "both high" overlap zone than linear.
+
+Total crossfade duration stays at 1.2s — no perceptible change in
+pacing, but the audible "double-track" artifact shrinks to a thin
+window instead of the full 1.2s. `stopMusic()` adopts the same
+exponential shape over 1.0s.
+
+### STACK.md update
+
+Added:
+- **Suno** as the music source (3 tracks in `public/audio/`, prompts
+  iterated in Advanced mode).
+- **Tripo AI** as the 3D model source (all 9 critter GLBs in
+  `public/models/critters/`, procedural animation layer on top).
+- Full server stack (Node + Colyseus + schema) — was missing.
+- Lab subsystem files (`src/tools/*`) — was missing.
+- Online waiting-screen + spectator prompt notes in the HUD module.
+- Clarified that AI-generated content is baked into the bundle; the
+  game makes no runtime calls to Suno or Tripo.
+
+### Files changed
+- `src/audio.ts` — `playMusic` and `stopMusic` rewritten with the
+  new shape; new PRE_ROLL_SEC / MAIN_FADE_SEC / MIN_GAIN constants.
+- `STACK.md` — full refresh with AI content generation section and
+  current subsystem list.
+
+### Verification
+- Typecheck + build clean.
+- Bundle delta: input-touch +0.14 kB (crossfade constants + extra
+  setValueAtTime calls). Main game bundle still 3.07 kB.
+- Audible testing: user reported.
