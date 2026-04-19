@@ -655,6 +655,133 @@
       color: #ffaa44;
     }
 
+    /* ---------- Waiting Screen (online 4P) ---------- */
+    #waiting-screen .waiting-title {
+      font-size: clamp(28px, 4.5vw, 46px);
+      font-weight: 900;
+      letter-spacing: 4px;
+      text-align: center;
+      margin-bottom: 6px;
+      text-shadow: 0 3px 18px rgba(0,0,0,0.85);
+    }
+    #waiting-screen .waiting-subtitle {
+      font-size: 14px;
+      opacity: 0.6;
+      letter-spacing: 1px;
+      margin-bottom: 28px;
+    }
+    #waiting-screen .waiting-countdown-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 28px;
+    }
+    #waiting-screen .waiting-countdown-label {
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0.6;
+    }
+    #waiting-screen .waiting-countdown {
+      font-size: clamp(48px, 8vw, 84px);
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      color: #ffdc5c;
+      text-shadow: 0 0 30px rgba(255,220,92,0.55);
+      line-height: 1;
+    }
+    #waiting-screen .waiting-countdown.urgent {
+      color: #e74c3c;
+      text-shadow: 0 0 30px rgba(231,76,60,0.6);
+      animation: waiting-urgent-pulse 0.7s ease-in-out infinite;
+    }
+    @keyframes waiting-urgent-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+    #waiting-screen .waiting-countdown-unit {
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0.5;
+    }
+    #waiting-screen .waiting-slots {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .waiting-slot {
+      width: 92px;
+      min-height: 92px;
+      background: rgba(255,255,255,0.04);
+      border: 2px solid rgba(255,255,255,0.10);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 6px;
+      transition: border-color 0.25s, background 0.25s;
+    }
+    .waiting-slot.empty {
+      opacity: 0.45;
+      border-style: dashed;
+    }
+    .waiting-slot.empty .waiting-slot-dot {
+      background: rgba(255,255,255,0.08);
+      box-shadow: none;
+    }
+    .waiting-slot.human {
+      border-color: rgba(74, 222, 128, 0.7);
+      background: rgba(74, 222, 128, 0.08);
+    }
+    .waiting-slot.bot {
+      border-color: rgba(255, 170, 68, 0.55);
+      background: rgba(255, 170, 68, 0.06);
+    }
+    .waiting-slot-dot {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: #888;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5), inset 0 -3px 6px rgba(0,0,0,0.3);
+    }
+    .waiting-slot-name {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .waiting-slot-badge {
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      font-weight: 700;
+      opacity: 0.85;
+    }
+    .waiting-slot.human .waiting-slot-badge { color: #4ade80; }
+    .waiting-slot.bot .waiting-slot-badge { color: #ffaa44; }
+    .waiting-slot.empty .waiting-slot-badge { color: rgba(255,255,255,0.35); }
+    #waiting-screen .waiting-hint {
+      font-size: 13px;
+      opacity: 0.55;
+      text-align: center;
+      max-width: 480px;
+      padding: 0 24px;
+      line-height: 1.4;
+      margin-bottom: 22px;
+    }
+
+    /* ---------- HUD bot badge (lives row) ---------- */
+    .lives-row .lives-bot-badge {
+      font-size: 10px;
+      color: #ffaa44;
+      letter-spacing: 1px;
+      margin-left: 2px;
+      opacity: 0.9;
+    }
+
     /* ---------- Desktop/touch hint visibility ---------- */
     /* Hints shown only when keyboard is the primary input */
     body.touch-mode .desktop-only { display: none !important; }
@@ -872,6 +999,24 @@
     </div>
     <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate</div>
     <div class="prompt touch-only">Tap a slot to select · tap again to confirm · drag preview to rotate</div>
+  </div>
+
+  <!-- Online waiting room — shown while the server is in phase 'waiting'.
+       Populated by initWaitingScreen / updateWaitingScreen from hud.ts. -->
+  <div id="waiting-screen" class="full-overlay hidden">
+    <h2 class="waiting-title">WAITING FOR CRITTERS</h2>
+    <div class="waiting-subtitle">Match begins when the room is full.</div>
+    <div class="waiting-countdown-wrap">
+      <div class="waiting-countdown-label">Bots join in</div>
+      <div id="waiting-countdown" class="waiting-countdown">60</div>
+      <div class="waiting-countdown-unit">seconds</div>
+    </div>
+    <div id="waiting-slots" class="waiting-slots"></div>
+    <div class="waiting-hint">
+      If the room doesn't fill in time, bots will take the remaining slots.
+    </div>
+    <div class="prompt desktop-only"><kbd>T</kbd> leave room</div>
+    <div class="prompt touch-only">Tap T to leave</div>
   </div>
 
   <div id="end-screen" class="full-overlay hidden">

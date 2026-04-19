@@ -2,24 +2,36 @@
 // BrawlRoom — authoritative multiplayer brawl instance
 // ---------------------------------------------------------------------------
 //
-// Bloque A scope:
-//   - 2 players max (maxClients: 2)
-//   - Both play as Sergei (fixed)
-//   - Server simulates: movement, headbutt, collisions, knockback, falloff,
-//     respawn, match timer, win/lose
-//   - Server simulates: charge_rush ability (generic arch ready for more)
-//   - Client sends 'input' each frame with movement + held flags
-//   - Client receives state automatically via Colyseus patches + 'abilityFired'
-//     event for visual effect triggers
+// Current scope (4P online + bot-fill):
+//   - Up to 4 players per room (maxClients: 4).
+//   - Waiting flow: the room waits up to WAITING_TIMEOUT seconds to fill up
+//     with humans. If 4 humans arrive, the countdown starts immediately.
+//     If the timer hits 0 and there is at least 1 human in the room, the
+//     remaining slots are filled with server-controlled bots.
+//   - Server simulates everything: movement, headbutt, collisions, knockback,
+//     falloff, respawn, match timer, win/lose, charge_rush ability (generic
+//     arch ready for more).
+//   - Humans send 'input' messages each client frame. Bots get their input
+//     from sim/bot.ts every server tick — gameplay is byte-identical
+//     regardless of input source, so no branch on bot-ness in the sim.
+//   - On human leave mid-match: if the remaining alive count is ≥ 2 we
+//     convert the leaver's critter into a bot (bot-takeover), keeping the
+//     match alive. Otherwise the match ends with opponent_left.
 // ---------------------------------------------------------------------------
 
 import { Client, Room } from 'colyseus';
 import { GameState } from './state/GameState.js';
 import { PlayerSchema } from './state/PlayerSchema.js';
-import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER } from './sim/config.js';
+import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
 import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed } from './sim/physics.js';
 import { createAbilityStates, tickPlayerAbilities } from './sim/abilities.js';
 import { ArenaSim } from './sim/arena.js';
+import { computeBotInput } from './sim/bot.js';
+
+/** Seconds of open waiting before the server fills empty slots with bots. */
+const WAITING_TIMEOUT = 60;
+/** Hard cap on humans+bots in one room — matches `maxClients`. */
+const MAX_PLAYERS = 4;
 
 interface InputMessage {
   moveX: number;      // -1..1
@@ -64,16 +76,22 @@ function newInternal(): InternalPlayerData {
 }
 
 export class BrawlRoom extends Room<GameState> {
-  maxClients = 2;
+  maxClients = MAX_PLAYERS;
   state = new GameState();
 
   private tickInterval: number = 0;
   private tickHandle: NodeJS.Timeout | null = null;
   private internal = new Map<string, InternalPlayerData>();
   private arenaSim!: ArenaSim;
+  /** Monotonic counter for bot sessionIds (bot_1, bot_2, …). */
+  private botCounter = 0;
 
   onCreate(_options: unknown) {
     this.tickInterval = 1000 / SIM.tickRate;
+    // Waiting-room countdown starts the moment the first client joins, not
+    // on room creation — see onJoin. The initial value here is a visible
+    // default in case a client attaches before anyone else.
+    this.state.waitingTimeLeft = WAITING_TIMEOUT;
 
     this.onMessage('input', (client, msg: InputMessage) => {
       const data = this.internal.get(client.sessionId);
@@ -121,58 +139,96 @@ export class BrawlRoom extends Room<GameState> {
   }
 
   onJoin(client: Client, options: JoinOptions = {}) {
-    const idx = this.state.players.size; // 0 or 1
+    // Only accept humans in 'waiting' — once we're in countdown/playing the
+    // room is locked via maxClients + seat count, but Colyseus can still
+    // race a join before lock takes effect. This guard rejects late humans
+    // cleanly instead of injecting them mid-match.
+    if (this.state.phase !== 'waiting') {
+      console.log(`[BrawlRoom] rejected ${client.sessionId}: phase=${this.state.phase}`);
+      client.leave();
+      return;
+    }
+
+    // Reset the waiting timer ONLY the first time someone joins. That way a
+    // burst of joins doesn't keep resetting it back to 60 — we always give
+    // the first human 60s to see the room fill.
+    if (this.state.players.size === 0) {
+      this.state.waitingTimeLeft = WAITING_TIMEOUT;
+    }
+
+    const idx = this.state.players.size;
     const spawn = SPAWN_POSITIONS[idx % SPAWN_POSITIONS.length];
 
-    // Validate critterName against the playable table; fall back on unknown.
     const requested = options.critterName ?? DEFAULT_CRITTER;
     const critterName = isPlayableCritter(requested) ? requested : DEFAULT_CRITTER;
     if (requested !== critterName) {
       console.log(`[BrawlRoom] ${client.sessionId} requested unknown critter "${requested}", using ${critterName}`);
     }
 
-    const p = new PlayerSchema();
-    p.sessionId = client.sessionId;
-    p.critterName = critterName;
-    p.x = spawn[0];
-    p.z = spawn[1];
-    p.rotationY = Math.atan2(-spawn[0], -spawn[1]); // face arena center
-    p.lives = SIM.lives.default;
-    p.alive = true;
-
-    const abilities = createAbilityStates(critterName);
-    for (const a of abilities) p.abilities.push(a);
-
+    const p = this.buildPlayerSchema(client.sessionId, critterName, spawn, /*isBot*/ false);
     this.state.players.set(client.sessionId, p);
     this.internal.set(client.sessionId, newInternal());
     console.log(`[BrawlRoom] ${client.sessionId} joined roomId=${this.roomId} (${this.state.players.size}/${this.maxClients})`);
 
-    // Start countdown once both players are in
-    if (this.state.players.size >= 2 && this.state.phase === 'waiting') {
-      // Generate deterministic arena seed — clients use this to build
-      // the identical fragment layout. Seed set BEFORE phase change so
-      // the value is included in the same patch that transitions to countdown.
-      const seed = (Math.random() * 0xFFFFFFFF) | 0;
-      this.arenaSim = new ArenaSim(seed);
-      this.state.arenaSeed = seed;
-      this.state.arenaRadius = this.arenaSim.currentRadius;
-
-      this.state.phase = 'countdown';
-      this.state.countdownLeft = SIM.match.countdown;
-      this.state.matchTimer = SIM.match.duration;
+    // 4 humans: start the match NOW, no need to wait out the timer.
+    if (this.state.players.size >= MAX_PLAYERS) {
+      this.transitionToCountdown();
     }
   }
 
   onLeave(client: Client, _consented: boolean) {
-    this.state.players.delete(client.sessionId);
-    this.internal.delete(client.sessionId);
-    console.log(`[BrawlRoom] ${client.sessionId} left (${this.state.players.size} remaining)`);
+    const sid = client.sessionId;
+    const phase = this.state.phase;
 
-    // If a player leaves mid-match, end it (Bloque A: no reconnection)
-    if (this.state.phase === 'playing' || this.state.phase === 'countdown') {
-      const remaining = [...this.state.players.values()][0];
-      this.endMatch('opponent_left', remaining?.sessionId ?? '');
+    // Waiting / ended: simple delete, no further logic. A human leaving
+    // during waiting just frees the slot; the bot-fill timer handles the
+    // rest once it expires.
+    if (phase === 'waiting' || phase === 'ended') {
+      this.state.players.delete(sid);
+      this.internal.delete(sid);
+      console.log(`[BrawlRoom] ${sid} left during ${phase} (${this.state.players.size} remaining)`);
+      return;
     }
+
+    // Countdown / playing: the leaver's critter is potentially still on the
+    // arena with lives left. Two options:
+    //   a) alive human+bot count after the leave is >= 2 → bot-takeover.
+    //      Keep the PlayerSchema, flip isBot=true, reset held-input flags so
+    //      the bot AI can cleanly take over from this tick on.
+    //   b) < 2 → end the match as opponent_left (legacy behaviour for 2P).
+    const leaver = this.state.players.get(sid);
+    if (!leaver) {
+      // Shouldn't happen, but be defensive.
+      this.state.players.delete(sid);
+      this.internal.delete(sid);
+      return;
+    }
+
+    const remainingAlive = [...this.state.players.values()].filter(
+      p => p.sessionId !== sid && p.alive,
+    );
+
+    if (remainingAlive.length >= 2 && leaver.alive) {
+      leaver.isBot = true;
+      const data = this.internal.get(sid);
+      if (data) {
+        data.inputMoveX = 0;
+        data.inputMoveZ = 0;
+        data.inputHeadbutt = false;
+        data.inputAbility1 = false;
+        data.inputAbility2 = false;
+        data.inputUltimate = false;
+      }
+      console.log(`[BrawlRoom] ${sid} left during ${phase} → bot takeover (${remainingAlive.length} humans remain)`);
+      return;
+    }
+
+    // Not enough players to keep the match alive: delete + end.
+    this.state.players.delete(sid);
+    this.internal.delete(sid);
+    const survivor = remainingAlive[0];
+    console.log(`[BrawlRoom] ${sid} left during ${phase} → ending match (${remainingAlive.length} remaining alive)`);
+    this.endMatch('opponent_left', survivor?.sessionId ?? '');
   }
 
   onDispose() {
@@ -185,6 +241,91 @@ export class BrawlRoom extends Room<GameState> {
    * match an already-finished room. Idempotent — safe to call multiple
    * times (e.g. both from tick win-check and onLeave opponent-left).
    */
+  /**
+   * Construct a fresh PlayerSchema for a human or a bot. Positions use the
+   * spawn table; kit comes from the shared ability factory so everything
+   * downstream treats bots and humans identically.
+   */
+  private buildPlayerSchema(
+    sessionId: string,
+    critterName: string,
+    spawn: readonly [number, number],
+    isBot: boolean,
+  ): PlayerSchema {
+    const p = new PlayerSchema();
+    p.sessionId = sessionId;
+    p.critterName = critterName;
+    p.isBot = isBot;
+    p.x = spawn[0];
+    p.z = spawn[1];
+    p.rotationY = Math.atan2(-spawn[0], -spawn[1]); // face arena centre
+    p.lives = SIM.lives.default;
+    p.alive = true;
+    const abilities = createAbilityStates(critterName);
+    for (const a of abilities) p.abilities.push(a);
+    return p;
+  }
+
+  /**
+   * Spawn ONE bot into the room. Uses a free spawn position (one not
+   * currently occupied by a humano index), picks a critter different from
+   * the humans already in the room when possible, and wires the same
+   * internal data block a human would have.
+   */
+  private spawnBot(): void {
+    const takenSlots = new Set<number>();
+    for (const p of this.state.players.values()) {
+      const i = SPAWN_POSITIONS.findIndex(s => s[0] === p.x && s[1] === p.z);
+      if (i >= 0) takenSlots.add(i);
+    }
+    let spawnIdx = 0;
+    for (let i = 0; i < SPAWN_POSITIONS.length; i++) {
+      if (!takenSlots.has(i)) { spawnIdx = i; break; }
+    }
+    const spawn = SPAWN_POSITIONS[spawnIdx];
+
+    // Prefer a critter no other player is using. If all 9 are unique, this
+    // always finds a free one (size of humans + bots ≤ 4 < 9).
+    const used = new Set<string>();
+    for (const p of this.state.players.values()) used.add(p.critterName);
+    const candidates = Object.keys(CRITTER_CONFIGS).filter(n => !used.has(n));
+    const critterName = candidates.length > 0
+      ? candidates[Math.floor(Math.random() * candidates.length)]
+      : DEFAULT_CRITTER;
+
+    this.botCounter++;
+    const sessionId = `bot_${this.botCounter}`;
+    const bot = this.buildPlayerSchema(sessionId, critterName, spawn, /*isBot*/ true);
+    this.state.players.set(sessionId, bot);
+    this.internal.set(sessionId, newInternal());
+    console.log(`[BrawlRoom] spawned bot ${sessionId} as ${critterName} (${this.state.players.size}/${MAX_PLAYERS})`);
+  }
+
+  /**
+   * Moves the room from 'waiting' → 'countdown'. Generates a deterministic
+   * arena seed so the clients build identical fragment layouts. Seed is
+   * set BEFORE the phase change so the seed and the phase transition
+   * arrive in the same Colyseus patch.
+   */
+  private transitionToCountdown(): void {
+    if (this.state.phase !== 'waiting') return;
+    const seed = (Math.random() * 0xFFFFFFFF) | 0;
+    this.arenaSim = new ArenaSim(seed);
+    this.state.arenaSeed = seed;
+    this.state.arenaRadius = this.arenaSim.currentRadius;
+
+    this.state.phase = 'countdown';
+    this.state.countdownLeft = SIM.match.countdown;
+    this.state.matchTimer = SIM.match.duration;
+    this.state.waitingTimeLeft = 0;
+    console.log(`[BrawlRoom] waiting → countdown (${this.state.players.size} players, seed=${seed})`);
+
+    // Once we're in countdown, nobody else can join. Colyseus maxClients
+    // already caps that but we also lock the room explicitly to avoid any
+    // race where joinOrCreate finds this room during the transition.
+    this.lock().catch(() => { /* already locked or disposing */ });
+  }
+
   /**
    * Pick a respawn position GUARANTEED to be on solid ground. Up to 12
    * attempts with a radius that shrinks per try so fallbacks converge
@@ -218,7 +359,7 @@ export class BrawlRoom extends Room<GameState> {
   private tick(dt: number) {
     switch (this.state.phase) {
       case 'waiting':
-        // Idle — players just joined, no sim yet
+        this.tickWaiting(dt);
         break;
 
       case 'countdown':
@@ -246,6 +387,28 @@ export class BrawlRoom extends Room<GameState> {
     }
   }
 
+  /**
+   * Waiting-phase tick. Counts down the public waitingTimeLeft and, when it
+   * hits zero with at least one human in the room, fills the remaining slots
+   * with bots and kicks off the countdown. An empty room just holds the
+   * timer indefinitely (keeps showing 60s — there's nobody to watch it
+   * anyway until someone joins and triggers a reset via onJoin).
+   */
+  private tickWaiting(dt: number): void {
+    if (this.state.players.size === 0) {
+      // Hold the timer — nobody to count down for. Next onJoin resets it.
+      this.state.waitingTimeLeft = WAITING_TIMEOUT;
+      return;
+    }
+    this.state.waitingTimeLeft = Math.max(0, this.state.waitingTimeLeft - dt);
+    if (this.state.waitingTimeLeft > 0) return;
+
+    // Timer expired: fill up to MAX_PLAYERS with bots, then start.
+    const slotsToFill = MAX_PLAYERS - this.state.players.size;
+    for (let i = 0; i < slotsToFill; i++) this.spawnBot();
+    this.transitionToCountdown();
+  }
+
   private simulatePlaying(dt: number) {
     this.state.matchTimer -= dt;
     const players = [...this.state.players.values()];
@@ -257,6 +420,23 @@ export class BrawlRoom extends Room<GameState> {
     this.state.arenaRadius = this.arenaSim.currentRadius;
     this.state.arenaCollapseLevel = this.arenaSim.collapseLevel;
     this.state.arenaWarningBatch = this.arenaSim.warningBatch;
+
+    // 0. Bot AI — inject synthetic inputs for every bot BEFORE the human
+    //    input path runs. Because everything downstream reads from
+    //    `internal[sid].input*`, bots and humans go through the same
+    //    physics/ability pipeline below. Only the input source differs.
+    for (const p of players) {
+      if (!p.isBot) continue;
+      const data = this.internal.get(p.sessionId);
+      if (!data) continue;
+      const input = computeBotInput(p, players);
+      data.inputMoveX = input.moveX;
+      data.inputMoveZ = input.moveZ;
+      data.inputHeadbutt = input.headbutt;
+      data.inputAbility1 = input.ability1;
+      data.inputAbility2 = input.ability2;
+      data.inputUltimate = input.ultimate;
+    }
 
     // 1. Process per-player input → intent (movement, headbutt trigger)
     for (const p of players) {

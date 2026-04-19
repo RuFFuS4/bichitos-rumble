@@ -16,7 +16,8 @@ import {
   showMatchHud,
   setSlotClickHandler, setTitleModeHandlers, updateTitleModeSelection, isOnlineModeAvailable, setEndTapHandler,
   setPortalLegend, setPortalToggleHandler,
-  type EndResult,
+  showWaitingScreen, hideWaitingScreen, updateWaitingScreen,
+  type EndResult, type WaitingScreenData,
 } from './hud';
 import { applyHitStop, FEEL } from './gamefeel';
 import { showPreview, swapPreviewCritter, hidePreview } from './preview';
@@ -47,6 +48,14 @@ const SPAWN_POSITIONS: [number, number][] = [
   [6, 0],
 ];
 const MAX_CRITTERS_PER_MATCH = SPAWN_POSITIONS.length;
+
+/**
+ * Maximum players per online room. Must match `MAX_PLAYERS` in the server
+ * (`server/src/BrawlRoom.ts`). Used to size the waiting-screen slot grid
+ * and the "needed to start" display. Offline matches use the same 4-cap
+ * via SPAWN_POSITIONS.length.
+ */
+const ONLINE_MAX_PLAYERS = 4;
 
 /**
  * Build the match roster: player config first, then bots drawn from the
@@ -526,8 +535,9 @@ export class Game {
     critter.skipPhysics = true;  // server is authoritative
     critter.x = playerState.x ?? 0;
     critter.z = playerState.z ?? 0;
+    critter.isBot = !!playerState.isBot;  // 4P bot-fill or takeover
     this.onlineCritters.set(sessionId, critter);
-    console.log('[Game] spawned online critter for', sessionId, 'as', critterName);
+    console.log('[Game] spawned online critter for', sessionId, 'as', critterName, critter.isBot ? '(bot)' : '');
 
     // Local-player-only HUD init (abilities + HUD/win-check compat)
     if (this.room && sessionId === this.room.sessionId) {
@@ -637,6 +647,15 @@ export class Game {
       c.isHeadbutting = !!p.isHeadbutting;
       (c as any).headbuttAnticipating = !!p.headbuttAnticipating;
       c.lives = p.lives ?? 3;
+      // Bot-fill + takeover: server flips isBot mid-match when a human
+      // disconnects and we have enough survivors. Reflect it every frame so
+      // the HUD badge appears/disappears live.
+      const wasBot = c.isBot;
+      c.isBot = !!p.isBot;
+      if (wasBot !== c.isBot) {
+        // Lives HUD shows a 🤖 badge per bot — rebuild so it appears.
+        initAllLivesHUD([...this.onlineCritters.values()]);
+      }
       // Update ability states from server (for HUD) — guard ArraySchema access
       if (p.abilities && typeof p.abilities.length === 'number') {
         const count = Math.min(p.abilities.length, c.abilityStates.length);
@@ -660,14 +679,31 @@ export class Game {
     if (serverPhase !== this.lastServerPhase) {
       console.log('[Game] server phase:', this.lastServerPhase, '→', serverPhase);
       this.lastServerPhase = serverPhase;
+      // Always drop the waiting screen when leaving waiting.
+      if (serverPhase !== 'waiting') hideWaitingScreen();
+
       if (serverPhase === 'playing') {
         hideOverlay();
       } else if (serverPhase === 'waiting') {
-        showOverlay('Waiting for opponent...');
+        // New 4P waiting room — the old "Waiting for opponent..." text is
+        // replaced by the full waiting-screen overlay (countdown + slots).
+        hideOverlay();
+        showWaitingScreen();
       } else if (serverPhase === 'ended') {
         const winnerSid = state.winnerSessionId;
         const localSid = this.room.sessionId;
         const reason = state.endReason;
+        // Figure out if the winner is a bot — influences the subtitle copy.
+        let winnerIsBot = false;
+        let winnerCritterName = '';
+        if (winnerSid) {
+          const w = state.players?.get?.(winnerSid);
+          if (w) {
+            winnerIsBot = !!w.isBot;
+            winnerCritterName = w.critterName ?? '';
+          }
+        }
+
         let title = 'DRAW';
         let subtitle = 'No winner';
         let result: EndResult = 'draw';
@@ -676,11 +712,22 @@ export class Game {
           playSoundEffect('victory');
         } else if (winnerSid && winnerSid !== localSid) {
           result = 'lose'; title = 'DEFEATED';
-          subtitle = reason === 'opponent_left' ? 'You won by default' : 'Opponent won';
+          if (reason === 'opponent_left') {
+            subtitle = 'You won by default';
+          } else if (winnerIsBot) {
+            subtitle = `Bot ${winnerCritterName || ''} won`.trim();
+          } else {
+            subtitle = `${winnerCritterName || 'Opponent'} won`.trim();
+          }
         }
         hideOverlay();
         showEndScreen(result, title, subtitle, false);
       }
+    }
+
+    // Live waiting-screen update — countdown + slots every frame.
+    if (serverPhase === 'waiting') {
+      updateWaitingScreen(this.buildWaitingScreenData(state));
     }
 
     // Overlay for countdown
@@ -808,6 +855,33 @@ export class Game {
         if (!e.repeat) this.portalFreshKeys.add(e.code);
       }
     });
+  }
+
+  /**
+   * Build the waiting-screen snapshot from the current server state. The
+   * MapSchema is iterated via its Colyseus `forEach`; each player becomes
+   * a slot with critter name + colour. Empty slots are padded to reach
+   * ONLINE_MAX_PLAYERS so the layout always shows the full room.
+   */
+  private buildWaitingScreenData(state: any): WaitingScreenData {
+    const slots: WaitingScreenData['slots'] = [];
+    state.players?.forEach?.((p: any) => {
+      if (!p) return;
+      const config = CRITTER_PRESETS.find(c => c.name === p.critterName);
+      slots.push({
+        kind: p.isBot ? 'bot' : 'human',
+        name: p.critterName || '',
+        color: config?.color ?? 0xffffff,
+      });
+    });
+    while (slots.length < ONLINE_MAX_PLAYERS) {
+      slots.push({ kind: 'empty', name: '', color: 0 });
+    }
+    return {
+      secondsLeft: state.waitingTimeLeft ?? 0,
+      slots,
+      maxPlayers: ONLINE_MAX_PLAYERS,
+    };
   }
 
   /**

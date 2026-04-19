@@ -13,20 +13,27 @@ innegociables (animaciones distintivas, habilidades finales, mejora
 de destrucción) son prioritarios; si algo cae por tiempo, es el
 último de los innegociables (destrucción iterada).
 
-### Fase 1 · ESTA SEMANA (18-24 abril)
+### Fase 1 · ESTA SEMANA (18-24 abril) — parcial
 - [x] Branding firma `@RGomezR14` en portada (bottom-left, link a X)
-- [ ] **Sonido / feedback esencial** (4-6h) — hit impact, ability fire,
-      victory stinger, music hooks. Ya en diseño.
-- [ ] Prompts Suno entregados → usuario genera música en paralelo
-- [ ] Integración de las 3 pistas cuando lleguen (~1h cada una)
+- [x] SFX in-game (Web Audio API sintético) desde hace tiempo
+- [x] 3 pistas Suno generadas y añadidas a `public/audio/`
+      (intro / ingame / special)
+- [x] API de música en `src/audio.ts` (musicGain, playMusic,
+      crossfade, preload, mute persistente)
+- [ ] **Hooks por phase en `game.ts`** — pospuesto al siguiente bloque
+      (4 llamadas, trivial). Ver `ONLINE.md` sección Música.
 
-### Fase 2 · Semana del 25-27 abril
-- [ ] **4P online + bots de relleno** (6-8h con gating)
-  - maxClients 4
-  - 60s waiting timeout → spawna bots hasta 4
-  - Bot AI server-side (seek + headbutt + occasional ability)
-  - HUD: badge `🤖` para bots, counter `X/4` en waiting
-  - Si al 4h no está estable → revertir a 2P
+### Fase 2 — EN CURSO, adelantada
+- [x] **4P online + bot-fill** — hecho
+  - [x] maxClients 4 en server + client
+  - [x] 60s waiting timeout → spawn de bots hasta llenar la sala
+  - [x] Instant-start si entran 4 humanos antes del timeout
+  - [x] Bot AI server-side (`server/src/sim/bot.ts`)
+  - [x] Bot-takeover on disconnect (si alive ≥ 2)
+  - [x] Waiting screen con contador + slots humano/bot/empty
+  - [x] Badge 🤖 en HUD lives-row para bots
+  - [x] End-screen distingue victoria de/contra bot
+  - Documentación: `ONLINE.md` (living doc del flujo online completo)
 
 ### Fase 3 · 28-30 abril — INNEGOCIABLES
 - [ ] **Animaciones distintivas per-character** (5-6h)

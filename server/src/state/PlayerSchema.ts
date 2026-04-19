@@ -13,7 +13,16 @@ import { AbilityStateSchema } from './AbilityStateSchema.js';
  */
 export class PlayerSchema extends Schema {
   @type('string') sessionId: string = '';
-  @type('string') critterName: string = 'Sergei'; // fixed for Bloque A
+  @type('string') critterName: string = 'Sergei';
+  /**
+   * True when this "player" is a server-controlled bot. Bots use the same
+   * PlayerSchema (identical physics/abilities/HUD path) — only the input
+   * source differs: a bot's input comes from sim/bot.ts each tick, a
+   * human's from the client's 'input' messages.
+   * Clients read this flag to render bot badges and distinguish them in
+   * waiting / end screens. No gameplay logic branches on it server-side.
+   */
+  @type('boolean') isBot: boolean = false;
 
   // Position / motion (XZ plane, Y is height for fall animation only)
   @type('number') x: number = 0;

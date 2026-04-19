@@ -20,14 +20,38 @@ export type SoundName =
   | 'respawn'
   | 'victory';
 
+/**
+ * Background music tracks. Each maps to a file in `public/audio/`. The
+ * track names are stable identifiers — the caller asks for `'intro'` or
+ * `'ingame'` and this module loads the actual file on demand.
+ *
+ * When we wire music into gameplay, the plan is:
+ *   title           → 'intro'
+ *   countdown/play  → 'ingame'
+ *   ended (win)     → 'special'
+ */
+export type MusicTrack = 'intro' | 'ingame' | 'special';
+
+const MUSIC_FILES: Record<MusicTrack, string> = {
+  intro:   '/audio/intro.mp3',
+  ingame:  '/audio/ingame.mp3',
+  special: '/audio/special.mp3',
+};
+
 let ctx: AudioContext | null = null;
-let masterGain: GainNode | null = null;
-// SFX channel (all current sounds go here)
+let masterGain: GainNode | null = null;    // SFX bus
+let musicGain: GainNode | null = null;      // Music bus (independent from SFX)
 let sfxMuted = false;
-// Music channel (no music yet — flag reserved for future)
 let musicMuted = false;
 
-const MASTER_VOLUME = 0.35;
+const MASTER_VOLUME = 0.35;   // SFX bus level
+const MUSIC_VOLUME = 0.22;    // Music bus level (below SFX so combat stays legible)
+const CROSSFADE_SEC = 1.2;    // Default crossfade time between music tracks
+
+// Loaded music buffers (lazy, cached).
+const musicBuffers = new Map<MusicTrack, AudioBuffer>();
+// Active music source node + its gain (so crossfade can fade it out).
+let currentMusic: { track: MusicTrack; source: AudioBufferSourceNode; gain: GainNode } | null = null;
 
 // Shared noise buffer (generated once, reused by every noise-based sound)
 let noiseBuffer: AudioBuffer | null = null;
@@ -45,12 +69,16 @@ function ensureContext(): boolean {
     const AC = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
     if (!AC) return false;
     ctx = new AC();
+    // Two independent buses. Each respects its own mute state at creation
+    // time so a user who muted music before any track played doesn't get
+    // a burst of audio when the context comes up.
     masterGain = ctx.createGain();
-    // Respect the current sfx mute state at context creation time. Without
-    // this, a user who muted before any sound played would have masterGain
-    // start at full volume when the context was lazily created.
     masterGain.gain.value = sfxMuted ? 0 : MASTER_VOLUME;
     masterGain.connect(ctx.destination);
+
+    musicGain = ctx.createGain();
+    musicGain.gain.value = musicMuted ? 0 : MUSIC_VOLUME;
+    musicGain.connect(ctx.destination);
     return true;
   } catch {
     return false;
@@ -119,16 +147,19 @@ export function isSfxMuted(): boolean {
 }
 
 /**
- * Mute/unmute the Music channel. Placeholder for when we add background
- * music — currently does nothing audible, but the state is persisted and
- * the HUD button respects it.
+ * Mute/unmute the Music channel. Applies INSTANTLY to the music bus, same
+ * pattern as SFX — if a track is playing, it goes silent without waiting
+ * for any ramp. Persisted to localStorage.
  */
 export function setMusicMuted(value: boolean): void {
   musicMuted = value;
   try {
     localStorage.setItem(STORAGE_KEY_MUSIC, value ? '1' : '0');
   } catch { /* ignore */ }
-  // TODO: connect to musicGain when music is added
+  if (musicGain && ctx) {
+    musicGain.gain.cancelScheduledValues(ctx.currentTime);
+    musicGain.gain.setValueAtTime(value ? 0 : MUSIC_VOLUME, ctx.currentTime);
+  }
 }
 
 export function toggleMusicMuted(): boolean {
@@ -303,6 +334,112 @@ function playRespawn(): void {
     osc.start(start);
     osc.stop(start + each);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Background music — lazy-load MP3s, per-track crossfade
+// ---------------------------------------------------------------------------
+//
+// Usage (once gameplay wires it up):
+//   playMusic('intro')           — starts or crossfades to the intro loop
+//   playMusic('ingame')          — switches to the in-game track
+//   stopMusic()                  — fades out whatever is playing
+//
+// Design:
+//   - Tracks live at public/audio/*.mp3 (fetched on first request, cached).
+//   - Each track loops automatically.
+//   - Asking for the current track is a no-op.
+//   - Asking for a different track crossfades CROSSFADE_SEC between them.
+//   - All music goes through `musicGain` — independent from SFX mute.
+//   - Safe to call before AudioContext init: it lazily creates the context
+//     just like play(). Obviously needs a prior user gesture in browsers
+//     that block autoplay.
+
+/**
+ * Fetch + decode an MP3 into an AudioBuffer. Cached per-track for the
+ * lifetime of the page.
+ */
+async function loadMusicBuffer(track: MusicTrack): Promise<AudioBuffer | null> {
+  if (musicBuffers.has(track)) return musicBuffers.get(track)!;
+  if (!ctx) return null;
+  try {
+    const resp = await fetch(MUSIC_FILES[track]);
+    if (!resp.ok) {
+      console.warn('[Audio] music fetch failed', track, resp.status);
+      return null;
+    }
+    const arrayBuf = await resp.arrayBuffer();
+    const buf = await ctx.decodeAudioData(arrayBuf);
+    musicBuffers.set(track, buf);
+    return buf;
+  } catch (err) {
+    console.warn('[Audio] music load error', track, err);
+    return null;
+  }
+}
+
+/**
+ * Play a background track. If another track is already playing, crossfades
+ * over CROSSFADE_SEC. If the SAME track is already playing, this is a no-op.
+ */
+export async function playMusic(track: MusicTrack): Promise<void> {
+  if (!ensureContext() || !ctx || !musicGain) return;
+  if (currentMusic?.track === track) return;
+
+  const buffer = await loadMusicBuffer(track);
+  if (!buffer || !ctx || !musicGain) return;
+
+  // New source with its own gain so we can fade it in while the previous
+  // fades out. Both gains funnel into musicGain (which is mute-controlled).
+  const gain = ctx.createGain();
+  gain.gain.value = 0;
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  source.connect(gain).connect(musicGain);
+  const startAt = ctx.currentTime;
+  source.start(startAt);
+  gain.gain.linearRampToValueAtTime(1.0, startAt + CROSSFADE_SEC);
+
+  // Fade out the previous track and stop it when the crossfade finishes.
+  const prev = currentMusic;
+  currentMusic = { track, source, gain };
+  if (prev) {
+    const endAt = startAt + CROSSFADE_SEC;
+    prev.gain.gain.cancelScheduledValues(startAt);
+    prev.gain.gain.setValueAtTime(prev.gain.gain.value, startAt);
+    prev.gain.gain.linearRampToValueAtTime(0, endAt);
+    try { prev.source.stop(endAt + 0.02); } catch { /* already stopped */ }
+  }
+}
+
+/** Fade out the current track (if any) over CROSSFADE_SEC and release it. */
+export function stopMusic(): void {
+  if (!ctx || !currentMusic) return;
+  const now = ctx.currentTime;
+  const { source, gain } = currentMusic;
+  gain.gain.cancelScheduledValues(now);
+  gain.gain.setValueAtTime(gain.gain.value, now);
+  gain.gain.linearRampToValueAtTime(0, now + CROSSFADE_SEC);
+  try { source.stop(now + CROSSFADE_SEC + 0.02); } catch { /* already stopped */ }
+  currentMusic = null;
+}
+
+/** True if the given track is currently playing (may still be ramping in). */
+export function isMusicPlaying(track?: MusicTrack): boolean {
+  if (!currentMusic) return false;
+  if (!track) return true;
+  return currentMusic.track === track;
+}
+
+/**
+ * Preload a track's buffer without starting playback. Optional — `playMusic`
+ * will load on demand, but calling this earlier (e.g. on title screen)
+ * avoids a brief silence when the first transition lands.
+ */
+export async function preloadMusic(track: MusicTrack): Promise<void> {
+  if (!ensureContext()) return;
+  await loadMusicBuffer(track);
 }
 
 /** Major chord held ~900ms. C5 E5 G5 C6. */

@@ -182,6 +182,15 @@ export class Critter {
    */
   debugBotBehaviour: BotBehaviourTag = 'normal';
 
+  /**
+   * True for server-controlled fill-in bots in online 4P matches. Set from
+   * the PlayerSchema's isBot flag when the online critter is spawned.
+   * Used by the HUD (bot badge) and the end-screen to distinguish them
+   * from human opponents. Offline matches never set this — offline bots
+   * are identified by being non-player critters (index != 0) instead.
+   */
+  isBot = false;
+
   constructor(config: CritterConfig, scene: THREE.Scene) {
     this.config = config;
     this.mesh = new THREE.Group();

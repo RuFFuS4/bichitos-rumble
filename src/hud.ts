@@ -25,6 +25,12 @@ const portalLegendEl = document.getElementById('portal-legend')!;
 const portalLegendReturnEl = document.getElementById('portal-legend-return')!;
 const portalToggleBtn = document.getElementById('btn-portal-toggle')!;
 
+// Waiting screen (online 4P). Nullable because /tools.html doesn't include
+// these nodes — the lab launches matches directly without a waiting phase.
+const waitingScreen = document.getElementById('waiting-screen');
+const waitingCountdownEl = document.getElementById('waiting-countdown');
+const waitingSlotsEl = document.getElementById('waiting-slots');
+
 /** Total slots on the grid. Must match CSS grid-template-columns × rows. */
 export const GRID_SLOTS = 9;
 
@@ -60,6 +66,17 @@ export function initAllLivesHUD(critters: Critter[]): void {
 
     row.appendChild(dot);
     row.appendChild(hearts);
+
+    // Bot badge (online 4P fill). Never set for offline — offline bots are
+    // identified by index, not by this flag.
+    if (c.isBot) {
+      const badge = document.createElement('span');
+      badge.className = 'lives-bot-badge';
+      badge.textContent = '🤖';
+      badge.title = 'Bot';
+      row.appendChild(badge);
+    }
+
     livesContainer.appendChild(row);
 
     liveEls.push({ root: row, hearts });
@@ -102,6 +119,105 @@ export function showOverlay(main: string, sub?: string): void {
 
 export function hideOverlay(): void {
   overlayEl.style.display = 'none';
+}
+
+// ---------------------------------------------------------------------------
+// Waiting screen (online 4P)
+// ---------------------------------------------------------------------------
+//
+// Shown while the server is in phase 'waiting'. Renders:
+//   - A big countdown indicating seconds left until bot-fill
+//   - A row of 4 slots (filled/empty, human/bot)
+//   - A hint about bot-fill behaviour
+//
+// Null-safe: every function is a no-op on pages where the DOM nodes don't
+// exist (e.g. /tools.html, which skips the waiting flow entirely).
+
+export type WaitingSlotKind = 'human' | 'bot' | 'empty';
+
+export interface WaitingSlotData {
+  /** 'human' | 'bot' | 'empty'. */
+  kind: WaitingSlotKind;
+  /** Critter name (e.g. "Sergei"). Empty string for empty slots. */
+  name: string;
+  /** Display colour hex (e.g. 0xff5577). 0 for empty. */
+  color: number;
+}
+
+export interface WaitingScreenData {
+  secondsLeft: number;
+  slots: WaitingSlotData[];   // exactly MAX_PLAYERS entries (padded with empty)
+  maxPlayers: number;
+}
+
+export function showWaitingScreen(): void {
+  if (!waitingScreen) return;
+  waitingScreen.classList.remove('hidden');
+}
+
+export function hideWaitingScreen(): void {
+  if (!waitingScreen) return;
+  waitingScreen.classList.add('hidden');
+}
+
+/**
+ * Refresh the waiting-screen DOM with server-driven data. Called every
+ * frame while phase === 'waiting'. Only touches the nodes whose content
+ * actually changed (the countdown goes down every tick; slot contents
+ * change only when a player joins/leaves/becomes a bot).
+ */
+export function updateWaitingScreen(data: WaitingScreenData): void {
+  if (!waitingScreen || !waitingCountdownEl || !waitingSlotsEl) return;
+
+  // Countdown: round up so "0.4s left" reads as "1s left" until it truly hits 0.
+  const sec = Math.max(0, Math.ceil(data.secondsLeft));
+  if (waitingCountdownEl.textContent !== String(sec)) {
+    waitingCountdownEl.textContent = String(sec);
+  }
+  // Last 10s: urgency pulse.
+  const urgent = sec > 0 && sec <= 10;
+  waitingCountdownEl.classList.toggle('urgent', urgent);
+
+  // Slots — re-render the set. Small enough that an innerHTML replace is fine.
+  const fp = waitingSlotsFingerprint(data.slots);
+  if (waitingSlotsEl.dataset.fp !== fp) {
+    waitingSlotsEl.innerHTML = '';
+    for (const s of data.slots) {
+      waitingSlotsEl.appendChild(buildWaitingSlotEl(s));
+    }
+    waitingSlotsEl.dataset.fp = fp;
+  }
+}
+
+function waitingSlotsFingerprint(slots: WaitingSlotData[]): string {
+  return slots.map(s => `${s.kind}:${s.name}:${s.color}`).join('|');
+}
+
+function buildWaitingSlotEl(s: WaitingSlotData): HTMLDivElement {
+  const el = document.createElement('div');
+  el.className = 'waiting-slot ' + s.kind;
+
+  const dot = document.createElement('span');
+  dot.className = 'waiting-slot-dot';
+  if (s.color) {
+    dot.style.background = '#' + s.color.toString(16).padStart(6, '0');
+  }
+  el.appendChild(dot);
+
+  const name = document.createElement('span');
+  name.className = 'waiting-slot-name';
+  name.textContent = s.name || '—';
+  el.appendChild(name);
+
+  const badge = document.createElement('span');
+  badge.className = 'waiting-slot-badge';
+  badge.textContent =
+    s.kind === 'human' ? 'HUMAN' :
+    s.kind === 'bot'   ? '🤖 BOT' :
+                         'OPEN';
+  el.appendChild(badge);
+
+  return el;
 }
 
 // ---------------------------------------------------------------------------

@@ -1485,3 +1485,125 @@ so callers keep appending the same way they did before.
 - Respawn fix visually testable via lab Pattern B (axis-split): force a
   seed that triggers pattern B, push bots to chase = eliminar uno, se
   respawnea → debe caer en una zona válida (never in void).
+
+---
+
+## 2026-04-19 — 4P online + bot-fill + waiting UX + music API stub
+
+### Scope change
+
+Originally this phase (Phase 2 in `NEXT_STEPS.md`) was planned for 25-27
+apr, with sound-integration as Phase 1 first. The user chose to pull
+Phase 2 forward (online carries more technical risk) and defer music
+hooks to the next block; MP3 assets are now in the bundle and the
+playback API is live but nothing calls it automatically yet.
+
+### Server changes
+
+- `maxClients = 4` (was 2). `MAX_PLAYERS = 4`, `WAITING_TIMEOUT = 60`.
+- New `PlayerSchema.isBot: boolean`. Bots are fully normal
+  PlayerSchemas; only the input source differs.
+- New `GameState.waitingTimeLeft: number` — counts down every tick in
+  `waiting` so the client can render the countdown.
+- `onJoin`: rejects joins outside `waiting`; resets timer on first
+  human; arms instant-start when `size === MAX_PLAYERS`.
+- `onLeave`:
+  - In `waiting` / `ended` → simple delete.
+  - In `countdown` / `playing` with ≥ 2 survivors → **bot-takeover**:
+    flip `isBot = true`, reset held input, match continues. Only below
+    2 survivors does the match end with `opponent_left`.
+- New `tickWaiting(dt)`: counts down `waitingTimeLeft`. When it reaches
+  0 with at least one human in the room, fills the empty slots with
+  bots and transitions to countdown. Empty room holds the timer.
+- New `spawnBot()`: generates `bot_N` sessionIds, picks a free spawn
+  position + a critter name not already in use.
+- New `transitionToCountdown()` centralises the waiting → countdown
+  transition and also locks the room so late `joinOrCreate` calls
+  don't land in an already-starting match.
+- New `buildPlayerSchema()` helper — same builder for humans and bots.
+- New `server/src/sim/bot.ts` → `computeBotInput(bot, allPlayers)`:
+  chase nearest, headbutt < 2u, ability1 at mid-range, ability2 when
+  surrounded. Inputs injected into the normal pipeline at the top of
+  `simulatePlaying`, so everything downstream treats bots identically
+  to humans.
+
+### Client changes
+
+- `src/critter.ts` → new `isBot: boolean = false` field.
+- `src/hud.ts` → `showWaitingScreen` / `hideWaitingScreen` /
+  `updateWaitingScreen(data)`. Lives-row renders a 🤖 badge for bots.
+  All functions are null-safe so `/tools.html` (no waiting flow)
+  doesn't break.
+- `src/game.ts`:
+  - `spawnOnlineCritter` propagates `playerState.isBot`.
+  - Per-frame sync loop reads `p.isBot` and rebuilds the lives HUD if
+    it flips mid-match (bot-takeover).
+  - Phase transition in `updateOnline`:
+    - `waiting` → `hideOverlay()` + `showWaitingScreen()` + per-frame
+      `updateWaitingScreen(data)`.
+    - any other phase → `hideWaitingScreen()`.
+    - `ended` → subtitle distinguishes bot vs human winner.
+  - New `buildWaitingScreenData(state)` — builds slot array padded to
+    `ONLINE_MAX_PLAYERS`.
+  - New const `ONLINE_MAX_PLAYERS = 4`.
+- `index.html` → new `#waiting-screen` overlay + CSS for slots,
+  countdown urgency pulse (< 10s), HUD bot badge.
+
+### Music (API only, no auto-hooks)
+
+- MP3s copied to `public/audio/intro.mp3`, `ingame.mp3`, `special.mp3`
+  (~3 MB total).
+- `src/audio.ts`:
+  - New `MusicTrack = 'intro' | 'ingame' | 'special'` type.
+  - Independent `musicGain` bus at 0.22 level, separate from `masterGain`
+    (SFX) at 0.35 level. Each bus has its own mute state.
+  - `playMusic(track)`: lazy fetch + decode, loop, crossfade 1.2s if
+    another track is active. No-op if same track.
+  - `stopMusic()`: fade out 1.2s.
+  - `preloadMusic(track)`: warm cache without playing.
+  - `isMusicPlaying(track?)`.
+  - `setMusicMuted` now actually mutes (was a TODO before).
+- No hooks yet from `game.ts` — integration is 4 calls in phase
+  transitions (documented in `ONLINE.md`). Console playable today:
+  `(await import('/src/audio.ts')).playMusic('intro')`.
+
+### Docs
+
+- New `ONLINE.md` — living doc of the online flow, edge cases, params,
+  bot AI, music plan. Goes in the root next to `DEV_TOOLS.md`.
+- `NEXT_STEPS.md` — Phase 1 reorganised (música API lista, hooks
+  pendientes), Phase 2 marked done.
+- `BUILD_LOG.md` — this entry.
+
+### Files created
+- `server/src/sim/bot.ts`
+- `ONLINE.md`
+- `public/audio/intro.mp3`, `ingame.mp3`, `special.mp3`
+
+### Files changed
+- `server/src/state/PlayerSchema.ts` (+isBot)
+- `server/src/state/GameState.ts` (+waitingTimeLeft)
+- `server/src/BrawlRoom.ts` (major: maxClients, onJoin/onLeave,
+  tickWaiting, spawnBot, transitionToCountdown, bot input injection)
+- `src/critter.ts` (+isBot field)
+- `src/hud.ts` (waiting screen API + lives badge)
+- `src/game.ts` (waiting screen wiring, bot flag sync, end-screen)
+- `src/audio.ts` (music API + musicGain bus)
+- `index.html` (waiting-screen DOM + CSS)
+
+### Verification
+- Typecheck: client + server clean.
+- Build: client 3.07 kB main (unchanged) · input-touch 813.6 kB
+  (+2.1 kB for waiting + music API) · tools 37.57 kB (unchanged).
+- Server `npx tsc` clean.
+- **Manual online testing (2-4 clients over network) pending** — see
+  `ONLINE.md` validation checklist.
+
+### Known limitations (documented, not fixed)
+- No `allowReconnection` (standby).
+- Single global room pool, no region-based matchmaking.
+- No persistence / ranking.
+- Server bot AI simpler than offline bot (deliberate — bots are fill,
+  not main experience).
+- Music integration hooks deferred to the next block — 4 calls in
+  `game.ts` phase transitions. API is ready and testable from console.

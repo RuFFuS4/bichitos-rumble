@@ -11,6 +11,15 @@ export class GameState extends Schema {
   @type('string') winnerSessionId: string = '';
   @type('string') endReason: string = '';
 
+  /**
+   * Seconds left before the room auto-fills with bots. Counted down every
+   * tick while phase === 'waiting'. Reaches 0 → server fills the remaining
+   * slots with bots and moves to 'countdown'. If the room reaches
+   * maxClients humans before the timer expires, the countdown starts
+   * immediately (and this timer becomes irrelevant).
+   */
+  @type('number') waitingTimeLeft: number = 0;
+
   // Arena (Bloque B 3b — irregular fragments)
   /** Deterministic seed — both clients generate identical layout from this. */
   @type('number') arenaSeed: number = 0;
