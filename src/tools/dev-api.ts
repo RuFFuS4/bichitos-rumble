@@ -761,6 +761,37 @@ export class DevApi {
   }
 
   // -------------------------------------------------------------------------
+  // Skeletal clip inspection — lab-side helpers on top of SkeletalAnimator.
+  // Used by the /tools.html Skeletal Clips panel to preview what the GLB
+  // actually brought in after a user-driven export from /animations
+  // (mesh2motion) or Tripo Animate.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Return the list of clips available on the local player's skeletal
+   * animator, or null when the player has no skeletal layer attached
+   * (i.e. the GLB shipped no animation clips, or no match is live).
+   */
+  getPlayerClips(): Array<{ name: string; state: string | null }> | null {
+    const p = this.game.player;
+    if (!p?.skeletal) return null;
+    return p.skeletal.listClips();
+  }
+
+  /** Play a specific clip by name on the player's skeletal animator. */
+  playPlayerClip(clipName: string, loop = true): boolean {
+    const p = this.game.player;
+    if (!p?.skeletal) return false;
+    return p.skeletal.playClipByName(clipName, loop);
+  }
+
+  /** Stop every action on the player's skeletal animator. */
+  stopPlayerClips(): void {
+    const p = this.game.player;
+    p?.skeletal?.stopAll();
+  }
+
+  // -------------------------------------------------------------------------
   // Input snapshot — aggregates keyboard + gamepad state for the Input panel.
   // -------------------------------------------------------------------------
 

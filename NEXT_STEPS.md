@@ -35,26 +35,31 @@ de destrucción) son prioritarios; si algo cae por tiempo, es el
   - [x] End-screen distingue victoria de/contra bot
   - Documentación: `ONLINE.md` (living doc del flujo online completo)
 
-### Fase 3 · 28-30 abril — INNEGOCIABLES
-- [ ] **Animaciones distintivas per-character** (5-6h)
-  - NO bones, sí patrones procedurales divergentes por personaje
-  - Shelly balanceo lateral amplio (tortuga waddle)
-  - Trunk trompa que se eleva en anticipation
-  - Cheeto burst-accelerate-decelerate
-  - Kurama hint de múltiples colas procedurales
-  - Kowalski slide de panza en charge rush
-  - Sebastian desplazamiento lateral en charge rush
-  - Sihans emerge-from-ground mini-efecto
-  - Kermit pre-leap squash
-- [ ] **Top 4 habilidades distintivas** (8-12h, prioridad por impacto)
-  1. **Trunk Grip** — grab + throw (signature Bruiser)
-  2. **Shelly Shell Shield** — invulnerability pose + reflect
+### Fase 3 · EN CURSO — innegociables
+- [x] **Capa de animación skeletal opcional** (`src/critter-skeletal.ts`)
+      + loader GLB con clips + hooks por fase (idle/run/victory/defeat/
+      ability/hit/fall) — listo desde hace días.
+- [x] **Animation lab integrado** (`/animations`) con Mesh2Motion como
+      base + roster picker propio (9 críttrs con rig sugerido por
+      morfología) + banner INTERNAL + noindex. Exportas GLB animado →
+      sustituyes en `public/models/critters/` → engine detecta los
+      clips automáticamente. Tripo Animate para los no cubiertos
+      (Shelly tortuga, Kermit sapo, Sihans topo).
+- [x] **Warning visual de destrucción** renovado: sustituido red blink
+      por per-fragment shake + warm emissive + seismic rumble SFX.
+- [ ] **Animaciones reales por crítter** — usuario las está generando
+      con Mesh2Motion / Tripo Animate en paralelo.
+- [ ] **Top 4 habilidades distintivas** (8-12h, prioridad por impacto).
+      Pospuestas hasta que el batch de validación del user termine.
+  1. **Shelly Shell Shield** — invulnerability pose + reflect
+     (la menos arriesgada técnicamente, reusa `immunityTimer`)
+  2. **Trunk Grip** — grab + throw (signature Bruiser, más sistémica)
   3. **Kowalski Snowball** — introduce sistema proyectiles (reutilizable)
   4. **Cheeto Shadow Step** — introduce sistema teleport (reutilizable)
-  
+
   Cada nuevo sistema base habilita otras Tier 2 abilities después.
-- [ ] **Destrucción iterada** (3-4h) — Pattern C con cortes no-radiales
-      + warning visual más claro. Si no entra, la actual queda.
+- [ ] **Destrucción iterada Pattern C** (3-4h) — cortes no-radiales.
+      Decidido: solo si sobra tiempo. El warning nuevo ya cumple.
 
 ### Fase 4 · Última semana (28 abril - 1 mayo)
 - [x] Gamepad support + toast detección — adelantado al paralelizar
@@ -220,3 +225,12 @@ Post-mortem del bug de rotación en `ERROR_LOG.md` entry 2026-04-17.
   EventType, recording format, cómo añadir una feature nueva al lab sin
   romper nada (patrón de DOM caching para paneles con dropdowns live,
   etc). Actualizar cada vez que se toque el lab.
+- **Animation lab** en `/animations` (Mesh2Motion adaptado). Subpackage
+  `mesh2motion/` con su propio build. Para añadir una adaptación
+  nueva tocar `src/BichitosRosterPicker.ts` sin modificar el engine
+  de mesh2motion. Update upstream = diff manual contra
+  `mesh2motion/README-INTEGRATION.md`.
+- **Checklist vivo de validación**: `VALIDATION_CHECKLIST.md`. Todo
+  lo pendiente de probar manualmente (gamepad, shake arena, 4P online,
+  stats end-screen, Mesh2Motion, etc.) consolidado en un único lugar.
+  Actualizar con cada feature sin validar.

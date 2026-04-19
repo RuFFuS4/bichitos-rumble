@@ -312,6 +312,53 @@ const CSS = `
   border-radius: 3px;
   font-size: 11px;
 }
+#lab-sidebar .lab-skeletal-list {
+  background: #14182a;
+  padding: 4px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+#lab-sidebar .lab-skeletal-list .sk-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+#lab-sidebar .lab-skeletal-list .sk-row:hover { background: rgba(255,255,255,0.04); }
+#lab-sidebar .lab-skeletal-list .sk-name {
+  color: #dde1ea;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#lab-sidebar .lab-skeletal-list .sk-state {
+  color: #4ade80;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+#lab-sidebar .lab-skeletal-list .sk-state.unresolved {
+  color: #7a8197;
+}
+#lab-sidebar .lab-skeletal-list .sk-play {
+  background: #242a3d;
+  border: 1px solid #3a4260;
+  color: #ffdc5c;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+#lab-sidebar .lab-skeletal-list .sk-play:hover { background: #2d354d; }
 #lab-sidebar .lab-input-box .key {
   display: inline-block;
   background: #1a1e2c;
@@ -561,6 +608,23 @@ export function mountLabSidebar(devApi: DevApi): void {
   perfGrid.className = 'lab-perf-grid';
   perf.appendChild(perfGrid);
 
+  // ---- Skeletal Clips (collapsed — preview imported animations) --------
+  // Closes the Mesh2Motion / Tripo Animate pipeline: user exports an
+  // animated GLB, drops it into public/models/critters/, opens this
+  // panel and clicks any clip to verify the GLB rigged cleanly + that
+  // our fuzzy-name resolver assigned the right state.
+  const skeletal = section(observeGroup, 'Skeletal clips', { collapsed: true });
+  const skeletalInfo = document.createElement('div');
+  skeletalInfo.className = 'lab-note';
+  skeletalInfo.textContent = '(select a critter in Matchup to inspect)';
+  skeletal.appendChild(skeletalInfo);
+  const skeletalList = document.createElement('div');
+  skeletalList.className = 'lab-skeletal-list';
+  skeletal.appendChild(skeletalList);
+  const skeletalCtrl = row(skeletal);
+  button(skeletalCtrl, 'Stop playback', () => devApi.stopPlayerClips());
+  button(skeletalCtrl, 'Refresh', () => refreshSkeletalPanel());
+
   // ---- Input (collapsed — kept for gamepad / touch checks) --------------
   const inputSec = section(observeGroup, 'Input', { collapsed: true });
   const inputBox = document.createElement('div');
@@ -654,6 +718,60 @@ export function mountLabSidebar(devApi: DevApi): void {
     refreshPerfPanel();
     refreshInputPanel();
     refreshRecordingPanel();
+    refreshSkeletalPanel();
+  }
+
+  /**
+   * List the clips attached to the player's skeletal animator and the
+   * state each resolved to (per STATE_KEYWORDS in critter-skeletal.ts).
+   * Called explicitly on match start + by the Refresh button — cheap
+   * but not worth running every 250ms (clip list doesn't change live).
+   */
+  function refreshSkeletalPanel(): void {
+    const clips = devApi.getPlayerClips();
+    skeletalList.innerHTML = '';
+
+    if (clips === null) {
+      skeletalInfo.textContent =
+        '(no skeletal animator — the player\'s GLB ships no animation clips)';
+      return;
+    }
+    if (clips.length === 0) {
+      skeletalInfo.textContent = '(skeletal animator present but no clips — unexpected)';
+      return;
+    }
+
+    const resolved = clips.filter(c => c.state !== null).length;
+    skeletalInfo.textContent =
+      `${clips.length} clip${clips.length === 1 ? '' : 's'} · ` +
+      `${resolved} resolved to a state · ${clips.length - resolved} unresolved`;
+
+    for (const c of clips) {
+      const row = document.createElement('div');
+      row.className = 'sk-row';
+
+      const name = document.createElement('span');
+      name.className = 'sk-name';
+      name.textContent = c.name;
+      name.title = c.name;
+      row.appendChild(name);
+
+      const state = document.createElement('span');
+      state.className = 'sk-state' + (c.state ? '' : ' unresolved');
+      state.textContent = c.state ?? '—';
+      row.appendChild(state);
+
+      const play = document.createElement('button');
+      play.className = 'sk-play';
+      play.textContent = '▶';
+      play.title = `Play "${c.name}" in loop`;
+      play.addEventListener('click', () => {
+        devApi.playPlayerClip(c.name, true);
+      });
+      row.appendChild(play);
+
+      skeletalList.appendChild(row);
+    }
   }
 
   function refreshRecordingPanel(): void {

@@ -2095,6 +2095,88 @@ The hover tooltip on each card carries the "why this rig" note.
 
 ---
 
+## 2026-04-19 — Skeletal clips preview panel + VALIDATION_CHECKLIST.md
+
+Two small additions while the user validates the Mesh2Motion integration.
+
+### Skeletal clips panel in `/tools.html`
+
+Closes the loop on the animation pipeline: after exporting a GLB with
+clips from `/animations` (or Tripo Animate) and dropping it into
+`public/models/critters/`, the user can open the lab, pick that
+critter as the local player, expand the new "Skeletal clips" panel
+under OBSERVE, and:
+
+- See every clip the GLB shipped, sorted alphabetically.
+- See which logical state (idle/run/victory/…) our fuzzy resolver
+  assigned each clip. Unresolved clips show `—` and a dim colour so
+  the user knows to rename them (or extend `STATE_KEYWORDS`).
+- Click the ▶ button next to any clip to preview it in the arena
+  (loop, crossfade-in 0.15s). Useful to visually confirm the
+  skeleton rigged correctly without having to trigger the matching
+  gameplay event.
+- "Stop playback" button to reset. "Refresh" button to re-inspect
+  after a new critter is selected.
+
+API additions:
+
+- `SkeletalAnimator.listClips()` returns `{ name, state }[]`.
+- `SkeletalAnimator.playClipByName(name, loop)` — bypasses the state
+  resolver; creates/reuses an Action keyed by the exact clip name.
+  Does NOT touch `currentState`, so the normal state machine (idle /
+  run auto) retakes control on the next `play(state)` call.
+- `SkeletalAnimator.stopAll()` — stops every action.
+- `DevApi.getPlayerClips / playPlayerClip / stopPlayerClips` — thin
+  proxies for the sidebar panel.
+
+### `VALIDATION_CHECKLIST.md` — single source of truth for pending manual tests
+
+User is validating features in batch ("I'll test it all together").
+Consolidated every manual-only test I couldn't automate into one
+living checklist grouped by area (gamepad, arena shake, respawn,
+4P online flow, stats end-screen, audio crossfade, bots dropdowns,
+recorder export, skeletal loader, /animations, gameplay regression,
+settings persistence, portals). Order chosen so blocks can be tested
+independently.
+
+Also added a "Cosas que NO están validables todavía" section listing
+features that need content we don't have yet (specific critter clips,
+signature abilities, Lighthouse run, cross-device playtest).
+
+### Docs
+
+- `NEXT_STEPS.md` → Fase 3 updated to reflect skeletal layer + lab
+  integration already shipped, and signature abilities explicitly
+  deferred until the validation batch lands.
+- Mention of `VALIDATION_CHECKLIST.md` and the Mesh2Motion lab added
+  to the "Key architecture notes" block.
+
+### Files changed
+
+- `src/critter-skeletal.ts` — new `listClips`, `playClipByName`,
+  `stopAll` methods. Stored the raw clips list + lazy action map
+  keyed by name.
+- `src/tools/dev-api.ts` — three proxies (`getPlayerClips`,
+  `playPlayerClip`, `stopPlayerClips`).
+- `src/tools/sidebar.ts` — new Skeletal Clips panel in OBSERVE group
+  (collapsed by default). CSS for the `sk-row` list items + the
+  `▶` play buttons.
+- `VALIDATION_CHECKLIST.md` — new file.
+- `NEXT_STEPS.md` — Phase 3 refresh + pointer to the new docs.
+
+### Verification
+
+- Typecheck + build clean.
+- Main game bundle still 3.08 kB.
+- `tools-*.js`: 37.92 → 40.65 kB (+2.73 kB for the panel + refresh
+  logic).
+- Shared chunk +0.79 kB for the skeletal API extensions.
+- Works on critters with NO clips (the panel shows
+  "(no skeletal animator)" gracefully).
+- Works on critters with clips (list populated, ▶ buttons functional).
+
+---
+
 ## 2026-04-19 — Pre-collapse shake + seismic rumble (replaces red blink)
 
 User's request: replace the red blink warning with a small localised

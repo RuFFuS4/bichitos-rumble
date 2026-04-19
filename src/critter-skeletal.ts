@@ -112,10 +112,16 @@ export class SkeletalAnimator {
   private fallbackAfterOneShot: SkeletalState | null = null;
   /** Cached list of clip names for debug output. */
   readonly availableClipNames: string[];
+  /** Raw clip list kept so the dev lab can play arbitrary clips by name,
+   *  not just ones that resolved to a logical state. */
+  private readonly clips: THREE.AnimationClip[];
+  /** Lazy-created Actions keyed by exact clip name — for playClipByName. */
+  private readonly clipActionsByName = new Map<string, THREE.AnimationAction>();
 
   constructor(root: THREE.Object3D, clips: THREE.AnimationClip[]) {
     this.mixer = new THREE.AnimationMixer(root);
     this.availableClipNames = clips.map(c => c.name);
+    this.clips = clips;
 
     // Resolve each logical state to an actual clip (first keyword match).
     // Some states may end up unresolved → actions[state] === undefined.
@@ -207,6 +213,76 @@ export class SkeletalAnimator {
   /** Advance the mixer. Call every frame from Critter.update(). */
   update(dt: number): void {
     this.mixer.update(dt);
+  }
+
+  /**
+   * List every clip that came with the GLB, along with which logical
+   * state (if any) our fuzzy resolver maps it to. Used by the /tools.html
+   * lab Skeletal Clips panel to inspect whether an imported GLB's clip
+   * names are being picked up correctly.
+   */
+  listClips(): Array<{ name: string; state: SkeletalState | null }> {
+    return this.clips.map(clip => {
+      let matchedState: SkeletalState | null = null;
+      for (const [state, action] of Object.entries(this.actions)) {
+        if (action.getClip() === clip) {
+          matchedState = state as SkeletalState;
+          break;
+        }
+      }
+      return { name: clip.name, state: matchedState };
+    });
+  }
+
+  /**
+   * Play a specific clip by its exact name — bypassing the state resolver.
+   * Used by the dev lab to preview clips and confirm the GLB rigged cleanly.
+   *
+   * Intentionally DOES NOT update currentState or trigger fallbacks — the
+   * caller is in debug mode and wants raw playback. The next call to
+   * `play(state)` (e.g. from the auto idle/run loop) will take over
+   * cleanly via crossFadeTo on the previous action.
+   *
+   * Returns true if the clip was found and started, false otherwise.
+   */
+  playClipByName(clipName: string, loop = true): boolean {
+    const clip = this.clips.find(c => c.name === clipName);
+    if (!clip) return false;
+
+    let action = this.clipActionsByName.get(clipName);
+    if (!action) {
+      action = this.mixer.clipAction(clip);
+      this.clipActionsByName.set(clipName, action);
+    }
+
+    // Fade out every other currently-playing action so the chosen clip
+    // reads clean. The mixer handles the cleanup; we just drop weights.
+    for (const a of [...Object.values(this.actions), ...this.clipActionsByName.values()]) {
+      if (a === action || !a.isRunning()) continue;
+      a.fadeOut(DEFAULT_CROSSFADE);
+    }
+
+    action.reset();
+    action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
+    action.clampWhenFinished = !loop;
+    action.setEffectiveWeight(1);
+    action.setEffectiveTimeScale(1);
+    action.enabled = true;
+    action.fadeIn(DEFAULT_CROSSFADE);
+    action.play();
+
+    // Mark state as "unknown" — the normal state machine will pick up
+    // again on the next play() call.
+    this.currentState = null;
+    this.fallbackAfterOneShot = null;
+    return true;
+  }
+
+  /** Stop everything. Used by the lab's "Stop clip" button. */
+  stopAll(): void {
+    this.mixer.stopAllAction();
+    this.currentState = null;
+    this.fallbackAfterOneShot = null;
   }
 
   hasClip(state: SkeletalState): boolean {
