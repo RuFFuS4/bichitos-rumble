@@ -49,8 +49,23 @@ Arcade / chibi arena brawler. Toy-like, punchy, instantly readable.
   articulation (e.g., separate head for future animation).
 - **One material per model.** Vertex colors or a single small texture
   (≤ 512×512 JPEG) for color variation.
-- **No animations embedded in GLB.** Animations will be code-driven
-  (squash/stretch, bob, rotation) for the base roster.
+- **Procedural animation is the default baseline.** The shared
+  `critter-animation.ts` layer drives idle bob / run bounce / lean /
+  sway / squash-stretch / headbutt pose from mass+speed — the same
+  for every critter, tuned per-instance.
+- **Skeletal animation clips are now supported as an OPTIONAL layer.**
+  GLBs may ship `AnimationClips` (typically from Mixamo or Tripo
+  Animate). The engine's `SkeletalAnimator`
+  (`src/critter-skeletal.ts`) resolves states (`idle` / `run` /
+  `victory` / `defeat` / `ability_1..3` / `headbutt_lunge` /
+  `fall` / `hit`) by fuzzy name match and crossfades 0.15s between
+  them. Loop states (idle/walk/run) coexist with procedural
+  lean/sway/squash; heavy states (victory/defeat/ability/lunge/fall/
+  hit) take over the root transforms while procedural steps aside.
+- Clips must stay **consistent with the style**: no realistic-motion
+  pack (no jogging, no walk-cycle pointing ideal human mass). Prefer
+  bouncy / toy-like poses, clear pose-to-pose timing, readable
+  silhouettes at gameplay camera distance.
 
 ## What This Style Is NOT
 

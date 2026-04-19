@@ -179,3 +179,124 @@ Acceptance criteria met:
 - [ ] In-match spawn, movement, abilities, elimination all work
 - [ ] Immunity blink applies correctly to GLB materials
 - [ ] Ability glow (emissive) applies correctly
+
+---
+
+# Animation Pipeline (skeletal clips, optional layer)
+
+Since 2026-04-19, GLBs can ship **AnimationClips** that the engine
+picks up automatically via `src/critter-skeletal.ts`. The procedural
+layer (`src/critter-animation.ts`) keeps running in parallel — it
+owns idle bob / lean / sway / squash-stretch and steps aside for
+heavy clips (victory, defeat, ability, headbutt lunge, fall, hit).
+
+Critters without skeletal clips are **not broken**: `skeletal === null`
+and the procedural layer handles 100% of the motion like before.
+
+## Supported sources
+
+| Tool | Good for | Notes |
+|------|----------|-------|
+| **Mixamo** (Adobe) | Humanoid rig + 2500+ prebuilt motions | Best for Sergei, Trunk, Cheeto, Kurama, Kermit, Kowalski, Sihans. Requires FBX input (no GLB import). |
+| **Tripo Animate** | Non-humanoid critters (Shelly turtle, Sebastian crab), text-to-animation | GLB native in/out, no conversion. Smaller library. |
+| **Cascadeur** | Custom signature moves (Trunk Grip, Shell Shield pose, Shadow Step teleport) | Free indie tier. AI-assisted keyframes. GLB export. |
+| **Rokoko Video** | Mocap from webcam for one-off gestures | Trial + subscription. GLB/FBX export. |
+
+## Canonical workflow (Mixamo → Blender → GLB)
+
+Mixamo only accepts **FBX / OBJ**, but we use GLB. Blender bridges:
+
+1. **Blender: GLB → FBX** for upload.
+   - `File → Import → glTF 2.0` → selects `sergei.glb` from
+     `public/models/critters/`.
+   - `File → Export → FBX` with:
+     - Object Types: Mesh only.
+     - Armature → Add Leaf Bones: off.
+     - Bake Animation: off (no animation yet).
+2. **Mixamo**: upload the FBX, auto-rig (mark chin/wrists/knees/groin),
+   choose an animation (Idle, Running, Victory, Dying, Hit Reaction,
+   Falling To Roll, Punching…). Download:
+   - Format: FBX Binary.
+   - Skin: **With Skin** for the first animation (contains the rig);
+     **Without Skin** for subsequent animations (just the motion).
+   - FPS: 30.
+3. **Blender: assemble + export GLB**.
+   - Import the first FBX (rig + animation).
+   - Import subsequent FBX's (motion-only; they'll attach to the same
+     armature).
+   - In the Action Editor, **rename each clip** to a name the
+     `critter-skeletal.ts` resolver understands. Mixamo's stock
+     names (`Idle`, `Running`, `Victory`, `Dying`, `Hit Reaction`,
+     `Falling To Roll`) already match. If the clip names end up as
+     `mixamo.com`, rename them.
+   - Push actions down to the NLA editor so they all live in the
+     final GLB.
+   - `File → Export → glTF 2.0` with Animation marked ✅.
+4. **Replace** `public/models/critters/<id>.glb` with the animated
+   version. Reload the game. Console should show:
+   `[Critter] skeletal animator attached: <Name> | clips: Idle, Running, …`.
+
+## Tripo Animate (bypasses Mixamo entirely)
+
+For critters that already live in Tripo (all 9 in this project):
+
+1. In Tripo, open the model.
+2. Click **Animate**.
+3. Choose from the library (idle / walk / run / attack / victory /
+   defeat / etc) — or use text-to-animation.
+4. Download as **GLB directly**.
+5. Drop in `public/models/critters/<id>.glb`.
+
+## Clip-name resolver
+
+The fuzzy matcher lives in `STATE_KEYWORDS` inside
+`src/critter-skeletal.ts`. First match wins per state. Add keywords
+there if your clips use non-standard names — one-line change.
+
+Current keyword coverage (substrings, case-insensitive):
+
+| State | Recognised names |
+|-------|------------------|
+| `idle` | `idle`, `breathing`, `standing`, `breath` |
+| `walk` | `walk` |
+| `run` | `run`, `sprint`, `gallop` |
+| `headbutt_anticip` | `anticip`, `windup`, `prepare`, `charge_up` |
+| `headbutt_lunge` | `headbutt`, `head_butt`, `lunge`, `punch`, `strike`, `attack`, `melee` |
+| `ability_1` | `ability1`, `ability_1`, `skill1`, `dash`, `charge`, `rush`, `leap`, `pounce` |
+| `ability_2` | `ability2`, `ability_2`, `skill2`, `slam`, `special`, `grip`, `shield`, `cloud`, `tunnel`, `snowball`, `shadow_step`, `shadow`, `sweep`, `mirror` |
+| `ability_3` | `ability3`, `ability_3`, `ultimate`, `ulti`, `frenzy`, `pound`, `mega`, `hypno`, `diggy`, `ice_age`, `tiger_roar`, `roar`, `crab_slash` |
+| `victory` | `victory`, `win`, `celebrat`, `cheer`, `dance` |
+| `defeat` | `defeat`, `lose`, `dying`, `death`, `ko`, `loss` |
+| `fall` | `fall`, `drop`, `falling` |
+| `hit` | `hit`, `damage`, `react`, `stagger`, `flinch` |
+| `respawn` | `respawn`, `revive`, `spawn`, `appear` |
+
+## Priority order for content work
+
+Hands-on time is limited. Ship this order for maximum visible impact:
+
+1. `idle` — shown in character select, waiting, between actions.
+2. `run` — most of the match time.
+3. `victory` — end-screen, emotional peak.
+4. `defeat` — end-screen, symmetry with victory.
+5. `headbutt_lunge` — the most used action in combat.
+6. `fall` + `hit` — adds drama to the void edge.
+7. `ability_1/2/3` — signature moves, the showpiece.
+8. `walk`, `respawn`, `headbutt_anticip` — nice-to-have.
+
+## Validation Checklist (per animated GLB)
+
+- [ ] File size still under 500 KB (animations are small, shouldn't
+      matter, but Mixamo + Blender can bloat vertex data).
+- [ ] At least `idle` and `run` resolve in console log.
+- [ ] Critter breathes during character select / waiting (not a hard
+      snap between poses).
+- [ ] Moving in match crossfades idle → run smoothly (no snap).
+- [ ] Stopping crossfades back to idle.
+- [ ] Headbutt pose reads: wind-up → lunge → recovery (the procedural
+      head-retract still applies under procedural layer if the
+      skeletal doesn't own that motion).
+- [ ] No visible T-pose or rig glitch at any point.
+- [ ] Victory / defeat hold the pose on end-screen (clampWhenFinished).
+- [ ] Online multiplayer behaves the same — each client loads its own
+      mixer, clips don't cross over.
