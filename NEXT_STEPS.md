@@ -208,3 +208,7 @@ Post-mortem del bug de rotación en `ERROR_LOG.md` entry 2026-04-17.
   endMatchImmediately) son los pilares, DevApi envuelve el resto.
 - `Critter.debugBotBehaviour` es el único campo "debug-only" en la clase
   gameplay. Default `'normal'` = comportamiento de producción intacto.
+- **Referencia viva del lab**: `DEV_TOOLS.md`. Contiene paneles,
+  EventType, recording format, cómo añadir una feature nueva al lab sin
+  romper nada (patrón de DOM caching para paneles con dropdowns live,
+  etc). Actualizar cada vez que se toque el lab.

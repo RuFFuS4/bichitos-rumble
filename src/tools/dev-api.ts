@@ -106,6 +106,102 @@ export interface GameplayEvent {
 }
 
 // ---------------------------------------------------------------------------
+// Recording — exhaustive session log for post-match analysis
+// ---------------------------------------------------------------------------
+//
+// One session covers one match from start to end (or until the user hits
+// Download). Snapshots are sampled every SNAPSHOT_INTERVAL_MS; every event
+// is captured uncapped (the sidebar event log is still a 60-slot circular
+// buffer, but the recording keeps ALL of them). Lab actions (force ability,
+// teleport, bot behaviour changes, etc.) are also logged so the recording
+// is a complete reproducible trace.
+
+export type LabActionType =
+  | 'force_ability'
+  | 'teleport_player'
+  | 'teleport_bots'
+  | 'set_bot_behaviour'
+  | 'set_all_bots_behaviour'
+  | 'reset_cooldowns'
+  | 'force_seed'
+  | 'set_speed'
+  | 'end_match';
+
+export interface LabAction {
+  t: number;
+  matchTime: number;                  // seconds since match start
+  type: LabActionType;
+  details: Record<string, unknown>;
+}
+
+export interface CritterFrame {
+  index: number;
+  name: string;
+  role: string;
+  alive: boolean;
+  lives: number;
+  pos: { x: number; z: number };
+  vel: { x: number; z: number };
+  falling: boolean;
+  immunityLeft: number;
+  headbuttCooldown: number;
+  isHeadbutting: boolean;
+  abilities: Array<{
+    name: string;
+    type: AbilityType;
+    active: boolean;
+    cooldownLeft: number;
+    windUpLeft: number;
+    durationLeft: number;
+  }>;
+  /** Only set for bots — the currently active behaviour tag. */
+  behaviour?: BotBehaviourTag;
+}
+
+export interface RecordingSnapshot {
+  t: number;                           // ms since recording.startedAt
+  matchTime: number;                   // seconds since match start
+  critters: CritterFrame[];
+  arena: {
+    collapseLevel: number;
+    warningBatch: number;
+    radius: number;
+  };
+  perf: {
+    fps: number;
+    frameMs: number;
+    drawCalls: number;
+    triangles: number;
+  };
+}
+
+export interface RecordingMeta {
+  playerName: string;
+  botNames: string[];
+  seed: number | null;
+  arenaPattern: string;
+  startedAt: number;                   // performance.now()
+  startedAtIso: string;                // ISO wall clock
+  endedAt: number | null;
+  endedAtIso: string | null;
+  durationSec: number | null;
+}
+
+export interface RecordingOutcome {
+  survivor: string | null;
+  reason: 'last_standing' | 'match_timeout' | 'user_stopped' | null;
+}
+
+export interface RecordingSession {
+  version: 1;
+  meta: RecordingMeta;
+  events: GameplayEvent[];
+  actions: LabAction[];
+  snapshots: RecordingSnapshot[];
+  outcome: RecordingOutcome;
+}
+
+// ---------------------------------------------------------------------------
 // DevApi
 // ---------------------------------------------------------------------------
 
@@ -132,6 +228,14 @@ export class DevApi {
     arenaFragmentsAlive: 0, arenaFragmentsTotal: 0,
   };
 
+  // Recording state (one session at a time; a new match auto-starts a new
+  // session, overwriting any previous one that wasn't downloaded).
+  private recording: RecordingSession | null = null;
+  private recordingElapsedMs = 0;        // drives snapshot sampling
+  private readonly SNAPSHOT_INTERVAL_MS = 200;   // 5 snapshots/sec
+  private lastSnapshotAt = 0;
+  private matchStartMs = 0;              // performance.now() at match start
+
   constructor(public readonly game: Game, private readonly renderer: THREE.WebGLRenderer) {}
 
   // -------------------------------------------------------------------------
@@ -143,20 +247,38 @@ export class DevApi {
     this.game.debugStartOfflineMatch(player, bots, opts);
     this.botOverrides.clear();
     this.resetEventMemory();
+    this.matchStartMs = performance.now();
+
+    // Auto-start a new recording. Any previous session that wasn't
+    // downloaded is overwritten — the sidebar shows a "unsaved recording"
+    // warning when this would happen.
+    const info = this.getArenaInfo();
+    this.startRecording({
+      playerName: player,
+      botNames: bots,
+      seed: info?.seed ?? null,
+      arenaPattern: info?.patternLabel ?? 'unknown',
+    });
+
     this.pushEvent('match_started', 'lab', `${player} vs ${bots.join(', ') || '(solo)'}`);
   }
 
   endMatch(): void {
     this.game.debugEndMatchImmediately();
     this.botOverrides.clear();
+    this.logAction('end_match', {});
+    this.pushEvent('match_ended', 'lab', 'ended by user');
+    this.finaliseRecording('user_stopped');
   }
 
   forceSeed(seed: number): void {
     this.game.debugForceArenaSeed(seed);
+    this.logAction('force_seed', { seed });
   }
 
   setSpeed(scale: number): void {
     this.game.debugSpeedScale = scale;
+    this.logAction('set_speed', { scale });
   }
 
   getSpeed(): number {
@@ -221,12 +343,17 @@ export class DevApi {
     if (!c) return;
     c.debugBotBehaviour = b;
     this.botOverrides.set(index, b);
+    this.logAction('set_bot_behaviour', { index, behaviour: b, name: c.config.name });
   }
 
   setAllBotsBehaviour(b: BotBehaviourTag): void {
     for (let i = 1; i < this.game.critters.length; i++) {
-      this.setBotBehaviour(i, b);
+      const c = this.game.critters[i];
+      if (!c) continue;
+      c.debugBotBehaviour = b;
+      this.botOverrides.set(i, b);
     }
+    this.logAction('set_all_bots_behaviour', { behaviour: b });
   }
 
   // -------------------------------------------------------------------------
@@ -239,6 +366,7 @@ export class DevApi {
     if (!p) return;
     p.headbuttCooldown = 0;
     for (const s of p.abilityStates) s.cooldownLeft = 0;
+    this.logAction('reset_cooldowns', {});
   }
 
   /**
@@ -257,6 +385,7 @@ export class DevApi {
     s.durationLeft = s.def.duration;
     s.effectFired = false;
     this.pushEvent('ability_cast', p.config.name, `forced: ${s.def.name}`);
+    this.logAction('force_ability', { slotIndex, name: s.def.name });
   }
 
   teleportPlayer(x: number, z: number): void {
@@ -267,6 +396,7 @@ export class DevApi {
     p.vx = 0;
     p.vz = 0;
     clearAllHeldInputs();
+    this.logAction('teleport_player', { x, z });
   }
 
   /** Scatter the bots to a preset layout. Useful to reproduce specific
@@ -282,6 +412,7 @@ export class DevApi {
       b.vx = 0;
       b.vz = 0;
     });
+    this.logAction('teleport_bots', { preset, count: bots.length });
   }
 
   private computePresetPositions(preset: 'center' | 'corners' | 'line' | 'bunch', n: number) {
@@ -318,6 +449,11 @@ export class DevApi {
     const e: GameplayEvent = { t: performance.now(), type, actor, details };
     this.eventLog.push(e);
     if (this.eventLog.length > this.MAX_EVENTS) this.eventLog.shift();
+    // Recording keeps every event uncapped — the live panel is a separate
+    // circular buffer just for display.
+    if (this.recording) {
+      this.recording.events.push({ ...e });
+    }
   }
 
   getEventLog(): GameplayEvent[] {
@@ -346,6 +482,7 @@ export class DevApi {
     this.sampleFrame(dt);
     this.pollGameplayEvents();
     this.pollArenaEvents();
+    this.tickRecording(dt);
   }
 
   private sampleFrame(dt: number): void {
@@ -437,6 +574,188 @@ export class DevApi {
   }
 
   // -------------------------------------------------------------------------
+  // Recording — exhaustive match trace + JSON/MD export
+  // -------------------------------------------------------------------------
+
+  /** Start a fresh recording. Any previous session is discarded — if the UI
+   *  hasn't downloaded it, it's gone. */
+  startRecording(meta: Omit<RecordingMeta, 'startedAt' | 'startedAtIso' | 'endedAt' | 'endedAtIso' | 'durationSec'>): void {
+    const now = performance.now();
+    this.recording = {
+      version: 1,
+      meta: {
+        ...meta,
+        startedAt: now,
+        startedAtIso: new Date().toISOString(),
+        endedAt: null,
+        endedAtIso: null,
+        durationSec: null,
+      },
+      events: [],
+      actions: [],
+      snapshots: [],
+      outcome: { survivor: null, reason: null },
+    };
+    this.recordingElapsedMs = 0;
+    this.lastSnapshotAt = -this.SNAPSHOT_INTERVAL_MS; // force a snapshot on tick 0
+  }
+
+  /** Mark the recording as closed (still downloadable). */
+  stopRecording(): void {
+    this.finaliseRecording('user_stopped');
+  }
+
+  isRecording(): boolean {
+    return this.recording !== null && this.recording.meta.endedAt === null;
+  }
+
+  hasRecording(): boolean {
+    return this.recording !== null;
+  }
+
+  getRecording(): RecordingSession | null {
+    return this.recording;
+  }
+
+  clearRecording(): void {
+    this.recording = null;
+  }
+
+  /** Record a lab-side action (force ability, teleport, etc). No-op if not
+   *  currently recording. Each mutating DevApi method calls this internally. */
+  private logAction(type: LabActionType, details: Record<string, unknown>): void {
+    if (!this.recording || this.recording.meta.endedAt !== null) return;
+    this.recording.actions.push({
+      t: performance.now() - this.recording.meta.startedAt,
+      matchTime: this.currentMatchTime(),
+      type,
+      details,
+    });
+  }
+
+  private currentMatchTime(): number {
+    if (this.matchStartMs === 0) return 0;
+    return (performance.now() - this.matchStartMs) / 1000;
+  }
+
+  private tickRecording(dt: number): void {
+    if (!this.recording || this.recording.meta.endedAt !== null) return;
+    this.recordingElapsedMs += dt * 1000;
+    if (this.recordingElapsedMs - this.lastSnapshotAt < this.SNAPSHOT_INTERVAL_MS) return;
+    this.lastSnapshotAt = this.recordingElapsedMs;
+    this.recording.snapshots.push(this.buildSnapshot());
+
+    // Auto-detect last-survivor end condition. We look at the current
+    // alive count; if we go from >1 to exactly 1, mark outcome immediately
+    // (before the user restarts).
+    const alive = this.game.critters.filter(c => c.alive);
+    if (alive.length === 1 && this.recording.outcome.survivor === null
+        && this.game.critters.length > 1) {
+      this.recording.outcome.survivor = alive[0].config.name;
+      this.recording.outcome.reason = 'last_standing';
+    }
+  }
+
+  private buildSnapshot(): RecordingSnapshot {
+    const rec = this.recording!;
+    const critters: CritterFrame[] = this.game.critters.map((c, i) => ({
+      index: i,
+      name: c.config.name,
+      role: c.config.role,
+      alive: c.alive,
+      lives: c.lives,
+      pos: { x: +c.x.toFixed(3), z: +c.z.toFixed(3) },
+      vel: { x: +c.vx.toFixed(3), z: +c.vz.toFixed(3) },
+      falling: c.falling,
+      immunityLeft: +c.immunityTimer.toFixed(3),
+      headbuttCooldown: +c.headbuttCooldown.toFixed(3),
+      isHeadbutting: c.isHeadbutting,
+      abilities: c.abilityStates.map(s => ({
+        name: s.def.name,
+        type: s.def.type,
+        active: s.active,
+        cooldownLeft: +s.cooldownLeft.toFixed(3),
+        windUpLeft: +s.windUpLeft.toFixed(3),
+        durationLeft: +s.durationLeft.toFixed(3),
+      })),
+      ...(i === 0 ? {} : { behaviour: c.debugBotBehaviour }),
+    }));
+    const arenaInfo = this.getArenaInfo();
+    return {
+      t: performance.now() - rec.meta.startedAt,
+      matchTime: this.currentMatchTime(),
+      critters,
+      arena: {
+        collapseLevel: arenaInfo?.collapseLevel ?? 0,
+        warningBatch: arenaInfo?.warningBatch ?? -1,
+        radius: arenaInfo?.currentRadius ?? 0,
+      },
+      perf: {
+        fps: +this.lastPerf.fps.toFixed(1),
+        frameMs: +this.lastPerf.frameMs.toFixed(2),
+        drawCalls: this.lastPerf.drawCalls,
+        triangles: this.lastPerf.triangles,
+      },
+    };
+  }
+
+  private finaliseRecording(reason: RecordingOutcome['reason']): void {
+    if (!this.recording || this.recording.meta.endedAt !== null) return;
+    const endMs = performance.now();
+    this.recording.meta.endedAt = endMs;
+    this.recording.meta.endedAtIso = new Date().toISOString();
+    this.recording.meta.durationSec = +((endMs - this.recording.meta.startedAt) / 1000).toFixed(2);
+    if (this.recording.outcome.reason === null) {
+      // Derive survivor if not already set (e.g. match timeout or manual end).
+      const alive = this.game.critters.filter(c => c.alive);
+      if (alive.length === 1) {
+        this.recording.outcome.survivor = alive[0].config.name;
+      }
+      this.recording.outcome.reason = reason;
+    }
+  }
+
+  /** Trigger a browser download of the current recording as raw JSON. */
+  downloadRecordingJSON(): void {
+    const rec = this.recording;
+    if (!rec) return;
+    const name = this.recordingFilename(rec, 'json');
+    const blob = new Blob([JSON.stringify(rec, null, 2)], { type: 'application/json' });
+    this.triggerDownload(blob, name);
+  }
+
+  /** Trigger a browser download of a human-readable MD summary. */
+  downloadRecordingMD(): void {
+    const rec = this.recording;
+    if (!rec) return;
+    const name = this.recordingFilename(rec, 'md');
+    const md = buildRecordingSummaryMD(rec);
+    const blob = new Blob([md], { type: 'text/markdown' });
+    this.triggerDownload(blob, name);
+  }
+
+  private recordingFilename(rec: RecordingSession, ext: 'json' | 'md'): string {
+    const stamp = rec.meta.startedAtIso.replace(/[:.]/g, '-').slice(0, 19);
+    const lineup = [rec.meta.playerName, ...rec.meta.botNames].slice(0, 4).join('-');
+    return `bichitos-${stamp}-${lineup}.${ext}`;
+  }
+
+  private triggerDownload(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    requestAnimationFrame(() => {
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  // -------------------------------------------------------------------------
   // Input snapshot — aggregates keyboard + gamepad state for the Input panel.
   // -------------------------------------------------------------------------
 
@@ -459,6 +778,125 @@ export class DevApi {
       gamepads,
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Recording summary — turns a session into a readable Markdown report
+// ---------------------------------------------------------------------------
+
+export function buildRecordingSummaryMD(rec: RecordingSession): string {
+  const lines: string[] = [];
+  const { meta, events, actions, snapshots, outcome } = rec;
+
+  lines.push(`# Match recording — ${meta.startedAtIso}`);
+  lines.push('');
+  lines.push('## Setup');
+  lines.push(`- **Seed**: ${meta.seed ?? '(unknown)'}`);
+  lines.push(`- **Arena pattern**: ${meta.arenaPattern}`);
+  lines.push(`- **Player**: ${meta.playerName}`);
+  lines.push(`- **Bots**: ${meta.botNames.join(', ') || '(none)'}`);
+  lines.push(`- **Started**: ${meta.startedAtIso}`);
+  lines.push(`- **Ended**: ${meta.endedAtIso ?? '(still recording)'}`);
+  lines.push(`- **Duration**: ${meta.durationSec !== null ? `${meta.durationSec.toFixed(2)}s` : '(running)'}`);
+  lines.push('');
+  lines.push('## Outcome');
+  lines.push(`- **Survivor**: ${outcome.survivor ?? '(unresolved)'}`);
+  lines.push(`- **Reason**: ${outcome.reason ?? '(unresolved)'}`);
+  lines.push('');
+
+  // Event counts by type
+  const evtCounts = new Map<string, number>();
+  for (const e of events) evtCounts.set(e.type, (evtCounts.get(e.type) ?? 0) + 1);
+  lines.push('## Events summary');
+  lines.push(`Total: ${events.length}`);
+  lines.push('');
+  lines.push('| Type | Count |');
+  lines.push('|------|-------|');
+  for (const [t, n] of [...evtCounts.entries()].sort((a, b) => b[1] - a[1])) {
+    lines.push(`| ${t} | ${n} |`);
+  }
+  lines.push('');
+
+  // Per-critter aggregates
+  interface CritterStats {
+    name: string;
+    headbutts: number;
+    abilityCasts: number;
+    falls: number;
+    respawns: number;
+    eliminatedAt: number | null;
+  }
+  const stats = new Map<string, CritterStats>();
+  const ensure = (name: string): CritterStats => {
+    let s = stats.get(name);
+    if (!s) {
+      s = { name, headbutts: 0, abilityCasts: 0, falls: 0, respawns: 0, eliminatedAt: null };
+      stats.set(name, s);
+    }
+    return s;
+  };
+  for (const e of events) {
+    if (!e.actor || e.actor === 'arena' || e.actor === 'lab') continue;
+    const s = ensure(e.actor);
+    if (e.type === 'headbutt') s.headbutts++;
+    else if (e.type === 'ability_cast') s.abilityCasts++;
+    else if (e.type === 'fall') s.falls++;
+    else if (e.type === 'respawn') s.respawns++;
+    else if (e.type === 'eliminate' && s.eliminatedAt === null) {
+      s.eliminatedAt = +((e.t - meta.startedAt) / 1000).toFixed(2);
+    }
+  }
+  if (stats.size > 0) {
+    lines.push('## Per-critter stats');
+    lines.push('');
+    lines.push('| Critter | Headbutts | Abilities | Falls | Respawns | Eliminated at |');
+    lines.push('|---------|-----------|-----------|-------|----------|---------------|');
+    for (const s of stats.values()) {
+      const elim = s.eliminatedAt !== null ? `${s.eliminatedAt}s` : '—';
+      lines.push(`| ${s.name} | ${s.headbutts} | ${s.abilityCasts} | ${s.falls} | ${s.respawns} | ${elim} |`);
+    }
+    lines.push('');
+  }
+
+  // Lab actions
+  if (actions.length > 0) {
+    lines.push('## Lab actions');
+    lines.push('');
+    lines.push('| t (s) | matchTime | type | details |');
+    lines.push('|-------|-----------|------|---------|');
+    for (const a of actions) {
+      const tSec = (a.t / 1000).toFixed(2);
+      const det = JSON.stringify(a.details);
+      lines.push(`| ${tSec} | ${a.matchTime.toFixed(2)} | ${a.type} | \`${det}\` |`);
+    }
+    lines.push('');
+  }
+
+  // Arena collapse timeline
+  const collapses = events.filter(e => e.type === 'collapse_batch' || e.type === 'collapse_warn');
+  if (collapses.length > 0) {
+    lines.push('## Arena collapse timeline');
+    lines.push('');
+    for (const e of collapses) {
+      const tSec = ((e.t - meta.startedAt) / 1000).toFixed(2);
+      lines.push(`- t=${tSec}s · ${e.type} · ${e.details ?? ''}`);
+    }
+    lines.push('');
+  }
+
+  // Sampling stats
+  lines.push('## Sampling');
+  lines.push(`- Snapshots: ${snapshots.length} (every ~200ms)`);
+  lines.push(`- Events captured: ${events.length}`);
+  lines.push(`- Lab actions: ${actions.length}`);
+  if (snapshots.length > 0) {
+    const fps = snapshots.map(s => s.perf.fps).filter(v => v > 0);
+    const avg = fps.length ? (fps.reduce((a, b) => a + b, 0) / fps.length) : 0;
+    const min = fps.length ? Math.min(...fps) : 0;
+    lines.push(`- FPS avg: ${avg.toFixed(1)} · min: ${min.toFixed(1)}`);
+  }
+
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------

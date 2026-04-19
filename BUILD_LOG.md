@@ -1342,3 +1342,66 @@ gamepad) that was going to bloat `Game` fast. Added a DevApi layer.
 - `__devApi.getEventLog()` — last 60 events (timestamp + type + actor).
 
 Sidebar surfaces all of the above as buttons/dropdowns too.
+
+---
+
+## 2026-04-19 — Lab v2.1: dropdown fix + full match recorder + DEV_TOOLS.md
+
+### What changed
+
+1. **Fix**: individual bot dropdowns in the Bots panel never opened. Root
+   cause: `refreshBotsPanel` called `innerHTML = ''` every 250 ms and
+   recreated every `<select>`, so the browser tore down the dropdown
+   before it could render. Rewritten to cache row elements per
+   `bot.index`, only update state on the existing DOM, and skip
+   overwriting a select's `value` while it has focus (would close the
+   open dropdown). Added the same guard pattern to any future panel
+   that renders live lists with interactive widgets.
+2. **Exhaustive match recorder** inside `DevApi`:
+   - Session auto-starts with each `startMatch`. Previous session (if
+     not downloaded) is overwritten.
+   - Captures: every `GameplayEvent` (uncapped), every `LabAction`
+     (force_ability, teleport_player, teleport_bots,
+     set_bot_behaviour, set_all_bots_behaviour, reset_cooldowns,
+     force_seed, set_speed, end_match), and one `RecordingSnapshot`
+     every 200 ms with every critter's full state (pos/vel/lives/
+     abilities/behaviour/etc), arena (collapseLevel/warning/radius) and
+     perf (fps/frameMs/drawCalls/triangles).
+   - Outcome auto-detected: `last_standing` when alive count drops to 1,
+     `user_stopped` when `endMatch` is called, `match_timeout` when
+     finalised without a survivor emerging.
+   - Two download buttons in the sidebar: **Download JSON** (raw dump)
+     + **Download MD** (human summary with events-by-type table,
+     per-critter stats, arena timeline, lab actions, sampling stats).
+   - Filename pattern: `bichitos-<ISO>-<player>-<bot1>-<bot2>-<bot3>.<ext>`.
+   - Typical session size: 0.5–1.5 MB JSON for a 90 s match.
+3. **`DEV_TOOLS.md`** added — single source of truth for the lab's
+   architecture, panels, event types, recording format, how to extend,
+   safety boundaries and TODOs. Living document: updated whenever the
+   lab grows.
+
+### Files created
+- `DEV_TOOLS.md`
+
+### Files changed
+- `src/tools/dev-api.ts` — new types (RecordingSession, RecordingSnapshot,
+  LabAction, RecordingMeta, RecordingOutcome, CritterFrame,
+  LabActionType), recorder fields, `startRecording/stopRecording/
+  isRecording/hasRecording/getRecording/clearRecording/
+  downloadRecordingJSON/downloadRecordingMD`, snapshot sampling on
+  `tick`, auto-outcome detection, per-mutation `logAction` calls,
+  `buildRecordingSummaryMD` exported helper.
+- `src/tools/sidebar.ts` — bot dropdown fix (DOM caching), new
+  Recording panel, refresh function wired to the slow interval.
+- `BUILD_LOG.md` — this entry.
+- `NEXT_STEPS.md` — pointer to `DEV_TOOLS.md`.
+
+### Verification
+- Typecheck clean.
+- Build clean (tools chunk ~40–42 kB expected after recorder weight;
+  main game bundle unchanged).
+- Manual checklist: open `/tools.html`, start a match, verify
+  individual bot dropdowns open and changes apply, watch the
+  Recording panel count events/actions/snapshots, let the match end,
+  click `Download JSON` → verify filename + contents, click
+  `Download MD` → verify summary renders.

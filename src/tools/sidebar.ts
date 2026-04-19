@@ -387,6 +387,18 @@ export function mountLabSidebar(devApi: DevApi): void {
   const botListEl = document.createElement('div');
   bots.appendChild(botListEl);
 
+  // ---- Recording --------------------------------------------------------
+  // Auto-starts with each match. User downloads when they want to analyse.
+  const recording = section(root, 'Recording');
+  const recStatus = document.createElement('div');
+  recStatus.className = 'lab-info';
+  recording.appendChild(recStatus);
+  const recBtns = row(recording);
+  button(recBtns, 'Stop', () => { devApi.stopRecording(); refreshRecordingPanel(); });
+  button(recBtns, 'Download JSON', () => devApi.downloadRecordingJSON(), 'primary');
+  button(recBtns, 'Download MD', () => devApi.downloadRecordingMD());
+  button(recBtns, 'Clear', () => { devApi.clearRecording(); refreshRecordingPanel(); });
+
   // ---- Gameplay (priority #2) ------------------------------------------
   const gameplay = section(root, 'Gameplay');
   // Cooldowns live readout
@@ -534,6 +546,34 @@ export function mountLabSidebar(devApi: DevApi): void {
     refreshEventLog();
     refreshPerfPanel();
     refreshInputPanel();
+    refreshRecordingPanel();
+  }
+
+  function refreshRecordingPanel(): void {
+    const rec = devApi.getRecording();
+    if (!rec) {
+      recStatus.textContent = [
+        'status   no recording',
+        'hint     starts automatically with each match',
+      ].join('\n');
+      return;
+    }
+    const live = devApi.isRecording();
+    const dur = live
+      ? ((performance.now() - rec.meta.startedAt) / 1000).toFixed(1)
+      : (rec.meta.durationSec ?? 0).toFixed(1);
+    recStatus.textContent = [
+      `status   ${live ? 'RECORDING' : 'closed'}`,
+      `started  ${rec.meta.startedAtIso}`,
+      `player   ${rec.meta.playerName}`,
+      `bots     ${rec.meta.botNames.join(', ') || '(none)'}`,
+      `seed     ${rec.meta.seed ?? '-'}`,
+      `duration ${dur}s`,
+      `events   ${rec.events.length}`,
+      `actions  ${rec.actions.length}`,
+      `samples  ${rec.snapshots.length}`,
+      `outcome  ${rec.outcome.survivor ?? '-'} (${rec.outcome.reason ?? 'pending'})`,
+    ].join('\n');
   }
 
   function refreshInfoPanel(): void {
@@ -587,38 +627,81 @@ export function mountLabSidebar(devApi: DevApi): void {
     }
   }
 
+  // Bot rows are kept ALIVE across refreshes. Recreating them every tick
+  // destroys the <select> element while the user has the dropdown open,
+  // which the browser interprets as "close the dropdown". Previous bug:
+  // individual bot dropdowns never opened because they were nuked ~4×/sec.
+  interface BotRowEls {
+    row: HTMLDivElement;
+    sel: HTMLSelectElement;
+    name: HTMLSpanElement;
+  }
+  const botRowEls = new Map<number, BotRowEls>();
+  let botEmptyEl: HTMLElement | null = null;
+
   function refreshBotsPanel(): void {
     const list = devApi.getBotSnapshots();
-    botListEl.innerHTML = '';
+
     if (list.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'lab-note';
-      empty.textContent = '(no bots in current match)';
-      botListEl.appendChild(empty);
+      // Remove any stale rows, show empty placeholder.
+      for (const { row } of botRowEls.values()) row.remove();
+      botRowEls.clear();
+      if (!botEmptyEl) {
+        botEmptyEl = document.createElement('div');
+        botEmptyEl.className = 'lab-note';
+        botEmptyEl.textContent = '(no bots in current match)';
+        botListEl.appendChild(botEmptyEl);
+      }
       return;
     }
+    if (botEmptyEl) {
+      botEmptyEl.remove();
+      botEmptyEl = null;
+    }
+
+    const seen = new Set<number>();
     for (const b of list) {
-      const rowEl = document.createElement('div');
-      rowEl.className = 'lab-bot-row' + (b.alive ? '' : ' dead');
-      const dot = document.createElement('span');
-      dot.className = 'bot-dot';
-      rowEl.appendChild(dot);
-      const name = document.createElement('span');
-      name.className = 'bot-name';
-      name.textContent = `${b.index} · ${b.name}`;
-      rowEl.appendChild(name);
-      const sel = document.createElement('select');
-      for (const opt of BOT_BEHAVIOURS) {
-        const op = document.createElement('option');
-        op.value = opt; op.textContent = opt;
-        sel.appendChild(op);
+      seen.add(b.index);
+      let cached = botRowEls.get(b.index);
+      if (!cached) {
+        const rowEl = document.createElement('div');
+        const dot = document.createElement('span');
+        dot.className = 'bot-dot';
+        rowEl.appendChild(dot);
+        const nameEl = document.createElement('span');
+        nameEl.className = 'bot-name';
+        rowEl.appendChild(nameEl);
+        const sel = document.createElement('select');
+        for (const opt of BOT_BEHAVIOURS) {
+          const op = document.createElement('option');
+          op.value = opt; op.textContent = opt;
+          sel.appendChild(op);
+        }
+        sel.addEventListener('change', () => {
+          devApi.setBotBehaviour(b.index, sel.value as BotBehaviourTag);
+        });
+        rowEl.appendChild(sel);
+        botListEl.appendChild(rowEl);
+        cached = { row: rowEl, sel, name: nameEl };
+        botRowEls.set(b.index, cached);
       }
-      sel.value = b.behaviour;
-      sel.addEventListener('change', () => {
-        devApi.setBotBehaviour(b.index, sel.value as BotBehaviourTag);
-      });
-      rowEl.appendChild(sel);
-      botListEl.appendChild(rowEl);
+      // Update state on the SAME DOM nodes (no recreation).
+      cached.row.className = 'lab-bot-row' + (b.alive ? '' : ' dead');
+      cached.name.textContent = `${b.index} · ${b.name}`;
+      // Only overwrite the select's value when it's NOT focused. If the user
+      // has the dropdown open, programmatic assignment would close it.
+      if (document.activeElement !== cached.sel) {
+        cached.sel.value = b.behaviour;
+      }
+    }
+
+    // Drop rows for bots that no longer exist (e.g. match ended / restarted).
+    for (const idx of Array.from(botRowEls.keys())) {
+      if (!seen.has(idx)) {
+        const { row } = botRowEls.get(idx)!;
+        row.remove();
+        botRowEls.delete(idx);
+      }
     }
   }
 
@@ -825,6 +908,7 @@ export function mountLabSidebar(devApi: DevApi): void {
     refreshArenaPanel();
     refreshInfoPanel();
     refreshBotsPanel();
+    refreshRecordingPanel();
   }, 250);
   // First paint
   setTimeout(() => {
