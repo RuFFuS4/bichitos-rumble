@@ -4,3 +4,7 @@ dist
 *.local
 
 .vercel
+
+# Copied from game's public/models/critters/ by mesh2motion's prebuild
+# hook. Not a source of truth — regenerated on every build/dev run.
+mesh2motion/static/models/critters/

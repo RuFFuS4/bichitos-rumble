@@ -17,7 +17,10 @@
 - **Vite** v6.2 — multi-entry bundler (`index.html` = game,
   `tools.html` = internal dev lab). Static assets from `public/`
   served before the SPA rewrite so `/tools.html` resolves.
-- **tsc** — type checking (noEmit) for both client and server targets
+- **tsc** — type checking (noEmit) for both client and server targets.
+- **`mesh2motion/` subpackage** — separate Vite 8 build that lands its
+  output in `public/animations/`, so the main game's build copies it
+  straight into `dist/animations/`. See `mesh2motion/README-INTEGRATION.md`.
 
 ## Deployment
 - **Vercel** — client CI/CD and hosting (autodeploy from `main`)
@@ -37,12 +40,24 @@
 - **Tripo AI** — 3D character models. All 9 playable critters
   (`public/models/critters/*.glb`) were generated and iterated there.
   Models imported as GLB + scaled in-engine via `src/model-loader.ts`.
-  Procedural animation layer (`src/critter-animation.ts`) adds idle
-  bob, run bounce, lean, sway and headbutt pose on top of the static
-  meshes — no bones, no rigged animations yet.
+- **Mesh2Motion** (integrated as `/animations` internal lab, subpackage
+  `mesh2motion/`) — open-source (MIT code + CC0 assets) web tool for
+  rigging models and exporting animated GLBs. Adapted with a roster
+  picker that preloads our 9 critters + suggests an appropriate rig
+  per critter. The exported GLB drops into `public/models/critters/`
+  and the game's `SkeletalAnimator` picks up the clips automatically.
+- **Tripo Animate** (external, optional) — used for critters whose
+  morphology doesn't map cleanly to Mesh2Motion's rig templates
+  (Shelly turtle, Kermit frog, Sihans mole).
+
+Base animation layer is **procedural** (`src/critter-animation.ts`):
+idle bob, run bounce, lean, sway, squash/stretch derived from each
+critter's mass+speed. Skeletal clips from Mesh2Motion / Tripo Animate
+layer on top via `src/critter-skeletal.ts`.
 
 Everything AI-generated is exported as static assets that ship with
-the bundle. No runtime calls to Suno or Tripo from the game.
+the bundle. No runtime calls to Suno, Tripo or any other AI service
+from the shipped build.
 
 ## Architecture — client
 Game code lives in `src/`:

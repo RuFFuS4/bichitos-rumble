@@ -1,0 +1,94 @@
+import { type Bone } from 'three'
+
+/**
+ * Classifies bones into categories that determine smoothing behavior.
+ * - torso: spine, chest, neck — gets wider multi-ring smoothing
+ * - limb: arms, legs — gets directional child-only smoothing
+ * - extremity: hands, feet, fingers, toes — minimal smoothing
+ * - other: root, head, unclassified — default smoothing
+ */
+export enum BoneCategory {
+  Torso = 'torso',
+  Limb = 'limb',
+  Extremity = 'extremity',
+  Other = 'other'
+}
+
+export class BoneClassifier {
+  private readonly bone_categories = new Map<number, BoneCategory>()
+
+  constructor (bones: Bone[]) {
+    this.classify_all_bones(bones)
+  }
+
+  public get_category (bone_index: number): BoneCategory {
+    return this.bone_categories.get(bone_index) ?? BoneCategory.Other
+  }
+
+  /**
+   * Returns true if the bone pair represents a parent-child relationship
+   * where smoothing should only flow toward the child direction.
+   * This prevents elbow movement from deforming the bicep.
+   */
+  public is_limb_boundary (bone_index_a: number, bone_index_b: number): boolean {
+    const cat_a = this.get_category(bone_index_a)
+    const cat_b = this.get_category(bone_index_b)
+    return cat_a === BoneCategory.Limb || cat_b === BoneCategory.Limb
+  }
+
+  /**
+   * Returns true if the boundary between two bones should get
+   * wider multi-ring smoothing (torso regions).
+   */
+  public is_torso_boundary (bone_index_a: number, bone_index_b: number): boolean {
+    const cat_a = this.get_category(bone_index_a)
+    const cat_b = this.get_category(bone_index_b)
+    // At least one side must be torso, and neither side should be extremity
+    return (cat_a === BoneCategory.Torso || cat_b === BoneCategory.Torso) &&
+           cat_a !== BoneCategory.Extremity && cat_b !== BoneCategory.Extremity
+  }
+
+  private classify_all_bones (bones: Bone[]): void {
+    bones.forEach((bone, idx) => {
+      const category = this.classify_bone(bone)
+      this.bone_categories.set(idx, category)
+    })
+  }
+
+  private classify_bone (bone: Bone): BoneCategory {
+    const name = bone.name.toLowerCase()
+
+    // Torso bones: spine, chest, hips, pelvis, neck, wings, tails
+    // tails and feathers aren't technically torso, but we want
+    // to give them more smoothing since they aren't as rigid
+    const torso_keywords = [
+      'spine', 'chest', 'hips', 'pelvis', 'neck', 'torso', 'abdomen', 'body',
+      'wing', 'feather', 'tail'
+    ]
+    if (torso_keywords.some(kw => name.includes(kw))) {
+      return BoneCategory.Torso
+    }
+
+    // Extremity bones: hands, feet, fingers, toes
+    const extremity_keywords = [
+      'hand', 'foot', 'toe', 'ball',
+      'thumb', 'index', 'middle', 'ring', 'pinky', 'finger',
+      'mouth', 'jaw', 'eye', 'tongue'
+    ]
+    if (extremity_keywords.some(kw => name.includes(kw))) {
+      return BoneCategory.Extremity
+    }
+
+    // Limb bones: upper/lower arms, thighs, calves, shoulders
+    const limb_keywords = [
+      'arm', 'upperarm', 'lowerarm', 'forearm', 'elbow', 'wrist',
+      'shoulder', 'clavicle',
+      'thigh', 'calf', 'shin', 'knee', 'leg', 'upleg', 'lowleg'
+    ]
+    if (limb_keywords.some(kw => name.includes(kw))) {
+      return BoneCategory.Limb
+    }
+
+    return BoneCategory.Other
+  }
+}

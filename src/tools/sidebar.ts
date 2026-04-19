@@ -623,11 +623,24 @@ export function mountLabSidebar(devApi: DevApi): void {
       .catch(() => {});
   });
 
-  // ---- Footer note ------------------------------------------------------
+  // ---- Footer note + sibling-tool links --------------------------------
   const note = document.createElement('div');
   note.className = 'lab-note';
-  note.textContent = '/tools.html · internal · unlinked from production UI · noindex';
+  note.innerHTML = '/tools.html · internal · unlinked from production UI · noindex';
   root.appendChild(note);
+
+  // Sibling internal tool discoverability. Keep adding tools here as they
+  // appear; the list is short on purpose — these are dev surfaces, not
+  // player-facing UI.
+  const siblingLinks = document.createElement('div');
+  siblingLinks.className = 'lab-note';
+  siblingLinks.style.marginTop = '2px';
+  siblingLinks.innerHTML =
+    'Other internal tools: ' +
+    '<a href="/animations" target="_blank" rel="noopener" ' +
+    'style="color:#ffdc5c;text-decoration:none;">🎬 /animations</a> ' +
+    '<span style="opacity:0.55">(mesh2motion-based animation lab)</span>';
+  root.appendChild(siblingLinks);
 
   // =======================================================================
   // Live panel refresh functions

@@ -6,6 +6,11 @@ el lab se vuelve ilegible para quien entre después.
 
 ---
 
+> **Sibling tool**: [`/animations`](../mesh2motion/README-INTEGRATION.md) — animation
+> lab based on Mesh2Motion. Internal, same `noindex` posture, used to
+> rig the critters and generate skeletal clips that the game's skeletal
+> loader picks up. Linked from the bottom of this sidebar.
+
 ## Propósito
 
 El lab es un entorno **interno** (no para jugadores) que reutiliza el

@@ -1974,6 +1974,127 @@ with no behaviour change.
 
 ---
 
+## 2026-04-19 — Mesh2Motion integrated as `/animations` internal lab
+
+User asked for a self-hosted, in-browser animation pipeline to cover
+the "90% AI-ready" jam rule without forcing a Mixamo + Blender
+round-trip per critter. Found
+[Mesh2Motion](https://github.com/Mesh2Motion/mesh2motion-app) — an
+MIT-licensed, CC0-asset, TypeScript + Vite web app that exactly
+matches our stack. Integrated as a subpackage.
+
+### Arquitectura
+
+- New `mesh2motion/` folder in the repo. Source code is a light fork
+  (three tweaks only — see below); upstream can still be diffed +
+  merged manually.
+- Its own `package.json` and `node_modules` (git-ignored). Its `npm
+  run build` writes **directly to `../public/animations/`** via a
+  tweaked `outDir` and `base: '/animations/'`. The parent project's
+  normal `public/` → `dist/` pass then ships it at `/animations/*`
+  when Vercel serves dist.
+- `mesh2motion/README-INTEGRATION.md` spells out the three upstream
+  deltas + update workflow.
+
+### Upstream tweaks (minimal, localised)
+
+1. **`vite.config.js`** — `outDir: '../../public/animations'`,
+   `base: '/animations/'`, dropped the Cloudflare-specific
+   `PROCESS_ENV` define, dev port 5174 so it runs in parallel with
+   the game at 5173.
+2. **`src/environment.js`** — no-op replacement for the former
+   Cloudflare build globals.
+3. **`src/create.html`, `src/index.html`, `src/retarget/index.html`**
+   — Bichitos Rumble banner (INTERNAL, red, fixed at the top),
+   `<meta name="robots" content="noindex, nofollow">`, title change,
+   "← back to game" link.
+
+No changes to Mesh2MotionEngine.ts or any internal library code.
+
+### Custom additions
+
+- **`src/BichitosRosterPicker.ts`** — injects a grid of our 9 critters
+  above Mesh2Motion's load-model tools on `create.html`. Each card
+  shows the critter's colour + name + suggested rig. Click → adds an
+  `<option>` to `#model-selection`, selects it, dispatches click on
+  `#load-model-button` (reusing Mesh2Motion's existing load path).
+  A rAF-based watcher preselects the suggested rig on
+  `#skeleton-selection` once it populates. Zero monkey-patching of
+  Mesh2Motion internals.
+- **`scripts/copy-game-assets.mjs`** — pre-dev and pre-build hook that
+  mirrors `../public/models/critters/` into
+  `mesh2motion/static/models/critters/`. Makes the roster picker work
+  in both dev (5174) and production. `static/models/critters/` is
+  `.gitignore`d since it's regenerated.
+
+### Suggested rig mapping (per critter)
+
+Determined by shape + skeleton templates Mesh2Motion provides:
+
+| Critter | Rig | Coverage |
+|---|---|---|
+| Sergei | `human` | ⭐ great match |
+| Kurama | `fox` | ⭐ direct match |
+| Cheeto | `fox` | ⭐ quadruped feline |
+| Kowalski | `bird` | 🟡 may need `human` for richer animation set |
+| Trunk | `kaiju` | 🟡 closest heavy quadruped |
+| Sebastian | `spider` | 🟡 multi-leg arthropod |
+| Shelly | `kaiju` | ⚠️ no good match, Tripo Animate recommended |
+| Kermit | `human` | ⚠️ forced, Tripo Animate recommended |
+| Sihans | `human` | ⚠️ forced, Tripo Animate recommended |
+
+The hover tooltip on each card carries the "why this rig" note.
+
+### Discoverability
+
+- `/tools.html` sidebar now carries a footer link to `/animations` so
+  the two internal labs are reachable from each other.
+- `vercel.json` rewrites `/animations` and `/animations/` to
+  `/animations/create.html` (the Use-Your-Model page) since that's
+  the primary working entry. `/animations/index.html` (marketing /
+  explore) and `/animations/retarget/index.html` remain reachable.
+
+### Docs
+
+- `STACK.md` → Mesh2Motion listed under AI-assisted content
+  generation alongside Suno and Tripo. Build section notes the
+  subpackage.
+- `ASSET_PIPELINE.md` → new "Preferred tool: `/animations` (Mesh2Motion
+  integrated)" section with the workflow and rig mapping. Mixamo +
+  Blender kept as fallback.
+- `DEV_TOOLS.md` → cross-reference to the animation lab at the top.
+- `mesh2motion/README-INTEGRATION.md` → new, explains every
+  upstream delta + update workflow.
+
+### Verification
+
+- `cd mesh2motion && npm install` clean (411 packages, 11s).
+- `cd mesh2motion && npm run build` clean. Output lands in
+  `../public/animations/` with the expected 3 entry HTMLs + chunks.
+- Main game `npx tsc --noEmit` clean.
+- Main game `npm run build` clean. Main bundle still 3.08 kB;
+  `tools-*.js` +0.33 kB for the sibling link; the 38 MB of animation
+  rigs + static assets end up under `dist/animations/` and are
+  served statically by Vercel — they never touch the game's JS
+  bundle.
+- **Manual validation pending** from the user at `/animations` on
+  the deployed site.
+
+### Known limitations
+
+- Upstream updates require a manual diff-and-merge pass since we don't
+  use git subtree/submodule. Upstream changes rarely, and our deltas
+  are small and well-localised.
+- The `static/` assets from upstream (~32 MB of prebuilt rigs and
+  animations) ride along in `dist/animations/` on every deploy.
+  Only served on demand when someone hits `/animations`; no impact
+  on the game's startup.
+- 3 critters (Shelly, Kermit, Sihans) don't have a native Mesh2Motion
+  rig that fits their morphology. They'll need Tripo Animate or a
+  custom skeleton.
+
+---
+
 ## 2026-04-19 — Pre-collapse shake + seismic rumble (replaces red blink)
 
 User's request: replace the red blink warning with a small localised

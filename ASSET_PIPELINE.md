@@ -193,6 +193,57 @@ heavy clips (victory, defeat, ability, headbutt lunge, fall, hit).
 Critters without skeletal clips are **not broken**: `skeletal === null`
 and the procedural layer handles 100% of the motion like before.
 
+## Preferred tool: `/animations` (Mesh2Motion integrated)
+
+The project ships with an internal **animation lab** at
+[`/animations`](../mesh2motion/README-INTEGRATION.md) based on
+[Mesh2Motion](https://github.com/Mesh2Motion/mesh2motion-app) (MIT code,
+CC0 animation assets). Adaptations we ship:
+
+- Roster picker with the 9 critters at the top of the Use-Your-Model
+  page. One click preloads the GLB and suggests a rig.
+- `noindex` + INTERNAL banner on every page so the lab can't leak to
+  search engines.
+- Build output lands directly in `public/animations/` so Vercel serves
+  it as `/animations/*` alongside the game.
+
+**Workflow per critter**:
+
+1. Open `https://bichitosrumble.com/animations` (or local dev — see
+   `mesh2motion/README-INTEGRATION.md`).
+2. Click the critter card. The GLB loads and the suggested rig gets
+   preselected.
+3. Adjust the bones inside the mesh (Mesh2Motion's skeleton-fit step).
+4. Pick animations from the library.
+5. Export GLB with embedded clips.
+6. Save to `public/models/critters/<id>.glb` (overwriting the non-
+   animated version).
+7. Reload the game — the console should log
+   `[Critter] skeletal animator attached: <Name> | clips: ...`.
+
+**Suggested rig mapping** (preset in the roster picker):
+
+| Critter | Rig | Notes |
+|---|---|---|
+| Sergei (gorilla) | `human` | Clean match. |
+| Kurama (fox) | `fox` | Direct match. |
+| Cheeto (tiger) | `fox` | Both quadruped felines. |
+| Kowalski (penguin) | `bird` | Try `human` if `bird` feels limited. |
+| Trunk (elephant) | `kaiju` | Closest heavy quadruped. |
+| Sebastian (crab) | `spider` | Multi-leg arthropod. |
+| Shelly (turtle) | `kaiju` | No great match. Consider Tripo Animate. |
+| Kermit (frog) | `human` | Forced. Consider Tripo Animate. |
+| Sihans (mole) | `human` | Forced. Consider Tripo Animate. |
+
+The three marked "Consider Tripo Animate" don't have a native rig —
+`human`/`kaiju` work but results are weak. For those, Tripo Animate
+(external tool) gives better output.
+
+## Fallback: Mixamo + Blender (older workflow)
+
+Kept as reference in case the Mesh2Motion library doesn't cover an
+edge case.
+
 ## Supported sources
 
 | Tool | Good for | Notes |

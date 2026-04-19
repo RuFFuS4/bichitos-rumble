@@ -4,6 +4,8 @@
   "outputDirectory": "dist",
   "devCommand": "npm run dev",
   "rewrites": [
+    { "source": "/animations", "destination": "/animations/create.html" },
+    { "source": "/animations/", "destination": "/animations/create.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
