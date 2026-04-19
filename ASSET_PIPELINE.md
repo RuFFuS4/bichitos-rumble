@@ -335,6 +335,29 @@ Hands-on time is limited. Ship this order for maximum visible impact:
 7. `ability_1/2/3` — signature moves, the showpiece.
 8. `walk`, `respawn`, `headbutt_anticip` — nice-to-have.
 
+## Quick audit: `verify-critter-glbs.mjs`
+
+Offline, read-only report. Opens every GLB under
+`public/models/critters/` and prints, per file, which clips it ships
+and which logical `SkeletalState` each one resolves to using the same
+keyword map as `src/critter-skeletal.ts`. Also flags "orphan" clips
+whose names don't match any keyword — usually a renaming problem.
+
+```bash
+# Full report:
+node scripts/verify-critter-glbs.mjs
+
+# Just one file:
+node scripts/verify-critter-glbs.mjs public/models/critters/sergei.glb
+
+# CI gate — exits 1 if any GLB resolves zero priority clips:
+node scripts/verify-critter-glbs.mjs --strict
+```
+
+Useful before and after every round-trip through `/animations` to see
+at a glance which critters are animated and which still rely 100% on
+the procedural layer.
+
 ## Validation Checklist (per animated GLB)
 
 - [ ] File size still under 500 KB (animations are small, shouldn't
