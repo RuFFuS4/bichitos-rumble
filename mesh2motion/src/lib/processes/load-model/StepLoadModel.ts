@@ -121,8 +121,19 @@ export class StepLoadModel extends EventTarget {
     if (child.geometry.attributes.position.isInterleavedBufferAttribute) {
       // console.log('reading interleaved geometry for child mesh. Converting', child.geometry)
       geometry_to_add.setAttribute('position', child.geometry.attributes.position.clone())
-      geometry_to_add.setAttribute('normal', child.geometry.attributes.normal.clone())
-      geometry_to_add.setAttribute('uv', child.geometry.attributes.uv.clone())
+
+      // [BICHITOS-FORK] normal/uv are not guaranteed to exist on every GLB.
+      // Tripo3D exports ship POSITION + TEXCOORD_0 only (no NORMAL). Without
+      // these guards the lab threw `Cannot read properties of undefined
+      // (reading 'clone')` silently on critter load ("click bichito = no-op"
+      // symptom). computeVertexNormals() fills the gap on the cloned
+      // low-poly geometry when the source lacks normals.
+      if (child.geometry.attributes.normal !== undefined) {
+        geometry_to_add.setAttribute('normal', child.geometry.attributes.normal.clone())
+      }
+      if (child.geometry.attributes.uv !== undefined) {
+        geometry_to_add.setAttribute('uv', child.geometry.attributes.uv.clone())
+      }
 
       // set uv2 if it exists
       if (child.geometry.attributes.uv2 !== undefined) {
@@ -137,6 +148,14 @@ export class StepLoadModel extends EventTarget {
         geometry_to_add.deleteAttribute('skinWeight')
       }
     }
+
+    // [BICHITOS-FORK] if the source had no normals at all (not just when
+    // interleaved), recompute them here so every downstream step (weight
+    // paint, skinning, preview shading) has a valid attribute to read.
+    if (geometry_to_add.attributes.normal === undefined) {
+      geometry_to_add.computeVertexNormals()
+    }
+
     return geometry_to_add
   }
 

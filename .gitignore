@@ -5,6 +5,9 @@ dist
 
 .vercel
 
+# Per-user Claude Code permissions — each developer has their own.
+.claude/settings.local.json
+
 # Copied from game's public/models/critters/ by mesh2motion's prebuild
 # hook. Not a source of truth — regenerated on every build/dev run.
 mesh2motion/static/models/critters/

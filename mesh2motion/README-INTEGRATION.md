@@ -111,7 +111,7 @@ mesh2motion/
   static/                      ← CC0 rigs + animations (shipped as-is)
 ```
 
-### Edits vs upstream (total: 4 files)
+### Edits vs upstream (total: 6 files)
 
 1. **`vite.config.js`** (5 lines changed):
    - `base: '/animations/'`
@@ -128,6 +128,30 @@ mesh2motion/
    adaptation layer. Hooks into upstream DOM via `#model-selection`,
    `#load-model-button`, `#export-button`, `#download-hidden-link` —
    no JS-level monkey-patching of mesh2motion internals.
+5. **`src/lib/processes/load-model/StepLoadModel.ts`** — defensive
+   guards in `build_geometry_list_from_mesh`. Upstream unconditionally
+   calls `.normal.clone()` / `.uv.clone()` on interleaved geometry;
+   Tripo3D sources export `POSITION + TEXCOORD_0` only (no NORMAL),
+   which made the lab crash silently on critter load with
+   `Cannot read properties of undefined (reading 'clone')`. Fork now
+   checks each attribute before cloning and calls
+   `computeVertexNormals()` on the output geometry when normals are
+   absent. Marked with `[BICHITOS-FORK]` comments so upstream merges
+   are easy to re-port. Proposing this fix upstream is a good idea.
+6. **`src/lib/CustomSkeletonHelper.ts`** — two small fixes for the
+   "draggable joint dots never appear in Position Joints / Edit
+   Skeleton" bug:
+   - Texture URL is now relative (`images/skeleton-joint-point.png`)
+     instead of absolute (`/images/...`), so it resolves correctly
+     under the `/animations/` base path in both dev and prod.
+   - `joint_points.frustumCulled = false` (and on the parent
+     LineSegments). In mirror mode, upstream writes `NaN` into the
+     right-side joint positions; three.js then lazily computes a
+     bounding sphere with radius NaN and treats the whole Points mesh
+     as out-of-frustum — no dots ever render. Disabling culling lets
+     WebGL handle the NaN positions per-vertex while the valid joints
+     still draw. Also marked with `[BICHITOS-FORK]`. Also a good
+     upstream contribution.
 
 Every other file is unchanged from upstream. Merging a new mesh2motion
 release is a manual diff-and-port on these 4 files plus the usual

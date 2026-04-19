@@ -91,6 +91,13 @@ let currentCritter: RosterEntry | null = null;
 
 const PANEL_CSS = `
 #bichitos-roster-panel {
+  /* max-width keeps the panel from pushing #tool-panel into the canvas.
+     Without it, the 3-column card grid stretches to whatever width the
+     tool-panel has available, and the tool-panel grows to fit, which ends
+     up covering ~65% of the viewport and hiding the 3D scene where the
+     critter mesh and skeleton joints render. 340px fits 3 columns of
+     ~100px cards comfortably and leaves the canvas free. */
+  max-width: 340px;
   background: rgba(231, 76, 60, 0.07);
   border: 1px solid rgba(231, 76, 60, 0.4);
   border-radius: 8px;
