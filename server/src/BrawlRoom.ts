@@ -185,6 +185,23 @@ export class BrawlRoom extends Room<GameState> {
    * match an already-finished room. Idempotent — safe to call multiple
    * times (e.g. both from tick win-check and onLeave opponent-left).
    */
+  /**
+   * Pick a respawn position GUARANTEED to be on solid ground. Up to 12
+   * attempts with a radius that shrinks per try so fallbacks converge
+   * toward the immune islet at the centre, which never collapses.
+   */
+  private pickRespawnPos(): [number, number] {
+    const maxR = Math.max(2.0, this.arenaSim.currentRadius * 0.4);
+    for (let i = 0; i < 12; i++) {
+      const r = maxR * (1 - i / 12) + 0.5;
+      const angle = Math.random() * Math.PI * 2;
+      const x = Math.cos(angle) * r;
+      const z = Math.sin(angle) * r;
+      if (this.arenaSim.isOnArena(x, z)) return [x, z];
+    }
+    return [0, 0];
+  }
+
   private endMatch(reason: string, winnerSessionId: string = ''): void {
     if (this.state.phase === 'ended') return;
     this.state.phase = 'ended';
@@ -342,12 +359,14 @@ export class BrawlRoom extends Room<GameState> {
     for (const sid of toRespawn) {
       const p = this.state.players.get(sid);
       if (!p) continue;
-      // Respawn at arena center-ish. Use the CURRENT radius so that when
-      // rings have collapsed we still land on solid ground.
-      const angle = Math.random() * Math.PI * 2;
-      const r = this.arenaSim.currentRadius * 0.4;
-      p.x = Math.cos(angle) * r;
-      p.z = Math.sin(angle) * r;
+      // Pick a position GUARANTEED to be on solid ground. With the irregular
+      // fragment layout (esp. Pattern B axis-split), a naive angle × 0.4·r
+      // draw can land the player in the void half of the arena. We retry up
+      // to 12 times with a shrinking radius and finally fall back to the
+      // immune islet at (0, 0), which never collapses.
+      const [rx, rz] = this.pickRespawnPos();
+      p.x = rx;
+      p.z = rz;
       // Face the centre after respawn — consistent with initial spawn
       // so the player never re-enters the arena staring at the void.
       p.rotationY = Math.atan2(-p.x, -p.z);

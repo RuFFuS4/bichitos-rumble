@@ -1405,3 +1405,83 @@ Sidebar surfaces all of the above as buttons/dropdowns too.
   Recording panel count events/actions/snapshots, let the match end,
   click `Download JSON` → verify filename + contents, click
   `Download MD` → verify summary renders.
+
+---
+
+## 2026-04-19 — Lab v2.2 + respawn safety fix (client + server)
+
+### Gameplay fix: respawn in collapsed void
+
+**Bug**: after fragmenting the arena into irregular sectors (Pattern A /
+B), `pickRespawnPos` was picking `currentRadius * 0.4` with a fully
+random angle and NO `isOnArena` check. On Pattern B (axis-split) in
+particular, half of the ring is already gone at mid-match — if the
+respawn roll landed there, the critter would reappear in the void and
+fall again on the same frame.
+
+**Fix** applied to both client and server (same logic in both):
+
+- Up to 12 retries. Each retry shrinks the radius toward the immune
+  islet (r=0.5..maxR, decreasing linearly).
+- Every candidate is validated with `arena.isOnArena(x, z)` /
+  `arenaSim.isOnArena(x, z)`.
+- Last-resort fallback: `(0, 0)` — sits on the central islet which
+  never collapses, so ground is guaranteed.
+- Client: `src/game.ts` → `pickRespawnPos`.
+- Server: `server/src/BrawlRoom.ts` → new private `pickRespawnPos`
+  helper, replaces the inline angle × 0.4·r block.
+
+This benefits both offline (bots and player) and online matches.
+
+### Lab fix: recorder didn't close on last_standing
+
+**Bug**: when a match ended because the user survived (last_standing),
+the recording's `outcome.survivor` + `outcome.reason` were set but
+`finaliseRecording` was never called. Downloading the JSON/MD showed
+`Ended: (still recording)` and `Duration: (running)` even for a
+clearly-finished match.
+
+**Fix**: in `DevApi.tickRecording`, when the alive-count drops to 1 we
+now also push a `match_ended` event and call `finaliseRecording(
+'last_standing')` so the session carries correct `endedAt` +
+`durationSec` + locked event history.
+
+### Sidebar reorg: thematic groups + collapsible sections
+
+The v2.1 sidebar had 10 flat panels with only a thin heading separating
+them — the density was high and there was no visual hint about what
+each panel was for. Reorganised into 4 thematic groups with coloured
+separator bars:
+
+- **MATCH SETUP** (blue) — Matchup, Arena
+- **LIVE CONTROL** (red) — Bots, Gameplay, Playback
+- **OBSERVE** (green) — Recording, Performance, Input, Player info
+- **TUNING** (yellow) — Animation
+
+Every section is now collapsible (click header). Defaults chosen for
+the "start a match and observe" flow: Bots / Gameplay / Recording /
+Performance expanded, the rest collapsed. State is per-pageload only
+(no localStorage — deliberate simplicity).
+
+New helper `group(parent, label, kind)` in `src/tools/sidebar.ts`.
+`section(parent, title, { collapsed })` now returns the content element
+so callers keep appending the same way they did before.
+
+### Files changed
+- `src/game.ts` — `pickRespawnPos` rewritten with retry + fallback.
+- `server/src/BrawlRoom.ts` — inline respawn block replaced with new
+  `pickRespawnPos` helper; same retry + fallback strategy.
+- `src/tools/dev-api.ts` — `tickRecording` now pushes `match_ended` and
+  finalises recording on last-standing detection.
+- `src/tools/sidebar.ts` — full rewrite of the panel layout + CSS for
+  thematic groups and collapsible sections.
+- `DEV_TOOLS.md` — groups + defaults + canonical DOM-caching pattern
+  documented.
+- `BUILD_LOG.md` — this entry.
+
+### Verification
+- `npx tsc --noEmit` clean (client + server).
+- Build clean.
+- Respawn fix visually testable via lab Pattern B (axis-split): force a
+  seed that triggers pattern B, push bots to chase = eliminar uno, se
+  respawnea → debe caer en una zona válida (never in void).

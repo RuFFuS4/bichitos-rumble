@@ -810,11 +810,32 @@ export class Game {
     });
   }
 
-  /** Pick a respawn position near center that's inside the current arena. */
+  /**
+   * Pick a respawn position that is GUARANTEED to be on solid ground.
+   *
+   * Previously we just picked a random angle within `currentRadius * 0.4`,
+   * which works for concentric-ring arenas but breaks on irregular fragment
+   * layouts (especially Pattern B / axis-split, where half the arena can
+   * be fully collapsed). Critters would respawn in the void and fall again
+   * on the same frame.
+   *
+   * Strategy: up to 12 tries with a radius that SHRINKS per attempt so the
+   * first picks prefer room to breathe but fallbacks converge toward the
+   * centre, which always sits on the immune islet (never collapses).
+   * Last-resort fallback is (0, 0) — the islet guarantees ground there.
+   */
   private pickRespawnPos(): [number, number] {
-    const r = this.arena.currentRadius * 0.4;
-    const angle = Math.random() * Math.PI * 2;
-    return [Math.cos(angle) * r, Math.sin(angle) * r];
+    const arena = this.arena;
+    const maxR = Math.max(2.0, arena.currentRadius * 0.4);
+    for (let i = 0; i < 12; i++) {
+      const r = maxR * (1 - i / 12) + 0.5;
+      const angle = Math.random() * Math.PI * 2;
+      const x = Math.cos(angle) * r;
+      const z = Math.sin(angle) * r;
+      if (arena.isOnArena(x, z)) return [x, z];
+    }
+    // Immune islet — guaranteed on-arena for the whole match.
+    return [0, 0];
   }
 
   // -------------------------------------------------------------------------

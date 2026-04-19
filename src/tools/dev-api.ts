@@ -645,14 +645,19 @@ export class DevApi {
     this.lastSnapshotAt = this.recordingElapsedMs;
     this.recording.snapshots.push(this.buildSnapshot());
 
-    // Auto-detect last-survivor end condition. We look at the current
-    // alive count; if we go from >1 to exactly 1, mark outcome immediately
-    // (before the user restarts).
+    // Auto-detect last-survivor end condition. When alive count drops to 1
+    // (in a match that had >1 critters), we freeze the outcome, push a
+    // match_ended event and finalise the recording so the downloaded
+    // JSON/MD carries the correct endedAt + duration instead of
+    // "(still recording)".
     const alive = this.game.critters.filter(c => c.alive);
     if (alive.length === 1 && this.recording.outcome.survivor === null
         && this.game.critters.length > 1) {
-      this.recording.outcome.survivor = alive[0].config.name;
+      const survivor = alive[0].config.name;
+      this.recording.outcome.survivor = survivor;
       this.recording.outcome.reason = 'last_standing';
+      this.pushEvent('match_ended', 'arena', `last standing: ${survivor}`);
+      this.finaliseRecording('last_standing');
     }
   }
 

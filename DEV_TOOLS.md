@@ -112,21 +112,66 @@ porque se destruyen cada 250 ms".
 
 ## Paneles actuales
 
-Orden visual en el sidebar (top → bottom):
+Los paneles están agrupados en 4 bloques temáticos con una barra de color
+propia. Cada panel es **colapsable** (click en el header). Los defaults
+priorizan el flujo "arranca partida → observa → itera".
 
-| # | Panel       | Qué cubre                                                              |
-|---|-------------|------------------------------------------------------------------------|
-| — | Banner      | "INTERNAL DEV TOOL · not for players"                                  |
-| 1 | Matchup     | Player + 3 bots dropdown, Start / Restart same seed / Randomize / Mirror |
-| 2 | Arena       | Seed · pattern · batches · Force Seed / Replay Last / Copy Seed       |
-| 3 | Bots        | Dropdown por bot + dropdown bulk "All bots"                            |
-| 4 | Recording   | Estado + Stop / Download JSON / Download MD / Clear                    |
-| 5 | Gameplay    | Cooldowns live + Reset CDs + Force J/K/L + TP player/bots + event log  |
-| 6 | Animation   | 7 sliders sobre `animPersonality` + Reset Derived + Copy Values       |
-| 7 | Performance | FPS · frameMs · drawCalls · triangles · geo · tex · critters · fragments |
-| 8 | Input       | Move vector · held actions · teclas activas · gamepads                 |
-| 9 | Playback    | Speed slider · Pause / Slow 0.3× / Normal 1× / End Match               |
-| 10| Player info | Readout de stats del player actual                                     |
+### Grupos y orden
+
+```
+┌─ MATCH SETUP ──────┐  (azul)    config previa a la partida
+│  Matchup     [▸]   │
+│  Arena       [▸]   │
+└────────────────────┘
+┌─ LIVE CONTROL ─────┐  (rojo)    acciones DURANTE la partida
+│  Bots        [▾]   │  ← default expandido
+│  Gameplay    [▾]   │  ← default expandido
+│  Playback    [▸]   │
+└────────────────────┘
+┌─ OBSERVE ──────────┐  (verde)   paneles live read-only
+│  Recording   [▾]   │  ← default expandido
+│  Performance [▾]   │  ← default expandido
+│  Input       [▸]   │
+│  Player info [▸]   │
+└────────────────────┘
+┌─ TUNING ───────────┐  (amarillo) ajustes de grano fino
+│  Animation   [▸]   │
+└────────────────────┘
+```
+
+`[▾]` = expanded por defecto · `[▸]` = collapsed por defecto.
+
+### Qué cubre cada panel
+
+| Panel       | Contenido                                                              |
+|-------------|------------------------------------------------------------------------|
+| Matchup     | Player + 3 bots dropdown · Start / Restart same seed / Randomize / Mirror |
+| Arena       | Seed · pattern · batches · Force Seed / Replay Last / Copy Seed       |
+| Bots        | Dropdown por bot + dropdown bulk "All bots"                            |
+| Gameplay    | Cooldowns live + Reset CDs + Force J/K/L + TP player/bots + event log  |
+| Playback    | Speed slider · Pause / Slow 0.3× / Normal 1× / End Match               |
+| Recording   | Estado + Stop / Download JSON / Download MD / Clear                    |
+| Performance | FPS · frameMs · drawCalls · triangles · geo · tex · critters · fragments |
+| Input       | Move vector · held actions · teclas activas · gamepads                 |
+| Player info | Readout verbose de stats del player actual                             |
+| Animation   | 7 sliders sobre `animPersonality` + Reset Derived + Copy Values        |
+
+### Defaults y heurística de colapso
+
+Reglas que usé al decidir qué va expandido:
+
+- Lo que cambias **una vez** al inicio → colapsado (Matchup, Arena).
+- Lo que tocas **durante** la partida de forma continua → expandido
+  (Bots, Gameplay).
+- Lo que **observas** en cada partida → expandido (Recording,
+  Performance).
+- Lo **verbose** o raramente usado → colapsado (Input, Player info,
+  Animation, Playback).
+
+El estado de colapso es **per-pageload** — no se persiste. Si refresc
+as, vuelve a los defaults. Decisión intencional: una persistencia en
+localStorage habría añadido complejidad sin ganancia real para un
+lab interno.
 
 ---
 
@@ -263,15 +308,35 @@ Flujo canónico. Lee esto antes de tocar código:
 
 ### 4. Enchúfalo al sidebar
 
-- Añade el control en la sección correspondiente (o crea una nueva
-  sección con `section(root, 'X')`).
+- Elige el grupo temático donde encaja (SETUP / LIVE CONTROL / OBSERVE /
+  TUNING) y añade la sección como hijo del wrapper del grupo:
+
+  ```ts
+  const observeGroup = group(root, 'Observe', 'observe');
+  const mySec = section(observeGroup, 'My new panel');
+  ```
+
+  Si necesitas un grupo nuevo entero, añade una nueva `GroupKind` y
+  define su color en el CSS (busca `.lab-group.*` y el border-left color
+  del section para completar las 2 capas).
+
+- **Decide el default collapsed**:
+  - Expandido por defecto si el usuario lo mira **en cada partida**
+    (core live panel).
+  - Colapsado si es **setup**, **verbose**, o se usa ocasionalmente.
+  - `section(parent, 'Title', { collapsed: true })` para colapsado.
+
 - Si muestra estado live, escribe una función `refreshXxx()` y añádela:
   - al `refreshAll()` inicial.
   - al intervalo rápido (80 ms) o lento (250 ms) según cuánto cambie.
-- **Si añades un `<select>` o `<input>` que se ve en el panel**, no lo
-  recrees en el refresh. Cachea los elementos y actualiza propiedades.
-  Si lo haces mal, se dispararán los bugs de "dropdowns que no se abren"
-  o "inputs que pierden el focus cada 250 ms".
+
+- **CANÓNICO — no recrees DOM interactivo en cada refresh**. Si tu panel
+  tiene un `<select>`, `<input>`, botón con focus, etc., cachea el
+  elemento y solo actualiza sus propiedades. Destruirlo y recrearlo
+  cierra dropdowns abiertos, pierde focus, y te borra la selección del
+  usuario mid-interaction. Mira cómo lo hace `refreshBotsPanel` con su
+  `botRowEls: Map<number, BotRowEls>` y el guard
+  `document.activeElement !== cached.sel`. Ese es el patrón.
 
 ### 5. Documenta aquí
 

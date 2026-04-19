@@ -7,17 +7,16 @@
 // the game engine never gets poked from UI code directly. If a panel stops
 // working after a refactor, the failure lives in DevApi, not here.
 //
-// Panels (top to bottom):
-//   0. INTERNAL banner (visible reminder this page is a dev surface)
-//   1. Matchup     — pick player + up to 3 bots, start/restart/randomize
-//   2. Arena       — seed + pattern + batches + force/replay seed
-//   3. Bots        — per-bot behaviour dropdown + bulk apply
-//   4. Gameplay    — event log + cooldowns + force ability + teleports
-//   5. Animation   — live sliders on the player's animPersonality
-//   6. Performance — FPS / frameMs / drawcalls / tris / geo / tex / entities
-//   7. Input       — keys held + held actions + gamepad list
-//   8. Playback    — speedScale, pause/slow, end-match
-//   9. Player info — raw stat readout for the current critter
+// Layout — panels bucketed in 4 thematic groups, each collapsible:
+//
+//   [MATCH SETUP]    Matchup · Arena
+//   [LIVE CONTROL]   Bots · Gameplay · Playback
+//   [OBSERVE]        Recording · Performance · Input · Player info
+//   [TUNING]         Animation
+//
+// Sections collapse on header click. Default states are chosen so the
+// first-paint screen fits the "start a match and watch it" flow — setup
+// collapsed, core live panels expanded, heavy/verbose panels collapsed.
 // ---------------------------------------------------------------------------
 
 import { getPlayableNames } from '../roster';
@@ -44,6 +43,8 @@ const BOT_BEHAVIOURS: BotBehaviourTag[] = [
 ];
 
 const TELEPORT_PRESETS = ['center', 'corners', 'line', 'bunch'] as const;
+
+type GroupKind = 'setup' | 'control' | 'observe' | 'tuning';
 
 // ---------------------------------------------------------------------------
 // Styles — injected once, scoped under body.lab-mode via the #lab-sidebar id
@@ -77,14 +78,83 @@ const CSS = `
   text-align: center;
   margin-bottom: 12px;
 }
-#lab-sidebar h2 {
+
+/* --- Thematic group bars + matching section border --- */
+#lab-sidebar .lab-group-wrap {
+  margin: 0 -14px;
+  padding: 0 14px 6px;
+}
+#lab-sidebar .lab-group {
+  margin: 12px -14px 8px;
+  padding: 5px 14px;
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  font-weight: bold;
+  text-transform: uppercase;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+#lab-sidebar .lab-group-wrap:first-of-type .lab-group { margin-top: 4px; }
+#lab-sidebar .lab-group.setup {
+  color: #a8c7ff;
+  background: linear-gradient(90deg, rgba(95,163,255,0.14), transparent 70%);
+  border-top-color: rgba(95,163,255,0.45);
+}
+#lab-sidebar .lab-group.control {
+  color: #ffb8b0;
+  background: linear-gradient(90deg, rgba(231,76,60,0.14), transparent 70%);
+  border-top-color: rgba(231,76,60,0.45);
+}
+#lab-sidebar .lab-group.observe {
+  color: #a8e6a0;
+  background: linear-gradient(90deg, rgba(74,222,128,0.14), transparent 70%);
+  border-top-color: rgba(74,222,128,0.45);
+}
+#lab-sidebar .lab-group.tuning {
+  color: #ffe390;
+  background: linear-gradient(90deg, rgba(255,220,92,0.14), transparent 70%);
+  border-top-color: rgba(255,220,92,0.45);
+}
+#lab-sidebar .lab-group-setup   .lab-section { border-left-color: rgba(95,163,255,0.30); }
+#lab-sidebar .lab-group-control .lab-section { border-left-color: rgba(231,76,60,0.30); }
+#lab-sidebar .lab-group-observe .lab-section { border-left-color: rgba(74,222,128,0.30); }
+#lab-sidebar .lab-group-tuning  .lab-section { border-left-color: rgba(255,220,92,0.30); }
+
+/* --- Collapsible sections --- */
+#lab-sidebar .lab-section {
+  margin-bottom: 6px;
+  border-left: 2px solid rgba(255,255,255,0.08);
+  padding-left: 8px;
+  background: rgba(255,255,255,0.012);
+  border-radius: 0 3px 3px 0;
+}
+#lab-sidebar .lab-section-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 3px 0;
+}
+#lab-sidebar .lab-section-header:hover h2 { color: #dde1ea; }
+#lab-sidebar .lab-section-header:hover .lab-section-caret { color: #fff; }
+#lab-sidebar .lab-section-caret {
+  color: #6a7289;
+  font-size: 9px;
+  width: 10px;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+#lab-sidebar .lab-section-header h2 {
+  margin: 0;
   font-size: 11px;
   letter-spacing: 0.12em;
   color: #9aa6c4;
   text-transform: uppercase;
-  margin: 14px 0 6px;
+  transition: color 0.15s;
 }
-#lab-sidebar h2:first-child { margin-top: 0; }
+#lab-sidebar .lab-section-content { padding: 4px 0 6px; }
+#lab-sidebar .lab-section.collapsed .lab-section-content { display: none; }
+
+/* --- Shared controls --- */
 #lab-sidebar .lab-row {
   display: flex;
   align-items: center;
@@ -141,6 +211,8 @@ const CSS = `
   gap: 4px;
   flex-wrap: wrap;
 }
+
+/* --- Info / event log / specialized widgets --- */
 #lab-sidebar .lab-info {
   background: #14182a;
   padding: 6px 8px;
@@ -180,6 +252,7 @@ const CSS = `
 #lab-sidebar .evt-collapse_batch .evt-type { color: #ff8844; }
 #lab-sidebar .evt-match_started .evt-type { color: #4ade80; }
 #lab-sidebar .evt-match_ended  .evt-type { color: #9aa6c4; }
+
 #lab-sidebar .lab-bot-row {
   display: grid;
   grid-template-columns: 1fr 2fr auto;
@@ -195,6 +268,7 @@ const CSS = `
   background: #4ade80;
 }
 #lab-sidebar .lab-bot-row.dead .bot-dot { background: #5c6177; }
+
 #lab-sidebar .lab-cd-row {
   display: grid;
   grid-template-columns: 30px 1fr 70px;
@@ -218,6 +292,7 @@ const CSS = `
 #lab-sidebar .lab-cd-row .cd-val {
   color: #b8becf; font-variant-numeric: tabular-nums; text-align: right; font-size: 10px;
 }
+
 #lab-sidebar .lab-perf-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -230,6 +305,7 @@ const CSS = `
 }
 #lab-sidebar .lab-perf-grid .pk { color: #9aa6c4; }
 #lab-sidebar .lab-perf-grid .pv { color: #e8c77d; text-align: right; }
+
 #lab-sidebar .lab-input-box {
   background: #14182a;
   padding: 6px 8px;
@@ -261,11 +337,13 @@ const CSS = `
   background: #ffdc5c;
   border-color: #ffdc5c;
 }
+
 #lab-sidebar .lab-note {
   font-size: 10px;
   color: #6a7289;
   margin-top: 4px;
 }
+
 body.lab-mode #title-screen,
 body.lab-mode #character-select,
 body.lab-mode #end-screen { display: none !important; }
@@ -294,14 +372,19 @@ export function mountLabSidebar(devApi: DevApi): void {
   banner.textContent = 'INTERNAL DEV TOOL · not for players';
   root.appendChild(banner);
 
-  // ---- state ------------------------------------------------------------
+  // ---- Shared state -----------------------------------------------------
   const names = getPlayableNames(); // 9 playables
   let playerPick = 'Sergei';
   let botPicks: string[] = ['Trunk', 'Kurama', 'Shelly'];
   let lastSeed: number | null = null;
 
-  // ---- Matchup ----------------------------------------------------------
-  const matchup = section(root, 'Matchup');
+  // =======================================================================
+  // GROUP: MATCH SETUP ----------------------------------------------------
+  // =======================================================================
+  const setupGroup = group(root, 'Match setup', 'setup');
+
+  // ---- Matchup (collapsed by default — only needed at the start) --------
+  const matchup = section(setupGroup, 'Matchup', { collapsed: true });
   const playerSel = select(matchup, 'Player', names, playerPick, (v) => { playerPick = v; });
   const bot1Sel = select(matchup, 'Bot 1', [NONE, ...names], botPicks[0] ?? NONE, (v) => { botPicks[0] = v === NONE ? '' : v; });
   const bot2Sel = select(matchup, 'Bot 2', [NONE, ...names], botPicks[1] ?? NONE, (v) => { botPicks[1] = v === NONE ? '' : v; });
@@ -334,8 +417,8 @@ export function mountLabSidebar(devApi: DevApi): void {
     refreshAll();
   }
 
-  // ---- Arena ------------------------------------------------------------
-  const arena = section(root, 'Arena');
+  // ---- Arena (collapsed by default) -------------------------------------
+  const arena = section(setupGroup, 'Arena', { collapsed: true });
   const arenaInfoEl = document.createElement('div');
   arenaInfoEl.className = 'lab-info';
   arena.appendChild(arenaInfoEl);
@@ -366,8 +449,13 @@ export function mountLabSidebar(devApi: DevApi): void {
     if (info) navigator.clipboard.writeText(String(info.seed)).catch(() => {});
   });
 
-  // ---- Bots (priority #1) ----------------------------------------------
-  const bots = section(root, 'Bots');
+  // =======================================================================
+  // GROUP: LIVE CONTROL ---------------------------------------------------
+  // =======================================================================
+  const controlGroup = group(root, 'Live control', 'control');
+
+  // ---- Bots (expanded — priority panel) ---------------------------------
+  const bots = section(controlGroup, 'Bots');
   const bulkRow = row(bots);
   const bulkLabel = document.createElement('label');
   bulkLabel.textContent = 'All bots';
@@ -387,9 +475,77 @@ export function mountLabSidebar(devApi: DevApi): void {
   const botListEl = document.createElement('div');
   bots.appendChild(botListEl);
 
-  // ---- Recording --------------------------------------------------------
-  // Auto-starts with each match. User downloads when they want to analyse.
-  const recording = section(root, 'Recording');
+  // ---- Gameplay (expanded — priority panel) -----------------------------
+  const gameplay = section(controlGroup, 'Gameplay');
+  tinyLabel(gameplay, 'Cooldowns (player)');
+  const cdList = document.createElement('div');
+  gameplay.appendChild(cdList);
+  const gpBtns = row(gameplay);
+  button(gpBtns, 'Reset CDs', () => { devApi.resetPlayerCooldowns(); refreshCooldownsPanel(); });
+  button(gpBtns, 'Force J', () => devApi.forceAbility(0));
+  button(gpBtns, 'Force K', () => devApi.forceAbility(1));
+  button(gpBtns, 'Force L', () => devApi.forceAbility(2));
+  const tpBtns = row(gameplay);
+  button(tpBtns, 'TP Player Centre', () => devApi.teleportPlayer(0, 0));
+  for (const preset of TELEPORT_PRESETS) {
+    button(tpBtns, `Bots→${preset}`, () => devApi.teleportBotsPreset(preset));
+  }
+  tinyLabel(gameplay, 'Event log');
+  const eventLogEl = document.createElement('div');
+  eventLogEl.className = 'lab-event-log';
+  gameplay.appendChild(eventLogEl);
+  const evtBtns = row(gameplay);
+  button(evtBtns, 'Clear Log', () => { devApi.clearEventLog(); refreshEventLog(); });
+
+  // ---- Playback (collapsed — reach for when pausing / slow-mo) ----------
+  const actions = section(controlGroup, 'Playback', { collapsed: true });
+  const speedRow = row(actions);
+  const speedLabel = document.createElement('label');
+  speedLabel.textContent = 'speedScale';
+  speedLabel.style.minWidth = '90px';
+  speedRow.appendChild(speedLabel);
+  const speedSlider = document.createElement('input');
+  speedSlider.type = 'range';
+  speedSlider.min = '0';
+  speedSlider.max = '2';
+  speedSlider.step = '0.05';
+  speedSlider.value = '1';
+  const speedVal = document.createElement('span');
+  speedVal.className = 'lab-val';
+  speedVal.textContent = '1.00';
+  speedSlider.addEventListener('input', () => {
+    const v = parseFloat(speedSlider.value);
+    devApi.setSpeed(v);
+    speedVal.textContent = v.toFixed(2);
+  });
+  speedRow.appendChild(speedSlider);
+  speedRow.appendChild(speedVal);
+  const actionBtns = row(actions);
+  button(actionBtns, 'Pause', () => {
+    const next = devApi.getSpeed() === 0 ? 1 : 0;
+    devApi.setSpeed(next);
+    speedSlider.value = String(next);
+    speedVal.textContent = next.toFixed(2);
+  });
+  button(actionBtns, 'Slow 0.3×', () => {
+    devApi.setSpeed(0.3);
+    speedSlider.value = '0.3';
+    speedVal.textContent = '0.30';
+  });
+  button(actionBtns, 'Normal 1×', () => {
+    devApi.setSpeed(1);
+    speedSlider.value = '1';
+    speedVal.textContent = '1.00';
+  });
+  button(actionBtns, 'End Match', () => devApi.endMatch());
+
+  // =======================================================================
+  // GROUP: OBSERVE --------------------------------------------------------
+  // =======================================================================
+  const observeGroup = group(root, 'Observe', 'observe');
+
+  // ---- Recording (expanded — live status) -------------------------------
+  const recording = section(observeGroup, 'Recording');
   const recStatus = document.createElement('div');
   recStatus.className = 'lab-info';
   recording.appendChild(recStatus);
@@ -399,35 +555,31 @@ export function mountLabSidebar(devApi: DevApi): void {
   button(recBtns, 'Download MD', () => devApi.downloadRecordingMD());
   button(recBtns, 'Clear', () => { devApi.clearRecording(); refreshRecordingPanel(); });
 
-  // ---- Gameplay (priority #2) ------------------------------------------
-  const gameplay = section(root, 'Gameplay');
-  // Cooldowns live readout
-  const cdTitle = tinyLabel(gameplay, 'Cooldowns (player)');
-  void cdTitle;
-  const cdList = document.createElement('div');
-  gameplay.appendChild(cdList);
-  // Force/reset actions
-  const gpBtns = row(gameplay);
-  button(gpBtns, 'Reset CDs', () => { devApi.resetPlayerCooldowns(); refreshCooldownsPanel(); });
-  button(gpBtns, 'Force J', () => devApi.forceAbility(0));
-  button(gpBtns, 'Force K', () => devApi.forceAbility(1));
-  button(gpBtns, 'Force L', () => devApi.forceAbility(2));
-  // Teleports
-  const tpBtns = row(gameplay);
-  button(tpBtns, 'TP Player Centre', () => devApi.teleportPlayer(0, 0));
-  for (const preset of TELEPORT_PRESETS) {
-    button(tpBtns, `Bots→${preset}`, () => devApi.teleportBotsPreset(preset));
-  }
-  // Event log
-  tinyLabel(gameplay, 'Event log');
-  const eventLogEl = document.createElement('div');
-  eventLogEl.className = 'lab-event-log';
-  gameplay.appendChild(eventLogEl);
-  const evtBtns = row(gameplay);
-  button(evtBtns, 'Clear Log', () => { devApi.clearEventLog(); refreshEventLog(); });
+  // ---- Performance (expanded — quick FPS glance) ------------------------
+  const perf = section(observeGroup, 'Performance');
+  const perfGrid = document.createElement('div');
+  perfGrid.className = 'lab-perf-grid';
+  perf.appendChild(perfGrid);
 
-  // ---- Animation tuner -------------------------------------------------
-  const anim = section(root, 'Animation (player)');
+  // ---- Input (collapsed — kept for gamepad / touch checks) --------------
+  const inputSec = section(observeGroup, 'Input', { collapsed: true });
+  const inputBox = document.createElement('div');
+  inputBox.className = 'lab-input-box';
+  inputSec.appendChild(inputBox);
+
+  // ---- Player info (collapsed — verbose raw stats) ----------------------
+  const info = section(observeGroup, 'Player info', { collapsed: true });
+  const infoEl = document.createElement('div');
+  infoEl.className = 'lab-info';
+  info.appendChild(infoEl);
+
+  // =======================================================================
+  // GROUP: TUNING ---------------------------------------------------------
+  // =======================================================================
+  const tuningGroup = group(root, 'Tuning', 'tuning');
+
+  // ---- Animation tuner (collapsed — occasional tweaking) ----------------
+  const anim = section(tuningGroup, 'Animation (player)', { collapsed: true });
   const sliders = new Map<AnimKey, HTMLInputElement>();
   const valueLabels = new Map<AnimKey, HTMLSpanElement>();
   for (const p of ANIM_PARAMS) {
@@ -471,73 +623,15 @@ export function mountLabSidebar(devApi: DevApi): void {
       .catch(() => {});
   });
 
-  // ---- Performance (priority #3) ---------------------------------------
-  const perf = section(root, 'Performance');
-  const perfGrid = document.createElement('div');
-  perfGrid.className = 'lab-perf-grid';
-  perf.appendChild(perfGrid);
-
-  // ---- Input (priority #4) ---------------------------------------------
-  const inputSec = section(root, 'Input');
-  const inputBox = document.createElement('div');
-  inputBox.className = 'lab-input-box';
-  inputSec.appendChild(inputBox);
-
-  // ---- Playback --------------------------------------------------------
-  const actions = section(root, 'Playback');
-  const speedRow = row(actions);
-  const speedLabel = document.createElement('label');
-  speedLabel.textContent = 'speedScale';
-  speedLabel.style.minWidth = '90px';
-  speedRow.appendChild(speedLabel);
-  const speedSlider = document.createElement('input');
-  speedSlider.type = 'range';
-  speedSlider.min = '0';
-  speedSlider.max = '2';
-  speedSlider.step = '0.05';
-  speedSlider.value = '1';
-  const speedVal = document.createElement('span');
-  speedVal.className = 'lab-val';
-  speedVal.textContent = '1.00';
-  speedSlider.addEventListener('input', () => {
-    const v = parseFloat(speedSlider.value);
-    devApi.setSpeed(v);
-    speedVal.textContent = v.toFixed(2);
-  });
-  speedRow.appendChild(speedSlider);
-  speedRow.appendChild(speedVal);
-
-  const actionBtns = row(actions);
-  button(actionBtns, 'Pause', () => {
-    const next = devApi.getSpeed() === 0 ? 1 : 0;
-    devApi.setSpeed(next);
-    speedSlider.value = String(next);
-    speedVal.textContent = next.toFixed(2);
-  });
-  button(actionBtns, 'Slow 0.3×', () => {
-    devApi.setSpeed(0.3);
-    speedSlider.value = '0.3';
-    speedVal.textContent = '0.30';
-  });
-  button(actionBtns, 'Normal 1×', () => {
-    devApi.setSpeed(1);
-    speedSlider.value = '1';
-    speedVal.textContent = '1.00';
-  });
-  button(actionBtns, 'End Match', () => devApi.endMatch());
-
-  // ---- Player info -----------------------------------------------------
-  const info = section(root, 'Player info');
-  const infoEl = document.createElement('div');
-  infoEl.className = 'lab-info';
-  info.appendChild(infoEl);
-
+  // ---- Footer note ------------------------------------------------------
   const note = document.createElement('div');
   note.className = 'lab-note';
   note.textContent = '/tools.html · internal · unlinked from production UI · noindex';
   root.appendChild(note);
 
-  // ---- Live panels -----------------------------------------------------
+  // =======================================================================
+  // Live panel refresh functions
+  // =======================================================================
   function refreshAll(): void {
     refreshArenaPanel();
     refreshInfoPanel();
@@ -596,7 +690,6 @@ export function mountLabSidebar(devApi: DevApi): void {
       `animPersonality`,
       ...Object.entries(ap).map(([k, v]) => `  ${k.padEnd(20)} ${(+v).toFixed(3)}`),
     ].join('\n');
-
     syncSlidersFromPlayer();
   }
 
@@ -631,6 +724,7 @@ export function mountLabSidebar(devApi: DevApi): void {
   // destroys the <select> element while the user has the dropdown open,
   // which the browser interprets as "close the dropdown". Previous bug:
   // individual bot dropdowns never opened because they were nuked ~4×/sec.
+  // Canonical pattern for any live panel with interactive widgets.
   interface BotRowEls {
     row: HTMLDivElement;
     sel: HTMLSelectElement;
@@ -643,7 +737,6 @@ export function mountLabSidebar(devApi: DevApi): void {
     const list = devApi.getBotSnapshots();
 
     if (list.length === 0) {
-      // Remove any stale rows, show empty placeholder.
       for (const { row } of botRowEls.values()) row.remove();
       botRowEls.clear();
       if (!botEmptyEl) {
@@ -685,17 +778,12 @@ export function mountLabSidebar(devApi: DevApi): void {
         cached = { row: rowEl, sel, name: nameEl };
         botRowEls.set(b.index, cached);
       }
-      // Update state on the SAME DOM nodes (no recreation).
       cached.row.className = 'lab-bot-row' + (b.alive ? '' : ' dead');
       cached.name.textContent = `${b.index} · ${b.name}`;
-      // Only overwrite the select's value when it's NOT focused. If the user
-      // has the dropdown open, programmatic assignment would close it.
       if (document.activeElement !== cached.sel) {
         cached.sel.value = b.behaviour;
       }
     }
-
-    // Drop rows for bots that no longer exist (e.g. match ended / restarted).
     for (const idx of Array.from(botRowEls.keys())) {
       if (!seen.has(idx)) {
         const { row } = botRowEls.get(idx)!;
@@ -715,9 +803,7 @@ export function mountLabSidebar(devApi: DevApi): void {
       cdList.appendChild(empty);
       return;
     }
-    // Headbutt row
-    cdList.appendChild(renderCooldownRow('HB', 'headbutt', p.headbuttCooldown, 0.6, false));
-    // Ability rows
+    cdList.appendChild(renderCooldownRow('HB', 'headbutt', p.headbuttCooldown, 0.6));
     p.abilities.forEach((a, i) => {
       const slot = ['J', 'K', 'L'][i] || `#${i}`;
       let pct: number;
@@ -740,7 +826,7 @@ export function mountLabSidebar(devApi: DevApi): void {
     });
   }
 
-  function renderCooldownRow(slot: string, name: string, cdLeft: number, fullCd: number, _unused: boolean): HTMLDivElement {
+  function renderCooldownRow(slot: string, name: string, cdLeft: number, fullCd: number): HTMLDivElement {
     const onCd = cdLeft > 0;
     const pct = onCd ? 1 - Math.min(1, cdLeft / fullCd) : 1;
     return renderCooldownRowFull(slot, name, pct, onCd ? 'on-cd' : '', onCd ? `${cdLeft.toFixed(1)}s` : 'ready');
@@ -773,8 +859,6 @@ export function mountLabSidebar(devApi: DevApi): void {
 
   function refreshEventLog(): void {
     const log = devApi.getEventLog();
-    // Render newest first, cap to ~20 visible for readability (full log is
-    // 60 events; extras are reachable via scroll below).
     eventLogEl.innerHTML = '';
     const now = performance.now();
     for (let i = log.length - 1; i >= 0; i--) {
@@ -897,7 +981,7 @@ export function mountLabSidebar(devApi: DevApi): void {
 
   // Live refresh rates tuned per-panel cost:
   //   - Fast (12 Hz): cooldowns, event log, perf, input — visible latency matters.
-  //   - Slow (4 Hz): arena + info + bots — updated when things change discretely.
+  //   - Slow (4 Hz): arena + info + bots + recording — updated discretely.
   setInterval(() => {
     refreshCooldownsPanel();
     refreshEventLog();
@@ -920,9 +1004,8 @@ export function mountLabSidebar(devApi: DevApi): void {
     }
   }, 100);
 
-  // Stash on window for manual tweaking from the console. We also keep the
-  // `__game` escape hatch from the previous version for backwards-compat
-  // with any debugging muscle memory.
+  // Stash on window for manual tweaking from the console. Both DevApi and
+  // the raw Game are reachable as escape hatches.
   (window as unknown as { __lab: object }).__lab = {
     devApi,
     game: devApi.game,
@@ -935,8 +1018,8 @@ export function mountLabSidebar(devApi: DevApi): void {
   };
 
   playerSel.addEventListener('change', () => {
-    // If player changed before pressing Start, nothing to sync yet. Active
-    // matches keep their current tuning.
+    // Player changed before pressing Start — nothing to sync yet.
+    // Active matches keep their current tuning.
   });
 }
 
@@ -953,13 +1036,54 @@ function injectStyles(): void {
   document.head.appendChild(el);
 }
 
-function section(parent: HTMLElement, title: string): HTMLDivElement {
+/**
+ * Create a thematic group wrapper with a coloured separator bar. Returns
+ * the wrapper; callers add sections to it.
+ *
+ * Kinds:
+ *   - 'setup'   (blue)    one-time pre-match config
+ *   - 'control' (red)     things you change DURING a match
+ *   - 'observe' (green)   live read-only panels
+ *   - 'tuning'  (yellow)  fine-grained tweaks
+ */
+function group(parent: HTMLElement, label: string, kind: GroupKind): HTMLDivElement {
   const wrap = document.createElement('div');
-  const h = document.createElement('h2');
-  h.textContent = title;
-  wrap.appendChild(h);
+  wrap.className = 'lab-group-wrap lab-group-' + kind;
+  const header = document.createElement('div');
+  header.className = 'lab-group ' + kind;
+  header.textContent = label;
+  wrap.appendChild(header);
   parent.appendChild(wrap);
   return wrap;
+}
+
+/**
+ * Collapsible section. Returns the CONTENT element — callers append their
+ * controls to it exactly like before (the wrapper is transparent to them).
+ * The header toggles display of the content on click.
+ */
+function section(parent: HTMLElement, title: string, opts?: { collapsed?: boolean }): HTMLDivElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'lab-section' + (opts?.collapsed ? ' collapsed' : '');
+  const header = document.createElement('div');
+  header.className = 'lab-section-header';
+  const caret = document.createElement('span');
+  caret.className = 'lab-section-caret';
+  caret.textContent = opts?.collapsed ? '▸' : '▾';
+  const h = document.createElement('h2');
+  h.textContent = title;
+  header.appendChild(caret);
+  header.appendChild(h);
+  const content = document.createElement('div');
+  content.className = 'lab-section-content';
+  header.addEventListener('click', () => {
+    const nowCollapsed = wrap.classList.toggle('collapsed');
+    caret.textContent = nowCollapsed ? '▸' : '▾';
+  });
+  wrap.appendChild(header);
+  wrap.appendChild(content);
+  parent.appendChild(wrap);
+  return content;
 }
 
 function tinyLabel(parent: HTMLElement, text: string): HTMLDivElement {
