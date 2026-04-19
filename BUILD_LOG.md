@@ -1607,3 +1607,49 @@ playback API is live but nothing calls it automatically yet.
   not main experience).
 - Music integration hooks deferred to the next block — 4 calls in
   `game.ts` phase transitions. API is ready and testable from console.
+
+---
+
+## 2026-04-19 — Music hooks + "(up to 4P)" label fix
+
+Tiny follow-up while the user tests online manually.
+
+### Music hooks wired in `src/game.ts`
+
+Music now auto-switches with every phase transition (previously the API
+was ready but nothing called it). Tracks mapped:
+
+- `enterTitle()` → `playMusic('intro')` + `preloadMusic('ingame')`
+- `enterCountdown()` offline → `playMusic('ingame')`
+- `enterEnded(win)` → `playMusic('special')`; lose/draw → `playMusic('intro')`
+- Online `updateOnline` phase change:
+  - `waiting` → `playMusic('intro')` + `preloadMusic('ingame')`
+  - `countdown` → `playMusic('ingame')`
+  - `ended` win/lose/draw → `special` / `intro` / `intro`
+- `debugStartOfflineMatch` (lab) → `playMusic('ingame')`
+- `debugEndMatchImmediately` (lab) → `playMusic('intro')`
+
+The `/tools.html` lab inherits these automatically because it drives
+matches through the same `debug*` methods. No lab-specific wiring
+needed; the 🎶 HUD button covers the "silence while tuning balance"
+case.
+
+### Label fix
+
+`index.html` + `tools.html`: title mode button text changed from
+`🌐 Online Multiplayer (2P)` to `🌐 Online Multiplayer (up to 4P)` so
+it reflects the new bot-fill flow.
+
+### Files changed
+- `src/game.ts` — 7 call sites added across phase transitions.
+- `index.html` — button label.
+- `tools.html` — button label.
+- `ONLINE.md` — music section updated with the actual hook table.
+- `NEXT_STEPS.md` — music hooks marked done.
+
+### Verification
+- Typecheck + build clean.
+- Bundle delta trivial (input-touch +1.17 kB for the 7 call sites).
+- Autoplay policy: music only starts after first user gesture — the
+  title loop is silent on first load until the user clicks anything.
+  Documented in `ONLINE.md`.

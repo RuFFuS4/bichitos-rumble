@@ -20,8 +20,8 @@ de destrucción) son prioritarios; si algo cae por tiempo, es el
       (intro / ingame / special)
 - [x] API de música en `src/audio.ts` (musicGain, playMusic,
       crossfade, preload, mute persistente)
-- [ ] **Hooks por phase en `game.ts`** — pospuesto al siguiente bloque
-      (4 llamadas, trivial). Ver `ONLINE.md` sección Música.
+- [x] Hooks por phase en `game.ts` (title/countdown/ended + online
+      waiting/countdown/ended + lab debug*). Lab hereda auto.
 
 ### Fase 2 — EN CURSO, adelantada
 - [x] **4P online + bot-fill** — hecho

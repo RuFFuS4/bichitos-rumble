@@ -21,7 +21,7 @@ import {
 } from './hud';
 import { applyHitStop, FEEL } from './gamefeel';
 import { showPreview, swapPreviewCritter, hidePreview } from './preview';
-import { play as playSound } from './audio';
+import { play as playSound, playMusic, preloadMusic } from './audio';
 import { recordPick, recordOutcome, recordFall } from './stats';
 import { getDisplayRoster, getRosterEntry, getPlayableNames, type RosterEntry } from './roster';
 import { preloadModels } from './model-loader';
@@ -232,6 +232,14 @@ export class Game {
     disposePortals();
     clearPortalContext(); // exit portal mode: no start portal, no P/B prompts
 
+    // Music: title/menu loop. No-op until the user has interacted with the
+    // page (browsers block autoplay without a gesture). The HUD 🎶 button
+    // lets players mute if they prefer silence.
+    playMusic('intro');
+    // Warm up the in-game buffer while we're sitting on the title so the
+    // crossfade into countdown is instant.
+    preloadMusic('ingame');
+
     // Clear any lingering arena/critters from a previous match. Without
     // this, returning from a finished match (online or offline) leaves
     // the previous fragments painted under the title overlay for a
@@ -282,6 +290,11 @@ export class Game {
     this.phase = 'countdown';
     this.phaseTimer = FEEL.match.countdown;
     this.matchTimer = FEEL.match.duration;
+
+    // Music: swap to the in-game loop. Crossfades from 'intro' if it was
+    // playing. The special track (win) preloads once we see that we might
+    // need it, not here — keeps title→countdown lean.
+    playMusic('ingame');
 
     // Resolve player config from the display roster selection
     const entry = this.displayRoster[this.selectedIdx];
@@ -684,11 +697,19 @@ export class Game {
 
       if (serverPhase === 'playing') {
         hideOverlay();
+      } else if (serverPhase === 'countdown') {
+        // Online countdown: switch to the in-game loop so by the time the
+        // "GO!" pops the music is already at full volume.
+        playMusic('ingame');
       } else if (serverPhase === 'waiting') {
         // New 4P waiting room — the old "Waiting for opponent..." text is
         // replaced by the full waiting-screen overlay (countdown + slots).
         hideOverlay();
         showWaitingScreen();
+        // Chill title loop while we wait. Also preloads ingame for the
+        // moment the countdown kicks in.
+        playMusic('intro');
+        preloadMusic('ingame');
       } else if (serverPhase === 'ended') {
         const winnerSid = state.winnerSessionId;
         const localSid = this.room.sessionId;
@@ -710,6 +731,7 @@ export class Game {
         if (winnerSid === localSid) {
           result = 'win'; title = 'VICTORY'; subtitle = 'You won';
           playSoundEffect('victory');
+          playMusic('special');
         } else if (winnerSid && winnerSid !== localSid) {
           result = 'lose'; title = 'DEFEATED';
           if (reason === 'opponent_left') {
@@ -719,6 +741,10 @@ export class Game {
           } else {
             subtitle = `${winnerCritterName || 'Opponent'} won`.trim();
           }
+          playMusic('intro');
+        } else {
+          // Draw — no survivor. Also back to the title loop.
+          playMusic('intro');
         }
         hideOverlay();
         showEndScreen(result, title, subtitle, false);
@@ -813,6 +839,13 @@ export class Game {
     showEndScreen(result, title, subtitle, isFromPortal());
     if (result === 'win') {
       playSound('victory');
+      // Music: celebratory track on victory. Preload already covers the
+      // normal case (fast swap) via the warm-up in enterTitle → ingame.
+      playMusic('special');
+    } else {
+      // Loss or draw: drop back to the title loop so the end-screen feels
+      // a beat less aggressive and matches the "returning to menu" vibe.
+      playMusic('intro');
     }
 
     // Stats: record the match outcome for the player's critter. Draws are
@@ -1179,6 +1212,11 @@ export class Game {
     this.phaseTimer = FEEL.match.countdown;
     this.matchTimer = FEEL.match.duration;
 
+    // Lab path: same music hook as the normal flow. The lab heredará
+    // automáticamente this call — players on /tools.html can still mute
+    // via the 🎶 HUD button if the music distracts from balance work.
+    playMusic('ingame');
+
     const seed = options.seed ?? ((Math.random() * 0xFFFFFFFF) | 0);
     this.arena.reset();
     this.arena.buildFromSeed(seed);
@@ -1241,5 +1279,8 @@ export class Game {
     hideCharacterSelect();
     hidePreview();
     hideOverlay();
+    // Drop back to the title loop — also covers the lab's initial
+    // teardown before it starts its own match.
+    playMusic('intro');
   }
 }

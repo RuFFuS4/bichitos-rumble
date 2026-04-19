@@ -213,23 +213,34 @@ API en `src/audio.ts`:
 - Bus de música independiente del de SFX (`musicGain` vs `masterGain`).
   Volumen base: música 0.22, SFX 0.35.
 
-**No hay hooks automáticos en `game.ts` todavía**. El próximo bloque
-es 4 líneas:
+**Hooks conectados en `game.ts`** (activos en prod y en `/tools.html`):
 
-```ts
-// En game.ts, transiciones:
-this.phase = 'title';           → playMusic('intro');
-this.phase = 'countdown';       → playMusic('ingame');
-endScreen(win)                  → playMusic('special');
-room.leave() o restart a title  → playMusic('intro');
-```
+| Punto | Track |
+|---|---|
+| `enterTitle()` | `intro` + preload `ingame` |
+| `enterCountdown()` (offline) | `ingame` (crossfade 1.2s desde intro) |
+| `enterEnded(win)` | `special` |
+| `enterEnded(lose/draw)` | `intro` |
+| online `waiting` | `intro` + preload `ingame` |
+| online `countdown` | `ingame` |
+| online `ended` (win) | `special` |
+| online `ended` (lose/draw) | `intro` |
+| `debugStartOfflineMatch` (lab) | `ingame` |
+| `debugEndMatchImmediately` (lab) | `intro` |
 
-Con eso la música por estados ya funciona, con crossfades y todo. El
-tiempo de carga cuando sea Suno-pesado es imperceptible con `preloadMusic`
-en el menú.
+Autoplay: la música sólo empieza a sonar tras la primera interacción
+del usuario (los browsers bloquean `AudioContext` hasta entonces — es
+estándar W3C). Típicamente el primer click en "vs Bots" ya activa el
+contexto, así que `intro` → `ingame` se oye desde la transición a
+countdown. Si el usuario carga la página y no toca nada, el title
+screen permanece en silencio hasta que haga click/tecla.
 
-Consola (para probar sin esperar al bloque siguiente):
+Mute: el botón 🎶 del HUD sigue funcionando. Estado persistido en
+`localStorage` — si tienes música muteada entre sesiones, se queda
+muteada al recargar.
 
-```js
-(await import('/src/audio.ts')).playMusic('intro')
-```
+Lab (`/tools.html`): **hereda automáticamente** estos hooks — nada que
+configurar ahí. El lab arranca con `debugStartOfflineMatch` → suena
+`ingame`. Si distrae al probar balance, un click al 🎶 del HUD lo
+silencia. No hay una variante "lab-muted by default" porque la UX del
+botón ya cubre el caso.
