@@ -1,7 +1,7 @@
 import type { AbilityState } from './abilities';
 import { createAbilityStates } from './abilities';
 import type { Critter, CritterConfig } from './critter';
-import type { RosterEntry } from './roster';
+import { getRosterEntry, type RosterEntry } from './roster';
 import { getCritterThumbnail } from './slot-thumbnail';
 
 const aliveEl = document.getElementById('hud-alive')!;
@@ -30,6 +30,8 @@ const portalToggleBtn = document.getElementById('btn-portal-toggle')!;
 const waitingScreen = document.getElementById('waiting-screen');
 const waitingCountdownEl = document.getElementById('waiting-countdown');
 const waitingSlotsEl = document.getElementById('waiting-slots');
+// Spectator prompt (dead in online match). Same nullable pattern.
+const spectatorPrompt = document.getElementById('spectator-prompt');
 
 /** Total slots on the grid. Must match CSS grid-template-columns × rows. */
 export const GRID_SLOTS = 9;
@@ -193,22 +195,55 @@ function waitingSlotsFingerprint(slots: WaitingSlotData[]): string {
   return slots.map(s => `${s.kind}:${s.name}:${s.color}`).join('|');
 }
 
+/**
+ * Show the "you're out — press T to leave" prompt. Called only by the
+ * online path when the local player's lives hit 0 while the server is
+ * still in 'playing'. Hidden automatically on phase change to ended.
+ */
+export function showSpectatorPrompt(): void {
+  if (!spectatorPrompt) return;
+  spectatorPrompt.style.display = 'flex';
+}
+
+export function hideSpectatorPrompt(): void {
+  if (!spectatorPrompt) return;
+  spectatorPrompt.style.display = 'none';
+}
+
 function buildWaitingSlotEl(s: WaitingSlotData): HTMLDivElement {
   const el = document.createElement('div');
   el.className = 'waiting-slot ' + s.kind;
 
-  const dot = document.createElement('span');
-  dot.className = 'waiting-slot-dot';
+  // Avatar: starts as a coloured tile (instant fallback) and upgrades to a
+  // 3D thumbnail once getCritterThumbnail resolves. No await so the slot
+  // renders immediately; the cached thumbnails from character-select
+  // usually resolve synchronously.
+  const avatar = document.createElement('span');
+  avatar.className = 'waiting-slot-avatar';
   if (s.color) {
-    dot.style.background = '#' + s.color.toString(16).padStart(6, '0');
+    avatar.style.background = '#' + s.color.toString(16).padStart(6, '0');
   }
-  el.appendChild(dot);
+  if (s.kind !== 'empty' && s.name) {
+    const entry = getRosterEntry(s.name);
+    if (entry) {
+      getCritterThumbnail(entry).then(url => {
+        if (!url) return;
+        // Keep the tinted background as a subtle halo behind the avatar.
+        avatar.style.backgroundImage = `url(${url})`;
+        avatar.style.backgroundSize = 'cover';
+        avatar.style.backgroundPosition = 'center';
+      }).catch(() => { /* keep fallback tile */ });
+    }
+  }
+  el.appendChild(avatar);
 
+  // Critter name: Sergei, Trunk, etc. Prominent text under the avatar.
   const name = document.createElement('span');
   name.className = 'waiting-slot-name';
   name.textContent = s.name || '—';
   el.appendChild(name);
 
+  // Badge: HUMAN / 🤖 BOT / OPEN — type of participant, below the name.
   const badge = document.createElement('span');
   badge.className = 'waiting-slot-badge';
   badge.textContent =

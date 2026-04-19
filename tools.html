@@ -21,6 +21,13 @@
       pointer-events: none;
       font-family: 'Segoe UI', Arial, sans-serif;
       color: #fff;
+      /* Same rationale as index.html: keep settings buttons above
+         full-overlays so mute toggles reach the user on every screen. */
+      z-index: 20;
+    }
+    body:not(.match-active) #hud-top-left,
+    body:not(.match-active) #hud-lives {
+      display: none;
     }
     #hud-top {
       display: flex;

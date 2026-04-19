@@ -1653,3 +1653,74 @@ it reflects the new bot-fill flow.
 - Autoplay policy: music only starts after first user gesture — the
   title loop is silent on first load until the user clicks anything.
   Documented in `ONLINE.md`.
+
+---
+
+## 2026-04-19 — Online UX polish round (post-manual-test)
+
+User-reported issues from the 4P online smoke test. Four concrete fixes.
+
+### 1. Waiting-slot visuals: thumbnail + name instead of plain dot
+
+The waiting screen was showing a coloured circle per slot with the
+critter's signature colour, plus the name as small text. The user
+couldn't easily tell which critter each participant had picked at a
+glance. Now each slot renders the character-select 3D thumbnail (via
+the existing `getCritterThumbnail` loader, cached across pages) and
+the critter name in a larger font. The coloured tile stays as an
+instant fallback while the thumbnail async-loads. Occupied slots gently
+breathe (2.6s scale cycle) to feel alive.
+
+### 2. `T` during waiting left the overlay stuck on the title screen
+
+`enterTitle` never hid `#waiting-screen`, so pressing T to leave the
+room left the waiting overlay on top of the title — no clicks went
+through. Fix: `hideWaitingScreen()` (and `hideSpectatorPrompt()`, see
+below) are now called defensively at the top of `enterTitle` on every
+path.
+
+### 3. Spectator prompt when the local player is eliminated online
+
+Previously, if you lost all lives mid-match in an online game, there
+was no way to leave other than pressing T with no visual hint. Added
+a discreet fixed prompt at the bottom center (`#spectator-prompt`)
+that reads:
+
+> 💀 You're out · Press T to leave
+
+Pointer-events disabled (purely a hint). Shown only when
+`serverPhase === 'playing' && player !== null && !player.alive`;
+hidden automatically in any other state, and on `enterTitle` as
+defensive cleanup. Pulse animation 2.2s so it grabs attention without
+being loud.
+
+### 4. Settings buttons (SFX + music) reachable on every screen
+
+The 🔊 and 🎶 toggles were tucked inside `#hud`, which sat behind the
+full-overlays (title / character-select / waiting / end). Result:
+users couldn't mute before entering a match, which matters now that
+music starts as soon as the intro track plays. Fix:
+
+- `#hud { z-index: 20 }` — lifts the whole HUD above full-overlays.
+- `body:not(.match-active) #hud-top-left, #hud-lives { display: none }`
+  — hides the alive-count, timer, and lives rows on non-match screens
+  so only the settings cluster draws over the overlay (rest of the
+  HUD stays invisible until a match is live).
+- Same CSS applied to `tools.html` for consistency.
+
+### Files changed
+- `src/game.ts` — hideWaiting/Spectator in enterTitle, spectator show
+  logic in updateOnline, import of spectator helpers.
+- `src/hud.ts` — waiting-slot avatar + async thumbnail, spectator
+  show/hide helpers, roster import.
+- `index.html` — spectator-prompt DOM + CSS, waiting-slot CSS rework
+  (avatar 74×74, breathe animation, bigger slot), z-index + match-active
+  display rules on HUD.
+- `tools.html` — same z-index/display fix.
+
+### Verification
+- Typecheck + build clean.
+- Main game bundle unchanged at 3.07 kB. input-touch chunk +0.41 kB.
+  index.html +3.2 kB (CSS).
+- **Manual validation pending from the user** (browser testing).
+- No server changes this round — only client UX.

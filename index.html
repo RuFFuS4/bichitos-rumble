@@ -14,6 +14,18 @@
       pointer-events: none;
       font-family: 'Segoe UI', Arial, sans-serif;
       color: #fff;
+      /* Keep above full-overlays (title/character-select/waiting/end) so
+         the settings buttons (SFX + music toggles) remain reachable on
+         every screen — otherwise the user can't mute before entering a
+         match. The rest of the HUD (alive count, timer, lives) is hidden
+         via `body:not(.match-active)` rules below so only the settings
+         cluster actually draws over overlays. */
+      z-index: 20;
+    }
+    /* Alive count + match timer + lives only make sense during a match. */
+    body:not(.match-active) #hud-top-left,
+    body:not(.match-active) #hud-lives {
+      display: none;
     }
     #hud-top {
       display: flex;
@@ -712,25 +724,27 @@
       margin-bottom: 24px;
     }
     .waiting-slot {
-      width: 92px;
-      min-height: 92px;
+      width: 108px;
+      min-height: 130px;
       background: rgba(255,255,255,0.04);
       border: 2px solid rgba(255,255,255,0.10);
       border-radius: 12px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       gap: 6px;
-      padding: 10px 6px;
+      padding: 10px 6px 12px;
       transition: border-color 0.25s, background 0.25s;
+      position: relative;
+      overflow: hidden;
     }
     .waiting-slot.empty {
       opacity: 0.45;
       border-style: dashed;
     }
-    .waiting-slot.empty .waiting-slot-dot {
-      background: rgba(255,255,255,0.08);
+    .waiting-slot.empty .waiting-slot-avatar {
+      background: rgba(255,255,255,0.08) !important;
       box-shadow: none;
     }
     .waiting-slot.human {
@@ -741,17 +755,38 @@
       border-color: rgba(255, 170, 68, 0.55);
       background: rgba(255, 170, 68, 0.06);
     }
-    .waiting-slot-dot {
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
+    /* Avatar: starts as a coloured tile (fallback), upgrades to a 3D
+       critter thumbnail via background-image once the async loader
+       resolves. Size matches the character-select thumbnail so the user
+       recognises the sprite they picked. */
+    .waiting-slot-avatar {
+      width: 74px;
+      height: 74px;
+      border-radius: 10px;
       background: #888;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.5), inset 0 -3px 6px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      background-size: cover;
+      background-position: center;
+      transition: transform 0.25s;
+    }
+    .waiting-slot.human .waiting-slot-avatar,
+    .waiting-slot.bot .waiting-slot-avatar {
+      /* Pulse when someone actually occupies the slot so the waiting
+         screen feels alive. */
+      animation: waiting-slot-breathe 2.6s ease-in-out infinite;
+    }
+    @keyframes waiting-slot-breathe {
+      0%, 100% { transform: scale(1); }
+      50%      { transform: scale(1.04); }
     }
     .waiting-slot-name {
-      font-size: 11px;
-      font-weight: 700;
+      font-size: 13px;
+      font-weight: 800;
       letter-spacing: 0.5px;
+      color: #fff;
+    }
+    .waiting-slot.empty .waiting-slot-name {
+      color: rgba(255,255,255,0.5);
     }
     .waiting-slot-badge {
       font-size: 9px;
@@ -771,6 +806,46 @@
       padding: 0 24px;
       line-height: 1.4;
       margin-bottom: 22px;
+    }
+
+    /* ---------- Spectator prompt (dead in online match) ---------- */
+    #spectator-prompt.spectator-prompt {
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      background: rgba(10, 10, 24, 0.75);
+      border: 1px solid rgba(231, 76, 60, 0.6);
+      border-radius: 24px;
+      color: #ffbbb2;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 40;
+      pointer-events: none;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.85);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+      animation: spectator-pulse 2.2s ease-in-out infinite;
+    }
+    #spectator-prompt .spectator-icon {
+      font-size: 18px;
+    }
+    #spectator-prompt kbd {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.35);
+      border-radius: 3px;
+      padding: 1px 8px;
+      font-family: monospace;
+      font-size: 13px;
+      color: #ffdc5c;
+    }
+    @keyframes spectator-pulse {
+      0%, 100% { opacity: 0.8; }
+      50%      { opacity: 1;   }
     }
 
     /* ---------- HUD bot badge (lives row) ---------- */
@@ -1017,6 +1092,17 @@
     </div>
     <div class="prompt desktop-only"><kbd>T</kbd> leave room</div>
     <div class="prompt touch-only">Tap T to leave</div>
+  </div>
+
+  <!-- Spectator prompt — shown ONLY when the local player has been
+       eliminated during an online match but the server is still in
+       'playing'. Lets them leave without waiting for the match to end. -->
+  <div id="spectator-prompt" class="spectator-prompt" style="display:none;">
+    <span class="spectator-icon">💀</span>
+    <span class="spectator-text">You're out ·
+      <span class="desktop-only">Press <kbd>T</kbd> to leave</span>
+      <span class="touch-only">Tap T to leave</span>
+    </span>
   </div>
 
   <div id="end-screen" class="full-overlay hidden">

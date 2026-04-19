@@ -17,6 +17,7 @@ import {
   setSlotClickHandler, setTitleModeHandlers, updateTitleModeSelection, isOnlineModeAvailable, setEndTapHandler,
   setPortalLegend, setPortalToggleHandler,
   showWaitingScreen, hideWaitingScreen, updateWaitingScreen,
+  showSpectatorPrompt, hideSpectatorPrompt,
   type EndResult, type WaitingScreenData,
 } from './hud';
 import { applyHitStop, FEEL } from './gamefeel';
@@ -256,6 +257,11 @@ export class Game {
     showTitleScreen();
     hideCharacterSelect();
     hideEndScreen();
+    // Online path: if we come back from a waiting room (T → leave), the
+    // waiting-screen overlay would stay on top of the title and block all
+    // clicks. Defensive hide here covers every way to reach the title.
+    hideWaitingScreen();
+    hideSpectatorPrompt();
     hideOverlay();
     hidePreview();
     // Ensure the mode highlight matches the current state (default: bots)
@@ -754,6 +760,20 @@ export class Game {
     // Live waiting-screen update — countdown + slots every frame.
     if (serverPhase === 'waiting') {
       updateWaitingScreen(this.buildWaitingScreenData(state));
+    }
+
+    // Spectator prompt: the local player has lost all lives but the match
+    // is still running (other humans / bots are finishing). Offer them a
+    // one-key escape to the title so they aren't held hostage to the
+    // timer. Hidden in every other situation.
+    const showSpectator =
+      serverPhase === 'playing' &&
+      this.player !== null &&
+      !this.player.alive;
+    if (showSpectator) {
+      showSpectatorPrompt();
+    } else {
+      hideSpectatorPrompt();
     }
 
     // Overlay for countdown
