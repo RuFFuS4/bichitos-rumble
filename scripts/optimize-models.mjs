@@ -112,6 +112,18 @@ async function optimizeModel(filePath) {
   console.log(`   Simplify ratio: ${ratio.toFixed(6)} (target ${targetVerts})`);
 
   // Pipeline: dedup → weld → simplify
+  //
+  // Tripo3D sources export only POSITION + TEXCOORD_0 (no NORMAL). Adding
+  // normals() to the pipeline either balloons the vertex count (~800×
+  // when run before simplify on 1M verts) or breaks the style-lock budget
+  // (~4× when run after simplify). The mesh2motion lab expects the
+  // normal attribute at runtime; we handle that with a defensive guard
+  // in the lab's fork (see mesh2motion/src/lib/processes/load-model/
+  // StepLoadModel.ts) that computes vertex normals at load time instead.
+  //
+  // Keeping the in-game path free of normals is fine — the engine's
+  // runtime MeshPhongMaterial / MeshStandardMaterial call
+  // computeVertexNormals() automatically when the geometry lacks them.
   await document.transform(
     dedup(),
     weld({ tolerance: 0.0001 }),
