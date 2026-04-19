@@ -1774,3 +1774,86 @@ Added:
 - Bundle delta: input-touch +0.14 kB (crossfade constants + extra
   setValueAtTime calls). Main game bundle still 3.07 kB.
 - Audible testing: user reported.
+
+---
+
+## 2026-04-19 — Gamepad support (parallel work while user generates animations)
+
+User decided to parallelize Phase 3 animations by generating them
+externally in Mixamo/Tripo/Cascadeur. That freed my time up for
+Phase 4 work. First item pulled forward: gamepad.
+
+### Mapping
+
+Standard Xbox/PS layout via the browser's 'standard' gamepad spec.
+
+| Input | Action |
+|---|---|
+| Left stick | Move (radial deadzone 0.2, rescaled so deadzone edge = 0) |
+| A (btn 0) | Headbutt (held) + menu confirm (edge) |
+| B (btn 1) | Menu back (edge) |
+| X (btn 2) | Ability1 / J (held) |
+| Y (btn 3) | Ability2 / K (held) |
+| RB (btn 5) | Ultimate / L (held) — easier than Y mid-combat |
+| Start (btn 9) | Menu restart / R (edge) |
+| D-Pad (btn 12-15) | Menu up/down/left/right (edge) |
+| Left stick direction | Same as D-Pad, with hysteresis (on=0.6, off=0.3) |
+
+A being both headbutt (held) and confirm (edge) follows the keyboard
+convention where SPACE does both — menus route through
+`consumeMenuAction` (edge-clearing) and gameplay reads `isHeld`.
+
+### Architecture
+
+`src/input-gamepad.ts` is a **backend** for the existing input
+abstraction. It only writes via `_setMove` / `_setHeld` /
+`_pushMenuAction`, same as `input-touch.ts`. Game code (player, bot,
+etc.) never has to know a gamepad is in play.
+
+Only one gamepad supported at a time (the first connected). Split
+screen is not in the roadmap; adding a second pad later is a local
+change to this file.
+
+Polling at `requestAnimationFrame` cadence — the Gamepad API doesn't
+offer axis events, so rAF is the standard approach. Zero cost when
+no controller is connected (early-out before calling
+`navigator.getGamepads()`).
+
+Disconnect calls `clearAllHeldInputs()` so no held action stays
+pressed after the cable is yanked or the controller times out.
+
+### Toast UX
+
+`showGamepadToast(message)` in `hud.ts` pops a pill in the bottom-right
+corner (yellow border, 13px, auto-fades after 2.2s). Created lazily
+on first call — no HTML/CSS shipped until a controller actually
+connects.
+
+Triggers:
+- Connection: `🎮 <Controller id (truncated to 30 chars)>`
+- Disconnection: `🎮 Gamepad disconnected`
+
+### Integration points
+
+- `src/main.ts`: `initGamepadInput()` called once, idempotent.
+- `src/tools/main.ts`: same call, so the lab's Input panel reflects
+  real axes/buttons (the panel was already reading
+  `navigator.getGamepads()` — it just gets live data now).
+
+### Files created
+- `src/input-gamepad.ts`
+
+### Files changed
+- `src/hud.ts` — `showGamepadToast` + scoped CSS injection.
+- `src/main.ts` — `initGamepadInput` call (always on).
+- `src/tools/main.ts` — same.
+- `NEXT_STEPS.md` — Phase 4 gamepad marked done (pulled forward).
+- `BUILD_LOG.md` — this entry.
+
+### Verification
+- Typecheck + server + build: clean.
+- Main game bundle unchanged at 3.07 kB. Big shared chunk +3 kB
+  (gamepad module + toast). Chunk renamed `input-gamepad-*.js` by
+  Vite — same contents, Vite just uses the latest-added file's
+  name when naming the shared chunk.
+- Manual validation pending from user with a physical controller.

@@ -57,7 +57,8 @@ de destrucción) son prioritarios; si algo cae por tiempo, es el
       + warning visual más claro. Si no entra, la actual queda.
 
 ### Fase 4 · Última semana (28 abril - 1 mayo)
-- [ ] Gamepad support + toast detección (2-3h)
+- [x] Gamepad support + toast detección — adelantado al paralelizar
+      animaciones externas (usuario en Mixamo/Tripo).
 - [ ] Lighthouse pass + mejoras si hace falta (1-2h)
 - [ ] Playtesting remoto en producción (2-3 sesiones cortas)
 - [ ] Screenshots promocionales para jam listing

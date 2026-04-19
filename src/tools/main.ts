@@ -23,6 +23,7 @@ import { updateCameraShake } from '../gamefeel';
 import { initPreview, tickPreview } from '../preview';
 import { isLikelyMobile } from '../input';
 import { initTouchInput } from '../input-touch';
+import { initGamepadInput } from '../input-gamepad';
 import { loadMutedState } from '../audio';
 import { mountLabSidebar } from './sidebar';
 import { DevApi } from './dev-api';
@@ -72,6 +73,7 @@ const baseCamZ = camera.position.z;
 const previewCanvas = document.getElementById('preview-canvas') as HTMLCanvasElement | null;
 if (previewCanvas) initPreview(previewCanvas);
 if (isLikelyMobile()) initTouchInput();
+initGamepadInput();
 loadMutedState();
 
 // --- Game instance ---------------------------------------------------------

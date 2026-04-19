@@ -210,6 +210,73 @@ export function hideSpectatorPrompt(): void {
   spectatorPrompt.style.display = 'none';
 }
 
+// ---------------------------------------------------------------------------
+// Gamepad toast — auto-hiding notification for connect/disconnect events
+// ---------------------------------------------------------------------------
+//
+// Created lazily on first call so no extra HTML/CSS lives in the page. The
+// same element is reused on subsequent toasts (re-armed timer).
+
+let gamepadToastEl: HTMLDivElement | null = null;
+let gamepadToastTimer: number | null = null;
+
+function ensureGamepadToast(): HTMLDivElement {
+  if (gamepadToastEl) return gamepadToastEl;
+  // Scoped styles injected once.
+  if (!document.getElementById('gamepad-toast-style')) {
+    const style = document.createElement('style');
+    style.id = 'gamepad-toast-style';
+    style.textContent = `
+      #gamepad-toast {
+        position: fixed;
+        bottom: 18px;
+        right: 18px;
+        padding: 8px 14px;
+        background: rgba(10, 10, 24, 0.92);
+        border: 1px solid rgba(255, 220, 92, 0.55);
+        border-radius: 18px;
+        color: #ffdc5c;
+        font: 600 13px/1 'Segoe UI', Arial, sans-serif;
+        letter-spacing: 0.5px;
+        z-index: 10001;
+        pointer-events: none;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 0.2s ease, transform 0.2s ease;
+      }
+      #gamepad-toast.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  const el = document.createElement('div');
+  el.id = 'gamepad-toast';
+  document.body.appendChild(el);
+  gamepadToastEl = el;
+  return el;
+}
+
+/**
+ * Pop a small non-interactive toast in the bottom-right corner. Used by
+ * the gamepad backend to signal connect/disconnect events. Fades out
+ * after ~2s; consecutive calls re-arm the timer instead of stacking.
+ */
+export function showGamepadToast(message: string): void {
+  const el = ensureGamepadToast();
+  el.textContent = message;
+  // Force reflow so class toggle actually animates if re-triggered fast.
+  void el.offsetWidth;
+  el.classList.add('visible');
+  if (gamepadToastTimer !== null) window.clearTimeout(gamepadToastTimer);
+  gamepadToastTimer = window.setTimeout(() => {
+    el.classList.remove('visible');
+    gamepadToastTimer = null;
+  }, 2200);
+}
+
 function buildWaitingSlotEl(s: WaitingSlotData): HTMLDivElement {
   const el = document.createElement('div');
   el.className = 'waiting-slot ' + s.kind;

@@ -5,6 +5,7 @@ import { updateCameraShake } from './gamefeel';
 import { initPreview, tickPreview } from './preview';
 import { isLikelyMobile } from './input';
 import { initTouchInput } from './input-touch';
+import { initGamepadInput } from './input-gamepad';
 import {
   loadMutedState,
   toggleSfxMuted, isSfxMuted,
@@ -87,6 +88,12 @@ if (previewCanvas) {
 if (isLikelyMobile()) {
   initTouchInput();
 }
+
+// Gamepad — always on. initGamepadInput is idempotent and cheap: it only
+// attaches the `gamepadconnected`/`gamepaddisconnected` listeners and
+// starts polling once a controller is actually plugged in. No cost if
+// the player never connects one.
+initGamepadInput();
 
 // Audio settings: load persisted mute states + wire the top-right buttons.
 // Two independent channels:
