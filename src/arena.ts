@@ -13,6 +13,18 @@ import {
   generateArenaLayout, isPointOnArena, pointInFragment, FRAG,
   type ArenaLayout, type FragmentDef,
 } from './arena-fragments';
+import { playArenaWarning } from './audio';
+
+// Visual parameters for the pre-collapse shake effect. Applied to
+// `fragmentGroup.position.x/z` ONLY — collisions and `isOnArena` use the
+// static layout geometry, so wobbling the mesh doesn't make the floor
+// untrustworthy. Amplitudes are tiny (8cm in world space) so the player
+// can still stand on it comfortably.
+const SHAKE_AMP_MAX    = 0.08;  // world units
+const SHAKE_FREQ_HIGH  = 28;    // Hz, tight chatter
+const SHAKE_FREQ_MID   = 13;    // Hz, mid wobble
+const SHAKE_FREQ_LOW   = 7;     // Hz, slow ground heave
+const WARNING_EMISSIVE_COLOR = 0xff7733;   // warm orange, NOT red flash
 
 const ARC_SEGMENTS = 16;       // arc resolution per fragment shape edge
 const CENTER_SEGMENTS = 32;    // circle segments for the immune center
@@ -145,8 +157,16 @@ export class Arena {
   private syncedWarning = -2;
   private syncedSeed = -1;
 
-  // Base colors for resetting after warning blink
+  // Base colors for resetting after the warning effect clears. Kept even
+  // though the shake effect no longer tints the base color — the field
+  // stays useful if we re-introduce colour shifts later and avoids a
+  // breaking API change.
   private baseColors: number[] = [];
+
+  // Wallclock timestamp (s) when the current warning visual started. Used
+  // to drive the shake `progress` curve in both offline and online paths
+  // from a single source of truth. null when no warning is active.
+  private warningStartedAt: number | null = null;
 
   // Diagnostic helpers — null unless toggled on via the window.__arena API
   private debugCompass: THREE.Group | null = null;
@@ -201,6 +221,7 @@ export class Arena {
     this.timer = 0;
     this.warningActive = false;
     this.warningTimer = 0;
+    this.warningStartedAt = null;
     this.syncedLevel = -1;
     this.syncedWarning = -2;
     this.syncedSeed = seed;
@@ -229,13 +250,19 @@ export class Arena {
       if (this.warningTimer <= 0) {
         this.collapseCurrentBatch();
       } else {
-        this.blinkBatch(this.layout.batches[this.level].indices);
+        const progress = 1 - this.warningTimer / FRAG.warningDuration;
+        const t = performance.now() * 0.001;
+        this.shakeBatch(this.layout.batches[this.level].indices, progress, t);
       }
     } else {
       const batch = this.layout.batches[this.level];
       if (this.timer >= batch.delay) {
         this.warningActive = true;
         this.warningTimer = FRAG.warningDuration;
+        this.warningStartedAt = performance.now() * 0.001;
+        // Seismic rumble SFX — syncs with the visual shake; auto-stops
+        // when the warning window ends.
+        playArenaWarning(FRAG.warningDuration);
       }
     }
   }
@@ -270,9 +297,9 @@ export class Arena {
       this.updateRadius();
     }
 
-    // Warning blink
+    // Warning state change (edge-detected): reset the previous batch's
+    // visuals, then fire the seismic SFX for the new one.
     if (warningBatch !== this.syncedWarning) {
-      // Restore previously warned fragments to base color
       if (this.syncedWarning >= 0 && this.syncedWarning < (this.layout?.batches.length ?? 0)) {
         this.restoreBatch(this.layout!.batches[this.syncedWarning].indices);
       }
@@ -280,10 +307,22 @@ export class Arena {
         console.log(`[Arena] warning ${this.syncedWarning} → ${warningBatch}`);
       }
       this.syncedWarning = warningBatch;
+      if (warningBatch >= 0) {
+        this.warningStartedAt = performance.now() * 0.001;
+        playArenaWarning(FRAG.warningDuration);
+      } else {
+        this.warningStartedAt = null;
+      }
     }
 
-    if (warningBatch >= 0 && warningBatch < (this.layout?.batches.length ?? 0)) {
-      this.blinkBatch(this.layout!.batches[warningBatch].indices);
+    if (
+      warningBatch >= 0 &&
+      warningBatch < (this.layout?.batches.length ?? 0) &&
+      this.warningStartedAt !== null
+    ) {
+      const now = performance.now() * 0.001;
+      const progress = Math.min(1, (now - this.warningStartedAt) / FRAG.warningDuration);
+      this.shakeBatch(this.layout!.batches[warningBatch].indices, progress, now);
     }
   }
 
@@ -411,6 +450,7 @@ export class Arena {
     this.timer = 0;
     this.warningActive = false;
     this.warningTimer = 0;
+    this.warningStartedAt = null;
     this.syncedLevel = -1;
     this.syncedWarning = -2;
     this.syncedSeed = -1;
@@ -422,6 +462,10 @@ export class Arena {
   private collapseCurrentBatch(): void {
     if (!this.layout) return;
     const batch = this.layout.batches[this.level];
+    // Restore the cosmetic state (position offset + emissive) BEFORE we
+    // flip the visibility — otherwise the fragment disappears while still
+    // wobbling and the emissive lingers if visibility is re-toggled later.
+    this.restoreBatch(batch.indices);
     for (const idx of batch.indices) {
       this.alive[idx] = false;
       this.fragmentGroups[idx].visible = false;
@@ -429,6 +473,7 @@ export class Arena {
     this.level++;
     this.warningActive = false;
     this.timer = 0;
+    this.warningStartedAt = null;
     this.updateRadius();
   }
 
@@ -443,20 +488,52 @@ export class Arena {
     this.currentRadius = maxR;
   }
 
-  private blinkBatch(indices: number[]): void {
-    const rate = FRAG.warningPeakRate;
-    const phase = (Date.now() * 0.001 * rate) % 1;
-    const on = phase < 0.5;
+  /**
+   * Apply the pre-collapse shake effect to a batch.
+   *
+   * Writes to `fragmentGroup.position.x/z` (visual only — physics uses the
+   * static layout so the floor stays trustworthy) and to the material's
+   * emissive (warm orange glow that ramps up with `progress`).
+   *
+   * Each fragment gets a phase offset so the pieces don't shake in sync —
+   * reads as distributed ground tremor, not a rigid block.
+   *
+   * @param indices  batch fragment indices
+   * @param progress 0 at warning start → 1 right before collapse
+   * @param t        shared time in seconds (performance.now * 0.001)
+   */
+  private shakeBatch(indices: number[], progress: number, t: number): void {
+    // Intensity: starts at 0.3 (visible from frame 1) and ramps to 1.0.
+    // Non-zero baseline prevents the "nothing's happening yet" feel in
+    // the first 100ms of the warning.
+    const intensity = 0.3 + Math.min(1, progress) * 0.7;
+    const amp = SHAKE_AMP_MAX * intensity;
+    const emissiveVal = intensity * 0.65;
 
     for (const idx of indices) {
       const g = this.fragmentGroups[idx];
       if (!g || !g.visible) continue;
+
+      // Per-fragment phase — using the index as seed. Irrational constant
+      // multiplier so adjacent indices feel uncorrelated.
+      const phase = idx * 1.73;
+      const sx =
+        Math.sin(t * SHAKE_FREQ_HIGH + phase) * 0.55 +
+        Math.sin(t * SHAKE_FREQ_MID  + phase * 2.1) * 0.30 +
+        Math.sin(t * SHAKE_FREQ_LOW  + phase * 0.7) * 0.15;
+      const sz =
+        Math.cos(t * SHAKE_FREQ_HIGH + phase * 1.3) * 0.55 +
+        Math.cos(t * SHAKE_FREQ_MID  + phase * 0.8) * 0.30 +
+        Math.cos(t * SHAKE_FREQ_LOW  + phase * 1.7) * 0.15;
+      g.position.set(sx * amp, 0, sz * amp);
+
+      // Warm orange emissive pulse — not red alarm flash. Suggests
+      // "heating / cracking" rather than "DANGER" button blink.
       g.traverse(child => {
         if (child instanceof THREE.Mesh) {
           const mat = child.material as THREE.MeshStandardMaterial;
-          mat.color.setHex(on ? 0xff3333 : 0x5c2020);
-          mat.emissive.setHex(on ? 0xff1111 : 0x000000);
-          mat.emissiveIntensity = on ? 1.0 : 0.0;
+          mat.emissive.setHex(WARNING_EMISSIVE_COLOR);
+          mat.emissiveIntensity = emissiveVal;
         }
       });
     }
@@ -465,12 +542,14 @@ export class Arena {
   private restoreBatch(indices: number[]): void {
     for (const idx of indices) {
       const g = this.fragmentGroups[idx];
-      if (!g || !g.visible) continue;
-      const baseColor = this.baseColors[idx] ?? 0x4a6741;
+      if (!g) continue;
+      // Reset the shake offset even if the group is now invisible — if it
+      // ever comes back (debug, restart), it must render at its original
+      // position, not at the last shake offset frame.
+      g.position.set(0, 0, 0);
       g.traverse(child => {
         if (child instanceof THREE.Mesh) {
           const mat = child.material as THREE.MeshStandardMaterial;
-          mat.color.setHex(baseColor);
           mat.emissive.setHex(0x000000);
           mat.emissiveIntensity = 0;
         }

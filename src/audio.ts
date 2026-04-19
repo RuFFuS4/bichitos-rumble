@@ -472,6 +472,94 @@ export async function preloadMusic(track: MusicTrack): Promise<void> {
   await loadMusicBuffer(track);
 }
 
+// ---------------------------------------------------------------------------
+// Arena warning — seismic rumble when a terrain batch is about to collapse
+// ---------------------------------------------------------------------------
+//
+// Not part of the generic `play(name)` dispatcher because it takes a
+// parameter (the duration of the warning window). Called directly from
+// Arena when a batch enters the warning state, sustains until the batch
+// actually falls, then auto-fades.
+//
+// Layered synthesis:
+//   1. Sub sine ~45Hz → 38Hz slow sweep for the "deep shift" feel.
+//   2. Low-pass-filtered white noise with the cutoff opening over time,
+//      simulating earth loosening as cracks widen.
+//   3. A few random "crack" transients (triangle osc chirps) scattered
+//      across the duration for bite.
+
+/**
+ * Play the seismic warning sound. Call once per batch warning event —
+ * the sound lasts `duration` seconds and then stops itself. Safe to call
+ * multiple times back-to-back (each call is an independent voice that
+ * plays in parallel; warnings for different batches never overlap in
+ * practice because the game only flags one batch at a time).
+ */
+export function playArenaWarning(duration: number): void {
+  if (sfxMuted) return;
+  if (!ensureContext() || !ctx || !masterGain) return;
+
+  const now = ctx.currentTime;
+  const FADE_IN = 0.25;
+  const FADE_OUT = 0.35;
+  const tailStart = Math.max(now + FADE_IN, now + duration - FADE_OUT);
+  const end = now + duration;
+
+  // --- Sub rumble (slow pitch droop)
+  const sub = ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(45, now);
+  sub.frequency.linearRampToValueAtTime(38, end);
+  const subGain = ctx.createGain();
+  subGain.gain.setValueAtTime(0.0001, now);
+  subGain.gain.exponentialRampToValueAtTime(0.45, now + FADE_IN);
+  subGain.gain.setValueAtTime(0.45, tailStart);
+  subGain.gain.exponentialRampToValueAtTime(0.001, end);
+  sub.connect(subGain).connect(masterGain);
+  sub.start(now);
+  sub.stop(end + 0.05);
+
+  // --- Filtered-noise "crumbling earth" texture. Cutoff opens up so the
+  //     sound feels like it's getting closer to breaking through.
+  const nb = getNoiseBuffer();
+  if (nb) {
+    const src = ctx.createBufferSource();
+    src.buffer = nb;
+    src.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(180, now);
+    lp.frequency.linearRampToValueAtTime(320, end);
+    lp.Q.value = 1.4;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.3, now + FADE_IN);
+    noiseGain.gain.setValueAtTime(0.3, tailStart);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, end);
+    src.connect(lp).connect(noiseGain).connect(masterGain);
+    src.start(now);
+    src.stop(end + 0.05);
+  }
+
+  // --- 2-4 random crack chirps across the duration (adds bite / realism).
+  const cracks = 3;
+  for (let i = 0; i < cracks; i++) {
+    const offset = 0.5 + (i + Math.random() * 0.6) * (duration - 1.0) / cracks;
+    const start = now + offset;
+    if (start + 0.2 > end) continue;
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(160 + Math.random() * 50, start);
+    osc.frequency.exponentialRampToValueAtTime(55, start + 0.12);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.28, start);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.14);
+    osc.connect(gain).connect(masterGain);
+    osc.start(start);
+    osc.stop(start + 0.16);
+  }
+}
+
 /** Major chord held ~900ms. C5 E5 G5 C6. */
 function playVictory(): void {
   if (!ctx || !masterGain) return;

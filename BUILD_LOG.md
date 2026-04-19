@@ -1971,3 +1971,88 @@ with no behaviour change.
   every critter still renders identically in offline mode).
 - Real-world validation waiting on the first animated GLB from the
   user's Mixamo pipeline.
+
+---
+
+## 2026-04-19 — Pre-collapse shake + seismic rumble (replaces red blink)
+
+User's request: replace the red blink warning with a small localised
+shake of the fragments about to fall, plus a rumble SFX. "Más visceral
+y comunica mejor que se viene abajo".
+
+### Visual — shake replaces blink
+
+Old: fragments in a warning batch pulsed between green and red with
+`warningPeakRate = 16 Hz`, covering the material's base colour.
+
+New: `shakeBatch(indices, progress, t)` writes only to
+`fragmentGroup.position.x/z` and to `material.emissive`. Base colour
+untouched. Movement is the composition of three sine waves (28/13/7 Hz)
+with per-fragment phase offsets so the batch looks like distributed
+ground tremor instead of rigid-body oscillation. Amplitude caps at
+**0.08 world units** (~8 cm) — visible but tiny enough that the player
+still stands and walks normally on top.
+
+Emissive is a warm orange (`0xff7733`, not `0xff1111`) that ramps from
+0 → ~0.65 intensity with the same progress curve. Reads as "this is
+heating up / cracking", not "DANGER alarm".
+
+**Physics untouched.** `isOnArena(x, z)` and `pointInFragment()` look
+at `ArenaLayout.fragments` (static geometry), not at
+`fragmentGroup.position`. Shaking the mesh doesn't move the collision
+surface. Confirmed by following the call graph.
+
+### Audio — `playArenaWarning(duration)` in `audio.ts`
+
+New synthesised SFX layered from three elements:
+1. **Sub sine** (45 Hz → 38 Hz slow sweep) — the deep shift.
+2. **Low-pass-filtered white noise** with the cutoff opening from
+   180 → 320 Hz across the duration — crumbling earth texture getting
+   closer to break.
+3. **3 random "crack" chirps** (triangle osc, 160–210 Hz → 55 Hz
+   exponential drop, ~140 ms each) scattered across the window for
+   bite.
+
+Total volume fades in 0.25 s, sustains, fades out 0.35 s so the
+stop doesn't click. Auto-stops at `now + duration + 0.05s`.
+
+### Edge detection — synced with visual
+
+- **Offline** (`Arena.update`): when `timer >= batch.delay` flips
+  `warningActive` to true, we capture `warningStartedAt` and call
+  `playArenaWarning(FRAG.warningDuration)`.
+- **Online** (`Arena.syncFromServer`): when `warningBatch` transitions
+  from any value to a new one (including -1 → valid), same capture
+  and SFX fire. When it transitions back to -1, `warningStartedAt`
+  resets to null.
+
+Both flows share `shakeBatch` and use a uniform `progress` =
+`(now - warningStartedAt) / FRAG.warningDuration` so offline and
+online render identical behaviour.
+
+### Cleanup paths covered
+
+- `collapseCurrentBatch` calls `restoreBatch(indices)` BEFORE flipping
+  visibility, so no stuck shake offset or emissive survives a collapse.
+- `restoreBatch` also resets `fragmentGroup.position` to (0,0,0) so if
+  a collapsed fragment comes back (restart, debug) it renders at the
+  original slot.
+- `buildFromSeed` and `reset` null out `warningStartedAt`.
+
+### Files changed
+
+- `src/arena.ts` — `blinkBatch` → `shakeBatch`, `warningStartedAt`
+  field, SFX hook in both driver paths, cleanup in
+  `collapseCurrentBatch` / `buildFromSeed` / `reset`.
+- `src/audio.ts` — new exported `playArenaWarning(duration)`.
+
+### Verification
+
+- Typecheck + build clean.
+- Main game bundle unchanged at 3.08 kB. Shared chunk +1.9 kB (shake
+  trig math + SFX synth code).
+- No server-side changes — this is a pure client visual/audio polish,
+  online matches mirror the behaviour via `syncFromServer` which
+  already received `arenaWarningBatch` from the server.
+- User-validated on next test session (queued behind their Mixamo
+  pipeline work).
