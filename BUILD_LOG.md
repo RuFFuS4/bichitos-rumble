@@ -2177,6 +2177,118 @@ signature abilities, Lighthouse run, cross-device playtest).
 
 ---
 
+## 2026-04-19 — `/animations` fixes: make the lab actually usable
+
+User tested `/animations` and found two problems:
+
+1. The URL was serving **mesh2motion's Explore page** (marketing) instead
+   of our working page. The Explore screen has the skeleton-type buttons
+   on the left side but no functional flow — user couldn't load a
+   model or do anything.
+2. Too much upstream UI was still visible: Explore / Use Your Model /
+   Use Your Rigged Model links, upload button, reference-model dropdown,
+   mesh2motion.org + GitHub + donation links — all confusing noise for
+   a tool that's supposed to be "exclusively for Bichitos Rumble".
+
+Fixed in this pass. Now the lab is genuinely wired to a single
+predictable workflow: click a critter, rig, animate, export, save.
+
+### Root cause of the Explore-page bug
+
+Vercel evaluates static files BEFORE applying rewrites. Our
+`vercel.json` had:
+
+```json
+{ "source": "/animations", "destination": "/animations/create.html" }
+```
+
+But `dist/animations/index.html` existed (from mesh2motion's Explore
+entry) so Vercel served that directly and never reached the rewrite.
+
+### Fix
+
+Dropped `main` (Explore) and `retarget` (Retarget) from the build's
+`rollupOptions.input`. Only `create.html` is a build entry now. With
+no `index.html` in `dist/animations/`, Vercel falls through to the
+rewrite and reaches our working page every time.
+
+Upstream source files (`src/index.html`, `src/retarget/`) remain in
+the repo for future upstream-diff comparisons, but they're not built
+or shipped.
+
+### UI cleanup (CSS overrides in `create.html`)
+
+Added an inline `<style>` block at the end of the `<head>` that
+hides every upstream UI element we don't want the user to see:
+
+- **Upstream `<nav>` left cluster** (mesh2motion logo, Explore /
+  Use Your Model / Use Your Rigged Model links) → hidden.
+- **Nav right cluster's** `Learn`, `Contributors`, 💗, GitHub → hidden.
+  Only the Settings dropdown (theme + light intensity) stays because
+  it's actually useful for inspecting the rigged model.
+- **Nav pseudo-heading**: `nav::before` shows `🎬 Animation Lab —
+  exclusive for Bichitos Rumble` in yellow so the page feels ours.
+- **Upload button** (`label[for="model-upload"]` + the hidden input) →
+  hidden. Our roster picker is the only way in.
+- **"Reference model" dropdown** (the upstream Human/Fox/Bird/Dragon/
+  Kaiju selector) → hidden. Our roster picker writes an option into
+  the same `<select>` element programmatically and triggers the load,
+  so the upstream selector is redundant.
+
+The hidden elements stay in the DOM so `BichitosRosterPicker.ts` can
+still reach `#model-selection` and `#load-model-button` to piggy-back
+on the existing load path. Zero mesh2motion internals modified.
+
+### Roster picker UX pass
+
+`src/BichitosRosterPicker.ts` tightened:
+
+- The picker is now framed more prominently (bigger title, clearer
+  subtitle, description of why the upload button is hidden).
+- Active critter card gets a yellow highlight (`is-active` class) so
+  the user knows which one is loaded.
+- Module-scoped `currentCritter` reference used by the export hook.
+- **Export filename override**: the hidden download link
+  (`#download-hidden-link`) gets a click listener that rewrites
+  `this.download` to `${currentCritter.id}.glb` right before the save
+  dialog opens. Upstream exports as `exported_model.glb`; after this
+  hook the browser suggests `sergei.glb`, `kurama.glb`, etc.
+- **Post-export toast**: 600ms after the Export button click, a
+  yellow toast appears at the bottom centre with:
+  - Confirmation: `<Name> exported.`
+  - Exact destination path in `<code>`: `public/models/critters/<id>.glb`.
+  - Auto-hides after 6s.
+- The toast also includes the reminder that reloading the game picks
+  up the clips automatically, so the user doesn't wonder what to do
+  next.
+
+### Files changed
+
+- `mesh2motion/vite.config.js` — `rollupOptions.input` reduced to
+  just `create`. Dev server opens `/create.html` directly instead of
+  the marketing page.
+- `mesh2motion/src/create.html` — the inline `<style>` overrides.
+- `mesh2motion/src/BichitosRosterPicker.ts` — updated with tracking,
+  export rename, toast, active-card highlight.
+- `mesh2motion/README-INTEGRATION.md` — rewrote with the user flow,
+  architecture, edit list, upstream-update playbook.
+- `DEV_TOOLS.md` — the sibling-tool note at the top now points at
+  the README with the full details.
+- `BUILD_LOG.md` — this entry.
+
+### Verification
+
+- `cd mesh2motion && npm run build` clean. Output is just:
+  `create.html`, `assets/create-*.{js,css}`, `animations/`, `rigs/`,
+  `models/`, `images/`, `animpreviews/`, `test-files/`.
+  No `index.html` or `retarget/` in the dist.
+- Main game `npm run build` clean. Game bundle unchanged at 3.08 kB;
+  nothing about the game's own runtime changed in this pass.
+- Manual verification pending from the user at
+  `https://www.bichitosrumble.com/animations` after Vercel redeploys.
+
+---
+
 ## 2026-04-19 — Pre-collapse shake + seismic rumble (replaces red blink)
 
 User's request: replace the red blink warning with a small localised

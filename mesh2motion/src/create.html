@@ -12,8 +12,14 @@
     <meta name="googlebot" content="noindex, nofollow" />
     <meta name="description" content="Internal animation lab for Bichitos Rumble. Not a playable build." />
     <style>
-      /* Banner at the top of every mesh2motion page so the user can tell
-         at a glance they're on the internal lab, not the game. */
+      /* -----------------------------------------------------------------
+         Bichitos Rumble adaptation layer.
+         Loaded LAST (inline in the head) so these rules override any
+         upstream mesh2motion styling. Grouped so each override has a
+         clear "why".
+      ----------------------------------------------------------------- */
+
+      /* -- Banner: pinned at the top, marks the page as internal ------- */
       #bichitos-lab-banner {
         position: fixed;
         top: 0; left: 0; right: 0;
@@ -35,8 +41,50 @@
         margin-left: 8px;
       }
       #bichitos-lab-banner a:hover { text-decoration: underline; }
-      /* Push the rest of the page down to make room for the banner. */
       body { padding-top: 22px; }
+
+      /* -- Upstream nav: only the settings dropdown stays. Everything
+            else belongs to the marketing flow (Explore / Use Your Model /
+            Use Your Rigged Model / Learn / Contributors / donation /
+            GitHub) and confuses the user here since we have a single
+            working flow. We hide the noise and shrink the nav's visual
+            footprint. ------------------------------------------------- */
+      nav > div:first-child { display: none !important; }
+      nav > div:last-child #learn-link,
+      nav > div:last-child #attribution-link,
+      nav > div:last-child a[href*="support.mesh2motion"],
+      nav > div:last-child a[href*="github.com"] { display: none !important; }
+      nav {
+        justify-content: flex-end !important;
+        padding: 4px 12px !important;
+      }
+      nav::before {
+        content: '🎬 Animation Lab — exclusive for Bichitos Rumble';
+        font: 700 11px/1 'Segoe UI', Arial, sans-serif;
+        letter-spacing: 0.12em;
+        color: #ffdc5c;
+        margin-right: auto;
+        padding: 4px 10px;
+      }
+
+      /* -- Upstream "Upload" button + "Reference model" dropdown: our
+            BichitosRosterPicker fully replaces them (click a critter card
+            → mesh2motion's internal load path runs with our GLB). Leaving
+            them visible duplicates the UI and invites the user to load
+            random files that wouldn't work with the game. We hide the
+            upstream controls but keep them in the DOM so the picker can
+            still trigger #model-selection + #load-model-button
+            programmatically. ---------------------------------------- */
+      #load-model-tools > label[for="model-upload"],
+      #load-model-tools > input#model-upload,
+      #load-model-tools > div[style*="font-size: 1.5rem"],
+      #load-model-tools > .alternate-background-section {
+        display: none !important;
+      }
+
+      /* -- Make the Debug checkbox that remains in #load-model-tools
+            blend with the cleaner UI. ------------------------------- */
+      #load-model-tools { gap: 0.5rem; }
     </style>
   </head>
   <body style="margin: 0">

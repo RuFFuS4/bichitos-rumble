@@ -14,6 +14,12 @@
 //     deploy to Cloudflare Pages in this project.
 //   - Dev server uses port 5174 so you can run the game (5173) and the
 //     animation tool in parallel.
+//   - ONLY `create.html` is a build entry. Upstream ships three entries
+//     (Explore/marketing, Create/use-your-model, Retarget/use-your-rigged-
+//     model). We only want the second one — it's our single workflow.
+//     Dropping Explore also means the Vercel rewrite `/animations →
+//     /animations/create.html` actually fires (otherwise Vercel serves
+//     the static index.html first and never reaches the rewrite).
 // ---------------------------------------------------------------------------
 
 import { resolve } from 'path';
@@ -27,7 +33,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 5174,
-    open: true,
+    open: '/create.html',
   },
   build: {
     outDir: '../../public/animations',
@@ -35,9 +41,7 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       input: {
-        main:     resolve(__dirname, 'src/index.html'),
-        create:   resolve(__dirname, 'src/create.html'),
-        retarget: resolve(__dirname, 'src/retarget/index.html'),
+        create: resolve(__dirname, 'src/create.html'),
       },
     },
   },

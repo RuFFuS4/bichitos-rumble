@@ -187,25 +187,60 @@ del clip no caiga en ningún keyword.
 
 ## 10 · /animations (Mesh2Motion integrated)
 
-- [ ] `https://www.bichitosrumble.com/animations` carga sin errores.
+### 10.1 La página carga correctamente
+- [ ] `https://www.bichitosrumble.com/animations` carga **el flow de
+      trabajo** (no la página Explore/marketing). El centro de la pantalla
+      muestra el roster picker + el tool panel de mesh2motion.
 - [ ] Banner rojo arriba: `🎬 Bichitos Rumble · Animation Lab · INTERNAL`
       con link "← back to game".
 - [ ] Título del tab: "Bichitos Rumble — Animation Lab (internal)".
 - [ ] View source → `<meta name="robots" content="noindex, nofollow">`.
-- [ ] En el tool panel, por encima del load-model tools, ves **Bichitos
-      Rumble roster** con 9 cards (Sergei, Kurama, Cheeto, Kowalski,
-      Trunk, Sebastian, Shelly, Kermit, Sihans).
-- [ ] Click en Sergei → el GLB carga en la escena 3D. El dropdown
-      `#model-selection` se ha expandido con la opción `Sergei (Bichitos)`.
-- [ ] El tooltip de cada card da la razón del rig sugerido.
-- [ ] Cuando el paso Skeleton se activa, el dropdown `#skeleton-selection`
-      está preseleccionado en el rig sugerido (human para Sergei).
-- [ ] El flujo completo: skeleton fit → elegir animaciones → export GLB
-      funciona.
-- [ ] Reemplazas `public/models/critters/sergei.glb` con el exportado
-      → el skeletal loader del juego detecta los clips (punto 9).
-- [ ] Enlace desde `/tools.html` sidebar footer: `🎬 /animations` abre
-      nueva pestaña al lab.
+
+### 10.2 UI limpiada (no hay elementos upstream visibles)
+- [ ] Arriba en el nav NO ves "Explore / Use Your Model / Use Your
+      Rigged Model / Learn / Contributors / 💗 / GitHub".
+- [ ] Sí ves el pseudo-heading amarillo: `🎬 Animation Lab —
+      exclusive for Bichitos Rumble`.
+- [ ] Sí ves el botón de ⚙️ Settings a la derecha (theme + luz).
+- [ ] En el tool panel NO ves el botón "Upload".
+- [ ] NO ves el dropdown "Reference model" con Human/Fox/Bird/Dragon/Kaiju.
+
+### 10.3 Roster picker funcional
+- [ ] Ves el panel "Choose a critter" con 9 cards (Sergei, Kurama,
+      Cheeto, Kowalski, Trunk, Sebastian, Shelly, Kermit, Sihans).
+- [ ] Cada card muestra: dot de color + nombre + flecha + rig sugerido
+      (ej. "→ human").
+- [ ] Tooltip al hover de cada card explica la razón del rig.
+- [ ] Click en Sergei → el GLB carga. La card queda resaltada con glow
+      amarillo (`is-active`).
+- [ ] Cuando mesh2motion llega al paso Skeleton, el dropdown
+      `#skeleton-selection` está preseleccionado al rig correcto (human).
+
+### 10.4 Flow completo del export
+- [ ] Ajustas el skeleton dentro del mesh.
+- [ ] Eliges animaciones del panel derecho.
+- [ ] Click en "Download" (el botón con el contador de seleccionadas).
+- [ ] El archivo descargado se llama **`sergei.glb`** (no
+      `exported_model.glb`).
+- [ ] Aparece un toast amarillo abajo centro diciendo:
+      `Sergei exported. Save this file as public/models/critters/sergei.glb
+       in the game repo.`
+- [ ] El toast auto-oculta a los 6s.
+
+### 10.5 Integración con el juego
+- [ ] Sustituyes `public/models/critters/sergei.glb` con el exportado.
+- [ ] Reinicias `npm run dev`.
+- [ ] La consola del navegador dice
+      `[Critter] skeletal animator attached: Sergei | clips: ...`
+- [ ] En el juego, Sergei usa los clips (idle/run/etc).
+- [ ] En `/tools.html` → OBSERVE → Skeletal clips, los clips aparecen
+      listados con su state resuelto.
+
+### 10.6 Discoverability
+- [ ] En `/tools.html` sidebar footer hay un enlace
+      `🎬 /animations (mesh2motion-based animation lab)`.
+- [ ] En `/animations`, el link "← back to game" en el banner rojo
+      vuelve al juego.
 
 ---
 

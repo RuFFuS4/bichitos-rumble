@@ -6,10 +6,14 @@ el lab se vuelve ilegible para quien entre después.
 
 ---
 
-> **Sibling tool**: [`/animations`](../mesh2motion/README-INTEGRATION.md) — animation
-> lab based on Mesh2Motion. Internal, same `noindex` posture, used to
-> rig the critters and generate skeletal clips that the game's skeletal
-> loader picks up. Linked from the bottom of this sidebar.
+> **Sibling tool**: [`/animations`](../mesh2motion/README-INTEGRATION.md)
+> — animation lab adapted from Mesh2Motion. Internal, same `noindex`
+> posture. Loads only our 9 critters (roster picker), rewrites the
+> export filename to `<id>.glb`, and pops a toast telling the user
+> where to save the exported GLB in the game repo. The upstream
+> Explore/Retarget flows are NOT built; only `create.html` ships.
+> Full integration notes: [`mesh2motion/README-INTEGRATION.md`](../mesh2motion/README-INTEGRATION.md).
+> Linked from the bottom of this sidebar.
 
 ## Propósito
 
