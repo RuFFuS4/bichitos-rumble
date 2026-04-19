@@ -193,6 +193,25 @@ export class Critter {
   isBot = false;
 
   /**
+   * Per-match counters, reset on reset(). Used by the end-screen stats
+   * block. Works in both offline and online: the edges are detected
+   * from `isHeadbutting` / `falling` / `abilityStates[i].active` which
+   * are set by the local sim in offline and by the sync loop in online
+   * BEFORE Critter.update() runs, so both modes feed the same flags.
+   */
+  matchStats = {
+    headbutts: 0,
+    abilitiesUsed: 0,
+    falls: 0,
+    respawns: 0,
+  };
+
+  /** Edge-detection memory for matchStats counting. */
+  private lastStatsHeadbutting = false;
+  private lastStatsFalling = false;
+  private lastStatsAbilityActive: boolean[] = [false, false, false];
+
+  /**
    * Skeletal animation layer — non-null only when the GLB shipped clips.
    * Coexists with the procedural layer: for light states (idle/walk/run)
    * both run together; for heavy states (victory/defeat/ability/etc.) the
@@ -303,6 +322,7 @@ export class Critter {
       // Online mode: server is authoritative. Procedural animation still
       // runs because it reads vx/vz/abilityStates (all set from server
       // each tick before update() is called).
+      this.tickMatchStats();
       this.tickSkeletal(dt);
       tickProceduralAnimation(this, dt);
       this.updateVisuals();
@@ -382,6 +402,10 @@ export class Critter {
     if (Math.abs(this.vx) > 0.1 || Math.abs(this.vz) > 0.1) {
       this.mesh.rotation.y = Math.atan2(this.vx, this.vz);
     }
+
+    // Per-match stat edges (headbutt / fall / ability). Ordered before
+    // skeletal/procedural so a same-frame stats read reflects this tick.
+    this.tickMatchStats();
 
     // Skeletal animation layer (no-op if this critter has no clips). Runs
     // BEFORE procedural so procedural can read the skeletal state and
@@ -608,6 +632,37 @@ export class Critter {
    *   - Fires ability_1 / ability_2 / ability_3 on the rising edge of
    *     each ability's `active` flag.
    */
+  /**
+   * Advance per-match counters by edge-detecting state transitions.
+   * Called once per Critter.update() in BOTH offline and online paths —
+   * the flags it watches (`isHeadbutting`, `falling`, `abilityStates[i].
+   * active`) are set by the local sim in offline and by the online
+   * sync loop before `update()` runs. So one detection path feeds both.
+   */
+  private tickMatchStats(): void {
+    // Headbutt edge — count one "attempt" per lunge (not per anticipation
+    // so a cancelled anticip wouldn't double-count).
+    if (this.isHeadbutting && !this.lastStatsHeadbutting) {
+      this.matchStats.headbutts++;
+    }
+    this.lastStatsHeadbutting = this.isHeadbutting;
+
+    // Fall edge
+    if (this.falling && !this.lastStatsFalling) {
+      this.matchStats.falls++;
+    }
+    this.lastStatsFalling = this.falling;
+
+    // Ability cast edges (per slot)
+    for (let i = 0; i < this.abilityStates.length && i < 3; i++) {
+      const active = this.abilityStates[i].active;
+      if (active && !this.lastStatsAbilityActive[i]) {
+        this.matchStats.abilitiesUsed++;
+      }
+      this.lastStatsAbilityActive[i] = active;
+    }
+  }
+
   private tickSkeletal(dt: number): void {
     if (!this.skeletal) return;
 
@@ -708,6 +763,7 @@ export class Critter {
     this.body.scale.y = 1.0;
     // Play a respawn clip if present; falls back to idle automatically.
     this.playSkeletal('respawn', { fallback: 'idle' });
+    this.matchStats.respawns++;
   }
 
   /** Permanently eliminated (no lives left). */
@@ -771,5 +827,10 @@ export class Critter {
     this.mesh.scale.set(1, 1, 1);
     this.body.scale.y = 1.0;
     this.abilityStates = createAbilityStates(this.config.name);
+    // Fresh match → reset per-match counters and edge-detection memory.
+    this.matchStats = { headbutts: 0, abilitiesUsed: 0, falls: 0, respawns: 0 };
+    this.lastStatsHeadbutting = false;
+    this.lastStatsFalling = false;
+    this.lastStatsAbilityActive = [false, false, false];
   }
 }

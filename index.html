@@ -652,6 +652,42 @@
       margin-bottom: 24px;
     }
     /* Portal prompt on end screen — separated from match prompt */
+    /* Per-match stats block under the subtitle — counters for the local
+       player's match. Empty (display:none) if no match data available
+       (e.g. match ended on the very first frame, edge case). */
+    #end-stats.end-stats {
+      display: flex;
+      gap: 18px;
+      justify-content: center;
+      margin: 6px 0 18px;
+      padding: 10px 20px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 10px;
+      font-size: 13px;
+      max-width: 480px;
+    }
+    #end-stats .stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      min-width: 60px;
+    }
+    #end-stats .stat-value {
+      font-size: 22px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: #ffdc5c;
+      line-height: 1;
+    }
+    #end-stats .stat-label {
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      opacity: 0.7;
+    }
+
     #end-portal-prompt {
       margin-top: 14px;
       padding-top: 14px;
@@ -740,12 +776,68 @@
       overflow: hidden;
     }
     .waiting-slot.empty {
-      opacity: 0.45;
+      /* Was opacity 0.45 flat + dashed border. Now the border pulses
+         softly so the slot feels like it's "listening" for a player.
+         Avatar gets an animated conic gradient ring behind it. */
       border-style: dashed;
+      border-color: rgba(255,255,255,0.25);
+      animation: waiting-slot-empty-breathe 2.0s ease-in-out infinite;
+    }
+    @keyframes waiting-slot-empty-breathe {
+      0%, 100% { border-color: rgba(255,255,255,0.18); }
+      50%      { border-color: rgba(255,220,92,0.55); }
     }
     .waiting-slot.empty .waiting-slot-avatar {
-      background: rgba(255,255,255,0.08) !important;
-      box-shadow: none;
+      background: rgba(255,255,255,0.05) !important;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+      position: relative;
+      overflow: hidden;
+    }
+    /* A rotating conic gradient arc inside the avatar tile — reads as
+       "searching / awaiting connection". Pure CSS, cheap to run. */
+    .waiting-slot.empty .waiting-slot-avatar::after {
+      content: '';
+      position: absolute;
+      inset: -25%;
+      background: conic-gradient(
+        from 0deg,
+        rgba(255,220,92,0) 0deg,
+        rgba(255,220,92,0) 270deg,
+        rgba(255,220,92,0.45) 330deg,
+        rgba(255,220,92,0.9) 360deg
+      );
+      animation: waiting-slot-empty-spin 1.4s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes waiting-slot-empty-spin {
+      to { transform: rotate(360deg); }
+    }
+    /* Mask the spinner so it reads as a ring, not a filled disc. */
+    .waiting-slot.empty .waiting-slot-avatar::before {
+      content: '';
+      position: absolute;
+      inset: 18%;
+      background: #1a1d2a;
+      border-radius: 8px;
+      z-index: 1;
+    }
+    .waiting-slot.empty .waiting-slot-name {
+      /* Animated ellipsis — "Open…" feels like it's waiting. */
+      animation: waiting-slot-empty-dots 1.6s steps(4, end) infinite;
+    }
+    @keyframes waiting-slot-empty-dots {
+      0%   { content: ''; }
+      25%  { content: '.'; }
+      50%  { content: '..'; }
+      75%  { content: '...'; }
+      100% { content: ''; }
+    }
+    .waiting-slot.empty .waiting-slot-name::after {
+      content: '';
+      display: inline-block;
+      width: 1.1em;
+      text-align: left;
+      animation: waiting-slot-empty-dots 1.6s steps(4, end) infinite;
     }
     .waiting-slot.human {
       border-color: rgba(74, 222, 128, 0.7);
@@ -1108,6 +1200,7 @@
   <div id="end-screen" class="full-overlay hidden">
     <div class="end-result" id="end-result">Result</div>
     <div class="end-subtitle" id="end-subtitle"></div>
+    <div id="end-stats" class="end-stats" style="display:none;"></div>
     <div class="prompt desktop-only"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
     <div class="prompt touch-only">Tap to play again</div>
     <div id="end-portal-prompt" class="prompt desktop-only" style="display:none;">

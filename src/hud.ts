@@ -32,6 +32,8 @@ const waitingCountdownEl = document.getElementById('waiting-countdown');
 const waitingSlotsEl = document.getElementById('waiting-slots');
 // Spectator prompt (dead in online match). Same nullable pattern.
 const spectatorPrompt = document.getElementById('spectator-prompt');
+// End-screen per-match stats block (null on /tools.html).
+const endStatsEl = document.getElementById('end-stats');
 
 /** Total slots on the grid. Must match CSS grid-template-columns × rows. */
 export const GRID_SLOTS = 9;
@@ -211,6 +213,54 @@ export function hideSpectatorPrompt(): void {
 }
 
 // ---------------------------------------------------------------------------
+// End-screen per-match stats
+// ---------------------------------------------------------------------------
+
+export interface EndMatchStats {
+  /** Headbutt lunges performed this match (attempts, not contacts). */
+  headbutts: number;
+  /** Total ability casts across slots (J + K + L). */
+  abilitiesUsed: number;
+  /** Times the player fell off the arena. */
+  falls: number;
+  /** Times the player respawned from a fall. */
+  respawns: number;
+}
+
+/** Show the stats row on the end-screen with the player's counters. */
+export function setEndMatchStats(stats: EndMatchStats): void {
+  if (!endStatsEl) return;
+  const rows: Array<[label: string, value: number]> = [
+    ['Headbutts', stats.headbutts],
+    ['Abilities', stats.abilitiesUsed],
+    ['Falls', stats.falls],
+    ['Respawns', stats.respawns],
+  ];
+  endStatsEl.innerHTML = '';
+  for (const [label, value] of rows) {
+    const col = document.createElement('div');
+    col.className = 'stat';
+    const v = document.createElement('span');
+    v.className = 'stat-value';
+    v.textContent = String(value);
+    const l = document.createElement('span');
+    l.className = 'stat-label';
+    l.textContent = label;
+    col.appendChild(v);
+    col.appendChild(l);
+    endStatsEl.appendChild(col);
+  }
+  endStatsEl.style.display = 'flex';
+}
+
+/** Hide the stats row (called on match start, title return, etc.). */
+export function clearEndMatchStats(): void {
+  if (!endStatsEl) return;
+  endStatsEl.style.display = 'none';
+  endStatsEl.innerHTML = '';
+}
+
+// ---------------------------------------------------------------------------
 // Gamepad toast — auto-hiding notification for connect/disconnect events
 // ---------------------------------------------------------------------------
 //
@@ -304,10 +354,12 @@ function buildWaitingSlotEl(s: WaitingSlotData): HTMLDivElement {
   }
   el.appendChild(avatar);
 
-  // Critter name: Sergei, Trunk, etc. Prominent text under the avatar.
+  // Critter name for filled slots ("Sergei", "Trunk"); placeholder
+  // "Open" for empty slots so the animated-dots CSS reads as
+  // "waiting for player…" instead of pointing at a dash.
   const name = document.createElement('span');
   name.className = 'waiting-slot-name';
-  name.textContent = s.name || '—';
+  name.textContent = s.name || (s.kind === 'empty' ? 'Open' : '—');
   el.appendChild(name);
 
   // Badge: HUMAN / 🤖 BOT / OPEN — type of participant, below the name.

@@ -18,6 +18,7 @@ import {
   setPortalLegend, setPortalToggleHandler,
   showWaitingScreen, hideWaitingScreen, updateWaitingScreen,
   showSpectatorPrompt, hideSpectatorPrompt,
+  setEndMatchStats, clearEndMatchStats,
   type EndResult, type WaitingScreenData,
 } from './hud';
 import { applyHitStop, FEEL } from './gamefeel';
@@ -262,6 +263,7 @@ export class Game {
     // clicks. Defensive hide here covers every way to reach the title.
     hideWaitingScreen();
     hideSpectatorPrompt();
+    clearEndMatchStats();
     hideOverlay();
     hidePreview();
     // Ensure the mode highlight matches the current state (default: bots)
@@ -768,6 +770,17 @@ export class Game {
         for (const c of this.onlineCritters.values()) {
           if (c.alive) c.playSkeletal('victory', { fallback: 'victory' });
         }
+
+        // End-screen stats — local player's counters. this.player on
+        // online points at the local critter in onlineCritters.
+        if (this.player) {
+          setEndMatchStats({
+            headbutts: this.player.matchStats.headbutts,
+            abilitiesUsed: this.player.matchStats.abilitiesUsed,
+            falls: this.player.matchStats.falls,
+            respawns: this.player.matchStats.respawns,
+          });
+        }
       }
     }
 
@@ -888,6 +901,17 @@ export class Game {
     // Critter.eliminate(). No-op for critters without animation clips.
     for (const c of this.critters) {
       if (c.alive) c.playSkeletal('victory', { fallback: 'victory' });
+    }
+
+    // End-screen stats block — the LOCAL player's per-match counters.
+    // Online calls a separate path (see updateOnline 'ended' branch).
+    if (this.player) {
+      setEndMatchStats({
+        headbutts: this.player.matchStats.headbutts,
+        abilitiesUsed: this.player.matchStats.abilitiesUsed,
+        falls: this.player.matchStats.falls,
+        respawns: this.player.matchStats.respawns,
+      });
     }
 
     // Stats: record the match outcome for the player's critter. Draws are
