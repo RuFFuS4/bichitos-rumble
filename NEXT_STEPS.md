@@ -113,6 +113,50 @@ de destrucción) son prioritarios; si algo cae por tiempo, es el
 
 ---
 
+## Visual + UX backlog (2026-04-23)
+
+Ideas acumuladas para cuando toque la pasada de presentación final.
+Marcadas por impacto/urgencia. Las que ya se atacaron quedan tachadas
+al cerrarse.
+
+### Hacer ahora (bloque 2026-04-23)
+- [x] **Sistema de stats P/W/S (-2..+2)** — centralizar
+      Power/Weight/Speed en 5 niveles y derivar numéricos de ahí.
+      Simplifica ajustar cada bichito y el HUD ya muestra estas 3
+      barras. Ver `src/pws-stats.ts` + roster nuevo.
+- [x] **Fragmentos del arena caen al vacío** — en vez de desaparecer
+      en place, se les quita la colisión + aplican gravedad + rotan
+      ligeramente + se eliminan al salir de cámara.
+- [x] **Iluminación general del ingame** — tres puntos + rim + fill,
+      intensidades mejores, tono cálido del sol.
+- [x] **Fondo ingame** — sensación de "plataforma flotando" (cielo
+      con nubes lejanas + perspectiva de altura).
+- [x] **321 countdown mejorado** — críttrs caen del cielo durante la
+      cuenta, SFX de impacto + partículas de polvo al aterrizar.
+- [x] **`AI_PROMPTS.md`** — prompts listos para IAs generativas:
+      favicon, HUD del bichito (avatar + vidas + belts icono + habs),
+      iconos de habilidades, SFX personalizados via Suno.
+
+### Planeadas — más adelante
+- **Variedad en plataformas** (según el trailer que el usuario me
+  pasó) — cada arena con tema visual distinto (jungla, desierto,
+  hielo, playa, …). Afecta sólo texturas + meshes decorativos; la
+  lógica del colapso queda intacta.
+- **Elementos "traviesos" en el terreno** — zonas que empujan,
+  resortes, corrientes de aire, hielo resbaladizo aislado. Solo al
+  final si sobra tiempo.
+- **Voz para el countdown 3-2-1-GO!** — grabar o generar con una IA
+  de voz (ElevenLabs, etc.). Hoy es sólo texto + overlay pop.
+- **Sonidos personalizados en Suno** — además de la música. SFX
+  signature de cada bichito (rugido de Cheeto, trompeteo de Trunk,
+  cua-cua de Kermit, …). Hoy los SFX son sintetizados en Web Audio.
+- **HUD individual por bichito con arte real** — cuando
+  `AI_PROMPTS.md` salga, generar los 9 avatares + marcos + iconos
+  de cinturón (modo emoji y modo modelo 3D).
+- **Favicon** (AI_PROMPTS.md) — ahora es default Vite.
+
+---
+
 ## Standby list — nada se descarta
 
 Todo lo que hemos hablado sigue vivo. Si una fase acaba antes de tiempo,
