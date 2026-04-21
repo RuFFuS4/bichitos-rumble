@@ -15,8 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { getDisplayRoster, type RosterEntry } from './roster';
-import { CRITTER_PRESETS } from './critter';
+import { getDisplayRoster } from './roster';
 
 // ---------------------------------------------------------------------------
 // URL params (read once at module load)
@@ -142,11 +141,6 @@ export function resolvePortalCharacter(): number {
 export function togglePortalExpanded(): void {
   expanded = !expanded;
   console.debug('[Portal] expanded =', expanded);
-}
-
-/** Current expansion target (not the smoothed value). */
-export function isPortalExpanded(): boolean {
-  return expanded;
 }
 
 /** Whether a start portal exists in this match (for HUD legend). */

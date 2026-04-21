@@ -21,7 +21,9 @@ const infoAbilities = document.getElementById('critter-info-abilities')!;
 const endScreen = document.getElementById('end-screen')!;
 const endResultEl = document.getElementById('end-result')!;
 const endSubtitleEl = document.getElementById('end-subtitle')!;
-const portalLegendEl = document.getElementById('portal-legend')!;
+// portal-legend itself is styled entirely via CSS (body.match-active gate),
+// so we only need a handle to the return-row to toggle its visibility
+// when a return portal actually exists.
 const portalLegendReturnEl = document.getElementById('portal-legend-return')!;
 const portalToggleBtn = document.getElementById('btn-portal-toggle')!;
 
@@ -34,9 +36,6 @@ const waitingSlotsEl = document.getElementById('waiting-slots');
 const spectatorPrompt = document.getElementById('spectator-prompt');
 // End-screen per-match stats block (null on /tools.html).
 const endStatsEl = document.getElementById('end-stats');
-
-/** Total slots on the grid. Must match CSS grid-template-columns × rows. */
-export const GRID_SLOTS = 9;
 
 export function updateHUD(aliveCount: number, timeLeft: number): void {
   aliveEl.textContent = `Alive: ${aliveCount}`;
@@ -230,27 +229,64 @@ export interface EndMatchStats {
 /** Show the stats row on the end-screen with the player's counters. */
 export function setEndMatchStats(stats: EndMatchStats): void {
   if (!endStatsEl) return;
-  const rows: Array<[label: string, value: number]> = [
-    ['Headbutts', stats.headbutts],
-    ['Abilities', stats.abilitiesUsed],
-    ['Falls', stats.falls],
-    ['Respawns', stats.respawns],
+  // Order + icon per stat. Emojis chosen to read at a glance in the
+  // small 13px row — no custom asset pipeline required. If we ever
+  // want themed glyphs, swap these for CSS masked SVGs without
+  // touching the rest.
+  const rows: Array<{ icon: string; label: string; value: number }> = [
+    { icon: '⚡', label: 'Headbutts',  value: stats.headbutts     },
+    { icon: '✨', label: 'Abilities',  value: stats.abilitiesUsed },
+    { icon: '💀', label: 'Falls',      value: stats.falls         },
+    { icon: '🔁', label: 'Respawns',   value: stats.respawns      },
   ];
   endStatsEl.innerHTML = '';
-  for (const [label, value] of rows) {
+  const valueEls: Array<{ el: HTMLSpanElement; target: number }> = [];
+  for (const { icon, label, value } of rows) {
     const col = document.createElement('div');
     col.className = 'stat';
+    const i = document.createElement('span');
+    i.className = 'stat-icon';
+    i.textContent = icon;
     const v = document.createElement('span');
     v.className = 'stat-value';
-    v.textContent = String(value);
+    v.textContent = '0';
     const l = document.createElement('span');
     l.className = 'stat-label';
     l.textContent = label;
+    col.appendChild(i);
     col.appendChild(v);
     col.appendChild(l);
     endStatsEl.appendChild(col);
+    valueEls.push({ el: v, target: value });
   }
   endStatsEl.style.display = 'flex';
+  // Trigger the entry animation (CSS handles the look) by toggling a
+  // class. Using the next frame so the display:flex has committed.
+  endStatsEl.classList.remove('stats-enter');
+  requestAnimationFrame(() => {
+    endStatsEl.classList.add('stats-enter');
+  });
+  // Count-up: each number eases from 0 to its final value over ~700 ms.
+  // Pure RAF loop, no extra deps. Safe to re-invoke — the previous loop's
+  // stored el is overwritten on the next setEndMatchStats() call.
+  animateCountUp(valueEls, 700);
+}
+
+function animateCountUp(
+  entries: Array<{ el: HTMLSpanElement; target: number }>,
+  durationMs: number,
+): void {
+  const start = performance.now();
+  function step(now: number) {
+    const t = Math.min(1, (now - start) / durationMs);
+    // easeOutCubic — fast first, soft landing
+    const eased = 1 - Math.pow(1 - t, 3);
+    for (const { el, target } of entries) {
+      el.textContent = String(Math.round(target * eased));
+    }
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 /** Hide the stats row (called on match start, title return, etc.). */

@@ -64,8 +64,11 @@ let current: Stats = empty();
  * in-memory snapshot. Safe to call multiple times. Returns the loaded stats.
  * On any error (parse, disabled storage) the in-memory state is reset to
  * an empty stats object and the error is swallowed.
+ *
+ * Internal — called once at module load. If an external caller ever needs
+ * a reset handle, re-export here.
  */
-export function loadStats(): Stats {
+function loadStats(): Stats {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -130,10 +133,8 @@ export function recordFall(critterName: string): void {
   save();
 }
 
-/** Read-only snapshot of the current in-memory stats. Do not mutate. */
-export function getStats(): Stats {
-  return current;
-}
-
 // Auto-load on module import so callers don't have to remember.
+// If a consumer ever needs to read the current snapshot (e.g. the BADGES
+// system per BADGES_DESIGN.md), re-expose `getStats()` here — it was
+// removed in the dead-code audit when no consumer existed.
 loadStats();

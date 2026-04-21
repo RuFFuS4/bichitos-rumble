@@ -139,7 +139,7 @@ export function loadMutedState(): void {
  * Any in-flight oscillators stop being audible immediately because their
  * output flows through the masterGain node which is now at 0.
  */
-export function setSfxMuted(value: boolean): void {
+function setSfxMuted(value: boolean): void {
   sfxMuted = value;
   try {
     localStorage.setItem(STORAGE_KEY_SFX, value ? '1' : '0');
@@ -165,7 +165,7 @@ export function isSfxMuted(): boolean {
  * pattern as SFX — if a track is playing, it goes silent without waiting
  * for any ramp. Persisted to localStorage.
  */
-export function setMusicMuted(value: boolean): void {
+function setMusicMuted(value: boolean): void {
   musicMuted = value;
   try {
     localStorage.setItem(STORAGE_KEY_MUSIC, value ? '1' : '0');
@@ -357,7 +357,6 @@ function playRespawn(): void {
 // Usage (once gameplay wires it up):
 //   playMusic('intro')           — starts or crossfades to the intro loop
 //   playMusic('ingame')          — switches to the in-game track
-//   stopMusic()                  — fades out whatever is playing
 //
 // Design:
 //   - Tracks live at public/audio/*.mp3 (fetched on first request, cached).
@@ -439,27 +438,6 @@ export async function playMusic(track: MusicTrack): Promise<void> {
     prev.gain.gain.exponentialRampToValueAtTime(MIN_GAIN, fadeEnd);
     try { prev.source.stop(fadeEnd + 0.05); } catch { /* already stopped */ }
   }
-}
-
-/** Fade out the current track (if any) and release it. Uses exponential
- *  ramp for the same "cleaner than linear" reason as playMusic. */
-export function stopMusic(): void {
-  if (!ctx || !currentMusic) return;
-  const now = ctx.currentTime;
-  const { source, gain } = currentMusic;
-  const currentVal = Math.max(MIN_GAIN, gain.gain.value);
-  gain.gain.cancelScheduledValues(now);
-  gain.gain.setValueAtTime(currentVal, now);
-  gain.gain.exponentialRampToValueAtTime(MIN_GAIN, now + MAIN_FADE_SEC);
-  try { source.stop(now + MAIN_FADE_SEC + 0.05); } catch { /* already stopped */ }
-  currentMusic = null;
-}
-
-/** True if the given track is currently playing (may still be ramping in). */
-export function isMusicPlaying(track?: MusicTrack): boolean {
-  if (!currentMusic) return false;
-  if (!track) return true;
-  return currentMusic.track === track;
 }
 
 /**
