@@ -520,15 +520,75 @@ Bloque de contadores de partida reestilizado.
 
 Solo para tu verificación cuando toque. No gameplay:
 
-- [ ] `npm run verify:glbs` — lista los 9 GLBs con clips resolved.
+- [ ] `npm run verify:glbs` — lista los 9 GLBs con clips resolved
+      contra los **8 estados target** (política post-2026-04-22).
+      Pasa `--all-states` para el scan legacy de 13 estados.
 - [ ] `npm run inspect:clips public/models/critters/<id>.glb` —
       reporta per-clip (duración, channels, alive, max_var, verdict).
 - [ ] `npm run import:critter <id> <source.glb>` — import via
       `scripts/mappings/<id>.json` si existe, o `--map` inline.
 - [ ] `npm run og -- <source>` — genera `public/og-image.png`
       1200×628 (flags `--position` y `--fit` disponibles).
+- [ ] `npm run compress:audio` — re-encoda MP3s de `public/audio/`
+      con ffmpeg-static. Por defecto VBR 4 (~128 kbps); `--quality 5..7`
+      para ahorrar más si la pérdida audible no molesta. `--dry-run`
+      muestra plan.
+- [ ] `npm run test:smoke` — Playwright chromium headless, recorre
+      title → vs Bots → match starts en ~15 s. Primera vez:
+      `npx playwright install chromium` (~120 MB, one-off).
 - [ ] `npm run check` — `tsc + verify:glbs + build` todo seguido.
       Gate obvio antes de merge `dev → main`.
+
+---
+
+## 21 · Badges — WWE-belt achievement system (Phase 3+4)
+
+Scaffolding completo sin Phase 5 (arte real). Los iconos son emojis
+placeholder hasta que lleguen las PNGs finales.
+
+### 21.1 End-screen toast (Phase 3)
+- [ ] Juega una partida offline hasta ganar. Al llegar al end-screen,
+      si desbloqueaste badges, aparece un toast arriba-centro con:
+      icono placeholder + "NEW BELT UNLOCKED" + nombre + descripción.
+- [ ] El toast tiene entrada animada (slide + scale pulse), shine
+      sweep dorado y se auto-dismisea tras 6 s.
+- [ ] Click sobre el toast lo cierra antes del auto-dismiss.
+- [ ] Tras cerrarse, `localStorage.getItem('br-stats-v2')` ya NO tiene
+      `recentlyUnlocked` (debería ser `null`).
+- [ ] Si sigues ganando partidas y NO hay nuevos unlocks, el toast
+      NO aparece (silencio correcto).
+
+### 21.2 Hall of Belts (Phase 4 light)
+- [ ] En character-select, arriba-derecha hay un botón pill **🏆 Belts**.
+      Click (o tecla **B**) abre el modal.
+- [ ] El modal muestra los 16 belts en grid (desktop: 4 columnas; tablet:
+      3 columnas; móvil: 2 columnas).
+- [ ] Belts **desbloqueados** en amarillo/dorado con icono a color.
+      Belts **bloqueados** en gris con candado 🔒.
+- [ ] Hover sobre cada slot muestra tooltip nativo (desktop) con
+      nombre + descripción. En touch, la descripción ya está debajo
+      del nombre siempre visible.
+- [ ] Arriba del grid: contador `X / 16 UNLOCKED`.
+- [ ] Cerrar con: **Esc**, **B**, click en el ✕, o click en el
+      backdrop semi-transparente.
+- [ ] Al reabrir tras ganar una partida nueva, los counters y
+      unlocks reflejan el cambio (no queda cacheado).
+
+### 21.3 Test de condiciones (manual, localStorage editor)
+Ruta rápida sin jugar 20 partidas:
+
+1. DevTools → Application → localStorage → key `br-stats-v2`.
+2. Edit el JSON — p.ej. set `totalWins: 20` y cualquier bichito con
+   `wins: 5`.
+3. Recarga y juega 1 partida completa ganando: los badges que
+   cumplan condición quedarán en `unlockedBadges` + toast el último.
+
+### 21.4 Migración v1 → v2
+- [ ] Si tienes un `br-stats-v1` en localStorage (usuario pre-2026-04-22),
+      al cargar el juego los contadores v1 migran a v2 sin pérdida.
+      Verificable limpiando v2 primero: `localStorage.removeItem(
+      'br-stats-v2')` y recargando — los picks/wins viejos siguen
+      visibles en la UI de stats del end-screen.
 
 ---
 

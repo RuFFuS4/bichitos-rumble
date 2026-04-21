@@ -266,17 +266,41 @@ Por trofeo:
   - Solo offline por ahora — el flujo online (BrawlRoom) tiene su
     propio end-screen callback que aún NO dispara badges. Se
     añadirá cuando validemos el offline primero.
-- **Fase 3** (pendiente) · UI overlay en end-screen — el toast "NEW
-  BELT UNLOCKED" con animación de aparición, silueta del belt en
-  plomo antes del reveal. Lee `stats.recentlyUnlocked` y llama a
-  `clearRecentlyUnlocked()` al cerrarse.
-- **Fase 4** · Grid "Hall of Belts" en character-select.
-- **Fase 5** · Generar y colocar los 16 assets en `public/badges/`.
+- ✅ **Fase 3** (commit 2026-04-22) — Toast end-screen:
+  - `src/badge-toast.ts` nuevo módulo con `initBadgeToast`,
+    `maybeShowBadgeToast`, `dismissBadgeToast`. Lee
+    `stats.recentlyUnlocked` y llama a `clearRecentlyUnlocked()` al
+    cerrarse (click o auto-dismiss a los 6 s).
+  - `BadgeDef` ampliado con `icon` (emoji placeholder hasta Fase 5).
+  - `index.html` añade `#badge-toast` node + CSS (radial glow
+    dorado, shine sweep, enter animation scale+slide).
+  - `src/game.ts` llama `maybeShowBadgeToast()` tras
+    `addUnlockedBadges()` en el win path offline.
+  - `src/main.ts` hace `initBadgeToast()` al boot.
+- ✅ **Fase 4 light** (commit 2026-04-22) — Hall of Belts modal:
+  - `src/hall-of-belts.ts` nuevo módulo con `initHallOfBelts`,
+    `openHallOfBelts`, `closeHallOfBelts`, `isHallOfBeltsOpen`.
+    Teclas: **B** en character-select abre/cierra; **Esc** siempre
+    cierra.
+  - Modal fullscreen con grid responsive (4/3/2 columnas según
+    viewport), unlocked en dorado, locked con 🔒 + criterio visible,
+    contador `X / 16`.
+  - Botón dedicado **🏆 Belts** arriba-derecha del character-select.
+  - El grid se recrea en cada open para reflejar stats frescas.
+- **Fase 5** (pendiente) · Generar y colocar los 16 assets en
+  `public/badges/`. Prompts + tabla per-critter ya listos en este
+  mismo doc (sección "Prompt para generación de belts"). Cuando
+  lleguen los PNG, swap el innerHTML de `.badge-toast-icon` y
+  `.belt-icon` por un `<img src="/badges/<id>.png">`. El resto del
+  CSS ya está preparado para esa forma.
 - **Fase 6** · Validación — jugar 5-10 partidas buscando cada logro,
-  ajustar umbrales.
+  ajustar umbrales. VALIDATION_CHECKLIST §21 lista los smoke tests
+  manuales (toast / Hall of Belts / migración v1→v2 / edición
+  directa de localStorage).
 
-Total aproximado restante: **4-5 horas** de ingeniería + el tiempo
-externo de generación de arte.
+Total aproximado restante: **2 horas** de ingeniería (Fase 5 swap
+de assets + Fase 6 tunado de thresholds) + el tiempo externo de
+generación de arte.
 
 ## Decisiones pendientes (cuando retomemos)
 

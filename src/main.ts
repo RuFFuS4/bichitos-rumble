@@ -11,6 +11,8 @@ import {
   toggleSfxMuted, isSfxMuted,
   toggleMusicMuted, isMusicMuted,
 } from './audio';
+import { initBadgeToast } from './badge-toast';
+import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 
 // ---------------------------------------------------------------------------
 // WebGL diagnostic + renderer creation
@@ -88,6 +90,20 @@ if (previewCanvas) {
 if (isLikelyMobile()) {
   initTouchInput();
 }
+
+// Badge toast — creates the DOM node so the first match-end is ready to
+// surface an unlock. Cheap (one div), idempotent, no runtime cost until
+// Game calls maybeShowBadgeToast().
+initBadgeToast();
+
+// Hall of Belts modal — also pre-created so the first B-press / button
+// click from character-select opens instantly. The grid is rebuilt each
+// open against the current stats blob.
+initHallOfBelts();
+// Wire the on-screen "🏆 Belts" button (character-select overlay).
+document.getElementById('btn-open-belts')?.addEventListener('click', () => {
+  openHallOfBelts();
+});
 
 // Gamepad — always on. initGamepadInput is idempotent and cheap: it only
 // attaches the `gamepadconnected`/`gamepaddisconnected` listeners and

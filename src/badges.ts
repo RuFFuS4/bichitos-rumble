@@ -56,6 +56,10 @@ export interface BadgeDef {
   name: string;
   /** Short description surfaced in tooltips and the Hall of Belts. */
   description: string;
+  /** Placeholder emoji shown in the toast + Hall of Belts until the real
+   *  PNG assets land (Phase 5). Chosen for silhouette legibility at the
+   *  small sizes the UI uses. Swap to SVG masks later if desired. */
+  icon: string;
   /** Only for `category: 'champion'` — which critter this belongs to. */
   critter?: string;
   /** Pure predicate — true when the player's stats meet the criteria. */
@@ -72,26 +76,28 @@ export interface BadgeDef {
 interface ChampionSpec {
   critter: string;
   flavour: string;   // "Jungle Champion" / "Swamp Champion" / …
+  icon: string;      // placeholder emoji until Phase 5 art lands
 }
 
 const CHAMPIONS: ChampionSpec[] = [
-  { critter: 'Sergei',    flavour: 'Jungle Champion'    },
-  { critter: 'Trunk',     flavour: 'Savanna Champion'   },
-  { critter: 'Kurama',    flavour: 'Kitsune Champion'   },
-  { critter: 'Shelly',    flavour: 'Beachside Champion' },
-  { critter: 'Kermit',    flavour: 'Swamp Champion'     },
-  { critter: 'Sihans',    flavour: 'Desert Champion'    },
-  { critter: 'Kowalski',  flavour: 'Tundra Champion'    },
-  { critter: 'Cheeto',    flavour: 'Apex Champion'      },
-  { critter: 'Sebastian', flavour: 'Tide Champion'      },
+  { critter: 'Sergei',    flavour: 'Jungle Champion',    icon: '🦍' },
+  { critter: 'Trunk',     flavour: 'Savanna Champion',   icon: '🐘' },
+  { critter: 'Kurama',    flavour: 'Kitsune Champion',   icon: '🦊' },
+  { critter: 'Shelly',    flavour: 'Beachside Champion', icon: '🐢' },
+  { critter: 'Kermit',    flavour: 'Swamp Champion',     icon: '🐸' },
+  { critter: 'Sihans',    flavour: 'Desert Champion',    icon: '🦫' },
+  { critter: 'Kowalski',  flavour: 'Tundra Champion',    icon: '🐧' },
+  { critter: 'Cheeto',    flavour: 'Apex Champion',      icon: '🐯' },
+  { critter: 'Sebastian', flavour: 'Tide Champion',      icon: '🦀' },
 ];
 
 function championBadges(): BadgeDef[] {
-  return CHAMPIONS.map(({ critter, flavour }) => ({
+  return CHAMPIONS.map(({ critter, flavour, icon }) => ({
     id: `${critter.toLowerCase()}-champion`,
     category: 'champion' as const,
     name: `${critter} — ${flavour}`,
     description: `Win ${CHAMPION_WINS_THRESHOLD} matches with ${critter}.`,
+    icon,
     critter,
     condition: (s: Stats) => (s.byCritter[critter]?.wins ?? 0) >= CHAMPION_WINS_THRESHOLD,
   }));
@@ -107,6 +113,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     category: 'global',
     name: 'Speedrun Belt',
     description: `Win a match in ${SPEEDRUN_MAX_SECS} seconds or less.`,
+    icon: '⚡',
     condition: (s) =>
       s.fastestWinSecs !== null && s.fastestWinSecs <= SPEEDRUN_MAX_SECS,
   },
@@ -115,6 +122,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     category: 'global',
     name: 'Iron Will',
     description: 'Win a match without losing a single life.',
+    icon: '🛡️',
     condition: (s) => s.noDeathWins >= 1,
   },
   {
@@ -122,6 +130,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     category: 'global',
     name: 'Untouchable',
     description: 'Win a match without taking a single headbutt.',
+    icon: '👻',
     condition: (s) => s.noHitWins >= 1,
   },
   {
@@ -129,6 +138,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     category: 'global',
     name: 'Survivor',
     description: `Reach ${SURVIVOR_WINS_THRESHOLD} total wins across the roster.`,
+    icon: '🏔️',
     condition: (s) => s.totalWins >= SURVIVOR_WINS_THRESHOLD,
   },
   {
@@ -136,6 +146,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     category: 'global',
     name: 'Globetrotter',
     description: 'Win at least one match with every playable critter.',
+    icon: '🌍',
     condition: (s) => {
       // Every critter in CHAMPIONS must have at least 1 win.
       for (const { critter } of CHAMPIONS) {
@@ -149,6 +160,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     category: 'global',
     name: 'Arena Apex',
     description: 'Win a match with only one life left (comeback victory).',
+    icon: '🔥',
     condition: (s) => s.comebackWins >= 1,
   },
   {
@@ -156,6 +168,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     category: 'global',
     name: 'Pain Tolerance',
     description: `Win at least one match after taking ${PAIN_TOLERANCE_MIN_HITS}+ headbutts.`,
+    icon: '💪',
     // Coarse heuristic: cumulative hits received ≥ threshold AND ≥1 total
     // win. Phase 2 may refine with per-match tracking if the bar feels off.
     condition: (s) => {

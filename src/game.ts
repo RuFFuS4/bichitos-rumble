@@ -29,6 +29,7 @@ import {
   addUnlockedBadges, getStats,
 } from './stats';
 import { checkBadgeUnlocks } from './badges';
+import { maybeShowBadgeToast } from './badge-toast';
 import { getDisplayRoster, getRosterEntry, getPlayableNames, type RosterEntry } from './roster';
 import { preloadModels } from './model-loader';
 import {
@@ -947,6 +948,9 @@ export class Game {
         addUnlockedBadges(newly);
         console.debug('[Badges] unlocked:', newly.join(', '));
       }
+      // Show the end-screen toast for the most recent unlock (if any).
+      // No-op when `stats.recentlyUnlocked === null`.
+      maybeShowBadgeToast();
     }
     // Reset start timestamp so a stray post-match tick can't re-fire.
     this.matchStartMs = 0;

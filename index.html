@@ -1151,6 +1151,361 @@
       body.touch-mode #rotate-prompt { display: flex; }
     }
 
+    /* ---------- Hall of Belts button (opens the modal from character-select) ---------- */
+    .belts-trigger {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px 8px 12px;
+      background: rgba(10, 10, 24, 0.55);
+      border: 1px solid rgba(255, 220, 92, 0.35);
+      border-radius: 22px;
+      color: rgba(255, 255, 255, 0.88);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: background 0.18s, border-color 0.18s, transform 0.12s;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    .belts-trigger:hover {
+      background: rgba(255, 220, 92, 0.14);
+      border-color: rgba(255, 220, 92, 0.8);
+      transform: translateY(-1px);
+    }
+    .belts-trigger-icon { font-size: 16px; line-height: 1; }
+
+    /* ---------- Hall of Belts modal (BADGES_DESIGN Phase 4 light) ----------
+       Full-screen overlay listing every belt in the catalog. Unlocked
+       belts render in colour; locked ones show the criterion so the
+       player knows what to chase. Placeholder emoji icons until Phase 5. */
+    .belts-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      pointer-events: auto;
+    }
+    .belts-modal.hidden { display: none; }
+    .belts-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(5, 5, 14, 0.78);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      cursor: pointer;
+    }
+    .belts-panel {
+      position: relative;
+      width: min(780px, 100%);
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(
+        145deg,
+        rgba(26, 22, 12, 0.96) 0%,
+        rgba(14, 12, 6, 0.96) 100%
+      );
+      border: 1px solid rgba(255, 220, 92, 0.45);
+      border-radius: 18px;
+      color: #fff;
+      box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.65),
+        0 0 60px rgba(255, 220, 92, 0.18);
+      animation: belts-panel-enter 0.28s ease-out forwards;
+    }
+    @keyframes belts-panel-enter {
+      from { opacity: 0; transform: scale(0.96) translateY(10px); }
+      to   { opacity: 1; transform: scale(1)    translateY(0);   }
+    }
+    .belts-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 22px 14px;
+      border-bottom: 1px solid rgba(255, 220, 92, 0.18);
+    }
+    .belts-title {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: #ffdc5c;
+      flex-shrink: 0;
+    }
+    .belts-progress {
+      flex: 1;
+      text-align: right;
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.62);
+      font-weight: 600;
+    }
+    .belts-close {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+    .belts-close:hover {
+      background: rgba(255, 220, 92, 0.2);
+      color: #fff;
+      border-color: rgba(255, 220, 92, 0.6);
+    }
+    .belts-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      padding: 18px 22px;
+      overflow-y: auto;
+    }
+    .belts-footer {
+      padding: 12px 22px 16px;
+      border-top: 1px solid rgba(255, 220, 92, 0.12);
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .belts-footer kbd {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.12);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-family: 'Consolas', 'Menlo', monospace;
+      font-size: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #ffdc5c;
+      margin: 0 2px;
+    }
+    /* ---------- Single belt slot ---------- */
+    .belt-slot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 12px 8px 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      text-align: center;
+      transition: transform 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .belt-slot.unlocked {
+      background: linear-gradient(
+        180deg,
+        rgba(255, 220, 92, 0.12) 0%,
+        rgba(255, 220, 92, 0.04) 100%
+      );
+      border-color: rgba(255, 220, 92, 0.55);
+    }
+    .belt-slot.unlocked:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 220, 92, 0.85);
+      background: linear-gradient(
+        180deg,
+        rgba(255, 220, 92, 0.2) 0%,
+        rgba(255, 220, 92, 0.08) 100%
+      );
+    }
+    .belt-slot.locked {
+      opacity: 0.68;
+    }
+    .belt-slot.locked:hover {
+      opacity: 0.9;
+    }
+    .belt-icon {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      border-radius: 50%;
+      background: radial-gradient(
+        circle at 50% 45%,
+        rgba(255, 220, 92, 0.18) 0%,
+        transparent 70%
+      );
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+    }
+    .belt-slot.locked .belt-icon {
+      background: radial-gradient(
+        circle at 50% 45%,
+        rgba(255, 255, 255, 0.05) 0%,
+        transparent 70%
+      );
+      filter: grayscale(1) brightness(0.65);
+    }
+    .belt-slot.unlocked .belt-icon {
+      box-shadow: 0 0 14px rgba(255, 220, 92, 0.4);
+      border: 1.5px solid rgba(255, 220, 92, 0.6);
+    }
+    .belt-name {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      color: #fff;
+      line-height: 1.25;
+    }
+    .belt-slot.locked .belt-name {
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .belt-desc {
+      font-size: 10px;
+      line-height: 1.25;
+      opacity: 0.6;
+      color: #f3e7c4;
+    }
+
+    /* Responsive — compact grid on narrow screens */
+    @media (max-width: 720px) {
+      .belts-panel { width: 100%; }
+      .belts-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 14px; }
+      .belts-title { font-size: 18px; }
+      .belt-icon { width: 40px; height: 40px; font-size: 22px; }
+      .belt-name { font-size: 10px; }
+      .belt-desc { font-size: 9px; }
+    }
+    @media (max-width: 460px) {
+      .belts-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* ---------- Badge unlock toast (BADGES_DESIGN Phase 3) ----------
+       Floating card at the top of the screen surfaced by badge-toast.ts
+       when stats.recentlyUnlocked holds a new belt id. Click or auto-
+       dismiss after 6 s. Placeholder emoji icons until the Phase 5 PNG
+       assets land; the CSS won't need touching then — just swap the
+       inner element of .badge-toast-icon to <img>. */
+    .badge-toast {
+      position: fixed;
+      top: 30px;
+      left: 50%;
+      transform: translate(-50%, -24px);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 300px;
+      max-width: 460px;
+      padding: 14px 22px 14px 16px;
+      background: linear-gradient(
+        135deg,
+        rgba(40, 32, 10, 0.92) 0%,
+        rgba(20, 16, 5, 0.94) 100%
+      );
+      border: 1px solid rgba(255, 220, 92, 0.6);
+      border-radius: 14px;
+      color: #fff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      box-shadow:
+        0 10px 32px rgba(0, 0, 0, 0.55),
+        0 0 32px rgba(255, 220, 92, 0.22);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      cursor: pointer;
+      pointer-events: auto;
+      z-index: 2000;  /* above end-screen overlay (full-overlay z=auto) */
+      opacity: 0;
+      overflow: hidden;
+    }
+    .badge-toast.hidden {
+      display: none;
+    }
+    .badge-toast.badge-toast-enter {
+      animation: badge-toast-enter 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.1) forwards;
+    }
+    @keyframes badge-toast-enter {
+      0%   { opacity: 0; transform: translate(-50%, -24px) scale(0.92); }
+      60%  { opacity: 1; transform: translate(-50%, 6px)   scale(1.04); }
+      100% { opacity: 1; transform: translate(-50%, 0px)   scale(1);    }
+    }
+    /* Shine sweep across the panel when it appears — "newly earned" feel. */
+    .badge-toast-shine {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(
+        110deg,
+        transparent 30%,
+        rgba(255, 220, 92, 0.28) 50%,
+        transparent 70%
+      );
+      transform: translateX(-100%);
+    }
+    .badge-toast.badge-toast-enter .badge-toast-shine {
+      animation: badge-toast-shine 1.3s ease-out 0.15s forwards;
+    }
+    @keyframes badge-toast-shine {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .badge-toast-icon {
+      width: 56px;
+      height: 56px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      line-height: 1;
+      background: radial-gradient(
+        circle at 50% 45%,
+        rgba(255, 220, 92, 0.35) 0%,
+        rgba(255, 220, 92, 0.08) 60%,
+        transparent 100%
+      );
+      border: 2px solid rgba(255, 220, 92, 0.75);
+      border-radius: 50%;
+      box-shadow: 0 0 18px rgba(255, 220, 92, 0.35);
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+    }
+    .badge-toast-body {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+    .badge-toast-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      color: #ffdc5c;
+      text-transform: uppercase;
+      text-shadow: 0 0 6px rgba(255, 220, 92, 0.5);
+    }
+    .badge-toast-name {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .badge-toast-desc {
+      font-size: 12px;
+      line-height: 1.3;
+      opacity: 0.78;
+      color: #f3e7c4;
+    }
+
     /* ---------- Portal warp transition (jam portal in/out) ----------
        Fullscreen overlay that pulses out from the centre with the portal's
        colour when the player walks through. Runs for 650ms before the
@@ -1488,8 +1843,13 @@
         </div>
       </div>
     </div>
-    <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate</div>
+    <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate · <kbd>B</kbd> belts</div>
     <div class="prompt touch-only">Tap a slot to select · tap again to confirm · drag preview to rotate</div>
+    <button id="btn-open-belts" class="belts-trigger" type="button"
+            aria-label="Open Hall of Belts">
+      <span class="belts-trigger-icon">🏆</span>
+      <span class="belts-trigger-label">Belts</span>
+    </button>
   </div>
 
   <!-- Online waiting room — shown while the server is in phase 'waiting'.
