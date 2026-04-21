@@ -464,6 +464,46 @@ const CSS = `
   font-variant-numeric: tabular-nums;
 }
 
+/* P/W/S table ------------------------------------------------------------- */
+#lab-sidebar .lab-pws-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 2px 6px;
+}
+#lab-sidebar .lab-pws-row {
+  display: grid;
+  grid-template-columns: 1fr 24px 24px 24px 34px 38px 30px;
+  gap: 2px;
+  align-items: center;
+  padding: 3px 4px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: #cdd3e2;
+  border-bottom: 1px solid #1e2232;
+}
+#lab-sidebar .lab-pws-row.lab-pws-header {
+  color: #7f869d;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-bottom: 1px solid #2a2f44;
+}
+#lab-sidebar .lab-pws-name {
+  font-weight: 600;
+}
+#lab-sidebar .lab-pws-col {
+  text-align: center;
+  font-weight: 700;
+}
+#lab-sidebar .lab-pws-col[data-sign="1"]  { color: #72c77d; }
+#lab-sidebar .lab-pws-col[data-sign="-1"] { color: #d36f7a; }
+#lab-sidebar .lab-pws-col[data-sign="0"]  { color: #7f869d; }
+#lab-sidebar .lab-pws-stat {
+  text-align: right;
+  color: #9097a8;
+}
+
 body.lab-mode #title-screen,
 body.lab-mode #character-select,
 body.lab-mode #end-screen { display: none !important; }
@@ -778,11 +818,29 @@ export function mountLabSidebar(devApi: DevApi): void {
     refreshBadgesPanel();
   }, 'primary');
   button(badgesBtns, 'Lock all (reload)', () => devApi.lockAllBadges());
+  button(badgesBtns, 'Trigger toast demo', () => {
+    const id = devApi.triggerBadgeToastDemo();
+    if (id === null) alert('Every badge is already unlocked. Hit "Lock all" first.');
+    else refreshBadgesPanel();
+  });
   button(badgesBtns, 'Clear ALL stats (reload)', () => {
     if (confirm('Wipe picks / wins / badges / everything? Page reloads.')) {
       devApi.clearAllStats();
     }
   });
+
+  // ---- P/W/S read-only table (Power / Weight / Speed levels) ----------
+  // Quick reference of every critter's -2..+2 tuple + the numbers it
+  // derives. Edit src/pws-stats.ts + rebuild to rebalance — this panel
+  // just mirrors what's live.
+  const pwsSec = section(tuningGroup, 'P/W/S stats', { collapsed: true });
+  const pwsInfo = document.createElement('div');
+  pwsInfo.className = 'lab-info';
+  pwsInfo.textContent = 'Edit src/pws-stats.ts to rebalance. Read-only here.';
+  pwsSec.appendChild(pwsInfo);
+  const pwsList = document.createElement('div');
+  pwsList.className = 'lab-pws-list';
+  pwsSec.appendChild(pwsList);
 
   // ---- Critter parts (collapsed — prototype ability effects) -----------
   // Live sliders over every bone of the selected critter. Drag to 0 to
@@ -843,6 +901,47 @@ export function mountLabSidebar(devApi: DevApi): void {
     refreshSkeletalPanel();
     refreshBadgesPanel();
     refreshPartsPanel();
+    refreshPWSPanel();
+  }
+
+  /**
+   * Render the P/W/S table. Signed integers displayed with explicit +/-
+   * (no + for 0). Also shows the numeric stats each tuple derives, for
+   * quick cross-check when tuning.
+   */
+  function refreshPWSPanel(): void {
+    const snap = devApi.getPWSSnapshot();
+    pwsList.innerHTML = '';
+
+    // Header row — labels only.
+    const header = document.createElement('div');
+    header.className = 'lab-pws-row lab-pws-header';
+    header.innerHTML = `
+      <span class="lab-pws-name">Name</span>
+      <span class="lab-pws-col">P</span>
+      <span class="lab-pws-col">W</span>
+      <span class="lab-pws-col">S</span>
+      <span class="lab-pws-stat">spd</span>
+      <span class="lab-pws-stat">mass</span>
+      <span class="lab-pws-stat">hb</span>
+    `;
+    pwsList.appendChild(header);
+
+    const fmt = (n: number) => n > 0 ? `+${n}` : String(n);
+    for (const row of snap) {
+      const r = document.createElement('div');
+      r.className = 'lab-pws-row';
+      r.innerHTML = `
+        <span class="lab-pws-name">${row.name}</span>
+        <span class="lab-pws-col" data-sign="${Math.sign(row.p)}">${fmt(row.p)}</span>
+        <span class="lab-pws-col" data-sign="${Math.sign(row.w)}">${fmt(row.w)}</span>
+        <span class="lab-pws-col" data-sign="${Math.sign(row.s)}">${fmt(row.s)}</span>
+        <span class="lab-pws-stat">${row.speed.toFixed(1)}</span>
+        <span class="lab-pws-stat">${row.mass.toFixed(2)}</span>
+        <span class="lab-pws-stat">${row.force.toFixed(0)}</span>
+      `;
+      pwsList.appendChild(r);
+    }
   }
 
   /**

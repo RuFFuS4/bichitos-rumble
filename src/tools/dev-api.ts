@@ -30,6 +30,8 @@ import {
 } from '../input';
 import { BADGE_CATALOG, type BadgeDef } from '../badges';
 import { getStats, addUnlockedBadges, clearRecentlyUnlocked } from '../stats';
+import { maybeShowBadgeToast } from '../badge-toast';
+import { CRITTER_PWS } from '../pws-stats';
 
 export type { BotBehaviourTag } from '../critter';
 
@@ -860,6 +862,42 @@ export class DevApi {
   /** Clear the recently-unlocked slot (dismisses the post-match toast). */
   dismissBadgeToast(): void {
     clearRecentlyUnlocked();
+  }
+
+  /**
+   * Fire the toast UI with the first still-locked badge so we can
+   * eyeball the animation / colours without grinding a win condition.
+   * Reuses the same code path production takes (addUnlockedBadges →
+   * maybeShowBadgeToast) — if the visual breaks here, it's broken in
+   * gameplay too.
+   */
+  triggerBadgeToastDemo(): string | null {
+    const stats = getStats();
+    const locked = BADGE_CATALOG.find((b) => !stats.unlockedBadges.includes(b.id));
+    if (!locked) return null; // everything already unlocked — user can `Lock all` first
+    addUnlockedBadges([locked.id]);
+    maybeShowBadgeToast();
+    return locked.id;
+  }
+
+  /**
+   * Snapshot of every critter's P/W/S tuple + the numbers it derives.
+   * Used by the lab's read-only PWS panel. Order matches CRITTER_PWS
+   * declaration order (Sergei first, then by roster tiers).
+   */
+  getPWSSnapshot(): Array<{ name: string; p: number; w: number; s: number; speed: number; mass: number; force: number }> {
+    const out: ReturnType<DevApi['getPWSSnapshot']> = [];
+    for (const [name, pws] of Object.entries(CRITTER_PWS)) {
+      // Derived stats come from the critter's actual config post-attach.
+      // Safer to read them live so it reflects any future per-kit
+      // override we might layer on top of the pure PWS mapping.
+      const preset = this.game.critters.find((c) => c.config.name === name)?.config;
+      const speed = preset?.speed ?? 13 + pws.s * 2.5;
+      const mass  = preset?.mass  ?? 1 + pws.w * 0.2;
+      const force = preset?.headbuttForce ?? 14 + pws.p * 2;
+      out.push({ name, p: pws.p, w: pws.w, s: pws.s, speed, mass, force });
+    }
+    return out;
   }
 
   /** Nuke the whole stats blob — picks, wins, fastest times, badges,
