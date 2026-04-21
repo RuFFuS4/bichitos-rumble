@@ -13,9 +13,15 @@
 //   node scripts/verify-critter-glbs.mjs
 //   node scripts/verify-critter-glbs.mjs public/models/critters/sergei.glb
 //   node scripts/verify-critter-glbs.mjs path/to/dir --strict
+//   node scripts/verify-critter-glbs.mjs --all-states      # legacy 13-state scan
 //
-// --strict  → exit 1 if any scanned GLB has zero resolved priority clips
-//             (useful for CI gates; default is always exit 0).
+// --strict       → exit 1 if any scanned GLB has zero resolved priority clips
+//                   (useful for CI gates; default is always exit 0).
+// --all-states   → report against the full legacy state list (13 rows per
+//                   critter). Default is the policy-locked 8 target states
+//                   (idle / run / ability_1 / ability_2 / ability_3 /
+//                   victory / defeat / fall) — everything else is procedural
+//                   per SUBMISSION_CHECKLIST and doesn't need clip coverage.
 // ---------------------------------------------------------------------------
 
 import { readFile, readdir, stat } from 'node:fs/promises';
@@ -44,9 +50,21 @@ const STATE_KEYWORDS = {
   respawn:           ['respawn', 'revive', 'spawn', 'appear'],
 };
 
-// Priority order mirrors ASSET_PIPELINE.md "Priority order for content work".
-// Higher = more visible impact in the game.
-const PRIORITY = [
+// Policy-locked target states (8). Aligned with BADGES_DESIGN / SUBMISSION_
+// CHECKLIST: `walk` is eliminated, `headbutt_*` / `hit` / `respawn` are
+// procedural for every critter. Anything not in this list is still looked
+// up in STATE_KEYWORDS when --all-states is passed, but the default report
+// only counts these 8 so the "covered" number matches the coverage target
+// the roster aims at.
+const TARGET_STATES = [
+  'idle', 'run',
+  'ability_1', 'ability_2', 'ability_3',
+  'victory', 'defeat', 'fall',
+];
+
+// Extended legacy list, used when --all-states is passed. Preserves the
+// old ordering for backward-compatible diffs.
+const ALL_STATES = [
   'idle', 'run', 'victory', 'defeat', 'headbutt_lunge',
   'fall', 'hit', 'ability_1', 'ability_2', 'ability_3',
   'walk', 'respawn', 'headbutt_anticip',
@@ -61,11 +79,15 @@ const DEFAULT_DIR = resolve('public/models/critters');
 const args = process.argv.slice(2);
 let inputPath = null;
 let strict = false;
+let allStates = false;
 for (const a of args) {
   if (a === '--strict') strict = true;
+  else if (a === '--all-states') allStates = true;
   else if (!inputPath) inputPath = a;
 }
 if (!inputPath) inputPath = DEFAULT_DIR;
+
+const PRIORITY = allStates ? ALL_STATES : TARGET_STATES;
 
 // ---------------------------------------------------------------------------
 // Main
@@ -96,7 +118,8 @@ async function main() {
 
   console.log(`\n  Bichitos Rumble — Critter GLB Animation Report`);
   console.log(`  Scanning: ${relative(process.cwd(), inputPath) || inputPath}`);
-  console.log(`  Files:    ${files.length}\n`);
+  console.log(`  Files:    ${files.length}`);
+  console.log(`  Policy:   ${allStates ? 'legacy (13 states)' : 'target (8 states — idle/run/ability_1..3/victory/defeat/fall)'}\n`);
 
   const summary = [];
   for (const file of files) {
@@ -165,6 +188,9 @@ async function reportFile(filePath) {
   const clipNames = animations.map(a => a.getName() || '(unnamed)');
 
   // Resolve each state to the first matching clip (same rule as runtime).
+  // We still resolve against ALL states — so orphan detection sees clips
+  // that would match non-target states (e.g. a stray walk clip). The
+  // per-row output only prints the PRIORITY list though.
   const resolved = {};
   for (const state of Object.keys(STATE_KEYWORDS)) {
     resolved[state] = findClipForState(clipNames, state);
@@ -191,7 +217,12 @@ async function reportFile(filePath) {
     }
   }
 
-  const resolvedCount = Object.values(resolved).filter(Boolean).length;
+  // "Coverage" counts only the states we actually aim for — matches the
+  // policy and gives the "4/8" headline the summary table prints.
+  const resolvedCount = PRIORITY.reduce(
+    (n, state) => n + (resolved[state] ? 1 : 0),
+    0,
+  );
   console.log();
 
   return {
@@ -282,12 +313,29 @@ function auditMaterials(root) {
   return { count: materials.length, types, missingOnMesh };
 }
 
+// Mirrors src/critter-skeletal.ts findClipForState: exact match on the
+// state name (post strip-punct) wins before falling back to a fuzzy
+// substring keyword scan. Without this, clip "Run" would lose to
+// "Ability1TrunkRam" when resolving the 'run' state, because "trunkram"
+// happens to contain the substring "run".
 function findClipForState(clipNames, state) {
   const keywords = STATE_KEYWORDS[state];
-  for (const name of clipNames) {
-    const n = name.toLowerCase();
-    for (const kw of keywords) {
-      if (n.includes(kw)) return name;
+  const snake = state.replace(/_/g, '');
+  const lowered = clipNames.map((c) => ({
+    name: c,
+    lower: c.toLowerCase(),
+    compact: c.toLowerCase().replace(/[_\s-]/g, ''),
+  }));
+
+  // 1) Exact match on the state name (or snake_case variant).
+  for (const entry of lowered) {
+    if (entry.compact === state || entry.compact === snake) return entry.name;
+  }
+
+  // 2) Keyword substring match.
+  for (const kw of keywords) {
+    for (const entry of lowered) {
+      if (entry.lower.includes(kw)) return entry.name;
     }
   }
   return null;
