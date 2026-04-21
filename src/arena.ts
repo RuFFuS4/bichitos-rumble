@@ -152,6 +152,21 @@ export class Arena {
   private warningActive = false;
   private warningTimer = 0;
 
+  // Falling fragments — entries are pushed when a batch collapses (in
+  // either offline `collapseCurrentBatch` or online `syncFromServer`),
+  // and advanced each frame in `update()` until they drop past the void
+  // floor, at which point the mesh is hidden and the entry dropped.
+  // Visual-only: gameplay still treats the fragment as gone the instant
+  // `alive[idx] = false` (the physics path runs from that array, not
+  // from visibility).
+  private fallingFragments: Array<{
+    idx: number;
+    vy: number;              // downward velocity (world units / s)
+    rotX: number;            // tumbling angular velocity (rad / s)
+    rotZ: number;
+    startY: number;          // initial Y so we can decide when to stop
+  }> = [];
+
   // Online sync tracking
   private syncedLevel = -1;
   private syncedWarning = -2;
@@ -226,6 +241,7 @@ export class Arena {
     this.syncedWarning = -2;
     this.syncedSeed = seed;
     this.currentRadius = FRAG.maxRadius;
+    this.fallingFragments = [];
 
     for (const f of this.layout.fragments) {
       const mesh = createFragmentMesh(f);
@@ -238,9 +254,21 @@ export class Arena {
 
   // --- Offline mode: self-driven collapse --------------------------------
 
+  /**
+   * Advance visual-only animations that must run every frame in BOTH
+   * offline + online paths — currently just the falling-fragment
+   * tumble. Offline's `update()` calls this itself; online callers
+   * (where `update()` would wrongly drive the collapse timeline) invoke
+   * this directly via the game loop.
+   */
+  tickVisuals(dt: number): void {
+    this.tickFallingFragments(dt);
+  }
+
   /** Advance the collapse timeline locally (offline matches only). */
   update(dt: number): void {
     if (!this.layout) return;
+    this.tickVisuals(dt);
     if (this.level >= this.layout.batches.length) return;
 
     this.timer += dt;
@@ -285,9 +313,10 @@ export class Arena {
       for (let l = this.syncedLevel < 0 ? 0 : this.syncedLevel; l < collapseLevel; l++) {
         const batch = this.layout!.batches[l];
         if (!batch) continue;
+        this.restoreBatch(batch.indices); // clear any residual shake offset
         for (const idx of batch.indices) {
           this.alive[idx] = false;
-          this.fragmentGroups[idx].visible = false;
+          this.startFragmentFall(idx);
         }
         if (this.debugLogCollapses) {
           console.log(`[Arena] collapse level=${l + 1}  batch indices=[${batch.indices.join(',')}]  radius→${this.currentRadius.toFixed(2)}`);
@@ -463,18 +492,81 @@ export class Arena {
     if (!this.layout) return;
     const batch = this.layout.batches[this.level];
     // Restore the cosmetic state (position offset + emissive) BEFORE we
-    // flip the visibility — otherwise the fragment disappears while still
-    // wobbling and the emissive lingers if visibility is re-toggled later.
+    // start the fall — otherwise the initial fall position would include
+    // any residual shake offset and the emissive would linger on the
+    // tumbling piece.
     this.restoreBatch(batch.indices);
     for (const idx of batch.indices) {
       this.alive[idx] = false;
-      this.fragmentGroups[idx].visible = false;
+      this.startFragmentFall(idx);
     }
     this.level++;
     this.warningActive = false;
     this.timer = 0;
     this.warningStartedAt = null;
     this.updateRadius();
+  }
+
+  /**
+   * Kick off the free-fall animation for a single fragment. Called when
+   * a batch collapses (offline + online). Visual-only: the `alive[idx]`
+   * flag is already false by the time we get here so the physics layer
+   * treats the fragment as gone immediately.
+   */
+  private startFragmentFall(idx: number): void {
+    const g = this.fragmentGroups[idx];
+    if (!g) return;
+    // Deterministic-ish randomness from the fragment index so a given
+    // seed yields the same tumble pattern per fragment. Not critical —
+    // fall is purely cosmetic — but cheap and debuggable.
+    const rand = (k: number) => {
+      const x = Math.sin((idx + 1) * 73.1 + k * 11.3) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    this.fallingFragments.push({
+      idx,
+      vy: 0.8 + rand(0) * 1.2,             // 0.8..2.0 initial downward nudge
+      rotX: (rand(1) * 2 - 1) * 1.6,       // ±1.6 rad/s tumble
+      rotZ: (rand(2) * 2 - 1) * 1.6,
+      startY: g.position.y,
+    });
+  }
+
+  private readonly FRAGMENT_GRAVITY = 18;    // world units / s²
+  private readonly FRAGMENT_KILL_Y = -25;     // below this we hide + drop entry
+
+  /**
+   * Advance every falling fragment one frame. Called from update() (offline
+   * self-driven) and once at the end of syncFromServer (online). Shared
+   * code path so the visual is identical in both modes.
+   */
+  private tickFallingFragments(dt: number): void {
+    if (this.fallingFragments.length === 0) return;
+    const keep: typeof this.fallingFragments = [];
+    for (const ff of this.fallingFragments) {
+      const g = this.fragmentGroups[ff.idx];
+      if (!g) continue; // fragment was disposed between build + tick
+      ff.vy += this.FRAGMENT_GRAVITY * dt;
+      g.position.y = ff.startY - 0; // baseline
+      // Integrate downward: we simulate in "delta Y" space so the shake
+      // restore leaves position.y at 0 and we apply the offset directly.
+      // Easiest: just subtract the accumulated drop from startY.
+      ff.startY -= ff.vy * dt;        // startY drifts down with gravity
+      g.position.y = ff.startY;
+      g.rotation.x += ff.rotX * dt;
+      g.rotation.z += ff.rotZ * dt;
+      if (g.position.y > this.FRAGMENT_KILL_Y) {
+        keep.push(ff);
+      } else {
+        // Past the death plane — hide + reset transforms so a future
+        // seed rebuild starts from a clean slate.
+        g.visible = false;
+        g.position.y = 0;
+        g.rotation.x = 0;
+        g.rotation.z = 0;
+      }
+    }
+    this.fallingFragments = keep;
   }
 
   private updateRadius(): void {

@@ -45,6 +45,7 @@ import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
 import { spawnShockwaveRing } from './abilities';
+import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended' | 'online';
 
@@ -132,6 +133,12 @@ export class Game {
    *  Used to measure match duration for the Speedrun Belt badge. 0 while
    *  in menus. */
   private matchStartMs = 0;
+
+  /** Per-critter drop-from-sky state during the 3-2-1 countdown. When a
+   *  critter's y crosses 0, we play a thud + spawn a dust puff and drop
+   *  it from the map so subsequent frames don't re-fire. Cleared at the
+   *  start of every countdown. */
+  private countdownDrops = new Map<Critter, { y: number; vy: number }>();
   private displayRoster: RosterEntry[] = getDisplayRoster();
 
   // --- Online mode state (null when offline) ---
@@ -258,6 +265,10 @@ export class Game {
     this.arena.reset();
     this.onlineCritters.forEach(c => c.dispose());
     this.onlineCritters.clear();
+    // Purge any drop-state or dust-puff leftovers — same anti-flicker
+    // reason as the arena reset above.
+    this.countdownDrops.clear();
+    clearDustPuffs();
     // Rebuild the idle background critters the title expects. enterOnline
     // disposes them, so we must restore them when returning to title.
     if (this.critters.length === 0) {
@@ -348,6 +359,12 @@ export class Game {
     initAllLivesHUD(this.critters);
     showOverlay('Get Ready!');
 
+    // Drop-from-sky entrance: before the "3" shows, hoist every critter
+    // to a random altitude between 12 and 15 units with a small initial
+    // downward nudge. The countdown tick (updateCountdownDrops) integrates
+    // gravity, spawns a dust puff + plays a thud when each one lands.
+    this.initCountdownDrops();
+
     // Stats: the player just committed to a critter for this match.
     recordPick(this.player.config.name);
   }
@@ -383,6 +400,48 @@ export class Game {
     // Player is always the first critter of the roster
     this.playerIndex = 0;
     this.player = this.critters[0];
+  }
+
+  /**
+   * Start the drop-from-sky animation for every critter in the match.
+   * Called once at countdown entry. Critters are lifted to 12..15 units
+   * above the arena with a tiny initial downward velocity; updateCountdownDrops
+   * integrates gravity each frame until they land (~1.2-1.6 s in — before
+   * the "1" of the 3-2-1 finishes, so the platform is settled when GO!
+   * fires).
+   */
+  private initCountdownDrops(): void {
+    this.countdownDrops.clear();
+    for (const c of this.critters) {
+      const h = 12 + Math.random() * 3;       // 12..15 world units
+      const vy = -(0.4 + Math.random() * 0.3); // small initial push
+      c.mesh.position.y = h;
+      this.countdownDrops.set(c, { y: h, vy });
+    }
+  }
+
+  /**
+   * Integrate gravity on every live drop. When a critter crosses y=0 we
+   * snap to ground, spawn a dust puff + play a headbutt-hit thud (nearest
+   * SFX we have to a generic impact without adding a new asset), and drop
+   * the entry so it doesn't re-fire.
+   */
+  private updateCountdownDrops(dt: number): void {
+    if (this.countdownDrops.size === 0) return;
+    const G = 22; // gravity, world units / s²
+    for (const [c, state] of this.countdownDrops) {
+      state.vy -= G * dt;
+      state.y += state.vy * dt;
+      if (state.y <= 0) {
+        state.y = 0;
+        c.mesh.position.y = 0;
+        spawnDustPuff(this.scene, c.x, 0, c.z);
+        playSoundEffect('headbuttHit');
+        this.countdownDrops.delete(c);
+      } else {
+        c.mesh.position.y = state.y;
+      }
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -648,6 +707,10 @@ export class Game {
         state.arenaCollapseLevel ?? 0,
         state.arenaWarningBatch ?? -1,
       );
+      // Tick the falling-fragment tumble animation every frame. We use
+      // tickVisuals (not update) because `update` also drives the offline
+      // collapse timeline — the server is authoritative in online mode.
+      this.arena.tickVisuals(dt);
     }
 
     const allPlayers: Array<{ sessionId: string; alive: boolean }> = [];
@@ -1130,6 +1193,8 @@ export class Game {
 
       case 'countdown': {
         this.phaseTimer -= dt;
+        // Drop-from-sky animation runs alongside the number overlay.
+        this.updateCountdownDrops(dt);
         const sec = Math.ceil(this.phaseTimer);
         if (sec > 0) {
           showOverlay(`${sec}`);
@@ -1139,6 +1204,10 @@ export class Game {
           // Stamp the moment the match really starts. Used by recordWin
           // to compute duration for the Speedrun Belt badge.
           this.matchStartMs = performance.now();
+          // Safety net: any critter still mid-air when countdown ends
+          // snaps to ground (no thud — we'd rather avoid a late SFX).
+          for (const [c] of this.countdownDrops) c.mesh.position.y = 0;
+          this.countdownDrops.clear();
         }
         break;
       }
