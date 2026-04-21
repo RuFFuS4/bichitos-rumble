@@ -7,7 +7,7 @@ partidas reales con varios clientes, archivos reales, etc).
 Orden de los bloques = orden recomendado para hacer el batch. Cada
 bloque se puede probar independientemente.
 
-Última actualización: 2026-04-19 (tras integración Mesh2Motion).
+Última actualización: 2026-04-20 (Blender MCP activo + Sergei primer rig).
 
 ---
 
@@ -163,25 +163,54 @@ Necesita 2-4 browsers abiertos contra el server (Railway) o local.
 
 ---
 
-## 9 · Skeletal animation loader (cuando llegue el primer GLB animado)
+## 9 · Skeletal animations por crítter (validación progresiva)
 
-**Requisito**: primer GLB animado desde `/animations` (o Mixamo/Tripo)
-reemplazando `public/models/critters/<id>.glb`.
+Estado actual del roster — 8 estados skeletal target por bichito
+(`idle`, `run`, `ability_1`, `ability_2`, `ability_3`, `victory`,
+`defeat`, `fall`). Los demás estados son procedurales por política
+(ver `SUBMISSION_CHECKLIST.md`).
 
-- [ ] Recarga el juego. Consola debería decir:
-      `[Critter] skeletal animator attached: <Name> | clips: Idle, Running, Victory, ...`
-- [ ] Character select: el crítter respira con el clip de idle (no el
-      bob procedural simple).
-- [ ] En partida: mueves y ves el clip de run ciclar. Paras → idle.
-- [ ] Haces headbutt → si hay clip `lunge` / `punch` / `attack` se
-      reproduce.
-- [ ] Ganas → clip `victory` se reproduce y se queda en la pose final.
-- [ ] Pierdes → clip `defeat` / `death` se queda en la pose final.
-- [ ] Falls → clip `fall` si existe.
+| Bichito    | Cobertura | Notas                                         |
+|------------|-----------|-----------------------------------------------|
+| Cheeto     | 8 / 8     | Tripo Animate, full kit                       |
+| Kermit     | 7 / 8     | ab_3 Hypnosapo = flicker procedural (sin clip)|
+| Sergei     | 1 / 8     | solo Idle                                     |
+| Kowalski   | 0 / 8     | pendiente Meshy/Tripo                         |
+| Kurama     | 0 / 8     | pendiente Meshy/Tripo                         |
+| Sebastian  | 0 / 8     | pendiente Meshy/Tripo                         |
+| Shelly     | 0 / 8     | pendiente Meshy/Tripo                         |
+| Sihans     | 0 / 8     | pendiente Meshy/Tripo                         |
+| Trunk      | 0 / 8     | pendiente Meshy/Tripo                         |
 
-**Si el clip no se reproduce**: revisa el mapping
-`STATE_KEYWORDS` en `src/critter-skeletal.ts`. Posible que el nombre
-del clip no caiga en ningún keyword.
+### 9.1 Por cada bichito animado — checklist común
+
+Para Cheeto y Kermit hoy (y cada bichito nuevo conforme entre):
+
+- [ ] Consola al cargar el juego con ese crítter:
+      `[Critter] skeletal animator attached: <Name> | clips: Idle, Run, ...`
+- [ ] Character select: el crítter respira con su clip de `Idle` (no con
+      el bob procedural genérico).
+- [ ] En partida: al moverte cicla `Run`; al pararte vuelve a `Idle`.
+- [ ] Al ejecutar `J` (ability_1) se reproduce el clip correspondiente.
+- [ ] Al ejecutar `K` (ability_2) se reproduce el clip correspondiente.
+- [ ] Al ejecutar `L` (ability_3 / ULTI) se reproduce su clip — **excepto
+      Kermit**, que usa el efecto emissivo Hypnosapo (procedural).
+- [ ] Al ganar → `Victory` se queda en la pose final.
+- [ ] Al perder → `Defeat` se queda en la pose final.
+- [ ] Al caer al vacío → `Fall` mientras dura la animación de caída.
+- [ ] Headbutt y hit siguen siendo procedurales (squash/stretch + tilt).
+- [ ] Console **NO** muestra `[SkeletalAnimator] dropped N static` para
+      ese crítter (indica clips muertos → hay que reimportar).
+
+### 9.2 Si un clip no se reproduce
+
+1. `node scripts/verify-critter-glbs.mjs public/models/critters/<id>.glb`
+   → mira qué estados quedan sin resolver.
+2. Si es un clip esperado, revisa el mapping en
+   `scripts/mappings/<id>.json` y re-importa con
+   `node scripts/import-critter.mjs <id> <source.glb>`.
+3. Si el nombre del clip es raro, amplía keywords en
+   `STATE_KEYWORDS` (`src/critter-skeletal.ts`) o renombra en el mapping.
 
 ---
 
@@ -275,6 +304,104 @@ Si hay tiempo, revisar que la integración sigue funcionando.
 - [ ] Entrada por `?portal=true&ref=...` → salta title/select, entra
       directo a match, portal naranja (return) disponible.
 - [ ] End-screen con portales: P = next game, B = return to previous.
+
+---
+
+## 14 · Blender MCP — Sergei rigged (pendiente validación ingame)
+
+Estado al cierre 2026-04-20: Sergei re-exportado con armature desde
+Blender vía MCP. El GLB pesa 1.06 MB (antes 434 KB). No tiene clips
+todavía — sólo skeleton + weights. Validación manual que falta:
+
+### 14.1 Render en character select
+
+- [ ] `npm run dev` arranca sin errores.
+- [ ] Character select carga, Sergei visible en la tercera card.
+- [ ] Al seleccionar Sergei, el preview rota sin deformarse. **Crítico**:
+      el mesh debe seguir a la rotación del carrusel (bug previo: la
+      malla se quedaba estática en el origen mientras el group rotaba).
+- [ ] Silueta de Sergei en el podio es comparable en tamaño a los
+      demás críters (el bump `scale 2.0 → 2.3` + `pivotY 1.0` debería
+      igualar las sombras al suelo).
+- [ ] Los pies no flotan ni se clipean bajo el podio.
+
+### 14.2 Render en partida
+
+- [ ] "vs Bots" → Sergei → arena carga.
+- [ ] Sergei idle: respira con el bob procedural (`critter-animation.ts`).
+      No debería haber clip skeletal (aún no hay).
+- [ ] Sergei corre: movimiento, lean, sway — procedural layer intacto.
+- [ ] Headbutt: anticipación + lunge procedural.
+- [ ] Abilities J/K/L (Gorilla Rush / Shockwave / Frenzy): ejecutan
+      sin deformaciones extrañas.
+- [ ] Caída al vacío + respawn OK.
+
+### 14.3 Consola
+
+- [ ] **NO** debe aparecer
+      `[Critter] skeletal animator attached: Sergei | clips: ...` —
+      no hemos metido clips todavía. Si aparece, el GLB incluyó
+      animaciones por accidente o el loader detectó basura.
+- [ ] **Sí** puede aparecer el log normal de `GLTFLoader` de Three
+      indicando que cargó animaciones = 0.
+- [ ] **Cero** errores rojos relacionados con `SkinnedMesh`,
+      `SkeletonUtils`, `bones`, `weights`.
+
+### 14.4 Verifier audit
+
+- [ ] `node tools/verify-critter-glbs.mjs` (o `npm run verify:glbs`
+      si existe) termina sin errores críticos sobre `sergei.glb`.
+- [ ] Reporte muestra skinned mesh presente + bone count > 0.
+
+### 14.5 Regresión de otros críters
+
+Los 8 críters restantes (Kurama, Trunk, Shelly, Kermit, Sihans,
+Kowalski, Cheeto, Sebastian) siguen sin rig. El fix de
+`SkeletonUtils` en `model-loader.ts` no debería afectarles porque
+el `source.traverse` detecta ausencia de `SkinnedMesh` y usa el
+clone plain. Verificar:
+
+- [ ] Seleccionar cada uno de los 8 restantes en character select →
+      rota correctamente (igual que antes del cambio).
+- [ ] Al menos 2 críters no-Sergei jugados ingame: todo normal.
+
+### 14.6 Próximo paso si 14.1–14.5 pasa
+
+Añadir primer clip (idle) al GLB de Sergei. Opciones:
+1. Bajar idle humanoide de Mixamo → importar en Blender → retarget
+   al armature actual → export.
+2. Claude + bpy genera keyframes idle sintéticos.
+
+Tras añadir clip, repetir esta sección — esta vez SÍ debe salir
+el log `skeletal animator attached: Sergei | clips: idle` y el
+panel Skeletal clips del lab debe listarlo.
+
+### 14.7 Pose state limpio (importante post-cleanup 2026-04-20)
+
+Sergei.glb ya pasó por la limpieza de pose state. Verificar que sigue
+limpio:
+
+- [ ] Cargar `public/models/critters/sergei.glb` en Blender:
+      `File > Import > glTF 2.0` (o open the .blend si lo tienes).
+- [ ] Modo Object, frame 0, sin action activa: el mesh debe verse
+      en T-pose limpio (cuerpo vertical, brazos horizontales).
+      NO debe verse acuclillado / hunched.
+- [ ] Edit Mode → Pose Mode: ambos deben coincidir
+      (rest pose == pose state).
+- [ ] Si se ve torcido, correr `tools/blender-mcp/critter-cleanup.py`
+      con `CRITTER_ID = "sergei"`.
+
+### 14.8 Filtro runtime defensivo
+
+Aunque el GLB esté limpio, el filtro de `SkeletalAnimator` debe seguir
+operativo para futuros crítters. Verificar:
+
+- [ ] Console del navegador en partida con cualquier crítter:
+      NO debe haber log `[SkeletalAnimator] dropped N static`
+      (ni para Sergei ni para los demás).
+- [ ] Si en algún crítter futuro aparece, indica que su GLB tiene
+      placeholders y hay que correr `critter-cleanup.py` para
+      limpiar el source.
 
 ---
 

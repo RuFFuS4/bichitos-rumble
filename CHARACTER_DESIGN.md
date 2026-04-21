@@ -31,6 +31,28 @@ marca exactamente qué sigue siendo placeholder.
 | **Cheeto** | Assassin     | CR `Pounce` + GP `Paw Stomp`            | Charge Rush (salto felino) | **Shadow Step** (teleport detrás del enemigo más cercano + golpe) | **Tiger Roar** (empuje cónico, no radial) | H2 requiere target-selection + teleport. ULTI pide cono direccional, ahora es radial. Ambos placeholder. Sin Frenzy. |
 | **Sebastian** | Glass Cannon | CR `Claw Rush` + GP `Big Claw Slam`  | Charge Rush (desplazamiento lateral + pinza) | **Claw Sweep** (barrido en abanico frontal) | **Crab Slash** (carga lateral que mata o se cae del mapa) | H1 casi pero no es lateral. H2 pide cono direccional, ahora es radial. ULTI requiere detección "o mato o muero". Todo placeholder funcional. Sin Frenzy. |
 
+### Cobertura skeletal (2026-04-21)
+
+Estados esqueléticos target por bichito: 8 fijos — `idle`, `run`,
+`ability_1`, `ability_2`, `ability_3` (ULTI), `victory`, `defeat`,
+`fall`. El resto (`headbutt_*`, `hit`, `walk`, `respawn`) son
+procedurales por política (ver `SUBMISSION_CHECKLIST.md`).
+
+| Personaje  | Anim     | Fuente         | Notas                                          |
+|------------|----------|----------------|------------------------------------------------|
+| Cheeto     | **8 / 8**| Tripo Animate  | full kit (Pounce, ShadowStep, TigerRoar, …)    |
+| Kermit     | **7 / 8**| Tripo Animate  | ab_3 Hypnosapo = flicker procedural (sin clip) |
+| Sergei     | 1 / 8    | Mixamo (Idle)  | resto procedural                               |
+| Kowalski   | 0 / 8    | —              | pendiente Meshy / Tripo                        |
+| Kurama     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
+| Sebastian  | 0 / 8    | —              | pendiente Meshy / Tripo                        |
+| Shelly     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
+| Sihans     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
+| Trunk      | 0 / 8    | —              | pendiente Meshy / Tripo                        |
+
+Total: **16 / 72** estados (22%). La capa procedural de
+`critter-animation.ts` cubre automáticamente lo que falta.
+
 ### Qué está realmente implementado hoy
 
 - **3 factories base** (`charge_rush`, `ground_pound`, `frenzy`) con per-kit overrides cliente/servidor.

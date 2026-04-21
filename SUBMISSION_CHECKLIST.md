@@ -50,9 +50,18 @@
 - [x] Title screen
 - [x] Victory/defeat screen
 - [x] 3D rotatable preview in character select
-- [ ] Skeletal animations populated for the roster (user in flight: Mixamo + Blender + Tripo pipeline)
+- [ ] Skeletal animations populated for the roster — **2/9 completos** (Cheeto 8/8, Kermit 7/8 + Hypnosapo procedural). Pendientes: Sergei (solo idle), Kowalski, Kurama, Sebastian, Shelly, Sihans, Trunk. User pipeline: Meshy AI + Tripo Animate → `scripts/import-critter.mjs`.
 - [ ] Signature per-critter abilities (gap vs placeholders tracked in CHARACTER_DESIGN.md)
 - [ ] Particle effects (beyond shockwave rings)
+
+### Skeletal state policy (congelada 2026-04-21)
+- **8 estados target** por bichito: `idle`, `run`, `ability_1`,
+  `ability_2`, `ability_3` (ULTI), `victory`, `defeat`, `fall`.
+- **Procedurales para todos** (no se autorizan clips): `headbutt_anticip`,
+  `headbutt_lunge`, `hit`, `walk` (descartado), `respawn` (cubierto por
+  inmunidad + parpadeo).
+- Excepciones per-critter sólo si se especifica (ej. Kermit `ability_3`
+  Hypnosapo = efecto emissivo procedural porque no hay clip).
 
 ## Input / Accessibility
 - [x] Keyboard support (WASD + Space/J/K/L + R/T)

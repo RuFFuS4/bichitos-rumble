@@ -47,8 +47,41 @@ de destrucción) son prioritarios; si algo cae por tiempo, es el
       (Shelly tortuga, Kermit sapo, Sihans topo).
 - [x] **Warning visual de destrucción** renovado: sustituido red blink
       por per-fragment shake + warm emissive + seismic rumble SFX.
-- [ ] **Animaciones reales por crítter** — usuario las está generando
-      con Mesh2Motion / Tripo Animate en paralelo.
+- [ ] **Animaciones reales por crítter** (INNEGOCIABLE — decisión 2026-04-20):
+      - Estado a fecha: Sergei con Idle de Mixamo retargeado, el resto en
+        procedural. La capa procedural cumple spec pero queremos skeletal
+        distintivo antes de abrir habilidades.
+      - **Plan en curso**: integrar auto-bind del rig Tripo existente
+        en el lab `/animations` (Mesh2Motion). Al seleccionar el
+        crítter, la herramienta debe saltarse el paso de rigging y
+        aceptar el skeleton que ya trae el GLB (39 bones Tripo), con
+        un mapping bone-a-bone a uno de los templates de MM (human).
+        Así el usuario elige animaciones desde el catálogo de MM in-lab,
+        las previsualiza y exporta directamente al GLB correcto.
+        Estimado: 3-5 h de cirugía en `mesh2motion/src/`.
+      - **Fallback si la integración de MM explota**: construir un
+        `/preview.html` interno (1-2 h) donde el usuario dropea un FBX
+        Mixamo y lo ve retargeted en vivo sobre el crítter elegido vía
+        Three.js `AnimationMixer`. Más aislado, no toca MM.
+      - **Fallback al fallback**: Mixamo + Blender MCP batch (ya
+        validado con Sergei Idle) — funciona pero sin preview.
+      - Pipeline limpio de retargeting ya documentado en este archivo
+        y en `BLENDER_MCP.md` (mapping Mixamo→Tripo = 20 bones).
+- [ ] **Repaso de código + docs + limpieza general** (antes de empezar
+      habilidades, después de cerrar animaciones):
+      - Revisar `src/` para dead code, funciones > responsabilidad,
+        oportunidades de extracción común, constantes hardcoded que
+        deben bajar a `FEEL` / config.
+      - Pasar el lint, typecheck, y tamaño de bundles.
+      - Consolidar `.md` — detectar redundancia (mucho ha ido creciendo
+        orgánicamente en estos días), eliminar secciones obsoletas,
+        arreglar referencias a archivos que ya no existen.
+      - Candidatos sospechosos: `scripts/inspect-sergei-clips.mjs`
+        (throwaway), `sergei.glb.bak`, `tools/sergei-pose-baseline.json`,
+        `tools/sergei-views/`, `tools/sergei-views-cleared/` — ver si
+        aún valen o se van al `.gitignore`.
+      - Revisar `ONLINE.md` / `DEV_TOOLS.md` / `BUILD_LOG.md` (2400+
+        líneas) y decidir si partes antiguas se archivan.
 - [ ] **Top 4 habilidades distintivas** (8-12h, prioridad por impacto).
       Pospuestas hasta que el batch de validación del user termine.
   1. **Shelly Shell Shield** — invulnerability pose + reflect

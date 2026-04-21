@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:glbs": "node scripts/verify-critter-glbs.mjs",
+    "import:critter": "node scripts/import-critter.mjs"
   },
   "dependencies": {
     "colyseus.js": "^0.16.22",

@@ -120,8 +120,35 @@ export class SkeletalAnimator {
 
   constructor(root: THREE.Object3D, clips: THREE.AnimationClip[]) {
     this.mixer = new THREE.AnimationMixer(root);
-    this.availableClipNames = clips.map(c => c.name);
-    this.clips = clips;
+
+    // Filter out clips where every track has zero variance — these are
+    // bind-pose snapshots, commonly auto-generated when a Blender action
+    // slot exists with no real keyframes. Playing one forces every bone
+    // back to rest pose for the clip's duration, rendering as a T-pose
+    // snap mid-gameplay (the symptom we hit on Sergei's first rigging
+    // pass: Idle/Run animated, headbutt/abilities snapped to T-pose).
+    // Dropping them lets the resolver fall back to "no clip" — the
+    // current loop (idle/run) keeps playing instead of being clobbered.
+    const liveClips: THREE.AnimationClip[] = [];
+    const deadClipNames: string[] = [];
+    for (const c of clips) {
+      if (isClipEffectivelyStatic(c)) {
+        deadClipNames.push(c.name);
+      } else {
+        liveClips.push(c);
+      }
+    }
+    if (deadClipNames.length > 0) {
+      console.debug(
+        '[SkeletalAnimator] dropped',
+        deadClipNames.length,
+        'static (bind-pose) clip(s):',
+        deadClipNames.join(', '),
+      );
+    }
+
+    this.availableClipNames = liveClips.map(c => c.name);
+    this.clips = liveClips;
 
     // Resolve each logical state to an actual clip (first keyword match).
     // Some states may end up unresolved → actions[state] === undefined.
@@ -132,7 +159,7 @@ export class SkeletalAnimator {
       'victory', 'defeat', 'fall', 'hit', 'respawn',
     ];
     for (const state of states) {
-      const clip = findClipForState(clips, state);
+      const clip = findClipForState(liveClips, state);
       if (!clip) continue;
       const action = this.mixer.clipAction(clip);
       if (!LOOPING_STATES.has(state)) {
@@ -317,6 +344,33 @@ export class SkeletalAnimator {
 // ---------------------------------------------------------------------------
 // Clip name resolver
 // ---------------------------------------------------------------------------
+
+/**
+ * Returns true when every track in the clip has zero variance across its
+ * keyframes — i.e., bone values never move from the rest pose. Such clips
+ * are bind-pose snapshots (a Blender action slot exported with no real
+ * keyframes ends up like this: 1-2 identical keys per bone per channel).
+ * Playing them forces the rig to T-pose for the clip's duration, creating
+ * the visible snap we want to avoid.
+ *
+ * Detection is per-component within each keyframe so Vec3/Quaternion
+ * tracks are handled correctly (a flat min/max would alias cross-component
+ * differences as variance and miss truly-static channels).
+ */
+function isClipEffectivelyStatic(clip: THREE.AnimationClip, eps = 1e-4): boolean {
+  for (const track of clip.tracks) {
+    if (track.times.length < 2) continue;
+    const stride = track.values.length / track.times.length;
+    for (let k = 1; k < track.times.length; k++) {
+      for (let c = 0; c < stride; c++) {
+        if (Math.abs(track.values[k * stride + c] - track.values[c]) > eps) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
 
 function findClipForState(
   clips: THREE.AnimationClip[],

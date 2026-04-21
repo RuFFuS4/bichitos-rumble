@@ -55,10 +55,12 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Trunk',
     glbPath: './models/critters/trunk.glb',
     baseColor: 0x8c8c8c,
-    // Same transform defaults as Sergei initially — tune with __tune() in dev
-    // once we see it rendered. Tripo3D exports tend to share orientation.
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Bruiser — largest silhouette (mass 1.4). Tripo Animate meshes have
+    // their origin at the feet (minY=0 in GLB space), so pivotY=0 lands
+    // feet on floor regardless of scale — different from Sergei whose
+    // mesh is centered (pivotY=1.335).
+    scale: 3.3, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
@@ -68,8 +70,9 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Kurama',
     glbPath: './models/critters/kurama.glb',
     baseColor: 0xff6633,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Trickster — lean and light (mass 0.8). Tripo mesh origin at feet.
+    scale: 2.4, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Trickster',
     tagline: 'Fast, sly, unpredictable.',
@@ -87,8 +90,13 @@ const ROSTER: RosterEntry[] = [
     // Model bounds: Y [-0.49, 0.49], center at origin, front faces ±X
     // pivotY = |minY| × scale to place feet at ground level
     // rotation = -π/2 to turn from X-facing to Z-facing (game forward)
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // scale 3.07 — bumped 33% over the previous 2.3 per user request
+    // (gorila reads small at 2.3 next to the other critters; this is
+    // closer to the relative mass we want for a Bruiser-Balanced).
+    // pivotY scaled proportionally (1.0 × 3.07/2.3 = 1.335) so the
+    // 33% bigger mesh doesn't clip the floor.
+    scale: 3.07, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 1.335,
     status: 'playable',
     role: 'Balanced',
     tagline: 'Strong and agile. No weakness.',
@@ -98,11 +106,11 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Shelly',
     glbPath: './models/critters/shelly.glb',
     baseColor: 0x2d8659,
-    // Shelly's GLB was authored with her forward slightly off-axis from
-    // the other Tripo3D models. rotation=0 leaves her facing ~15° right;
-    // a small negative offset aligns her torso with the camera.
-    scale: 2.0, rotation: -0.4, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Tank turtle (mass 1.5) — second largest silhouette after Trunk.
+    // New Tripo Animate rig aligns her forward axis with the others.
+    // Tripo mesh origin at feet, pivotY=0.
+    scale: 3.1, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Tank',
     tagline: 'Heavy and wise.',
@@ -117,8 +125,9 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Kermit',
     glbPath: './models/critters/kermit.glb',
     baseColor: 0x44cc44,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Controller frog (mass 1.0) — medium size. Tripo mesh origin at feet.
+    scale: 2.6, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Controller',
     tagline: 'Venomous area denial.',
@@ -133,8 +142,9 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Sihans',
     glbPath: './models/critters/sihans.glb',
     baseColor: 0x8b6914,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Trapper mole (mass 1.15) — medium-heavy. Tripo mesh origin at feet.
+    scale: 2.7, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Trapper',
     tagline: 'Digs in. Controls ground.',
@@ -149,8 +159,9 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Kowalski',
     glbPath: './models/critters/kowalski.glb',
     baseColor: 0x1a1a3e,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Mage penguin (mass 0.9) — compact. Tripo mesh origin at feet.
+    scale: 2.5, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Mage',
     tagline: 'Calculated ranged threat.',
@@ -165,8 +176,9 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Cheeto',
     glbPath: './models/critters/cheeto.glb',
     baseColor: 0xffaa22,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Assassin tiger (mass 0.7) — smallest + sleek. Tripo mesh origin at feet.
+    scale: 2.3, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Assassin',
     tagline: 'Swift and lethal.',
@@ -181,8 +193,11 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Sebastian',
     glbPath: './models/critters/sebastian.glb',
     baseColor: 0xcc3333,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Glass Cannon crab (mass 0.75) — small, low silhouette. Now rigged
+    // via custom bpy armature (Body/Head/2 Claws/8 Legs). Mesh origin
+    // at feet, pivotY=0.
+    scale: 2.3, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Glass Cannon',
     tagline: 'One giant claw. All in.',

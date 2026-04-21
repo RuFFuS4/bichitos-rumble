@@ -62,6 +62,33 @@
   tests because they only checked angles 0 and π (which are fixed points
   of the Z-mirror).
 
+### [2026-04-20] Cloned SkinnedMesh — physics moves, vertices stay at origin
+- **Where**: `src/model-loader.ts` → `deepCloneWithMaterials()`
+- **Symptom**: After Sergei was re-exported with a rigged armature
+  (first critter to ship with a real skeleton), the character-select
+  thumbnail rendered as if the mesh were pinned to world origin while
+  the carousel rotated the container around it. In-game the critter
+  followed physics as an invisible ghost; visible geometry stayed
+  stuck at origin.
+- **Cause**: `source.clone(true)` on a `THREE.Group` containing a
+  `SkinnedMesh` clones the mesh and the armature nodes but leaves
+  `SkinnedMesh.skeleton.bones` pointing at the ORIGINAL armature's
+  bones — the ones cached inside the loader. Translating/rotating
+  the clone moves the empty parent, but vertices are still bound to
+  the cached skeleton at world origin.
+- **Fix**: Use `SkeletonUtils.clone()` from
+  `three/examples/jsm/utils/SkeletonUtils.js` for any source that
+  contains at least one `SkinnedMesh` — SkeletonUtils rebuilds the
+  skeleton and reconnects bone references to the clone subtree.
+  Detection: single `source.traverse` checking `node.isSkinnedMesh`.
+  Plain `source.clone(true)` kept as fallback for non-skinned models
+  (cheaper, still the majority today). Comment in the file documents
+  the symptom so the next refactor doesn't revert it.
+- **Lesson**: the moment any critter gets a real armature, SkeletonUtils
+  cloning is mandatory. This bug only surfaces once a skinned model is
+  added; all the critters shipped so far were static meshes, so the
+  cheap clone path worked.
+
 ## Format
 ```
 ### [Date] Error Title

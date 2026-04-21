@@ -1,0 +1,10 @@
+[
+  { "dur": 1.292,  "name": "Run" },
+  { "dur": 2.750,  "name": "Ability1Pounce" },
+  { "dur": 3.583,  "name": "Ability3TigerRoar" },
+  { "dur": 3.667,  "name": "Fall" },
+  { "dur": 3.875,  "name": "Ability2ShadowStep" },
+  { "dur": 6.000,  "name": "Idle" },
+  { "dur": 6.292,  "name": "Defeat" },
+  { "dur": 10.792, "name": "Victory" }
+]

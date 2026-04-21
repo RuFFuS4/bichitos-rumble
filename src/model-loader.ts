@@ -13,6 +13,7 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 // ---------------------------------------------------------------------------
 // Singleton loader setup
@@ -157,7 +158,23 @@ async function fetchAndCache(glbPath: string): Promise<CacheEntry> {
  * resources and sharing saves VRAM.
  */
 function deepCloneWithMaterials(source: THREE.Group): THREE.Group {
-  const cloned = source.clone(true);
+  // SkeletonUtils.clone() rebuilds the skeleton + bone references for any
+  // SkinnedMesh in the hierarchy so each cloned critter has its own working
+  // armature. A plain `source.clone(true)` keeps cloned SkinnedMesh.skeleton
+  // pointing at the ORIGINAL Armature in the cache — moving the cloned
+  // group then translates the empty/armature node but the vertex positions
+  // stay bound to the cached skeleton, which is what produced the "physics
+  // moves but visual stays put" symptom on the first rigged Sergei import.
+  // Falls back to plain clone(true) for non-skinned models (slightly cheaper),
+  // detected by walking the tree once for any SkinnedMesh node.
+  let hasSkinnedMesh = false;
+  source.traverse((n) => {
+    if ((n as THREE.SkinnedMesh).isSkinnedMesh) hasSkinnedMesh = true;
+  });
+
+  const cloned = hasSkinnedMesh
+    ? (SkeletonUtils.clone(source) as THREE.Group)
+    : source.clone(true);
 
   cloned.traverse((node) => {
     const mesh = node as THREE.Mesh;

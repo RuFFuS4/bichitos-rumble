@@ -474,7 +474,21 @@ export class Critter {
           glowColor = 0xffff00;
           glowIntensity = 0.5;
           bodyScaleY = 0.85;
+        } else if (this.config.name === 'Kermit') {
+          // Hypnosapo — Kermit's ulti runs a fast hypnotic flicker
+          // between two pinks / purples instead of the default frenzy
+          // red pulse. No skeletal clip ships for this state, so the
+          // effect lives entirely in the emissive channel per the
+          // gameplay-procedural separation rule.
+          const t = Date.now() * 0.025;
+          const flicker = Math.sin(t);
+          const swing = Math.abs(Math.sin(t * 0.5));
+          glowColor = flicker > 0 ? 0xaa00ff : 0xff44cc;
+          glowIntensity = 0.9 + swing * 0.4;
+          // Slight body scale pulse for "charging hypnosis"
+          bodyScaleY = 1.0 + swing * 0.08;
         } else {
+          // Default frenzy — red pulse (Sergei, Shelly, …).
           const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.008);
           glowColor = 0xff1100;
           glowIntensity = 0.6 + pulse * 0.4;
