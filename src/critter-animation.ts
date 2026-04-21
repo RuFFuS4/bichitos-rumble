@@ -126,6 +126,12 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
   // layer steps back from the root transforms it would otherwise fight
   // for. Light states (idle/walk/run) coexist with lean/sway/scale.
   const skeletalHeavy = critter.skeletal?.isHeavyClipActive() ?? false;
+  // Looping clip (idle/walk/run) is playing → the clip already owns the
+  // breathing / footfall cadence, so we drop the procedural vertical
+  // bob to avoid doubling it up (visible as "jumping" in the character
+  // select preview before this guard). Lean / sway / scale still apply
+  // because those channels are untouched by Tripo / Mixamo clips.
+  const skeletalLoop = critter.skeletal?.isLoopingClipActive() ?? false;
 
   const vMag = Math.sqrt(critter.vx * critter.vx + critter.vz * critter.vz);
   const moving = vMag > SPEED_DEADZONE;
@@ -159,11 +165,17 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
   const headbuttActive = antBlend + lungeBlend > 0;
 
   // --- Vertical bob (idle + run) + ability/headbutt offsets ---
-  const idleBob = Math.sin(t * p.idleBobHz * Math.PI * 2) * p.idleBobAmp;
-  const runBounce =
-    Math.abs(Math.sin(t * p.runBounceHz * Math.PI)) *
-    p.runBounceAmp *
-    runIntensity;
+  // When a skeletal loop clip is playing, the bob/bounce are zeroed so
+  // the clip's authored cadence reads cleanly. Critters without clips
+  // keep the procedural baseline.
+  const idleBob = skeletalLoop
+    ? 0
+    : Math.sin(t * p.idleBobHz * Math.PI * 2) * p.idleBobAmp;
+  const runBounce = skeletalLoop
+    ? 0
+    : Math.abs(Math.sin(t * p.runBounceHz * Math.PI)) *
+      p.runBounceAmp *
+      runIntensity;
 
   // Ground-pound wind-up drops the body (crouch before slam)
   const gpDrop = groundPoundWindUp * FEEL.groundPound.windUpHeadDrop; // negative

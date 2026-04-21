@@ -326,6 +326,26 @@ export class SkeletalAnimator {
     return HEAVY_STATES.has(this.currentState);
   }
 
+  /**
+   * True when a LOOPING clip (idle / walk / run) is actually playing —
+   * i.e. the state is a loop AND we have a resolved clip for it. The
+   * procedural layer reads this to suppress the vertical bob/bounce it
+   * would otherwise stack on top of the clip's own breathing / footfalls.
+   *
+   * Critical for the character-select preview: without this, critters
+   * with skeletal Idle look like they're jumping in place because the
+   * clip's spine animation + the procedural bob play at the same time.
+   *
+   * Returns false for critters without clips (procedural owns the look),
+   * and false during one-shot / heavy states (those have their own
+   * suppression path in `isHeavyClipActive`).
+   */
+  isLoopingClipActive(): boolean {
+    if (!this.currentState) return false;
+    if (!LOOPING_STATES.has(this.currentState)) return false;
+    return !!this.actions[this.currentState];
+  }
+
   getCurrentState(): SkeletalState | null {
     return this.currentState;
   }

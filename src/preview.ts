@@ -12,10 +12,13 @@ import { Critter, type CritterConfig } from './critter';
 // Keep this module free of gameplay logic.
 // ---------------------------------------------------------------------------
 
-const PEDESTAL_HEIGHT = 0.35;
-const PEDESTAL_RADIUS_TOP = 1.2;
-const PEDESTAL_RADIUS_BOT = 1.45;
-const CRITTER_LIFT = PEDESTAL_HEIGHT + 0.05;
+// Pedestal dimensions — beefed up from the first pass so the trophy
+// silhouette reads clearly at every viewport size. The critter sits
+// slightly above the rim to avoid feet clipping into the stone.
+const PEDESTAL_HEIGHT = 0.50;
+const PEDESTAL_RADIUS_TOP = 1.45;
+const PEDESTAL_RADIUS_BOT = 1.72;
+const CRITTER_LIFT = PEDESTAL_HEIGHT + 0.06;
 
 // Manual rotation smoothing (drag → target, render → eased)
 const ROTATION_SMOOTH_SPEED = 12;
@@ -51,21 +54,31 @@ export function initPreview(canvasEl: HTMLCanvasElement): void {
 
   scene = new THREE.Scene();
 
-  camera = new THREE.PerspectiveCamera(35, 1, 0.1, 50);
-  camera.position.set(0, 1.8, 5.5);
-  camera.lookAt(0, 1.0, 0);
+  // Slightly tighter framing so the critter + pedestal fill the frame
+  // instead of floating in a big dark field. Camera pitched a touch
+  // higher to get a 3/4 hero angle on the model.
+  camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
+  camera.position.set(0, 1.95, 4.8);
+  camera.lookAt(0, 1.05, 0);
 
-  // Lighting — soft ambient + key light for shape
-  const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+  // Lighting — three-point rig. Key from front-right for shape, fill
+  // from behind-left (cool) for silhouette, ambient keeps shadows lifted.
+  const ambient = new THREE.AmbientLight(0xffffff, 0.52);
   scene.add(ambient);
 
-  const key = new THREE.DirectionalLight(0xfff2e0, 1.1);
+  const key = new THREE.DirectionalLight(0xfff2e0, 1.35);
   key.position.set(3, 6, 4);
   scene.add(key);
 
-  const rim = new THREE.DirectionalLight(0x88aaff, 0.35);
-  rim.position.set(-4, 3, -3);
+  const rim = new THREE.DirectionalLight(0x9cb8ff, 0.55);
+  rim.position.set(-4, 4, -3);
   scene.add(rim);
+
+  // Fill light from below — gives the underside of the head/belly some
+  // lift. Otherwise the pedestal's shadow eats the chin.
+  const fill = new THREE.DirectionalLight(0xffd89c, 0.25);
+  fill.position.set(0, -2, 3);
+  scene.add(fill);
 
   // Pedestal — standard cylinder, will vary per critter later
   buildPedestal();
@@ -131,32 +144,69 @@ export function tickPreview(dt: number): void {
 function buildPedestal(): void {
   if (!scene) return;
 
+  // Main stone body — a touch darker than the base so it reads as solid
+  // stage material instead of competing with the critter.
   const geo = new THREE.CylinderGeometry(
     PEDESTAL_RADIUS_TOP,
     PEDESTAL_RADIUS_BOT,
     PEDESTAL_HEIGHT,
-    24,
+    32,
   );
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x2a2f3d,
-    metalness: 0.3,
-    roughness: 0.55,
+    color: 0x1f2331,
+    metalness: 0.35,
+    roughness: 0.58,
   });
   const pedestal = new THREE.Mesh(geo, mat);
   pedestal.position.y = PEDESTAL_HEIGHT / 2;
   scene.add(pedestal);
 
-  // Rim highlight on top edge
-  const rimGeo = new THREE.TorusGeometry(PEDESTAL_RADIUS_TOP, 0.04, 6, 32);
+  // Thin top plate to break up the slab and give the rim something to
+  // sit on. Subtle lift so it reads as trim, not a full step.
+  const plateGeo = new THREE.CylinderGeometry(
+    PEDESTAL_RADIUS_TOP + 0.02,
+    PEDESTAL_RADIUS_TOP + 0.02,
+    0.04,
+    32,
+  );
+  const plateMat = new THREE.MeshStandardMaterial({
+    color: 0x2d3446,
+    metalness: 0.45,
+    roughness: 0.45,
+  });
+  const plate = new THREE.Mesh(plateGeo, plateMat);
+  plate.position.y = PEDESTAL_HEIGHT + 0.02;
+  scene.add(plate);
+
+  // Gold rim around the top — trophy energy, matches the title's accent
+  // palette (#ffdc5c) without screaming.
+  const rimGeo = new THREE.TorusGeometry(PEDESTAL_RADIUS_TOP + 0.02, 0.05, 8, 48);
   const rimMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0xffffff,
-    emissiveIntensity: 0.25,
+    color: 0xffdc5c,
+    emissive: 0xffb830,
+    emissiveIntensity: 0.45,
+    metalness: 0.7,
+    roughness: 0.35,
   });
   const rim = new THREE.Mesh(rimGeo, rimMat);
   rim.rotation.x = Math.PI / 2;
-  rim.position.y = PEDESTAL_HEIGHT;
+  rim.position.y = PEDESTAL_HEIGHT + 0.05;
   scene.add(rim);
+
+  // Faint floor glow disc behind the pedestal — catches stray light and
+  // keeps the composition centered. Low opacity additive so it doesn't
+  // clash with the HTML backdrop's own gradient.
+  const glowGeo = new THREE.CircleGeometry(PEDESTAL_RADIUS_BOT + 1.0, 32);
+  const glowMat = new THREE.MeshBasicMaterial({
+    color: 0xffdc5c,
+    transparent: true,
+    opacity: 0.08,
+    depthWrite: false,
+  });
+  const glow = new THREE.Mesh(glowGeo, glowMat);
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = 0.001;
+  scene.add(glow);
 }
 
 function swapCritter(config: CritterConfig): void {
