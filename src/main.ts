@@ -13,6 +13,7 @@ import {
 } from './audio';
 import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
+import { updateDustPuffs } from './dust-puff';
 
 // ---------------------------------------------------------------------------
 // WebGL diagnostic + renderer creation
@@ -45,18 +46,98 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 console.log('[bichitos] Renderer created OK');
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.setClearColor(0x0a0a18);
+renderer.setClearColor(0x87b0d8); // sky blue — fallback before skydome paints
 document.body.prepend(renderer.domElement);
 
 // Scene
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0a0a18, 0.018); // exponential fog for depth falloff
+// Fog keyed to the horizon colour so the skydome blends smoothly with
+// distant geometry instead of clipping to a hard edge. Lower density so
+// the sky stays visible past the combat radius.
+scene.fog = new THREE.FogExp2(0xb6d1e8, 0.012);
 
-// Lighting — stronger contrast for depth readability
-const ambient = new THREE.AmbientLight(0xffffff, 0.35);
-scene.add(ambient);
+// Skydome — vertical gradient sphere painted from the inside. Sits
+// behind every game object, creating the "floating platform in the sky"
+// look the game design is after. Pure shader, no texture assets.
+const SKY_COLORS = {
+  top:     new THREE.Color(0x5c9fd9), // brighter blue high up
+  middle:  new THREE.Color(0x8ac1e8), // mid sky (matches clear color)
+  horizon: new THREE.Color(0xf5c792), // warm horizon band
+  bottom:  new THREE.Color(0x2a3b52), // deeper blue toward the void
+};
+const skyUniforms = {
+  topColor:     { value: SKY_COLORS.top },
+  middleColor:  { value: SKY_COLORS.middle },
+  horizonColor: { value: SKY_COLORS.horizon },
+  bottomColor:  { value: SKY_COLORS.bottom },
+};
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: skyUniforms,
+  side: THREE.BackSide,
+  depthWrite: false,
+  fog: false,
+  vertexShader: `
+    varying vec3 vWorldPos;
+    void main() {
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldPos = worldPos.xyz;
+      gl_Position = projectionMatrix * viewMatrix * worldPos;
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 topColor;
+    uniform vec3 middleColor;
+    uniform vec3 horizonColor;
+    uniform vec3 bottomColor;
+    varying vec3 vWorldPos;
+    void main() {
+      // h in [-1..+1] over the skydome's vertical extent (radius 200).
+      float h = clamp(vWorldPos.y / 200.0, -1.0, 1.0);
+      vec3 color;
+      if (h > 0.2) {
+        // Upper sky: middle → top
+        color = mix(middleColor, topColor, (h - 0.2) / 0.8);
+      } else if (h > -0.05) {
+        // Horizon band: warm transition
+        color = mix(horizonColor, middleColor, (h + 0.05) / 0.25);
+      } else {
+        // Below horizon: horizon → bottom (void reference)
+        color = mix(bottomColor, horizonColor, (h + 1.0) / 0.95);
+      }
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `,
+});
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(200, 24, 18), skyMat);
+skyDome.renderOrder = -1;
+scene.add(skyDome);
 
-const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+// Distant cloud band — a flat disc at altitude + below the arena, hinting
+// that the platform is floating very high above terrain. Single plane,
+// tinted additive for that "soft painted fog" look.
+const cloudsGeo = new THREE.PlaneGeometry(140, 140);
+const cloudsMat = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  transparent: true,
+  opacity: 0.35,
+  depthWrite: false,
+});
+const cloudsBelow = new THREE.Mesh(cloudsGeo, cloudsMat);
+cloudsBelow.rotation.x = -Math.PI / 2;
+cloudsBelow.position.y = -18;
+cloudsBelow.renderOrder = -1;
+scene.add(cloudsBelow);
+
+// Lighting — three-point rig + hemisphere ambient.
+// Sky/ground hemisphere replaces the flat AmbientLight: the top of every
+// critter picks up the cyan sky; the underside catches the warm ground
+// glow — cheap way to sell "outdoors on a floating platform".
+const hemi = new THREE.HemisphereLight(0x9cc7ea, 0x4a3a26, 0.55);
+scene.add(hemi);
+
+// Key: warm sun-angle light. Intensity bumped 1.2 → 1.35 and tinted
+// slightly warmer for the "high-altitude golden hour" reading.
+const dirLight = new THREE.DirectionalLight(0xfff1d4, 1.35);
 dirLight.position.set(8, 25, 12);
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.set(1024, 1024);
@@ -68,6 +149,12 @@ dirLight.shadow.camera.top = 18;
 dirLight.shadow.camera.bottom = -18;
 dirLight.shadow.bias = -0.002;
 scene.add(dirLight);
+
+// Rim from behind — cool blue backlight so silhouettes separate from the
+// warm sky. No shadow casting (cost we don't need here).
+const rimLight = new THREE.DirectionalLight(0x9fb4e8, 0.55);
+rimLight.position.set(-10, 14, -14);
+scene.add(rimLight);
 
 // Camera — syncSize sets the correct canvas dimensions and aspect ratio
 const camera = createCamera();
@@ -202,6 +289,9 @@ function loop(now: number) {
   }
 
   game.update(dt);
+  // Dust puff pool tick — no-op when empty. Lives outside game.update so
+  // puffs keep animating even through edge phase transitions.
+  updateDustPuffs(dt);
   // Apply camera shake on top of the base position (no accumulation drift)
   updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
   renderer.render(scene, camera);
