@@ -148,6 +148,19 @@ victory / defeat / fall). Pipeline: `npm run import:critter <id>
 See [`CHARACTER_DESIGN.md`](CHARACTER_DESIGN.md) for the per-critter
 table.
 
+**Stats are driven by a single P/W/S tuple** per critter
+(Power / Weight / Speed, each -2..+2). `src/pws-stats.ts` derives the
+raw numeric stats (speed / mass / headbuttForce) via a linear mapping
+and the server imports the same table byte-identical, so rebalancing
+is a 3-character edit per row that propagates to both client + server.
+
+The arena is a stone platform floating high in a painted sky (custom
+shader skydome + distant cloud disc) — when a fragment collapses it
+tumbles away under gravity instead of vanishing. Countdown entry: the
+fighters drop from the sky with a gravity arc, a dust puff + thud fire
+as each one lands. The 3-2-1 digits ramp colour with urgency (red →
+amber → yellow) and GO! paints in green with a radial burst.
+
 Online supports up to 4 humans per room with automatic bot-fill. The
 waiting room shows the lineup with human/bot badges and a visible
 countdown.
@@ -156,6 +169,14 @@ Vibe Jam portal integration is live: exit portal (webring) and return
 portal; players arriving via `?portal=true` skip menus and drop
 straight into a match. A warp transition plays for ~650 ms before each
 redirect so the hand-off feels like a portal trip, not a hard-cut.
+
+**Local achievement system** (BADGES) — 16 WWE-style belts
+(9 per-critter Champions + 7 global trophies like Speedrun / Iron
+Will / Pain Tolerance) that unlock as you play. Progress persists in
+localStorage. A floating toast surfaces new unlocks on the end-screen;
+the full catalogue lives in a "Hall of Belts" modal accessible from
+character-select (button or **B** key). Placeholder emoji icons until
+the generated PNGs drop (prompts in [`AI_PROMPTS.md`](AI_PROMPTS.md)).
 
 ## More docs
 
@@ -169,7 +190,9 @@ redirect so the hand-off feels like a portal trip, not a hard-cut.
 | [`RULES.md`](RULES.md) | Gameplay rules |
 | [`ASSET_PIPELINE.md`](ASSET_PIPELINE.md) | GLB optimization + import flow |
 | [`BLENDER_MCP.md`](BLENDER_MCP.md) | Tripo Animate / Meshy cleanup via Blender (standby) |
-| [`BADGES_DESIGN.md`](BADGES_DESIGN.md) | Planned WWE-belt achievement system |
+| [`BADGES_DESIGN.md`](BADGES_DESIGN.md) | WWE-belt achievement system (live in Phases 1-4) |
+| [`PROCEDURAL_PARTS.md`](PROCEDURAL_PARTS.md) | Per-critter bone/primitive playbook for future abilities |
+| [`AI_PROMPTS.md`](AI_PROMPTS.md) | Prompt library for generative asset passes |
 | [`BUILD_LOG.md`](BUILD_LOG.md) | Sprint history (pre-launch in `docs/archive/`) |
 | [`NEXT_STEPS.md`](NEXT_STEPS.md) | Roadmap to jam deadline |
 | [`SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md) | Jam deliverables gate |

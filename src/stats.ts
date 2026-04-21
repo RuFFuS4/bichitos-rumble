@@ -257,16 +257,6 @@ export function recordFall(critterName: string): void {
 }
 
 /**
- * Call every time the local player is hit by an enemy headbutt.
- * Counts total hits received this session for badge evaluation
- * (Untouchable / Pain Tolerance). Cumulative across matches per critter.
- */
-export function recordHitReceived(critterName: string): void {
-  ensure(critterName).hitsReceived++;
-  save();
-}
-
-/**
  * Call when the local player wins a match. Records the completion time and
  * lives-left for the badges that care (Speedrun Belt / Iron Will /
  * Arena Apex). Does NOT double-book the win itself — pair with recordOutcome
@@ -295,6 +285,12 @@ export function recordWin(
   }
 
   c.livesLeftSum += livesLeft;
+  // Accumulate lifetime hits received, per-critter. Used by the Pain
+  // Tolerance badge (sum across critters ≥ PAIN_TOLERANCE_MIN_HITS).
+  // We only add on wins — recording hits from losses would require an
+  // extra hook and the badge copy specifies "after taking N+ headbutts"
+  // which most naturally reads as "over your winning runs".
+  c.hitsReceived += hitsThisMatch;
 
   // Win-type tallies (Iron Will / Untouchable / Arena Apex)
   if (hitsThisMatch === 0) current.noHitWins++;

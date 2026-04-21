@@ -11,8 +11,9 @@
 //     yet. The caller is expected to pipe that through
 //     `addUnlockedBadges()` from stats.ts (which persists + sets the
 //     `recentlyUnlocked` slot for the end-screen toast).
-//   - Expose read helpers (`getBadgeById`, `getAllBadges`,
-//     `getUnlockedBadges`, `isUnlocked`) for UI code to bind against.
+//   - Expose read helpers (`getBadgeById`, `isUnlocked`) for UI code
+//     to bind against. Callers that need to iterate the catalog use
+//     the exported `BADGE_CATALOG` directly.
 //
 // Out of scope (future phases):
 //   - UI overlay (toast on end-screen — Fase 3 in BADGES_DESIGN).
@@ -215,17 +216,6 @@ export function checkBadgeUnlocks(stats: Stats): string[] {
 /** Single-lookup helper. Returns null for unknown IDs. */
 export function getBadgeById(id: string): BadgeDef | null {
   return BADGE_CATALOG.find((b) => b.id === id) ?? null;
-}
-
-/** Stable copy of the catalog, for UI code that wants to iterate. */
-export function getAllBadges(): readonly BadgeDef[] {
-  return BADGE_CATALOG;
-}
-
-/** Badges the player has already unlocked (resolved from the stats blob). */
-export function getUnlockedBadges(stats: Stats): BadgeDef[] {
-  const set = new Set(stats.unlockedBadges);
-  return BADGE_CATALOG.filter((b) => set.has(b.id));
 }
 
 /** True when the given badge id appears in Stats.unlockedBadges. */

@@ -18,7 +18,6 @@ import { BADGE_CATALOG, type BadgeDef } from './badges';
 import { getStats } from './stats';
 
 let modalEl: HTMLDivElement | null = null;
-let openTriggeredByB = false;   // ignore the keyup of the same press
 
 /**
  * One-time DOM setup. Idempotent. Call at boot from main.ts.
@@ -155,16 +154,7 @@ function onKeydown(e: KeyboardEvent): void {
       closeHallOfBelts();
     } else if (selectVisible) {
       e.preventDefault();
-      openTriggeredByB = true;
       openHallOfBelts();
     }
   }
-}
-
-// Exported to suppress a stale `unused` warning for openTriggeredByB if
-// the value isn't read in this file (we reserve it for future "focus
-// restoration" logic — closing should return focus to the button that
-// opened the modal, which depends on the trigger path).
-export function wasOpenedByB(): boolean {
-  return openTriggeredByB;
 }

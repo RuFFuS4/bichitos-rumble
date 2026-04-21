@@ -97,8 +97,3 @@ export function deriveCritterStats(name: string): DerivedStats {
   const pws = CRITTER_PWS[name] ?? CRITTER_PWS.Sergei;
   return toDerivedStats(pws);
 }
-
-/** Read-only: the full (p, w, s) tuple for a critter, or null if unknown. */
-export function getCritterPWS(name: string): PWS | null {
-  return CRITTER_PWS[name] ?? null;
-}
