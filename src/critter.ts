@@ -204,6 +204,10 @@ export class Critter {
     abilitiesUsed: 0,
     falls: 0,
     respawns: 0,
+    /** Headbutts received from enemies this match. Bumped from physics.ts
+     *  in the headbutt-impact branch. Feeds the Untouchable / Pain
+     *  Tolerance badge evaluation via recordWin(). */
+    hitsReceived: 0,
   };
 
   /** Edge-detection memory for matchStats counting. */
@@ -842,7 +846,7 @@ export class Critter {
     this.body.scale.y = 1.0;
     this.abilityStates = createAbilityStates(this.config.name);
     // Fresh match → reset per-match counters and edge-detection memory.
-    this.matchStats = { headbutts: 0, abilitiesUsed: 0, falls: 0, respawns: 0 };
+    this.matchStats = { headbutts: 0, abilitiesUsed: 0, falls: 0, respawns: 0, hitsReceived: 0 };
     this.lastStatsHeadbutting = false;
     this.lastStatsFalling = false;
     this.lastStatsAbilityActive = [false, false, false];

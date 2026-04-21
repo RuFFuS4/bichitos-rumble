@@ -24,7 +24,11 @@ import {
 import { applyHitStop, FEEL } from './gamefeel';
 import { showPreview, swapPreviewCritter, hidePreview } from './preview';
 import { play as playSound, playMusic, preloadMusic } from './audio';
-import { recordPick, recordOutcome, recordFall } from './stats';
+import {
+  recordPick, recordOutcome, recordFall, recordWin,
+  addUnlockedBadges, getStats,
+} from './stats';
+import { checkBadgeUnlocks } from './badges';
 import { getDisplayRoster, getRosterEntry, getPlayableNames, type RosterEntry } from './roster';
 import { preloadModels } from './model-loader';
 import {
@@ -123,6 +127,10 @@ export class Game {
   private phase: Phase = 'title';
   private phaseTimer = 0;
   private matchTimer = FEEL.match.duration;
+  /** performance.now() of the frame where phase transitioned to 'playing'.
+   *  Used to measure match duration for the Speedrun Belt badge. 0 while
+   *  in menus. */
+  private matchStartMs = 0;
   private displayRoster: RosterEntry[] = getDisplayRoster();
 
   // --- Online mode state (null when offline) ---
@@ -920,6 +928,28 @@ export class Game {
     if (result === 'win' || result === 'lose') {
       recordOutcome(this.player.config.name, result);
     }
+
+    // Badge aggregation — wins only. `recordWin` captures the duration +
+    // lives-left + hits-received needed by Speedrun / Iron Will / Arena
+    // Apex / Untouchable / Pain Tolerance conditions. Then we diff against
+    // already-unlocked badges to log new unlocks. UI surfacing (end-screen
+    // toast) will wire into `stats.recentlyUnlocked` in BADGES Phase 3.
+    if (result === 'win' && this.matchStartMs > 0) {
+      const durationSecs = (performance.now() - this.matchStartMs) / 1000;
+      recordWin(
+        this.player.config.name,
+        durationSecs,
+        this.player.lives,
+        this.player.matchStats.hitsReceived,
+      );
+      const newly = checkBadgeUnlocks(getStats());
+      if (newly.length > 0) {
+        addUnlockedBadges(newly);
+        console.debug('[Badges] unlocked:', newly.join(', '));
+      }
+    }
+    // Reset start timestamp so a stray post-match tick can't re-fire.
+    this.matchStartMs = 0;
   }
 
   // -------------------------------------------------------------------------
@@ -1073,6 +1103,9 @@ export class Game {
         } else {
           hideOverlay();
           this.phase = 'playing';
+          // Stamp the moment the match really starts. Used by recordWin
+          // to compute duration for the Speedrun Belt badge.
+          this.matchStartMs = performance.now();
         }
         break;
       }

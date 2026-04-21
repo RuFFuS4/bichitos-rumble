@@ -236,22 +236,47 @@ Por trofeo:
 ## Implementación — plan por fases (post-animaciones, post-signature abilities)
 
 - **Fase 0** · este doc (done).
-- **Fase 1** · Extender `stats.ts` con los nuevos campos + migración
-  suave v1 → v2. Añadir `src/badges.ts` con el catálogo de definiciones
-  (id / name / description / condition function) y `checkBadgeUnlocks`.
-- **Fase 2** · Recolectar datos faltantes. Requiere 2-3 hooks en
-  `game.ts` (match start time, hits received counter, livesLeft al
-  ganar). Cada hook es ≤ 5 líneas.
-- **Fase 3** · UI overlay en end-screen — el toast "NEW BELT UNLOCKED"
-  con animación de aparición, silueta del belt en plomo antes del
-  reveal.
+- ✅ **Fase 1** (commit 2026-04-22) — Schema v2 + catálogo + checker:
+  - `src/stats.ts` ampliado a v2 con migración suave desde v1
+    (localStorage key `br-stats-v2`). Nuevos campos: `fastestWinSecs`
+    (global + per-critter), `hitsReceived` (per-critter),
+    `livesLeftSum` (per-critter), `noHitWins`, `noDeathWins`,
+    `comebackWins`, `unlockedBadges[]`, `recentlyUnlocked`.
+  - `src/stats.ts` nuevas funciones: `recordHitReceived(name)`,
+    `recordWin(name, durationSecs, livesLeft, hits)`, `getStats()`,
+    `addUnlockedBadges(ids)`, `clearRecentlyUnlocked()`.
+  - `src/badges.ts` nuevo: catálogo de 16 belts (9 Champions + 7
+    globals) con `BadgeDef` tipado y condiciones puras.
+    `checkBadgeUnlocks(stats)` devuelve los ids nuevos desbloqueados.
+    Helpers: `getBadgeById`, `getAllBadges`, `getUnlockedBadges`,
+    `isUnlocked`.
+  - Umbrales default: Champion = 5 wins; Speedrun ≤ 30 s;
+    Survivor = 20 wins; Pain Tolerance ≥ 10 hits. Centralizados en
+    constantes arriba del archivo.
+- ✅ **Fase 2** (commit 2026-04-22) — Recolección desde gameplay:
+  - `src/physics.ts` incrementa `matchStats.hitsReceived` del
+    crítter golpeado en cada impacto de headbutt.
+  - `src/critter.ts` `matchStats` ahora incluye `hitsReceived`
+    (reset al iniciar match).
+  - `src/game.ts` captura `matchStartMs = performance.now()` al
+    entrar en `'playing'` y, al detectar `result === 'win'`, llama
+    a `recordWin(…)` + `checkBadgeUnlocks(getStats())` +
+    `addUnlockedBadges(newly)`. Log `[Badges] unlocked: …` en
+    consola.
+  - Solo offline por ahora — el flujo online (BrawlRoom) tiene su
+    propio end-screen callback que aún NO dispara badges. Se
+    añadirá cuando validemos el offline primero.
+- **Fase 3** (pendiente) · UI overlay en end-screen — el toast "NEW
+  BELT UNLOCKED" con animación de aparición, silueta del belt en
+  plomo antes del reveal. Lee `stats.recentlyUnlocked` y llama a
+  `clearRecentlyUnlocked()` al cerrarse.
 - **Fase 4** · Grid "Hall of Belts" en character-select.
 - **Fase 5** · Generar y colocar los 16 assets en `public/badges/`.
 - **Fase 6** · Validación — jugar 5-10 partidas buscando cada logro,
   ajustar umbrales.
 
-Total aproximado: **6-8 horas** de ingeniería + el tiempo externo de
-generación de arte.
+Total aproximado restante: **4-5 horas** de ingeniería + el tiempo
+externo de generación de arte.
 
 ## Decisiones pendientes (cuando retomemos)
 
