@@ -9,9 +9,14 @@
 //   npm run og -- C:/Users/rafa_/Downloads/og-source.png
 //
 // Flags:
-//   --out <path>    override output path (default public/og-image.png)
-//   --fit <mode>    sharp fit mode (cover|contain|inside|outside|fill)
-//                   defaults to "cover" (centre crop to 1200×628 ratio)
+//   --out <path>       override output path (default public/og-image.png)
+//   --fit <mode>       sharp fit mode (cover|contain|inside|outside|fill)
+//                      defaults to "cover" (centre crop to 1200×628 ratio)
+//   --position <anch>  where to anchor the crop when --fit=cover. One of
+//                      top / centre / bottom / left / right / top-left etc.
+//                      Default: centre. Use "top" when the source has a
+//                      title in the upper third that you don't want to
+//                      lose to the vertical crop.
 //
 // Produces:
 //   - 1200×628 PNG, under the 5 MB limit specified by the X/Twitter card
@@ -43,10 +48,12 @@ if (argv.length === 0 || argv.includes('-h') || argv.includes('--help')) {
 const src = argv[0];
 let out = DEFAULT_OUT;
 let fit = 'cover';
+let position = 'centre';
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--out' && argv[i + 1]) { out = resolve(argv[++i]); }
   else if (a === '--fit' && argv[i + 1]) { fit = argv[++i]; }
+  else if (a === '--position' && argv[i + 1]) { position = argv[++i]; }
   else { console.error(`Unknown flag: ${a}`); usage(); process.exit(1); }
 }
 
@@ -67,12 +74,12 @@ async function main() {
   console.log(`           ${srcMeta.width}×${srcMeta.height} · ${srcMeta.format} · ${srcSizeMB} MB`);
   console.log(`  Target : ${out}`);
   console.log(`  Size   : ${TARGET_WIDTH}×${TARGET_HEIGHT} (ratio 1.91:1)`);
-  console.log(`  Fit    : ${fit}\n`);
+  console.log(`  Fit    : ${fit} (position: ${position})\n`);
 
   await sharp(src)
     .resize(TARGET_WIDTH, TARGET_HEIGHT, {
       fit,
-      position: 'centre',
+      position,
       withoutEnlargement: false,
     })
     .png({ compressionLevel: 9 })
@@ -96,10 +103,13 @@ function usage() {
 Usage: node scripts/make-og-image.mjs <source-image> [flags]
 
 Flags:
-  --out <path>    override output (default public/og-image.png)
-  --fit <mode>    cover|contain|inside|outside|fill (default cover)
+  --out <path>        override output (default public/og-image.png)
+  --fit <mode>        cover|contain|inside|outside|fill (default cover)
+  --position <anch>   crop anchor: top|centre|bottom|left|right (default centre)
 
 Generates a 1200×628 PNG suitable for og:image / twitter:image.
+Use --position top when the source has a title in the upper third
+you want to preserve.
 `.trim());
 }
 
