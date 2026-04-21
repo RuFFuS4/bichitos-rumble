@@ -217,7 +217,6 @@ export class DevApi {
   private lastAbilityActive = new WeakMap<Critter, boolean[]>();
   private lastCollapseLevel = -1;
   private lastWarningBatch = -2;
-  private lastServerPhase = '';
 
   // Perf sampling
   private fpsSamples: number[] = [];
