@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "verify:glbs": "node scripts/verify-critter-glbs.mjs",
     "inspect:clips": "node scripts/inspect-clips.mjs",
+    "inspect:parts": "node scripts/inspect-parts.mjs",
     "import:critter": "node scripts/import-critter.mjs",
     "og": "node scripts/make-og-image.mjs",
     "compress:audio": "node scripts/compress-audio.mjs",
