@@ -263,9 +263,12 @@ Por trofeo:
     a `recordWin(…)` + `checkBadgeUnlocks(getStats())` +
     `addUnlockedBadges(newly)`. Log `[Badges] unlocked: …` en
     consola.
-  - Solo offline por ahora — el flujo online (BrawlRoom) tiene su
-    propio end-screen callback que aún NO dispara badges. Se
-    añadirá cuando validemos el offline primero.
+  - ✅ Online path también wired (commit 2026-04-22). `updateOnline`
+    stampea `matchStartMs` en el `serverPhase === 'playing'` edge y,
+    en el `'ended'` edge, ejecuta la misma secuencia
+    `recordOutcome` → `recordWin` → `checkBadgeUnlocks` →
+    `addUnlockedBadges` → `maybeShowBadgeToast`. Log
+    `[Badges] unlocked (online): …` para distinguir de offline.
 - ✅ **Fase 3** (commit 2026-04-22) — Toast end-screen:
   - `src/badge-toast.ts` nuevo módulo con `initBadgeToast`,
     `maybeShowBadgeToast`, `dismissBadgeToast`. Lee

@@ -721,6 +721,9 @@ export class Game {
 
       if (serverPhase === 'playing') {
         hideOverlay();
+        // Stamp match start for badge duration tracking (Speedrun Belt).
+        // Mirrors the offline countdown→playing transition.
+        this.matchStartMs = performance.now();
       } else if (serverPhase === 'countdown') {
         // Online countdown: switch to the in-game loop so by the time the
         // "GO!" pops the music is already at full volume.
@@ -790,6 +793,32 @@ export class Game {
             respawns: this.player.matchStats.respawns,
           });
         }
+
+        // Badge aggregation — mirrors the offline win path. recordOutcome
+        // first (feeds byCritter.wins / totalWins), then recordWin for
+        // the Speedrun/IronWill/Untouchable/ArenaApex signals, then check
+        // unlocks and show the toast. Only fires for wins + losses — the
+        // 'draw' branch skips both.
+        if (this.player && (result === 'win' || result === 'lose')) {
+          recordOutcome(this.player.config.name, result);
+        }
+        if (this.player && result === 'win' && this.matchStartMs > 0) {
+          const durationSecs = (performance.now() - this.matchStartMs) / 1000;
+          recordWin(
+            this.player.config.name,
+            durationSecs,
+            this.player.lives,
+            this.player.matchStats.hitsReceived,
+          );
+          const newly = checkBadgeUnlocks(getStats());
+          if (newly.length > 0) {
+            addUnlockedBadges(newly);
+            console.debug('[Badges] unlocked (online):', newly.join(', '));
+          }
+          maybeShowBadgeToast();
+        }
+        // Reset so the next 'playing' transition re-stamps cleanly.
+        this.matchStartMs = 0;
       }
     }
 

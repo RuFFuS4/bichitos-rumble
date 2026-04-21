@@ -590,6 +590,31 @@ Ruta rápida sin jugar 20 partidas:
       'br-stats-v2')` y recargando — los picks/wins viejos siguen
       visibles en la UI de stats del end-screen.
 
+### 21.5 Badges en modo online
+- [ ] Ganar una partida en Online Multiplayer (puede ser contra bots
+      de bot-fill tras el waiting timer). Consola debe mostrar
+      `[Badges] unlocked (online): <ids>` si cumpliste condiciones.
+- [ ] El toast aparece en el end-screen online, igual que offline.
+- [ ] Los contadores que requieren timing (Speedrun Belt) usan la
+      ventana `serverPhase transitioned to 'playing'` → `'ended'`
+      — no cuentan el tiempo de waiting ni de countdown.
+
+---
+
+## 22 · Parts inspector (2026-04-22)
+
+- [ ] `npm run inspect:parts` lista mesh + node names de los 9 GLBs.
+      El reporte debe mostrar:
+  - Cheeto / Kowalski / Trunk con meshes segmentados
+    (`Mesh_0.001`..`Mesh_N.001`) — la segmentación sobrevivió al
+    export de Tripo Animate.
+  - Kurama / Sebastian / Shelly / Sihans / Sergei / Kermit con mesh
+    único mergeado (`<id>_Mesh_Data`).
+  - Bones con nombres semánticos (`Head`, `L_Hand`, etc.) en todos.
+  - Sebastian con bones crab-específicos (`L_Claw`, `R_Leg1..4`, …).
+- [ ] `PROCEDURAL_PARTS.md` documenta qué se puede manipular por
+      crítter cuando toque abrir signature abilities.
+
 ---
 
 ## Cosas que NO están validables todavía

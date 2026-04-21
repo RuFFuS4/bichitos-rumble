@@ -2,9 +2,10 @@
 // Server-side ability system
 // ---------------------------------------------------------------------------
 //
-// Generic architecture ready for all 3 ability types. Bloque A wires only
-// `charge_rush` end-to-end. `ground_pound` and `frenzy` have config and
-// state slots but their fire effects are TODO for Bloque B.
+// Generic architecture wiring all 3 ability types authoritatively. Each
+// per-kit definition lives here (cooldown / duration / windUp / effect
+// overrides); the client mirrors the timings via clientside prediction
+// of cooldown bars but never decides whether an ability fires.
 //
 // Flow per tick:
 //   1. Check input — if input flag set AND ability ready, activate
