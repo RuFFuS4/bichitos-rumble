@@ -460,7 +460,7 @@ function buildParams(): string {
 function redirectToPortalHub(): void {
   const url = `https://vibej.am/portal/2026?${buildParams()}`;
   console.debug('[Portal] redirecting to:', url);
-  window.location.href = url;
+  triggerWarpAndRedirect(EXIT_COLOR, url);
 }
 
 function redirectToRef(): void {
@@ -469,7 +469,33 @@ function redirectToRef(): void {
   const separator = refUrl.includes('?') ? '&' : '?';
   const url = `${refUrl}${separator}${buildParams()}&portal=true`;
   console.debug('[Portal] redirecting to ref:', url);
-  window.location.href = url;
+  triggerWarpAndRedirect(START_COLOR, url);
+}
+
+/**
+ * Play the warp overlay animation in the portal's colour, then navigate.
+ *
+ * The animation duration (650 ms) matches the CSS keyframe in index.html
+ * (`@keyframes portal-warp`). We schedule the redirect 50 ms past the
+ * animation end so the browser has time to commit the final frame before
+ * the page navigates away — otherwise some engines blank the canvas
+ * mid-transition and the user sees a flash of empty dark.
+ *
+ * The overlay is fire-and-forget: once this runs, `redirected = true` is
+ * already set by updatePortals(), so further frames won't retrigger.
+ * If the user closes the tab during the animation, nothing leaks — the
+ * class just stays on the body until the next page load.
+ */
+function triggerWarpAndRedirect(color: number, url: string): void {
+  const hex = '#' + color.toString(16).padStart(6, '0');
+  document.documentElement.style.setProperty('--warp-color', hex);
+  document.body.classList.add('portal-warp-active');
+  // 650 ms animation + 50 ms safety buffer = 700 ms total. Fast enough
+  // that the user doesn't feel they're waiting; long enough to feel like
+  // a transition, not a glitch.
+  setTimeout(() => {
+    window.location.href = url;
+  }, 700);
 }
 
 // ---------------------------------------------------------------------------

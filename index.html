@@ -1151,6 +1151,52 @@
       body.touch-mode #rotate-prompt { display: flex; }
     }
 
+    /* ---------- Portal warp transition (jam portal in/out) ----------
+       Fullscreen overlay that pulses out from the centre with the portal's
+       colour when the player walks through. Runs for 650ms before the
+       actual page redirect fires (see portal.ts triggerWarpAndRedirect).
+       The game canvas + HUD fade white/blue-out in parallel for the
+       "absorbed into the portal" feel. */
+    #portal-warp-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0;
+      background: radial-gradient(
+        circle at 50% 50%,
+        var(--warp-color, #44ff88) 0%,
+        var(--warp-color, #44ff88) 18%,
+        transparent 70%
+      );
+      transform: scale(0.3);
+      filter: blur(0);
+      mix-blend-mode: screen;
+      will-change: opacity, transform, filter;
+    }
+    body.portal-warp-active #portal-warp-overlay {
+      animation: portal-warp 0.65s ease-in forwards;
+    }
+    @keyframes portal-warp {
+      0%   { opacity: 0;   transform: scale(0.3); filter: blur(0px);  }
+      25%  { opacity: 0.55; transform: scale(0.9); filter: blur(2px);  }
+      70%  { opacity: 1;    transform: scale(2.4); filter: blur(6px);  }
+      100% { opacity: 1;    transform: scale(3.8); filter: blur(14px); }
+    }
+    /* While warping, wash out the game canvas + HUD so the colour takes
+       over. Keeps the settings bar + overlays readable until the last
+       20% of the transition, then crunches to pure colour. */
+    body.portal-warp-active canvas,
+    body.portal-warp-active #hud,
+    body.portal-warp-active .full-overlay:not(.hidden) {
+      animation: portal-warp-fade 0.65s ease-in forwards;
+    }
+    @keyframes portal-warp-fade {
+      0%   { filter: saturate(1)   brightness(1)   blur(0);    opacity: 1; }
+      55%  { filter: saturate(1.5) brightness(1.25) blur(1px);  opacity: 0.85; }
+      100% { filter: saturate(0.4) brightness(1.6)  blur(6px);  opacity: 0.15; }
+    }
+
     /* ---------- Mobile touch controls ---------- */
     #touch-controls {
       position: fixed;
@@ -1503,6 +1549,11 @@
       <button class="touch-button touch-btn-k" data-action="ability2">K</button>
     </div>
   </div>
+
+  <!-- Portal warp overlay (Vibe Jam portal in/out transition). Hidden by
+       default; portal.ts triggerWarpAndRedirect() toggles body.portal-warp-active
+       to run the radial-burst animation before the redirect fires. -->
+  <div id="portal-warp-overlay" aria-hidden="true"></div>
 
   <script type="module" src="/src/main.ts"></script>
   <!-- Vibe Coding Game Jam 2026 widget (required for submission) -->

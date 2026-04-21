@@ -305,6 +305,22 @@ Si hay tiempo, revisar que la integración sigue funcionando.
       directo a match, portal naranja (return) disponible.
 - [ ] End-screen con portales: P = next game, B = return to previous.
 
+### 13.1 Warp transition (2026-04-22)
+
+El redirect del portal ya no es un hard-cut — corre un overlay warp
+de ~700 ms con el color del portal antes de navegar.
+
+- [ ] Cruzar el portal verde (exit): pantalla muestra **radial burst
+      verde** desde el centro, zoom + blur, canvas del juego se lava
+      (satura + desatura + blur). A los ~650 ms navega a vibej.am.
+- [ ] Cruzar el portal naranja (return): misma transición pero en
+      **naranja**, redirige al `?ref=` original.
+- [ ] El overlay NO bloquea clicks del HUD antes de dispararse
+      (`pointer-events: none`).
+- [ ] Si se cruza por accidente durante un knockback con portales
+      minimizados (< 0.7 expansion), **no pasa nada** — el trigger
+      solo se arma con `isUsable = true`.
+
 ---
 
 ## 14 · Blender MCP — Sergei rigged (pendiente validación ingame)
