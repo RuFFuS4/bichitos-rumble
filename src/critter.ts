@@ -8,6 +8,7 @@ import { loadModelWithAnimations } from './model-loader';
 import { SkeletalAnimator, type SkeletalState } from './critter-skeletal';
 import { createCritterParts } from './critter-parts';
 import { deriveAnimationPersonality, tickProceduralAnimation, type AnimationPersonality } from './critter-animation';
+import { deriveCritterStats } from './pws-stats';
 
 /**
  * Behaviour tag used ONLY by the /tools.html dev lab to isolate bot
@@ -62,70 +63,60 @@ export const CRITTER_PRESETS: CritterConfig[] = [
     role: 'Glass Cannon',
     tagline: 'High risk, high reward.',
   },
-  // --- First real roster character ---
-  // NOTE: all 9 playable speeds were scaled ×1.3 in one pass to lift the
-  // overall pace without re-tuning ability multipliers. Ratios preserved.
+  // --- 9 playable critters (2026-04-23) -----------------------------------
+  // speed / mass / headbuttForce now derive from CRITTER_PWS (P/W/S levels)
+  // — edit src/pws-stats.ts to rebalance without touching this file.
   {
+    ...deriveCritterStats('Sergei'),
     name: 'Sergei', color: 0xb5651d,
-    speed: 13, mass: 1.1, headbuttForce: 15,
     role: 'Balanced',
     tagline: 'Strong and agile. No weakness.',
   },
-  // --- Second real roster character: elephant Bruiser ---
-  // Stats modelled after Verde (Crusher) — slow, heavy, devastating —
-  // but with real identity + GLB + roster visibility.
   {
+    ...deriveCritterStats('Trunk'),
     name: 'Trunk', color: 0x8c8c8c,
-    speed: 9.1, mass: 1.4, headbuttForce: 17,
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
   },
-
-  // --- Bloque C: 7 remaining playables ---
-  // All share base ability factories (charge_rush / ground_pound / frenzy)
-  // but each kit is tuned per-critter. Server-side CRITTER_ABILITY_KITS
-  // carries the identical impulse/radius/force/multipliers so online play
-  // feels identical to offline.
-
   { // Trickster — fast, light, evasive. Uses Frenzy as ult.
+    ...deriveCritterStats('Kurama'),
     name: 'Kurama', color: 0xff6633,
-    speed: 15.6, mass: 0.8, headbuttForce: 12,
     role: 'Trickster',
     tagline: 'Fast, sly, unpredictable.',
   },
   { // Tank — slow, heavy, crushing. Uses Frenzy as ult (berserk).
+    ...deriveCritterStats('Shelly'),
     name: 'Shelly', color: 0x2d8659,
-    speed: 8.45, mass: 1.5, headbuttForce: 16,
     role: 'Tank',
     tagline: 'Heavy and wise.',
   },
   { // Controller — standard stats, biggest AoE radius.
+    ...deriveCritterStats('Kermit'),
     name: 'Kermit', color: 0x44cc44,
-    speed: 11.7, mass: 1.0, headbuttForce: 13,
     role: 'Controller',
     tagline: 'Venomous area denial.',
   },
   { // Trapper — grounded presence, highest windUp + force on AoE.
+    ...deriveCritterStats('Sihans'),
     name: 'Sihans', color: 0x8b6914,
-    speed: 10.4, mass: 1.15, headbuttForce: 14,
     role: 'Trapper',
     tagline: 'Digs in. Controls ground.',
   },
   { // Mage — widest AoE radius, lowest force (area denial, not burst).
+    ...deriveCritterStats('Kowalski'),
     name: 'Kowalski', color: 0x1a1a3e,
-    speed: 13, mass: 0.9, headbuttForce: 11,
     role: 'Mage',
     tagline: 'Calculated ranged threat.',
   },
   { // Assassin — fastest dash, mini AoE, fragile.
+    ...deriveCritterStats('Cheeto'),
     name: 'Cheeto', color: 0xffaa22,
-    speed: 16.9, mass: 0.7, headbuttForce: 11,
     role: 'Assassin',
     tagline: 'Swift and lethal.',
   },
   { // Glass Cannon — tiny AoE with massive force, high headbutt.
+    ...deriveCritterStats('Sebastian'),
     name: 'Sebastian', color: 0xcc3333,
-    speed: 13.65, mass: 0.75, headbuttForce: 18,
     role: 'Glass Cannon',
     tagline: 'One giant claw. All in.',
   },
