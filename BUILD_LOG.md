@@ -2924,3 +2924,109 @@ obvio antes de merge `dev → main`.
 - UI del title screen visualmente más profesional, firma del autor
   respira, social cards listas para cuando llegue la imagen hero.
 - Badges congelados en diseño; no implementados aún.
+
+## 2026-04-21 (sesión 3) — Trunk animado + OG image live + cleanup + stats polish
+
+Sesión tarde. Cuatro tareas pequeñas y un bichito más.
+
+### Trunk — 8 clips integrados
+
+Tripo Animate, pipeline estándar:
+
+| NLA         | Dur (s) | Nombre final            | Estado runtime |
+|-------------|---------|-------------------------|----------------|
+| NlaTrack.005| 1.292   | `Run`                   | run            |
+| NlaTrack.007| 1.958   | `Ability3GroundPound`   | ability_3      |
+| NlaTrack.001| 3.875   | `Ability2TrunkGrip`     | ability_2      |
+| NlaTrack.006| 4.583   | `Ability1TrunkRam`      | ability_1      |
+| NlaTrack.002| 5.542   | `Defeat`                | defeat         |
+| NlaTrack    | 5.583   | `Idle`                  | idle           |
+| NlaTrack.003| 5.708   | `Fall`                  | fall           |
+| NlaTrack.004| 12.792  | `Victory`               | victory        |
+
+Resultado: 1.58 MB, 10 762 verts, 8/8 clips alive (max_var 0.78–2.00).
+`STATE_KEYWORDS` ya resolvía `pound` y `grip`, 0 cambios en el
+resolver.
+
+**Nota de diseño**: la animación `Ability2TrunkGrip` incluye el giro
+de 180° + lanzamiento, pero NO incluye el estiramiento horizontal de
+la trompa (el "latigazo"). Cuando toquemos el comportamiento de
+Trunk Grip, el stretch irá procedural vía `glbMesh.scale` similar
+al `chargeStretch` existente. Anotado en `CHARACTER_DESIGN.md` para
+no olvidarlo cuando se abra la ability.
+
+### OG image live
+
+- `public/og-image.png` — 1200×628 top-anchored desde
+  `Portada/BichitosRumble_Horizontal.png` (1536×1024). 1.92 MB.
+- `scripts/make-og-image.mjs` gana `--position` flag para recrop
+  (default centre; usé top por el título arriba).
+- Meta tags ya apuntan a `/og-image.png`, así que X / Discord /
+  WhatsApp pickear la card en cuanto deploye.
+
+### Preview polish (character-select)
+
+- `SkeletalAnimator.isLoopingClipActive()` nuevo. Cuando un clip
+  idle/walk/run está activo, el procedural bob/bounce se zeroan
+  para no doblar la animación del clip. Fix visible de "brinco"
+  en Cheeto/Kermit/Kowalski/Trunk en character-select.
+- Preview canvas 320×280 → 380×340, pedestal más alto/ancho con
+  rim dorado + glow suelo, tres puntos de luz en vez de dos,
+  cámara más apretada (FOV 35→32, z 5.5→4.8), halo radial CSS
+  detrás del canvas.
+
+### End-screen stats polish
+
+- ⚡ Headbutts · ✨ Abilities · 💀 Falls · 🔁 Respawns con iconos.
+- Count-up animado 0 → target en 700 ms easeOutCubic.
+- Panel eleva con slide+fade 350 ms, borde dorado, separadores
+  verticales entre stats, value 22→26 px con glow.
+- Signature `setEndMatchStats(stats)` sin cambios — zero refactor
+  downstream.
+
+### Dead-code audit
+
+Con el gate `noUnusedLocals + noUnusedParameters` ahora on en
+`tsconfig.json`. Removed: `stopMusic`, `isMusicPlaying`, `getStats`
+(re-add cuando BADGES Phase 1), `hasGamepadConnected`,
+`isPortalExpanded`, `GRID_SLOTS`, + 4 unused locals (portalLegendEl,
+RosterEntry/CRITTER_PRESETS imports, lastServerPhase). Privatizados:
+setSfxMuted/setMusicMuted, applyKnockbackTilt/applyHitFlash,
+hasTouchSupport/isNarrowViewport. Bundle net neutral (minifier ya
+tree-shook).
+
+### Title screen polish
+
+- Firma `@RGomezR14` ahora pill con borde dorado + blur, handle en
+  dorado sólido, hover eleva.
+- `.controls-hint` con kbd-pills por binding, añadido L (ultimate)
+  + línea de gamepad auto-detected.
+- Meta OG + Twitter tags completos en `<head>`.
+- Tres breakpoints responsive nuevos (820 / 520 / 520-height).
+
+### Tooling nuevo
+
+- `scripts/inspect-clips.mjs` — per-clip variance report reusable
+  (sustituye throwaways ad-hoc).
+- `scripts/make-og-image.mjs` — 1200×628 generator con sharp.
+- `scripts/import-critter.mjs` (sesión 1) — pipeline genérico con
+  `scripts/mappings/<id>.json` convention.
+- `npm run` aliases: `verify:glbs`, `inspect:clips`, `import:critter`,
+  `og`, `check`.
+
+### Cobertura al cierre
+
+**4/9 bichitos full** (Cheeto 8/8, Kermit 7/8 + Hypnosapo procedural,
+Kowalski 8/8, Trunk 8/8). **Sergei** 1/8 (solo Idle). Pendientes
+**5/9**: Kurama, Sebastian, Shelly, Sihans.
+
+Total skeletal: **32 / 72** estados (44%).
+
+### Validation adds
+
+Añadidas al `VALIDATION_CHECKLIST.md`:
+- §15 Title screen polish (firma / controles / responsive)
+- §16 Social card OG (X / Discord / validator)
+- §17 Preview polish (no double bob / model + pedestal prominence)
+- §18 End-screen stats polish (icons / count-up / panel lift)
+- §19 Dev tooling nuevo (npm scripts)

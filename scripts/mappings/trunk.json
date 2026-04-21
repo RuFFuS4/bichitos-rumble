@@ -1,0 +1,10 @@
+[
+  { "dur": 1.292,  "name": "Run" },
+  { "dur": 1.958,  "name": "Ability3GroundPound" },
+  { "dur": 3.875,  "name": "Ability2TrunkGrip" },
+  { "dur": 4.583,  "name": "Ability1TrunkRam" },
+  { "dur": 5.542,  "name": "Defeat" },
+  { "dur": 5.583,  "name": "Idle" },
+  { "dur": 5.708,  "name": "Fall" },
+  { "dur": 12.792, "name": "Victory" }
+]

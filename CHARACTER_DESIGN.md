@@ -43,14 +43,14 @@ procedurales por política (ver `SUBMISSION_CHECKLIST.md`).
 | Cheeto     | **8 / 8**| Tripo Animate  | full kit (Pounce, ShadowStep, TigerRoar, …)    |
 | Kermit     | **7 / 8**| Tripo Animate  | ab_3 Hypnosapo = flicker procedural (sin clip) |
 | Kowalski   | **8 / 8**| Tripo Animate  | full kit (Ice Slide, Snowball, Ice Age)        |
+| Trunk      | **8 / 8**| Tripo Animate  | full kit (Ram, Grip, Ground Pound). Nota: la animación de ab_2 incluye el giro+lanzamiento pero **no el estiramiento horizontal de la trompa** — cuando toquemos la ability, el estiramiento irá procedural (mesh stretch). |
 | Sergei     | 1 / 8    | Mixamo (Idle)  | resto procedural                               |
 | Kurama     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 | Sebastian  | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 | Shelly     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 | Sihans     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
-| Trunk      | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 
-Total: **24 / 72** estados (33%). La capa procedural de
+Total: **32 / 72** estados (44%). La capa procedural de
 `critter-animation.ts` cubre automáticamente lo que falta.
 
 ### Qué está realmente implementado hoy

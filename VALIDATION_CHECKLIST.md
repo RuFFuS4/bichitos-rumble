@@ -175,12 +175,12 @@ Estado actual del roster — 8 estados skeletal target por bichito
 | Cheeto     | 8 / 8     | Tripo Animate, full kit                       |
 | Kermit     | 7 / 8     | ab_3 Hypnosapo = flicker procedural (sin clip)|
 | Kowalski   | 8 / 8     | Tripo Animate, full kit (Ice Slide/Snowball/Ice Age) |
+| Trunk      | 8 / 8     | Tripo Animate, full kit (Ram/Grip/Ground Pound) |
 | Sergei     | 1 / 8     | solo Idle                                     |
 | Kurama     | 0 / 8     | pendiente Meshy/Tripo                         |
 | Sebastian  | 0 / 8     | pendiente Meshy/Tripo                         |
 | Shelly     | 0 / 8     | pendiente Meshy/Tripo                         |
 | Sihans     | 0 / 8     | pendiente Meshy/Tripo                         |
-| Trunk      | 0 / 8     | pendiente Meshy/Tripo                         |
 
 ### 9.1 Por cada bichito animado — checklist común
 
@@ -402,6 +402,117 @@ operativo para futuros crítters. Verificar:
 - [ ] Si en algún crítter futuro aparece, indica que su GLB tiene
       placeholders y hay que correr `critter-cleanup.py` para
       limpiar el source.
+
+---
+
+## 15 · Title screen polish (2026-04-21)
+
+Tres cambios visibles al cargar la web:
+
+### 15.1 Firma `@RGomezR14`
+- [ ] Visible en la esquina inferior-izquierda de la pantalla de
+      título. Debe verse como un pill con fondo semi-transparente y
+      borde dorado sutil (no como texto plano casi-invisible).
+- [ ] El handle `@RGomezR14` aparece destacado en **dorado sólido**.
+- [ ] Hover: eleva 2px, borde dorado brillante, handle pasa a blanco.
+- [ ] Click abre `x.com/RGomezR14` en pestaña nueva.
+
+### 15.2 Controles en la pantalla de título
+- [ ] Bajo los botones de modo se ve una fila de bindings con
+      `<kbd>` pills (WASD move · SPACE headbutt · J K abilities ·
+      L ultimate · R restart). Cada tecla en su propia pill dorada.
+- [ ] Debajo de esa fila, en tipo más chico, aparece una línea
+      `🎮 Gamepad auto-detected — left stick · A headbutt · X/Y
+      abilities · RB ultimate`.
+- [ ] En touch mode (móvil): solo ves "Joystick to move · on-screen
+      buttons for headbutt, abilities and ultimate".
+
+### 15.3 Responsive breakpoints nuevos
+Probar que el title + character-select no rompen en:
+- [ ] Desktop 1080p (baseline): layout horizontal intacto.
+- [ ] Tablet landscape ~900×600: stacks funcionan, controles legibles.
+- [ ] Phone landscape ~820×390: character-select stackea vertical,
+      controles-hint no se sale, título + botones caben.
+- [ ] Phone landscape ~520×360: versión comprimida, nada overflow.
+
+---
+
+## 16 · Social card OG (2026-04-21)
+
+Pegado: `public/og-image.png` — 1200×628, top-anchored. Validar
+cuando la URL deploye en Vercel (dev preview o prod).
+
+- [ ] Pegar la URL del juego (`bichitosrumble.com` o el preview de
+      Vercel) en [cards-dev.twitter.com/validator](https://cards-dev.twitter.com/validator).
+      Debe renderizar la card con el título "Bichitos Rumble", la
+      descripción y la imagen hero. Cover amarillo legible.
+- [ ] Pegar la misma URL en un chat de Discord — el embed debe
+      mostrar la imagen + título + descripción.
+- [ ] Si el crop no convence, regenerar con
+      `npm run og -- <source> --position centre` (o `bottom`/`left`/etc.)
+      y redeploy. X cachea la card hasta 7 días: para forzar refresh,
+      bumpear el query param en `index.html` (`og-image.png?v=2`).
+
+---
+
+## 17 · Character-select preview polish (2026-04-21)
+
+Dos issues reportados + arreglados. Validar:
+
+### 17.1 No double bob en críttrs con Idle skeletal
+- [ ] Seleccionar **Cheeto**: el critter respira con el clip Idle.
+      NO se ve como si saltara en el sitio (antes: procedural bob
+      + clip bob se doblaban).
+- [ ] Lo mismo con **Kermit**, **Kowalski**, **Trunk**, **Sergei**.
+- [ ] Críttrs sin skeletal (Kurama, Sebastian, Shelly, Sihans):
+      mantienen su bob procedural normal, no parecen congelados.
+
+### 17.2 Modelo + pedestal más prominente
+- [ ] Canvas del preview visiblemente más grande (antes 320×280,
+      ahora 380×340).
+- [ ] Pedestal más alto + más ancho, con **rim dorado** en el borde
+      superior, glow suave en el suelo detrás.
+- [ ] Tres puntos de luz (key cálida + rim fría + fill desde abajo) —
+      el chin del bichito no queda en sombra total.
+- [ ] Halo radial dorado suave detrás del canvas (CSS ::before), el
+      modelo no flota en un campo oscuro.
+- [ ] Drag-to-rotate sigue funcionando (hover cursor grab, pointer
+      capture al arrastrar).
+
+---
+
+## 18 · End-screen stats polish (2026-04-21)
+
+Bloque de contadores de partida reestilizado.
+
+- [ ] Jugar una partida completa offline. En el end-screen ver 4 stats
+      en fila: **⚡ Headbutts · ✨ Abilities · 💀 Falls · 🔁 Respawns**.
+- [ ] Cada stat tiene ICONO ARRIBA + VALOR grande dorado + LABEL
+      pequeño en mayúsculas debajo.
+- [ ] Al aparecer el end-screen los números **cuentan desde 0**
+      hasta su valor final en ~700 ms (easeOutCubic). No saltan al
+      valor directo.
+- [ ] El panel entero **se desliza hacia arriba + fade** durante la
+      aparición (350 ms).
+- [ ] Separadores verticales sutiles entre stats, borde dorado tenue
+      en el panel, glow dorado en los valores.
+- [ ] Funciona igual en partidas online (BrawlRoom end callback).
+
+---
+
+## 19 · Dev tooling nuevo (2026-04-21)
+
+Solo para tu verificación cuando toque. No gameplay:
+
+- [ ] `npm run verify:glbs` — lista los 9 GLBs con clips resolved.
+- [ ] `npm run inspect:clips public/models/critters/<id>.glb` —
+      reporta per-clip (duración, channels, alive, max_var, verdict).
+- [ ] `npm run import:critter <id> <source.glb>` — import via
+      `scripts/mappings/<id>.json` si existe, o `--map` inline.
+- [ ] `npm run og -- <source>` — genera `public/og-image.png`
+      1200×628 (flags `--position` y `--fit` disponibles).
+- [ ] `npm run check` — `tsc + verify:glbs + build` todo seguido.
+      Gate obvio antes de merge `dev → main`.
 
 ---
 
