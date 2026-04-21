@@ -85,6 +85,13 @@ export function updateAllLivesHUD(critters: Critter[]): void {
 
 // ---- Overlay (countdown) ------------------------------------------------
 
+/** Countdown digit classes we toggle for the gradient-per-number look.
+ *  Kept as a list so clearing on every change is a single loop. */
+const DIGIT_VARIANT_CLASSES = [
+  'overlay-digit',
+  'overlay-d-3', 'overlay-d-2', 'overlay-d-1', 'overlay-d-go',
+];
+
 export function showOverlay(main: string, sub?: string): void {
   const html = main + (sub ? `<div class="sub">${sub}</div>` : '');
   // Only pop when the visible text actually changes (e.g. countdown tick),
@@ -92,6 +99,19 @@ export function showOverlay(main: string, sub?: string): void {
   const changed = overlayEl.innerHTML !== html;
   overlayEl.style.display = 'block';
   overlayEl.innerHTML = html;
+
+  // Detect countdown digit / GO! content (no sub, main is short enough to
+  // be a digit or GO!) and toggle the CSS variant classes. Anything longer
+  // ("Get Ready!") falls through to the neutral default style.
+  overlayEl.classList.remove(...DIGIT_VARIANT_CLASSES);
+  if (!sub) {
+    const trimmed = main.trim();
+    const variant = digitVariant(trimmed);
+    if (variant) {
+      overlayEl.classList.add('overlay-digit', variant);
+    }
+  }
+
   if (changed) {
     overlayEl.classList.remove('pop');
     // Force reflow so re-adding the class restarts the animation
@@ -100,8 +120,17 @@ export function showOverlay(main: string, sub?: string): void {
   }
 }
 
+function digitVariant(text: string): string | null {
+  if (text === '3') return 'overlay-d-3';
+  if (text === '2') return 'overlay-d-2';
+  if (text === '1') return 'overlay-d-1';
+  if (text === 'GO!' || text === 'GO' || text === '0') return 'overlay-d-go';
+  return null;
+}
+
 export function hideOverlay(): void {
   overlayEl.style.display = 'none';
+  overlayEl.classList.remove(...DIGIT_VARIANT_CLASSES, 'pop');
 }
 
 // ---- Ability cooldown HUD -----------------------------------------------

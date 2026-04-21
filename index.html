@@ -6,6 +6,10 @@
   <title>Bichitos Rumble — Headbutt Your Rivals Into The Void</title>
   <meta name="description" content="Lightweight web arena brawler for Vibe Jam 2026. 4-player online, 9 critters, signature abilities, no signup. Free to play in your browser." />
   <meta name="theme-color" content="#0a0a18" />
+  <!-- Favicon — SVG placeholder until the AI-generated PNG described in
+       AI_PROMPTS.md §1 lands. Modern browsers prefer SVG; Safari < 18
+       falls back to no favicon rather than Vite's default white-dot. -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
   <!-- Open Graph (Discord, Facebook, Slack, WhatsApp) -->
   <meta property="og:type"        content="website" />
@@ -100,29 +104,102 @@
     }
     .settings-btn:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.4); }
     .settings-btn.muted { opacity: 0.45; }
+    /* Countdown overlay — giant digits with gradient fill + per-number
+       colour (3 red → 2 amber → 1 yellow → GO! green) so the urgency
+       ramps visibly. Digits land with a scale-down pop; GO! adds a
+       shockwave ring pulse. Non-digit overlays ("Get Ready!") keep a
+       calmer, neutral style via the .overlay-text variant. */
     #overlay {
       position: absolute;
       top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       text-align: center;
       font-size: 36px;
-      font-weight: bold;
+      font-weight: 900;
       text-shadow: 0 3px 8px rgba(0,0,0,0.8);
       pointer-events: auto;
+      letter-spacing: 2px;
     }
     #overlay .sub {
       font-size: 18px;
       margin-top: 8px;
       opacity: 0.8;
+      font-weight: 600;
+      letter-spacing: 1.5px;
     }
-    /* Countdown pop: apply class on content change, keyframe scales in quickly */
+    /* Giant digit mode — triggered when the overlay content is a single
+       char from 0-9 (plus GO!). hud/runtime.ts showOverlay toggles the
+       .overlay-digit + .overlay-d-N classes. */
+    #overlay.overlay-digit {
+      font-size: clamp(140px, 22vw, 260px);
+      font-weight: 900;
+      letter-spacing: -4px;
+      line-height: 0.9;
+      filter: drop-shadow(0 6px 20px rgba(0, 0, 0, 0.7));
+    }
+    /* Gradient fills per countdown step — picked to telegraph urgency. */
+    #overlay.overlay-d-3 {
+      background: linear-gradient(180deg, #ff6666 0%, #c92525 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    #overlay.overlay-d-2 {
+      background: linear-gradient(180deg, #ffcc55 0%, #e67e22 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    #overlay.overlay-d-1 {
+      background: linear-gradient(180deg, #ffee77 0%, #f1c40f 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    #overlay.overlay-d-go {
+      background: linear-gradient(180deg, #a7ff55 0%, #1fb256 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    /* Countdown pop: scale IN from big to normal, then a subtle breathe. */
     #overlay.pop {
-      animation: overlay-pop 0.25s ease-out;
+      animation: overlay-pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
     }
     @keyframes overlay-pop {
-      0%   { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
-      60%  { transform: translate(-50%, -50%) scale(0.95); opacity: 1; }
-      100% { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+      0%   { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+      55%  { transform: translate(-50%, -50%) scale(0.92); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1);    opacity: 1; }
+    }
+    /* GO! additional burst — adds a radial glow ring behind the text. */
+    #overlay.overlay-d-go::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1px;
+      height: 1px;
+      transform: translate(-50%, -50%);
+      box-shadow:
+        0 0 0 0 rgba(167, 255, 85, 0.85),
+        0 0 0 0 rgba(31, 178, 86, 0.55);
+      animation: overlay-go-burst 0.55s ease-out forwards;
+    }
+    @keyframes overlay-go-burst {
+      0%   {
+        box-shadow:
+          0 0 0 0    rgba(167, 255, 85, 0.85),
+          0 0 0 0    rgba(31, 178, 86, 0.55);
+      }
+      100% {
+        box-shadow:
+          0 0 0 180px rgba(167, 255, 85, 0.00),
+          0 0 0 260px rgba(31, 178, 86, 0.00);
+      }
     }
     /* Ability cooldown bars */
     #ability-bar-container {

@@ -1199,7 +1199,11 @@ export class Game {
         if (sec > 0) {
           showOverlay(`${sec}`);
         } else {
-          hideOverlay();
+          // Flash "GO!" for ~0.45 s before hiding — the green variant in
+          // CSS plays a radial burst, which sells the transition better
+          // than snapping straight to gameplay.
+          showOverlay('GO!');
+          window.setTimeout(() => hideOverlay(), 450);
           this.phase = 'playing';
           // Stamp the moment the match really starts. Used by recordWin
           // to compute duration for the Speedrun Belt badge.

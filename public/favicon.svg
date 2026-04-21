@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Placeholder favicon for Bichitos Rumble.
+  Gradient fist punch silhouette — readable at 16×16. Will be replaced
+  by the AI-generated PNG described in AI_PROMPTS.md §1 when it lands.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffdc5c"/>
+      <stop offset="100%" stop-color="#e74c3c"/>
+    </linearGradient>
+    <radialGradient id="bg" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0%" stop-color="#1a1a3a"/>
+      <stop offset="100%" stop-color="#0a0a18"/>
+    </radialGradient>
+  </defs>
+  <!-- dark navy background chip -->
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- stylised chibi head silhouette: big round head + small body hint -->
+  <circle cx="32" cy="26" r="15" fill="url(#g)" stroke="#ffffff" stroke-width="2"/>
+  <!-- eyes (tiny white dots) -->
+  <circle cx="27" cy="24" r="2.2" fill="#1a1a3a"/>
+  <circle cx="37" cy="24" r="2.2" fill="#1a1a3a"/>
+  <circle cx="27.5" cy="23.2" r="0.8" fill="#ffffff"/>
+  <circle cx="37.5" cy="23.2" r="0.8" fill="#ffffff"/>
+  <!-- tiny body under the big head -->
+  <path d="M22 38 Q32 44 42 38 L42 50 Q32 54 22 50 Z"
+        fill="url(#g)" stroke="#ffffff" stroke-width="2"/>
+  <!-- speed burst lines behind the head -->
+  <path d="M8 30 L14 32" stroke="#ffdc5c" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M56 30 L50 32" stroke="#ffdc5c" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M10 18 L15 22" stroke="#ffdc5c" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M54 18 L49 22" stroke="#ffdc5c" stroke-width="1.8" stroke-linecap="round"/>
+</svg>
