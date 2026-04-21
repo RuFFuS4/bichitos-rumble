@@ -6,6 +6,7 @@ import { play as playSound } from './audio';
 import { getRosterEntry, type RosterEntry } from './roster';
 import { loadModelWithAnimations } from './model-loader';
 import { SkeletalAnimator, type SkeletalState } from './critter-skeletal';
+import { createCritterParts } from './critter-parts';
 import { deriveAnimationPersonality, tickProceduralAnimation, type AnimationPersonality } from './critter-animation';
 
 /**
@@ -224,6 +225,15 @@ export class Critter {
    * just like before — zero breakage for unanimated models.
    */
   skeletal: SkeletalAnimator | null = null;
+
+  /**
+   * Part manipulation handle — resolved when the GLB attaches. Lets
+   * ability code hide bones (Shelly's head/limbs inside the shell),
+   * target specific primitives (Trunk's nose mesh), or clone a tinted
+   * decoy (Kurama Mirror Trick). Null for procedural-only critters.
+   * See `PROCEDURAL_PARTS.md` + `src/critter-parts.ts`.
+   */
+  parts: ReturnType<typeof import('./critter-parts').createCritterParts> | null = null;
 
   constructor(config: CritterConfig, scene: THREE.Scene) {
     this.config = config;
@@ -617,7 +627,25 @@ export class Critter {
       );
     }
 
-    console.debug('[Critter] GLB attached:', this.config.name, '| materials:', this.glbMaterials.length);
+    // Parts handle — locates bones + primitives once so ability code can
+    // manipulate them without repeatedly traversing the scene graph.
+    // Finds the first SkinnedMesh skeleton under the clone (may be null
+    // for non-rigged GLBs — the API degrades gracefully).
+    let skeleton: THREE.Skeleton | null = null;
+    group.traverse((child) => {
+      if (!skeleton && (child as THREE.SkinnedMesh).isSkinnedMesh) {
+        skeleton = (child as THREE.SkinnedMesh).skeleton;
+      }
+    });
+    this.parts = createCritterParts(group, skeleton);
+
+    console.debug(
+      '[Critter] GLB attached:',
+      this.config.name,
+      '| materials:', this.glbMaterials.length,
+      '| bones:',     this.parts.bones.size,
+      '| primitives:', this.parts.primitives.length,
+    );
   }
 
   /**
@@ -807,6 +835,10 @@ export class Critter {
     // not be disposed here — the model-loader cache owns them.
     this.skeletal?.dispose();
     this.skeletal = null;
+    // Parts handle doesn't own GPU resources — it just holds references
+    // into the already-disposed mesh tree. Null the handle so consumers
+    // don't accidentally read stale bones.
+    this.parts = null;
     // Dispose all GPU resources: procedural + GLB
     this.mesh.traverse((child) => {
       const m = child as THREE.Mesh;
