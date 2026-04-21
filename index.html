@@ -773,38 +773,76 @@
     /* Portal prompt on end screen — separated from match prompt */
     /* Per-match stats block under the subtitle — counters for the local
        player's match. Empty (display:none) if no match data available
-       (e.g. match ended on the very first frame, edge case). */
+       (e.g. match ended on the very first frame, edge case). Entry is
+       animated via .stats-enter — panel slides up + fades in, numbers
+       get an easeOutCubic count-up via hud.ts setEndMatchStats(). */
     #end-stats.end-stats {
       display: flex;
-      gap: 18px;
+      gap: 22px;
       justify-content: center;
-      margin: 6px 0 18px;
-      padding: 10px 20px;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.10);
-      border-radius: 10px;
+      align-items: stretch;
+      margin: 10px 0 22px;
+      padding: 14px 26px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 220, 92, 0.18);
+      border-radius: 14px;
       font-size: 13px;
-      max-width: 480px;
+      max-width: 520px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+      /* Entry state — overridden once .stats-enter lands. */
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.35s ease-out, transform 0.35s ease-out;
+    }
+    #end-stats.end-stats.stats-enter {
+      opacity: 1;
+      transform: translateY(0);
     }
     #end-stats .stat {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 2px;
-      min-width: 60px;
+      gap: 4px;
+      min-width: 68px;
+      padding: 0 4px;
+      position: relative;
+    }
+    /* Subtle vertical separator between stats (except after the last). */
+    #end-stats .stat:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      top: 14%;
+      right: -11px;
+      width: 1px;
+      height: 72%;
+      background: linear-gradient(
+        180deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.14) 40%,
+        rgba(255, 255, 255, 0.14) 60%,
+        transparent 100%
+      );
+    }
+    #end-stats .stat-icon {
+      font-size: 18px;
+      line-height: 1;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+      margin-bottom: 2px;
     }
     #end-stats .stat-value {
-      font-size: 22px;
-      font-weight: 800;
+      font-size: 26px;
+      font-weight: 900;
       font-variant-numeric: tabular-nums;
       color: #ffdc5c;
       line-height: 1;
+      text-shadow: 0 0 14px rgba(255, 220, 92, 0.25);
     }
     #end-stats .stat-label {
       font-size: 9px;
       letter-spacing: 1.5px;
       text-transform: uppercase;
-      opacity: 0.7;
+      opacity: 0.72;
+      margin-top: 1px;
     }
 
     #end-portal-prompt {
