@@ -42,15 +42,15 @@ procedurales por política (ver `SUBMISSION_CHECKLIST.md`).
 |------------|----------|----------------|------------------------------------------------|
 | Cheeto     | **8 / 8**| Tripo Animate  | full kit (Pounce, ShadowStep, TigerRoar, …)    |
 | Kermit     | **7 / 8**| Tripo Animate  | ab_3 Hypnosapo = flicker procedural (sin clip) |
+| Kowalski   | **8 / 8**| Tripo Animate  | full kit (Ice Slide, Snowball, Ice Age)        |
 | Sergei     | 1 / 8    | Mixamo (Idle)  | resto procedural                               |
-| Kowalski   | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 | Kurama     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 | Sebastian  | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 | Shelly     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 | Sihans     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 | Trunk      | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 
-Total: **16 / 72** estados (22%). La capa procedural de
+Total: **24 / 72** estados (33%). La capa procedural de
 `critter-animation.ts` cubre automáticamente lo que falta.
 
 ### Qué está realmente implementado hoy

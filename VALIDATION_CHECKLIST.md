@@ -174,8 +174,8 @@ Estado actual del roster — 8 estados skeletal target por bichito
 |------------|-----------|-----------------------------------------------|
 | Cheeto     | 8 / 8     | Tripo Animate, full kit                       |
 | Kermit     | 7 / 8     | ab_3 Hypnosapo = flicker procedural (sin clip)|
+| Kowalski   | 8 / 8     | Tripo Animate, full kit (Ice Slide/Snowball/Ice Age) |
 | Sergei     | 1 / 8     | solo Idle                                     |
-| Kowalski   | 0 / 8     | pendiente Meshy/Tripo                         |
 | Kurama     | 0 / 8     | pendiente Meshy/Tripo                         |
 | Sebastian  | 0 / 8     | pendiente Meshy/Tripo                         |
 | Shelly     | 0 / 8     | pendiente Meshy/Tripo                         |

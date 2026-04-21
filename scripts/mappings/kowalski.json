@@ -1,0 +1,10 @@
+[
+  { "dur": 0.792,  "name": "Run" },
+  { "dur": 2.250,  "name": "Ability3IceAge" },
+  { "dur": 3.667,  "name": "Ability1IceSlide" },
+  { "dur": 3.792,  "name": "Ability2Snowball" },
+  { "dur": 5.708,  "name": "Fall" },
+  { "dur": 6.000,  "name": "Defeat" },
+  { "dur": 13.500, "name": "Victory" },
+  { "dur": 15.583, "name": "Idle" }
+]

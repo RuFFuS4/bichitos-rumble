@@ -2819,3 +2819,108 @@ Fixture de referencia: `scripts/mappings/cheeto.json`.
 - Todo lo obsoleto del cleanup de Sergei fuera del repo.
 - **Nada de gameplay tocado** — la capa skeletal sigue opcional y
   la procedural intacta.
+
+## 2026-04-21 (sesión 2) — Kowalski animado (8/8) + title polish + OG tags + BADGES_DESIGN
+
+Sesión larga pero cómoda. Un bichito nuevo importado por el pipeline
+nuevo, UI del title screen repulida, y documento de diseño para los
+cinturones de logros.
+
+### Kowalski — 8 clips integrados
+
+Tripo Animate source (71.1 MB, 1.03 M verts), pipeline genérico
+`scripts/import-critter.mjs`:
+
+| NLA         | Dur (s) | Nombre final          | Estado runtime |
+|-------------|---------|-----------------------|----------------|
+| NlaTrack.007| 0.792   | `Run`                 | run            |
+| NlaTrack.002| 2.250   | `Ability3IceAge`      | ability_3      |
+| NlaTrack.004| 3.667   | `Ability1IceSlide`    | ability_1      |
+| NlaTrack.006| 3.792   | `Ability2Snowball`    | ability_2      |
+| NlaTrack.005| 5.708   | `Fall`                | fall           |
+| NlaTrack.001| 6.000   | `Defeat`              | defeat         |
+| NlaTrack.003| 13.500  | `Victory`             | victory        |
+| NlaTrack    | 15.583  | `Idle`                | idle           |
+
+Resultado: **1645 KB / 10 683 verts** — más ligero que Cheeto
+(2665 KB) porque la malla de Kowalski es menos compleja. 8/8 clips
+pasan el runtime-static filter con margen amplio (max_var entre
+0.53 y 1.99).
+
+`STATE_KEYWORDS` ya cubría `ice_age`, así que 0 ajustes en el
+resolver.
+
+### inspect-clips.mjs — utilidad permanente
+
+Para evitar volver a crear throwaways ad-hoc cada vez que queremos
+confirmar que un GLB sobrevive al filtro runtime, añadido
+`scripts/inspect-clips.mjs` — toma cualquier GLB y reporta per-clip:
+duración, channels, alive tracks, max_var, verdict (KEEP / DROP).
+Reusable, idempotente, sin side-effects.
+
+Npm alias: `npm run inspect:clips public/models/critters/<id>.glb`.
+
+### Title screen polish
+
+- **Meta OG / Twitter Cards** en el `<head>` siguiendo la receta
+  de @s13k para #vibejam. TODO bien visible para `public/og-image.png`
+  (1200×628) — mientras no exista la imagen, el preview cae a "no
+  image" sin romper nada.
+- **Firma `@RGomezR14`** — rediseñada como pill con blur + borde
+  dorado, handle en dorado sólido, hover eleva + brilla. Antes era
+  casi invisible (opacity 0.45).
+- **`.controls-hint`** — cada binding en un `<kbd>` pill, añadida la
+  `L` (ultimate) que faltaba + línea separada de
+  "🎮 Gamepad auto-detected — A/X/Y/RB". Opacity 0.82 (era 0.45).
+- **Responsive** — tres breakpoints (`max-width 820`, `max-width 520`,
+  `max-height 520`) que stackean character-select vertical en móvil,
+  ajustan tamaños de slots y buttons, aprietan vertical en landscape
+  corto. Sin rediseño, solo cobertura.
+
+### BADGES_DESIGN.md — plan sin implementación
+
+Documento de diseño para los cinturones tipo WWE que el usuario
+planteó como sistema de trofeos (en vez de ranking global):
+
+- **9 Champion belts** (uno por crítter, desbloqueo por N victorias).
+- **7 trofeos globales** (Speedrun, Iron Will, Untouchable,
+  Survivor, Globetrotter, Arena Apex, Pain Tolerance).
+- Storage extension a `br-stats-v2` con migración suave.
+- Prompts base para generación IA (consistencia entre los 16 assets,
+  tabla de habitat/paleta por crítter).
+- Plan por fases post-animaciones / post-signatures. Decisiones
+  abiertas tracked al final del doc.
+
+### `npm run check` preflight
+
+`tsc --noEmit && verify:glbs && vite build` en un comando. Gate
+obvio antes de merge `dev → main`.
+
+### Files changed
+
+- `scripts/inspect-clips.mjs` (new) — utility permanente.
+- `scripts/mappings/kowalski.json` (new) — fixture.
+- `public/models/critters/kowalski.glb` — 1.65 MB, 8 clips.
+- `BADGES_DESIGN.md` (new) — diseño de logros tipo cinturón.
+- `index.html` — meta OG/Twitter + signature + controls + responsive.
+- `package.json` — `inspect:clips` + `check` npm scripts.
+- `SUBMISSION_CHECKLIST.md`, `VALIDATION_CHECKLIST.md`,
+  `CHARACTER_DESIGN.md`, `BUILD_LOG.md` — cobertura 3/9.
+
+### Verification
+
+- `node scripts/inspect-clips.mjs public/models/critters/kowalski.glb`
+  → 8/8 clips alive.
+- `node scripts/verify-critter-glbs.mjs public/models/critters/kowalski.glb`
+  → 8 clips, 8/13 covered.
+- `npm run check` — tsc + verify + build todos clean.
+- Bundle: index.html 37 kB → 45 kB (+8 kB por meta tags + CSS nuevo).
+
+### Estado al cierre
+
+- Roster animado: **3/9** al full (Cheeto, Kermit, Kowalski) +
+  Sergei idle-only. 5 pendientes: Kurama, Sebastian, Shelly,
+  Sihans, Trunk.
+- UI del title screen visualmente más profesional, firma del autor
+  respira, social cards listas para cuando llegue la imagen hero.
+- Badges congelados en diseño; no implementados aún.

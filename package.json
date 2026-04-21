@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "verify:glbs": "node scripts/verify-critter-glbs.mjs",
+    "inspect:clips": "node scripts/inspect-clips.mjs",
     "import:critter": "node scripts/import-critter.mjs",
     "check": "tsc --noEmit && node scripts/verify-critter-glbs.mjs && vite build"
   },

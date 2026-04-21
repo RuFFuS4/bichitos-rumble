@@ -50,7 +50,7 @@
 - [x] Title screen
 - [x] Victory/defeat screen
 - [x] 3D rotatable preview in character select
-- [ ] Skeletal animations populated for the roster — **2/9 completos** (Cheeto 8/8, Kermit 7/8 + Hypnosapo procedural). Pendientes: Sergei (solo idle), Kowalski, Kurama, Sebastian, Shelly, Sihans, Trunk. User pipeline: Meshy AI + Tripo Animate → `scripts/import-critter.mjs`.
+- [ ] Skeletal animations populated for the roster — **3/9 completos** (Cheeto 8/8, Kermit 7/8 + Hypnosapo procedural, Kowalski 8/8). Pendientes: Sergei (solo idle), Kurama, Sebastian, Shelly, Sihans, Trunk. User pipeline: Meshy AI + Tripo Animate → `scripts/import-critter.mjs`.
 - [ ] Signature per-critter abilities (gap vs placeholders tracked in CHARACTER_DESIGN.md)
 - [ ] Particle effects (beyond shockwave rings)
 
