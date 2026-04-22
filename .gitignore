@@ -5,9 +5,27 @@ dist
 
 .vercel
 
-# Per-user Claude Code permissions — each developer has their own.
+# Playwright output (npm run test:smoke) — test results + traces/videos
+# regenerate on every run and can be large.
+test-results
+playwright-report
+blob-report
+playwright/.cache
+
+# Per-user Claude Code / MCP config — paths inside .mcp.json are
+# Windows-absolute (uvx.exe location) so the file doesn't transfer
+# across machines as-is. Each developer keeps their own.
 .claude/settings.local.json
+.mcp.json
 
 # Copied from game's public/models/critters/ by mesh2motion's prebuild
 # hook. Not a source of truth — regenerated on every build/dev run.
 mesh2motion/static/models/critters/
+
+# OS / editor junk
+Thumbs.db
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/*.log

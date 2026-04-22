@@ -599,6 +599,28 @@ Ruta rápida sin jugar 20 partidas:
       ventana `serverPhase transitioned to 'playing'` → `'ended'`
       — no cuentan el tiempo de waiting ni de countdown.
 
+### 21.6 Lab panel — trigger + reset
+- [ ] `/tools.html` → Tuning → **Badges** (colapsado por defecto).
+      Aparece la lista de 16 badges con columna `Lock/Unlock` en
+      cada fila + contador `X / 16 unlocked` arriba.
+- [ ] Botón `Trigger toast demo` dispara el toast con el primer
+      badge locked. Usa el mismo code path que producción.
+- [ ] `Unlock all` → los 16 se marcan unlocked en la lista. Hall of
+      Belts al abrirlo muestra los 16 desbloqueados.
+- [ ] `Lock all (reload)` → recarga la página, los 16 quedan locked.
+- [ ] `Clear ALL stats (reload)` → confirm() dialog, y al aceptar
+      recarga con localStorage de stats limpio (picks + wins + badges
+      a 0).
+
+### 21.7 Pain Tolerance — verificación del fix
+Regresión cubierta tras el fix 2026-04-23:
+- [ ] Jugar varias partidas **ganando cada una** mientras acumulas
+      headbutts recibidos. A los 10+ totales la consola debe mostrar
+      `[Badges] unlocked: pain-tolerance`.
+- [ ] Verificable en DevTools:
+      `JSON.parse(localStorage['br-stats-v2']).byCritter.<name>.hitsReceived`
+      crece tras cada win. Antes del fix se quedaba en 0 para siempre.
+
 ---
 
 ## 22 · Parts inspector (2026-04-22)
@@ -614,6 +636,82 @@ Ruta rápida sin jugar 20 partidas:
   - Sebastian con bones crab-específicos (`L_Claw`, `R_Leg1..4`, …).
 - [ ] `PROCEDURAL_PARTS.md` documenta qué se puede manipular por
       crítter cuando toque abrir signature abilities.
+- [ ] `/tools.html` → Tuning → **Critter parts** (colapsado).
+      Seleccionar un crítter (start match first) → aparece la lista
+      de bones con slider (0.01..1.5). Arrastrar `Head` a 0.01 de
+      Shelly → la cabeza "desaparece" dentro del caparazón. `Reset
+      bones` → vuelve al estado original.
+
+---
+
+## 23 · Visual polish pass (2026-04-23)
+
+Los cambios cosméticos / presentación de la sesión 2026-04-23.
+Pruebas rápidas de una pasada al final del QA.
+
+### 23.1 Favicon
+- [ ] La pestaña del navegador muestra el SVG (chibi en chip navy
+      con gradient gold→red, speed lines). NO el default blanco de
+      Vite.
+- [ ] En Safari < 18 (fallback): la pestaña se ve sin favicon pero
+      la página carga sin errores de consola (`favicon.svg` devuelve
+      200 OK).
+
+### 23.2 Countdown 3-2-1 con gradiente
+- [ ] Arrancar una partida offline. El overlay `3` aparece con
+      gradiente rojo pop → `2` ámbar → `1` amarillo → `GO!` verde
+      con radial burst tras el 1.
+- [ ] Los dígitos se dimensionan con `clamp(140px, 22vw, 260px)`.
+      Visibles en desktop + tablet landscape sin overflow.
+- [ ] La animación `pop` (scale-down + slight overshoot) se dispara
+      cada vez que cambia el dígito, no cuando el DOM se setea al
+      mismo valor.
+
+### 23.3 Drop-from-sky + dust puff
+- [ ] Al pasar `Get Ready!` → `3`, los críters empiezan elevados
+      a 12-15 unidades del suelo y caen con gravedad.
+- [ ] Cada crítter al tocar suelo (y=0) dispara un **dust puff**
+      (ring dorado expansivo) + un thud (SFX `headbuttHit`). Los
+      tiempos de landing están staggered (~1 s tras el countdown).
+- [ ] Al llegar a `GO!`, todos ya están en suelo. Ninguno queda
+      flotando (safety snap a y=0 en la transición).
+
+### 23.4 Skydome + sensación de plataforma flotando
+- [ ] El fondo ingame es una gradiente vertical (cielo alto cyan →
+      medio más claro → horizonte cálido → dusk-blue abajo). NO el
+      flat dark blue anterior.
+- [ ] Las nubes distantes (disco plano) se ven debajo de la arena al
+      cámara normal. Contribuyen al efecto "altura".
+- [ ] Iluminación: hemisphere + key cálido + rim azul. Los críters
+      tienen tono cyan arriba y tono cálido abajo (no un single
+      directional flat).
+
+### 23.5 Fragmentos caen al vacío
+- [ ] Cuando un batch colapsa (offline + online) los fragmentos caen
+      con gravedad + rotación. Desaparecen al pasar y=-25.
+- [ ] Mientras caen, el player puede caminar por encima de fragmentos
+      vivos (los que no están en caída) sin colisión fantasma.
+- [ ] Nada queda flotando tras un reset de seed. `buildFromSeed`
+      limpia el pool de `fallingFragments`.
+
+### 23.6 Resource preloads
+- [ ] Network tab: al primer load aparecen las 9 entries de
+      `/models/critters/<id>.glb` como `prefetch` (low priority) y
+      `/audio/intro.mp3` como `preload` (high priority).
+- [ ] La música `intro` arranca sin gap perceptible al primer clic
+      en "vs Bots" (vs 200-400ms de gap antes del preload).
+- [ ] El primer match arranca sin el "loading critter X…" porque
+      los GLBs ya están en caché (network tab muestra `from prefetch
+      cache`).
+
+### 23.7 Lab P/W/S read-only
+- [ ] `/tools.html` → Tuning → **P/W/S stats**. Tabla de 9 filas
+      + header. Cada fila muestra nombre, (P, W, S) con colores
+      (verde +, rojo -, gris 0), y las columnas `spd / mass / hb`
+      derivadas.
+- [ ] Sergei en (0, 0, 0) → 13.0 / 1.00 / 14.
+- [ ] Sebastian en (2, -2, 1) → 15.5 / 0.60 / 18.
+- [ ] Shelly en (0, 2, -2) → 8.0 / 1.40 / 14.
 
 ---
 
