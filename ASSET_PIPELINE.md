@@ -2,6 +2,13 @@
 
 How 3D models get from source files to the game.
 
+> **2026-04-24 update.** Two active import routes now. Tripo sources
+> keep the original `simplify` path. Meshy sources (100-200 MB with
+> 2-3M skinned verts) route through `gltfpack` + meshopt quantization.
+> See "Import Pipeline" → "Route selection" below. The shared
+> entrypoint is `scripts/import-critter.mjs` which auto-picks the
+> route by source size.
+
 ## Directory Structure
 
 ```
@@ -9,21 +16,23 @@ public/
   models/
     critters/
       sergei.glb        ← optimized, game-ready
-      trunk.glb
-      kurama.glb
+      trunk.glb         ← Tripo route (2-4 MB)
+      kurama.glb        ← Meshy route (~14 MB, meshopt-compressed)
       shelly.glb
       kermit.glb
       sihans.glb
       kowalski.glb
       cheeto.glb
       sebastian.glb
-  draco/
-    draco_decoder.js    ← Draco WASM decoder (from three.js)
-    draco_decoder.wasm
-    draco_wasm_wrapper.js
 
 scripts/
-  optimize-models.mjs   ← optimization pipeline script
+  import-critter.mjs    ← primary import pipeline (either route)
+  verify-critter-glbs.mjs
+  inspect-clips.mjs
+  inspect-parts.mjs
+  inspect-bounds.mjs
+  mappings/
+    <id>.json           ← duration → semantic name mapping per critter
 ```
 
 ## Naming Convention
@@ -32,15 +41,128 @@ scripts/
 - **Source files**: kept outside the repo (user's local machine or shared drive)
 - **Only optimized files** go into `public/models/critters/`
 
-## Optimization Pipeline
+## Import Pipeline
+
+Primary entrypoint: `scripts/import-critter.mjs`. Handles both Tripo
+and Meshy sources end-to-end — rename animations by duration, optimise
+geometry + textures, write to `public/models/critters/<id>.glb`.
+
+### Route selection (auto)
+
+```
+source size ≤ 80 MB  →  plain route  (dedup + weld + simplify)
+source size >  80 MB  →  gltfpack route (skin-aware simplify + meshopt)
+```
+
+Override with flags: `--via-gltfpack` (force compressed) or
+`--no-gltfpack` (force plain).
+
+### Plain route — Tripo sources
+
+`dedup → weld(0.0001) → simplify(error: 0.01, ratio derived from
+target verts)`. All in-process via `gltf-transform`. Output typically
+2-4 MB, 10-40 K verts. Tripo sources arrive around 70 MB and are
+already close to optimal; this pass trims the fat without fighting
+the geometry.
+
+### gltfpack route — Meshy sources
+
+```
+pass 1 (in-process)
+   dedup()
+   textureCompress({ format: 'webp', resize: [1024, 1024], q: 82 })
+   → public/models/critters/<id>.pre.glb
+
+pass 2 (gltfpack CLI, via npx)
+   gltfpack -i <id>.pre.glb -o <id>.glb -si 0.02 -c -kn
+   → compressed final GLB
+```
+
+Flags: `-si 0.02` (simplify to 2% triangle target), `-c` (meshopt
+quantization compression), `-kn` (keep node names — needed so
+`SkeletalAnimator` can find bones + `critter-parts` can target them).
+
+Meshy sources arrive at 100-200 MB with 2-3 M skinned verts. The
+in-process `@gltf-transform` simplify is NOT skin-aware and would
+barely reduce the mesh (saw 1.94M → 1.94M on Kurama's first attempt).
+`gltfpack` handles skinning correctly; output typically 12-16 MB.
+
+The `-c` compression requires the `MeshoptDecoder` at load time —
+that's wired in `src/model-loader.ts` at loader init. Adds ~20 KB
+gzipped to the shared chunk; transparent to game code.
 
 ### Prerequisites
 
 ```bash
-npm install --save-dev @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions meshoptimizer
+npm install --save-dev \
+  @gltf-transform/core @gltf-transform/extensions @gltf-transform/functions \
+  meshoptimizer sharp gltfpack
 ```
 
+Already listed in `package.json`. `gltfpack` ships its own WASM
+binary usable via `npx gltfpack`.
+
 ### Usage
+
+```bash
+# Single critter import (source path passed in):
+npm run import:critter -- <id> "C:/Downloads/<source>.glb"
+
+# Examples:
+npm run import:critter -- cheeto "C:/Downloads/Cheeto.glb"
+npm run import:critter -- kurama "C:/Downloads/Meshy_Kurama_Merged.glb"
+
+# Dry-run — print rename plan + ratios, don't write output:
+npm run import:critter -- kurama "C:/Downloads/source.glb" --dry-run
+
+# Force plain route on a Meshy-sized source (usually a bad idea):
+npm run import:critter -- kurama "C:/source.glb" --no-gltfpack
+
+# Force gltfpack route on a Tripo-sized source (when Meshy re-exports):
+npm run import:critter -- kurama "C:/source.glb" --via-gltfpack
+```
+
+### Duration mapping
+
+The pipeline renames animation clips by matching their duration
+against a fixture per critter at `scripts/mappings/<id>.json`:
+
+```json
+[
+  { "dur": 2.333, "name": "Idle" },
+  { "dur": 3.067, "name": "Run" },
+  { "dur": 1.033, "name": "Ability1FoxDash" },
+  ...
+]
+```
+
+The fixture's `name` must match a keyword in `STATE_KEYWORDS`
+(`src/critter-skeletal.ts`) so the runtime resolver picks the clip
+up. Tolerance is 0.01 s by default — tune via `--tolerance` if the
+exporter emits a slightly different frame rate than you expect.
+
+### Post-import checks
+
+```bash
+# Confirm the 8 target states resolve to clips:
+npm run verify:glbs public/models/critters/<id>.glb
+
+# Per-clip variance verdict (does any clip get dropped as static?):
+npm run inspect:clips public/models/critters/<id>.glb
+
+# List mesh + bones (useful for PROCEDURAL_PARTS playbook):
+npm run inspect:parts public/models/critters/<id>.glb
+
+# Local bounds + suggested scale/pivotY for the roster entry:
+node scripts/inspect-bounds.mjs public/models/critters/<id>.glb
+```
+
+---
+
+## Legacy: optimize-models.mjs (pre-2026-04-21)
+
+Kept for one-off Tripo passes that don't need animation rename. The
+newer `import-critter.mjs` supersedes this for almost every use case.
 
 ```bash
 # Optimize a single model (recommended for first-time validation):

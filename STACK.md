@@ -47,17 +47,26 @@
   **Gotcha**: Tripo exports the clips inside NLA tracks → clip names
   come out as `NlaTrack.XXX` (semantic names lost). The re-name flow
   lives in `BLENDER_MCP.md` → "Animaciones via Tripo Animate".
-- **Meshy AI** (external, primary animation source going forward) —
-  alternative auto-rigger with a considerably larger stock-animation
-  library than Tripo Animate. Better results on non-humanoid
-  morphologies. Same downstream integration path as Tripo Animate:
-  export GLB with animations → rename actions to match our
-  `STATE_KEYWORDS` (in `src/critter-skeletal.ts`) → drop into
-  `public/models/critters/<id>.glb`. If any specific clip exports
-  corrupt (static / 0-variance — observed once with Kermit's
-  Run + Ability1), transplant the affected clips from the source
-  GLB via `gltf-transform` (see the "transplant fix" at the end of
-  the Tripo Animate section in `BLENDER_MCP.md`).
+- **Meshy AI** (external, used for Kurama + future imports where
+  Tripo Animate falls short on non-humanoids) — stock-animation
+  library much larger than Tripo Animate and clip names are preserved
+  semantically (no `NlaTrack.XXX` → duration-matching needed). The
+  catch is size: Meshy exports come in at ~150 MB with 2-3 M skinned
+  verts. gltf-transform's `simplify` is NOT skin-aware, so we route
+  Meshy sources through **`gltfpack`** (added as devDep 2026-04-24)
+  which handles skin-aware simplify + meshopt quantization compression.
+  Output typically 12-16 MB — larger than a Tripo 2-3 MB file but
+  runnable over any decent connection.
+
+  Runtime side: `GLTFLoader` is configured with `MeshoptDecoder`
+  (`src/model-loader.ts`) so the compressed GLBs decode on load.
+  Adds ~20 KB gzipped to the shared chunk; transparent to game code.
+
+  The import script auto-detects Meshy-sized sources (> 80 MB) and
+  routes through gltfpack; below that threshold the plain
+  `dedup + weld + simplify` route shipped for the Tripo GLBs still
+  runs. Both routes live in `scripts/import-critter.mjs`. Override
+  manually with `--via-gltfpack` / `--no-gltfpack` flags.
 
 ### On standby (kept in the stack, not in active use)
 
