@@ -70,8 +70,15 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Kurama',
     glbPath: './models/critters/kurama.glb',
     baseColor: 0xff6633,
-    // Trickster — lean and light (mass 0.8). Tripo mesh origin at feet.
-    scale: 2.4, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    // Trickster — Meshy AI mesh, imported 2026-04-24. Source bounds
+    // Y [0, 2.95], height 2.95u, feet-at-origin (Mixamo convention).
+    // scale 0.54 matches the ~1.6u chibi target the roster aims for;
+    // Tripo models were already ~1u tall so they used scale 2-3.
+    // rotation 0: Meshy/Mixamo character faces -Z (standard "forward"
+    // in three.js), so no rotation needed to line up with game forward.
+    // If playtest shows Kurama facing away from the camera in
+    // character-select, flip to Math.PI.
+    scale: 0.54, rotation: 0, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Trickster',
