@@ -205,7 +205,23 @@ export class SkeletalAnimator {
     opts: { fallback?: SkeletalState; crossfade?: number; force?: boolean } = {},
   ): boolean {
     const action = this.actions[state];
-    if (!action) return false;
+    if (!action) {
+      // Requested state has no clip on this critter. If a fallback was
+      // supplied, try it — otherwise we'd leave the mixer clamped on
+      // whatever heavy clip was running (the canonical symptom: critter
+      // falls, clip `fall` clamps at the final pose, respawn requests
+      // `respawn` which doesn't exist, state stays at 'fall' forever
+      // even though respawnAt has reset position + lives + vels).
+      if (opts.fallback && opts.fallback !== state) {
+        return this.play(opts.fallback, {
+          crossfade: opts.crossfade,
+          force: opts.force,
+          // Clear fallback on the recursive call so we don't recurse past
+          // one level (the fallback chain is intentionally shallow).
+        });
+      }
+      return false;
+    }
 
     // Skip re-triggering loops unless force=true — otherwise idle↔idle
     // every frame would reset the animation head.
