@@ -48,10 +48,13 @@ procedurales por política (ver `SUBMISSION_CHECKLIST.md`).
 | Kurama     | **8 / 8**| Meshy AI       | full kit (Fox Dash = Run_and_Jump, Mirror Trick = Back_Jump, Copycat ULTI = Charged_Spell_Cast). Primer crítter via pipeline Meshy → gltfpack + meshopt compression. 14 MB (vs 70→2 MB de Tripo). |
 | Sebastian  | **6 / 8**| Meshy AI       | idle / run / victory / defeat / fall + ab_2 Claw Sweep (Charged_Slash). **Ab_1 Claw Rush** y **ULTI Crab Slash** van procedurales (dash lateral con `glbMesh.position.x` easing + `glbMesh.scale.z` stretch en dirección de carga). Mixamo rig: sin bones crab-específicos — las 6 patas colapsan a 2 piernas humanoides; pinza grande/pequeña = `RightHand`/`LeftHand`. 15 MB. |
 | Sihans     | **8 / 8**| Meshy AI       | full kit (Burrow Rush = Crawl_and_Look_Back, Tunnel = Charged_Ground_Slam, Diggy Diggy Hole = Dive_Down_and_Land_2). Source era 15.8 MB → plain route (no gltfpack). 6.5 MB. |
-| Sergei     | 1 / 8    | Mixamo (Idle)  | en regeneración (usuario rehaciendo)           |
+| Sergei     | **8 / 8**| Meshy AI       | regen 2026-04-24, full kit (Gorilla Rush = Parkour_Vault_1, Shockwave = Slow_Orc_Walk, Frenzy = Charged_Spell_Cast). Idle curioso: "Boxing_Guard_Prep" lee como la postura territorial de Donkey Kong. 9.2 MB. |
 
-Total: **60 / 72** estados (83%). La capa procedural de
-`critter-animation.ts` cubre automáticamente lo que falta.
+Total: **68 / 72** estados (94%). Los 4 restantes son abilities
+procedurales por diseño (Kermit Hypnosapo, Shelly Shell Charge +
+Shell Shield, Sebastian Claw Rush + Crab Slash — suman 4, no 5).
+La capa procedural de `critter-animation.ts` cubre automáticamente
+lo que falta.
 
 ### Qué está realmente implementado hoy
 

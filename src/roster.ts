@@ -94,16 +94,15 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Sergei',
     glbPath: './models/critters/sergei.glb',
     baseColor: 0xb5651d,
-    // Model bounds: Y [-0.49, 0.49], center at origin, front faces ±X
-    // pivotY = |minY| × scale to place feet at ground level
-    // rotation = -π/2 to turn from X-facing to Z-facing (game forward)
-    // scale 3.07 — bumped 33% over the previous 2.3 per user request
-    // (gorila reads small at 2.3 next to the other critters; this is
-    // closer to the relative mass we want for a Bruiser-Balanced).
-    // pivotY scaled proportionally (1.0 × 3.07/2.3 = 1.335) so the
-    // 33% bigger mesh doesn't clip the floor.
-    scale: 3.07, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 1.335,
+    // Meshy AI regen landed 2026-04-24, full 8-clip kit (Gorilla Rush /
+    // Shockwave / Frenzy / Idle / Run / Victory / Defeat / Fall).
+    // Source bounds Y [0, 2.414], feet-at-origin (Mixamo convention).
+    // scale 0.66 targets the in-game ~1.6u chibi baseline; pivotY back
+    // to 0 (previous 1.335 was for the old Tripo centered mesh).
+    // rotation 0: Mixamo characters face -Z, same as every other
+    // Meshy import in the roster.
+    scale: 0.66, rotation: 0, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Balanced',
     tagline: 'Strong and agile. No weakness.',

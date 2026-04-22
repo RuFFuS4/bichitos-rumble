@@ -180,7 +180,7 @@ Estado actual del roster — 8 estados skeletal target por bichito
 | Kurama     | 8 / 8     | **Meshy AI** (primer import via-gltfpack), full kit (Fox Dash/Mirror Trick/Copycat ULTI). 14 MB (meshopt-compressed) |
 | Sebastian  | 6 / 8     | **Meshy AI** via-gltfpack. Ab_1 Claw Rush + ULTI Crab Slash procedurales (dash lateral + glbMesh.scale.z stretch). 15 MB |
 | Sihans     | 8 / 8     | **Meshy AI** via plain route (source was 15.8 MB). Full kit (Burrow Rush / Tunnel / Diggy Diggy Hole). 6.5 MB |
-| Sergei     | 1 / 8     | solo Idle — user rehaciéndolo a fecha 2026-04-24 |
+| Sergei     | **8 / 8** | **Meshy AI** regen 2026-04-24 via plain route (source 9 MB, 3642 verts). Full kit (Gorilla Rush / Shockwave / Frenzy). 9.2 MB |
 
 ### 9.1 Por cada bichito animado — checklist común
 
