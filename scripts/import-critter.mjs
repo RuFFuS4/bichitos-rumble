@@ -132,15 +132,25 @@ async function main() {
 
   for (const anim of anims) {
     const dur = computeDuration(anim);
-    const match = mapping.find(m => Math.abs(m.dur - dur) < flags.tolerance);
+    // Prefer a mapping entry that hasn't been consumed yet. Matters when
+    // two source clips share a duration (e.g. Sebastian's Walking and
+    // Charged_Slash both at 2.233 s): without the freshness guard, the
+    // later clip would silently overwrite the name we just assigned to
+    // the first one. The fallback to used entries is kept so the "NO
+    // MATCH (mapping X already used)" diagnostic tells you *why* the
+    // leftover clip stayed unmatched.
+    const match =
+      mapping.find(m => !renamed.has(m.name) && Math.abs(m.dur - dur) < flags.tolerance)
+      ?? mapping.find(m => Math.abs(m.dur - dur) < flags.tolerance);
     const oldName = anim.getName();
-    if (match) {
+    if (match && !renamed.has(match.name)) {
       anim.setName(match.name);
       renamed.add(match.name);
       console.log(`   ${oldName.padEnd(18)} (${dur.toFixed(3)}s) → ${match.name}`);
     } else {
       unmatched++;
-      console.log(`   ${oldName.padEnd(18)} (${dur.toFixed(3)}s) → ⚠ NO MATCH`);
+      const reason = match ? ` (mapping "${match.name}" already used)` : '';
+      console.log(`   ${oldName.padEnd(18)} (${dur.toFixed(3)}s) → ⚠ NO MATCH${reason}`);
     }
   }
 
