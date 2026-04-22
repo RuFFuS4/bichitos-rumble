@@ -20,6 +20,20 @@ export default defineConfig({
   build: {
     target: 'es2020',
     outDir: 'dist',
+    // Esbuild minifier is default; this switches to terser so we can
+    // strip console.debug + console.log from the production bundle.
+    // Ships with Vite, no extra dep. A noticeable perf + privacy win:
+    // the engine (Critter / Portal / Badges / …) emits ~40 debug logs
+    // per match; in prod those now vanish entirely. console.error and
+    // console.warn stay in place so crashes + invariant violations
+    // still surface in DevTools.
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_debugger: true,
+        pure_funcs: ['console.debug', 'console.log'],
+      },
+    },
     rollupOptions: {
       input: {
         index: resolve(__dirname, 'index.html'),

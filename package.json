@@ -11,10 +11,12 @@
     "inspect:clips": "node scripts/inspect-clips.mjs",
     "inspect:parts": "node scripts/inspect-parts.mjs",
     "import:critter": "node scripts/import-critter.mjs",
+    "inspect:bounds": "node scripts/inspect-bounds.mjs",
     "og": "node scripts/make-og-image.mjs",
     "compress:audio": "node scripts/compress-audio.mjs",
     "test:smoke": "playwright test",
-    "check": "tsc --noEmit && node scripts/verify-critter-glbs.mjs && vite build"
+    "check": "tsc --noEmit && node scripts/verify-critter-glbs.mjs && vite build",
+    "doctor": "node scripts/doctor.mjs"
   },
   "dependencies": {
     "colyseus.js": "^0.16.22",
@@ -30,6 +32,7 @@
     "gltfpack": "^1.1.0",
     "meshoptimizer": "^1.1.0",
     "sharp": "^0.34.5",
+    "terser": "^5.46.1",
     "typescript": "^5.7.0",
     "vite": "^6.2.0"
   }
