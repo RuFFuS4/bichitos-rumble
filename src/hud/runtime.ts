@@ -9,6 +9,8 @@
 
 import type { AbilityState } from '../abilities';
 import type { Critter } from '../critter';
+import { getRosterEntry } from '../roster';
+import { getCritterThumbnail } from '../slot-thumbnail';
 
 // ---- Top bar -------------------------------------------------------------
 
@@ -41,9 +43,26 @@ export function initAllLivesHUD(critters: Critter[]): void {
     const row = document.createElement('div');
     row.className = 'lives-row';
 
+    // Avatar: coloured dot as instant fallback, upgraded to a 3D
+    // thumbnail once getCritterThumbnail resolves. Same pattern the
+    // character-select slots + waiting-room slots use, so the cache
+    // hit rate is high by the time the match actually starts (the
+    // thumbnails were rendered when the user browsed the roster).
     const dot = document.createElement('span');
     dot.className = 'lives-dot';
     dot.style.background = '#' + c.config.color.toString(16).padStart(6, '0');
+    const entry = getRosterEntry(c.config.name);
+    if (entry) {
+      getCritterThumbnail(entry).then((url) => {
+        if (!url) return;
+        dot.style.backgroundImage = `url(${url})`;
+        dot.style.backgroundSize = 'cover';
+        dot.style.backgroundPosition = 'center';
+        // Keep the tint as a subtle halo behind the avatar for the
+        // critter-identity cue at 10-pixel sizes.
+        dot.classList.add('has-avatar');
+      }).catch(() => { /* leave the coloured dot */ });
+    }
 
     const hearts = document.createElement('span');
     hearts.className = 'lives-hearts';
