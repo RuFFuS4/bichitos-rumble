@@ -200,10 +200,14 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Sebastian',
     glbPath: './models/critters/sebastian.glb',
     baseColor: 0xcc3333,
-    // Glass Cannon crab (mass 0.75) — small, low silhouette. Now rigged
-    // via custom bpy armature (Body/Head/2 Claws/8 Legs). Mesh origin
-    // at feet, pivotY=0.
-    scale: 2.3, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    // Glass Cannon crab (mass 0.75). Meshy AI mesh imported 2026-04-24.
+    // Source bounds Y [0, 1.147] height 1.147u, feet-at-origin (Mixamo
+    // convention — the crab is now a biped humanoid rig; the 8-legs
+    // morphology is collapsed to 2 generic legs, see PROCEDURAL_PARTS).
+    // scale 1.40 matches the in-game ~1.6u chibi target (was 2.3 for
+    // the Tripo mesh which was ~0.7u tall).
+    // rotation 0: Meshy/Mixamo character faces -Z, same as Kurama.
+    scale: 1.40, rotation: 0, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Glass Cannon',

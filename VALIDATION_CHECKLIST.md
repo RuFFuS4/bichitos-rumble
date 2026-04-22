@@ -178,8 +178,8 @@ Estado actual del roster — 8 estados skeletal target por bichito
 | Trunk      | 8 / 8     | Tripo Animate, full kit (Ram/Grip/Ground Pound) |
 | Shelly     | 6 / 8     | Tripo Animate, idle/run/ULTI MegaShell/vic/def/fall. Ab_1 Shell Charge + Ab_2 Shell Shield procedurales (spin + hide limbs via bones) |
 | Kurama     | 8 / 8     | **Meshy AI** (primer import via-gltfpack), full kit (Fox Dash/Mirror Trick/Copycat ULTI). 14 MB (meshopt-compressed) |
+| Sebastian  | 6 / 8     | **Meshy AI** via-gltfpack. Ab_1 Claw Rush + ULTI Crab Slash procedurales (dash lateral + glbMesh.scale.z stretch). 15 MB |
 | Sergei     | 1 / 8     | solo Idle                                     |
-| Sebastian  | 0 / 8     | pendiente Meshy/Tripo                         |
 | Sihans     | 0 / 8     | pendiente Meshy/Tripo                         |
 
 ### 9.1 Por cada bichito animado — checklist común

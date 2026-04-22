@@ -12,15 +12,16 @@
 
 | Route | How it works | Works on… |
 |---|---|---|
-| **Bone scale/position** | Animate bones by name directly (bypass the clip) | Everyone (all critters share the humanoid skeleton nomenclature except Sebastian who has crab-specific bones) |
+| **Bone scale/position** | Animate bones by name directly (bypass the clip) | Everyone. Two distinct bone vocabularies: Tripo (L_Foot / L_Hand / NeckTwist / Spine01…) and Meshy/Mixamo (LeftFoot / LeftHand / Head / Spine01…). Both consistent within their family. See the per-critter playbooks below. |
 | **Mesh transform** | Address individual `Mesh_N.001` primitives | Cheeto (15 parts), Kowalski (12 parts), Trunk (18 parts) — the Tripo-animated critters |
 | **Skeletal clip** | Standard animation track | Any critter with clips (see `CHARACTER_DESIGN.md`) |
 
-## Global bone vocabulary (all 8 humanoid critters)
+## Global bone vocabulary — two families
 
-Every critter except Sebastian ships with the Tripo-standard humanoid
-rig. Bones are named consistently and can be addressed from code via
-`skinnedMesh.skeleton.getBoneByName(name)`:
+### Tripo-standard humanoid rig
+
+Used by Cheeto · Trunk · Shelly · Kermit · Kowalski · Sergei (via Mixamo
+retarget). Resolve with `skinnedMesh.skeleton.getBoneByName(name)`:
 
 ```
 Root · ParentNode (or <id>_Parent) · Armature (or <id>_Armature)
@@ -32,9 +33,37 @@ L_Thigh · L_ThighTwist01..02 · L_Calf · L_CalfTwist01..02 · L_Foot
 R_Thigh · R_ThighTwist01..02 · R_Calf · R_CalfTwist01..02 · R_Foot
 ```
 
-Total: **~35 named bones per humanoid critter**. Twist bones are
-subdivision helpers for smooth skinning; rarely worth manipulating by
-hand.
+Total: ~35 named bones per critter. Twist bones are subdivision helpers
+for smooth skinning; rarely worth manipulating by hand.
+
+### Meshy / Mixamo rig
+
+Used by **Kurama** and **Sebastian** (both 2026-04-24 onward). Same
+Mixamo naming any generic humanoid rig uses:
+
+```
+Hips · Spine · Spine01 · Spine02 · neck · Head · head_end · headfront
+LeftShoulder · LeftArm · LeftForeArm · LeftHand
+RightShoulder · RightArm · RightForeArm · RightHand
+LeftUpLeg · LeftLeg · LeftFoot · LeftToeBase
+RightUpLeg · RightLeg · RightFoot · RightToeBase
+```
+
+Total: ~23 named bones per critter. Fewer subdivisions than Tripo
+(no Twist01..02 bones), which is fine for the abilities we're
+prototyping — we don't need per-segment control on forearms.
+
+**When writing procedural ability code** that should work on both
+families, use a compatibility helper:
+
+```ts
+const LEFT_FOOT = critter.parts.hasBone('L_Foot') ? 'L_Foot' : 'LeftFoot';
+critter.parts.hideBone(LEFT_FOOT);
+```
+
+Or add a small mapping table at the top of the file. Every Meshy
+critter responds to the same Mixamo names, every Tripo critter
+responds to the same Tripo names, so the check only happens once.
 
 ## Per-critter playbooks
 
@@ -65,25 +94,52 @@ swaps, no asset changes.
 torso stays visible — that's the effect we want (Shelly curls inside
 the shell, shell remains prominent).
 
-### Sebastian — "Claw Sweep" + "Crab Slash"
+### Sebastian — "Claw Rush" + "Claw Sweep" + "Crab Slash"
 
-**Winner of the rig lottery.** Sebastian's GLB has crab-specific bones:
+**2026-04-24 update.** Sebastian switched from the Tripo rig (which
+had crab-specific `L_Claw` / `R_Claw` / `L_Leg1..4` / `R_Leg1..4`
+bones — a rare rig-lottery win) to the Meshy AI export, which uses
+the **standard Mixamo humanoid skeleton**:
 
 ```
-Body · Head · L_Claw · R_Claw
-L_Leg1 · L_Leg2 · L_Leg3 · L_Leg4
-R_Leg1 · R_Leg2 · R_Leg3 · R_Leg4
+Hips · Spine · Spine01 · Spine02 · neck · Head · head_end · headfront
+LeftShoulder · LeftArm · LeftForeArm · LeftHand
+RightShoulder · RightArm · RightForeArm · RightHand
+LeftUpLeg · LeftLeg · LeftFoot · LeftToeBase
+RightUpLeg · RightLeg · RightFoot · RightToeBase
 ```
 
-- **Claw Sweep (H2)**: rotate `R_Claw` (the big one) through an arc,
-  pair with a faint ghost-trail. The left claw can stay mostly idle
-  to sell the "uneven pincers" silhouette.
-- **Crab Slash (ULTI)**: lateral dash. Scale `L_Leg1..4`/`R_Leg1..4`
-  with a jitter so the 8 legs skitter asynchronously. Unlike a
-  skinned-mesh-only critter, we can give every leg its own
-  micro-animation without authoring anything.
-- **Stun frames**: scale `L_Claw` + `R_Claw` slightly up and add a
-  subtle red emissive for "about to strike".
+The 8-legs morphology of the original crab collapses to 2 biped
+legs; the two pincers (different sizes in the game-design brief)
+collapse to `LeftHand` + `RightHand`. We keep the convention that
+`RightHand` = the big claw (skinned heavier on the original mesh).
+
+**Clips shipped via Meshy (2026-04-24 import):**
+- Idle / Run / Fall / Victory (Punch_Combo_1) / Defeat (Sleep_Normally)
+- Ab_2 Claw Sweep → Charged_Slash (2.23 s)
+
+**What goes procedural under the new rig:**
+
+- **Claw Rush (H1)** — lateral dash with the big pincer:
+  `glbMesh.position.x += dashSpeed * dt` driven by the ability state,
+  plus `parts.scaleBone('RightHand', 1.4)` during the strike window
+  and a little `rotation.y` on `RightForeArm` to sell the pincer
+  arc. Reset bones on ability end.
+- **Crab Slash (ULTI)** — ultra-fast dash + claw extended as a whip:
+  * `glbMesh.scale.z = 1 + ulti.progress * 2.0` stretches the whole
+    body along the dash direction (same channel used by charge_rush
+    already).
+  * `parts.scaleBone('RightHand', 2.0)` + `parts.scaleBone('RightForeArm', 1.8)`
+    telegraphs the pincer shooting forward.
+  * On contact: hit-stop + reset scales; on miss: body keeps
+    sliding past the arena edge (existing fall-off physics handles
+    the elimination).
+- **Stun flash**: bone-agnostic — `updateVisuals()` already supports
+  per-critter emissive tints (Hypnosapo flicker on Kermit is the
+  existing precedent).
+
+No 8-legs skitter possible anymore — the Meshy rig can't do it.
+Trade-off accepted for the much larger Meshy animation library.
 
 ### Trunk — "Trunk Grip" (trunk stretches out, grabs, throws)
 

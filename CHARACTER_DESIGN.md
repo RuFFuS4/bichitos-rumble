@@ -46,11 +46,11 @@ procedurales por política (ver `SUBMISSION_CHECKLIST.md`).
 | Trunk      | **8 / 8**| Tripo Animate  | full kit (Ram, Grip, Ground Pound). Nota: la animación de ab_2 incluye el giro+lanzamiento pero **no el estiramiento horizontal de la trompa** — cuando toquemos la ability, el estiramiento irá procedural (mesh stretch). |
 | Shelly     | **6 / 8**| Tripo Animate  | idle / run / victory / defeat / fall + ab_3 Mega Shell. **Ab_1 Shell Charge** y **Ab_2 Shell Shield** van procedurales por diseño (spin rápido del mesh entero + hide head/hands/feet via bone scale, per `PROCEDURAL_PARTS.md`). |
 | Kurama     | **8 / 8**| Meshy AI       | full kit (Fox Dash = Run_and_Jump, Mirror Trick = Back_Jump, Copycat ULTI = Charged_Spell_Cast). Primer crítter via pipeline Meshy → gltfpack + meshopt compression. 14 MB (vs 70→2 MB de Tripo). |
+| Sebastian  | **6 / 8**| Meshy AI       | idle / run / victory / defeat / fall + ab_2 Claw Sweep (Charged_Slash). **Ab_1 Claw Rush** y **ULTI Crab Slash** van procedurales (dash lateral con `glbMesh.position.x` easing + `glbMesh.scale.z` stretch en dirección de carga). Mixamo rig: sin bones crab-específicos — las 6 patas colapsan a 2 piernas humanoides; pinza grande/pequeña = `RightHand`/`LeftHand`. 15 MB. |
 | Sergei     | 1 / 8    | Mixamo (Idle)  | resto procedural                               |
-| Sebastian  | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 | Sihans     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 
-Total: **46 / 72** estados (64%). La capa procedural de
+Total: **52 / 72** estados (72%). La capa procedural de
 `critter-animation.ts` cubre automáticamente lo que falta.
 
 ### Qué está realmente implementado hoy

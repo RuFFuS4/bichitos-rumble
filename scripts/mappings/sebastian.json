@@ -1,0 +1,8 @@
+[
+  { "dur": 0.633, "name": "Victory" },
+  { "dur": 1.033, "name": "Fall" },
+  { "dur": 1.733, "name": "Idle" },
+  { "dur": 2.000, "name": "Run" },
+  { "dur": 2.233, "name": "Ability2ClawSweep" },
+  { "dur": 3.000, "name": "Defeat" }
+]
