@@ -16,7 +16,14 @@ import { getCritterThumbnail } from '../slot-thumbnail';
 
 const aliveEl = document.getElementById('hud-alive')!;
 const timerEl = document.getElementById('hud-timer')!;
-const livesContainer = document.getElementById('hud-lives')!;
+// Four per-player life corners (top-left, top-right, bottom-left, bottom-right).
+// Populated by initAllLivesHUD per critter index.
+const lifeCornerEls: HTMLElement[] = [
+  document.getElementById('player-life-0')!,
+  document.getElementById('player-life-1')!,
+  document.getElementById('player-life-2')!,
+  document.getElementById('player-life-3')!,
+];
 const overlayEl = document.getElementById('overlay')!;
 const abilityContainer = document.getElementById('ability-bar-container')!;
 const portalLegendReturnEl = document.getElementById('portal-legend-return')!;
@@ -34,14 +41,29 @@ export function updateHUD(aliveCount: number, timeLeft: number): void {
 
 let liveEls: { root: HTMLElement; hearts: HTMLElement }[] = [];
 
-/** Build lives display for all critters. Call once at init and on restart. */
-export function initAllLivesHUD(critters: Critter[]): void {
-  livesContainer.innerHTML = '';
+/**
+ * Build lives display. One corner per critter (up to 4):
+ *   index 0 → top-left, 1 → top-right, 2 → bottom-left, 3 → bottom-right.
+ * Each corner shows a big avatar, critter name, hearts, optional bot badge.
+ *
+ * `localPlayerIndex` (optional) highlights that corner with a gold ring
+ * so the user finds their own lives at a glance.
+ */
+export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = -1): void {
+  // Clear any stale content in all four corners — a restart can land
+  // in the same corner elements.
+  for (const corner of lifeCornerEls) {
+    corner.innerHTML = '';
+    corner.classList.remove('is-local', 'is-dead');
+    corner.style.display = 'none';
+  }
   liveEls = [];
 
-  for (const c of critters) {
-    const row = document.createElement('div');
-    row.className = 'lives-row';
+  for (let i = 0; i < critters.length && i < lifeCornerEls.length; i++) {
+    const c = critters[i];
+    const corner = lifeCornerEls[i];
+    corner.style.display = '';
+    if (i === localPlayerIndex) corner.classList.add('is-local');
 
     // Avatar: coloured dot as instant fallback, upgraded to a 3D
     // thumbnail once getCritterThumbnail resolves. Same pattern the
@@ -58,18 +80,21 @@ export function initAllLivesHUD(critters: Critter[]): void {
         dot.style.backgroundImage = `url(${url})`;
         dot.style.backgroundSize = 'cover';
         dot.style.backgroundPosition = 'center';
-        // Keep the tint as a subtle halo behind the avatar for the
-        // critter-identity cue at 10-pixel sizes.
         dot.classList.add('has-avatar');
       }).catch(() => { /* leave the coloured dot */ });
     }
+
+    const name = document.createElement('span');
+    name.className = 'lives-name';
+    name.textContent = c.config.name;
 
     const hearts = document.createElement('span');
     hearts.className = 'lives-hearts';
     hearts.textContent = '\u2764'.repeat(c.lives);
 
-    row.appendChild(dot);
-    row.appendChild(hearts);
+    corner.appendChild(dot);
+    corner.appendChild(name);
+    corner.appendChild(hearts);
 
     // Bot badge (online 4P fill). Never set for offline — offline bots are
     // identified by index, not by this flag.
@@ -78,12 +103,10 @@ export function initAllLivesHUD(critters: Critter[]): void {
       badge.className = 'lives-bot-badge';
       badge.textContent = '🤖';
       badge.title = 'Bot';
-      row.appendChild(badge);
+      corner.appendChild(badge);
     }
 
-    livesContainer.appendChild(row);
-
-    liveEls.push({ root: row, hearts });
+    liveEls.push({ root: corner, hearts });
   }
 }
 
@@ -94,10 +117,10 @@ export function updateAllLivesHUD(critters: Critter[]): void {
     const el = liveEls[i];
     if (!c.alive) {
       el.hearts.textContent = '\u2716'; // ✖
-      el.root.style.opacity = '0.35';
+      el.root.classList.add('is-dead');
     } else {
       el.hearts.textContent = '\u2764'.repeat(c.lives);
-      el.root.style.opacity = '1';
+      el.root.classList.remove('is-dead');
     }
   }
 }
@@ -156,13 +179,22 @@ export function hideOverlay(): void {
 
 let slotEls: { root: HTMLElement; fill: HTMLElement; unavailable: boolean }[] = [];
 
+const ABILITY_SLOT_SUFFIX = ['j', 'k', 'l'] as const;
+
 /**
  * Build the ability HUD slots.
- * @param states  ability states to render (one slot per entry)
- * @param unavailable optional set of indices to render as disabled + "SOON".
- *                   Used in online mode for abilities not yet wired server-side.
+ * @param states       ability states to render (one slot per entry)
+ * @param critterSlug  lowercase critter id (matches roster.id) used to pick
+ *                     the per-ability sprite. Falls back to emoji-free
+ *                     layout if the sprite sheet hasn't loaded.
+ * @param unavailable  optional set of indices to render as disabled + "SOON".
+ *                     Used in online mode for abilities not yet wired server-side.
  */
-export function initAbilityHUD(states: AbilityState[], unavailable?: Set<number>): void {
+export function initAbilityHUD(
+  states: AbilityState[],
+  critterSlug: string | null = null,
+  unavailable?: Set<number>,
+): void {
   abilityContainer.innerHTML = '';
   slotEls = [];
 
@@ -171,6 +203,16 @@ export function initAbilityHUD(states: AbilityState[], unavailable?: Set<number>
     const isUnavailable = unavailable?.has(i) ?? false;
     const slot = document.createElement('div');
     slot.className = 'ability-slot' + (isUnavailable ? ' unavailable' : '');
+
+    // AI-generated per-ability icon. Appears only when the sprite sheet
+    // actually loaded (body.has-ability-sprites); otherwise the slot
+    // keeps its original key+name+bar layout clean.
+    if (critterSlug) {
+      const slotSuffix = ABILITY_SLOT_SUFFIX[i] ?? 'j';
+      const icon = document.createElement('span');
+      icon.className = `sprite-ability sprite-ability-${critterSlug}-${slotSuffix} ability-slot-icon`;
+      slot.appendChild(icon);
+    }
 
     const keyLabel = document.createElement('div');
     keyLabel.className = 'ability-key';

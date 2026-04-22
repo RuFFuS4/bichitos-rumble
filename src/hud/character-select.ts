@@ -228,25 +228,39 @@ function paintInfoPane(roster: RosterEntry[], presets: CritterConfig[], idx: num
   // Source 1: real abilities from gameplay config (playable characters)
   if (config) {
     const states = createAbilityStates(config.name);
-    for (const s of states) {
-      appendAbilityRow(s.def.key, s.def.name, s.def.description, false);
+    for (let i = 0; i < states.length; i++) {
+      const s = states[i];
+      appendAbilityRow(entry.id, i, s.def.key, s.def.name, s.def.description, false);
     }
   }
   // Source 2: planned abilities from roster (WIP characters)
   else if (entry.plannedAbilities) {
-    for (const a of entry.plannedAbilities) {
-      appendAbilityRow(a.key, a.name, a.description, true);
+    for (let i = 0; i < entry.plannedAbilities.length; i++) {
+      const a = entry.plannedAbilities[i];
+      appendAbilityRow(entry.id, i, a.key, a.name, a.description, true);
     }
   }
 }
 
-function appendAbilityRow(key: string, name: string, desc: string, planned: boolean): void {
+const ABILITY_SLOT_SUFFIX = ['j', 'k', 'l'];
+
+function appendAbilityRow(critterSlug: string, slotIdx: number, key: string, name: string, desc: string, planned: boolean): void {
   const row = document.createElement('div');
   row.className = 'ability-info-row';
 
+  // Ability icon (AI-generated sprite sheet). Hidden by CSS until
+  // body.has-ability-sprites is set by the preload in main.ts — if the
+  // sheet never loads, the row still reads fine with just key + name.
+  const slotSuffix = ABILITY_SLOT_SUFFIX[slotIdx] ?? 'j';
+  const icon = document.createElement('span');
+  icon.className = `sprite-ability sprite-ability-${critterSlug}-${slotSuffix} ability-info-icon`;
+  row.appendChild(icon);
+
+  // Key label without brackets — the CSS styles it as a chip (gold
+  // outlined pill) so the '[ ]' wrappers would read as double framing.
   const keyEl = document.createElement('span');
   keyEl.className = 'ability-info-key';
-  keyEl.textContent = `[${key}]`;
+  keyEl.textContent = key;
 
   const nameEl = document.createElement('span');
   nameEl.className = 'ability-info-name';

@@ -138,7 +138,12 @@ export class Game {
    *  critter's y crosses 0, we play a thud + spawn a dust puff and drop
    *  it from the map so subsequent frames don't re-fire. Cleared at the
    *  start of every countdown. */
-  private countdownDrops = new Map<Critter, { y: number; vy: number }>();
+  /** Per-critter drop state during the countdown entrance. `delay` staggers
+   *  the fall so the roster doesn't land in sync; `fallStarted` gates the
+   *  skeletal 'fall' clip so we only trigger it once when gravity kicks in. */
+  private countdownDrops = new Map<Critter, {
+    y: number; vy: number; delay: number; fallStarted: boolean;
+  }>();
   private displayRoster: RosterEntry[] = getDisplayRoster();
 
   // --- Online mode state (null when offline) ---
@@ -158,6 +163,10 @@ export class Game {
   private connectInProgress: boolean = false;
   /** Currently highlighted mode on the title screen (keyboard navigation). */
   private titleMode: 'bots' | 'online' = 'bots';
+  /** Offline-only pause flag. When true, the 'playing' branch of update()
+   *  short-circuits (no input, no bot AI, no physics) and the DOM pause
+   *  menu overlay is shown. Toggled by ESC and the pause buttons. */
+  private paused: boolean = false;
 
 
   constructor(scene: THREE.Scene) {
@@ -227,6 +236,10 @@ export class Game {
     // Mobile portal toggle button → same toggle as desktop P key
     setPortalToggleHandler(() => togglePortalExpanded());
 
+    // Pause menu wiring — ESC toggles pause in offline vs-bots while
+    // in 'playing'. The menu's three buttons resume / restart / quit.
+    this.initPauseMenu();
+
     // Portal entry: skip title + character select, go straight to match
     if (isFromPortal()) {
       this.selectedIdx = resolvePortalCharacter();
@@ -238,6 +251,54 @@ export class Game {
   }
 
   // -------------------------------------------------------------------------
+  // Pause menu (offline vs-bots only)
+  // -------------------------------------------------------------------------
+
+  private pauseMenuEl: HTMLElement | null = null;
+
+  private initPauseMenu(): void {
+    this.pauseMenuEl = document.getElementById('pause-menu');
+    if (!this.pauseMenuEl) {
+      console.warn('[Game] #pause-menu not found — pause unavailable');
+      return;
+    }
+
+    // ESC toggle during offline gameplay. We capture the event at the
+    // window level with `capture: true` so the menu opens even if some
+    // other handler later calls preventDefault.
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'Escape' || e.repeat) return;
+      // Only offline. Online has no pause (authoritative server).
+      if (this.phase !== 'playing' || this.room) return;
+      this.setPaused(!this.paused);
+      e.preventDefault();
+    });
+
+    document.getElementById('btn-pause-resume')
+      ?.addEventListener('click', () => this.setPaused(false));
+    document.getElementById('btn-pause-restart')
+      ?.addEventListener('click', () => {
+        this.setPaused(false);
+        if (!this.restartInProgress) this.restartMatch();
+      });
+    document.getElementById('btn-pause-quit')
+      ?.addEventListener('click', () => {
+        this.setPaused(false);
+        this.enterTitle();
+      });
+  }
+
+  private setPaused(v: boolean): void {
+    this.paused = v;
+    if (this.pauseMenuEl) {
+      this.pauseMenuEl.classList.toggle('hidden', !v);
+    }
+    // ESC also pushes a 'back' menu action via input.ts. Drop it so the
+    // title phase doesn't see a stale back-press on the next transition.
+    clearMenuActions();
+  }
+
+  // -------------------------------------------------------------------------
   // Phase transitions
   // -------------------------------------------------------------------------
 
@@ -245,6 +306,9 @@ export class Game {
     clearMenuActions();
     this.phase = 'title';
     this.selectForOnline = false;
+    // A quit-to-title from the pause menu leaves this.paused still true;
+    // clear here so the next match doesn't start frozen.
+    this.setPaused(false);
     document.body.classList.remove('match-active');
     document.body.classList.remove('online-mode');
     disposePortals();
@@ -355,8 +419,11 @@ export class Game {
     );
     setPortalLegend(hasStartPortal());
 
-    initAbilityHUD(this.player.abilityStates);
-    initAllLivesHUD(this.critters);
+    initAbilityHUD(
+      this.player.abilityStates,
+      getRosterEntry(this.player.config.name)?.id ?? null,
+    );
+    initAllLivesHUD(this.critters, this.playerIndex);
     showOverlay('Get Ready!');
 
     // Drop-from-sky entrance: before the "3" shows, hoist every critter
@@ -404,32 +471,49 @@ export class Game {
 
   /**
    * Start the drop-from-sky animation for every critter in the match.
-   * Called once at countdown entry. Critters are lifted to 12..15 units
-   * above the arena with a tiny initial downward velocity; updateCountdownDrops
-   * integrates gravity each frame until they land (~1.2-1.6 s in — before
-   * the "1" of the 3-2-1 finishes, so the platform is settled when GO!
-   * fires).
+   * Called once at countdown entry. Critters are lifted 10..16 units
+   * above the arena and EACH is staggered by a small per-index delay
+   * so the roster lands asynchronously (feels like actual falling from
+   * the sky instead of a synchronized rain). Each critter plays its
+   * skeletal 'fall' clip the instant its delay expires and gravity
+   * takes over; they snap to 'idle' the moment they touch the floor.
    */
   private initCountdownDrops(): void {
     this.countdownDrops.clear();
-    for (const c of this.critters) {
-      const h = 12 + Math.random() * 3;       // 12..15 world units
-      const vy = -(0.4 + Math.random() * 0.3); // small initial push
+    const n = this.critters.length;
+    for (let i = 0; i < n; i++) {
+      const c = this.critters[i];
+      const h = 10 + Math.random() * 6;                  // 10..16
+      // Staggered delay: every critter starts 0.15..0.35s after the
+      // previous one (plus jitter). Player (index 0) always starts
+      // immediately so the local experience doesn't feel sluggish.
+      const baseDelay = i === 0 ? 0 : 0.15 + Math.random() * 0.2;
+      const delay = i === 0 ? 0 : (baseDelay * i);
       c.mesh.position.y = h;
-      this.countdownDrops.set(c, { y: h, vy });
+      this.countdownDrops.set(c, { y: h, vy: 0, delay, fallStarted: false });
     }
   }
 
   /**
-   * Integrate gravity on every live drop. When a critter crosses y=0 we
-   * snap to ground, spawn a dust puff + play a headbutt-hit thud (nearest
-   * SFX we have to a generic impact without adding a new asset), and drop
-   * the entry so it doesn't re-fire.
+   * Integrate gravity on every live drop. Each critter waits for its
+   * own `delay` to run out before gravity kicks in and the 'fall' clip
+   * plays. On landing: snap to ground, spawn a dust puff, play impact
+   * SFX, and swap the skeletal state back to 'idle'.
    */
   private updateCountdownDrops(dt: number): void {
     if (this.countdownDrops.size === 0) return;
     const G = 22; // gravity, world units / s²
     for (const [c, state] of this.countdownDrops) {
+      if (state.delay > 0) {
+        state.delay -= dt;
+        // Hold altitude + keep feet-tucked pose (use idle clip so the
+        // critter is not frozen in bind pose while it waits).
+        continue;
+      }
+      if (!state.fallStarted) {
+        c.playSkeletal('fall', { fallback: 'idle' });
+        state.fallStarted = true;
+      }
       state.vy -= G * dt;
       state.y += state.vy * dt;
       if (state.y <= 0) {
@@ -437,6 +521,10 @@ export class Game {
         c.mesh.position.y = 0;
         spawnDustPuff(this.scene, c.x, 0, c.z);
         playSoundEffect('headbuttHit');
+        // Force the idle clip to take over — fall has clampWhenFinished
+        // so without an explicit swap the critter would freeze in its
+        // last fall-pose frame forever.
+        c.playSkeletal('idle', { force: true });
         this.countdownDrops.delete(c);
       } else {
         c.mesh.position.y = state.y;
@@ -633,7 +721,10 @@ export class Game {
       this.player = critter;
       this.critters = [critter];
       // Bloque B: all 3 abilities are live (charge_rush + ground_pound + frenzy)
-      initAbilityHUD(this.player.abilityStates);
+      initAbilityHUD(
+        this.player.abilityStates,
+        getRosterEntry(this.player.config.name)?.id ?? null,
+      );
       // Portal redirect params — name/color/speed come from the resolved config
       setPortalPlayerInfo(config.name, config.color, config.speed);
     }
@@ -642,7 +733,20 @@ export class Game {
     // Local may spawn before remote or vice-versa; rebuilding ensures both
     // rows exist once both players are in. Without this, only 1 row is
     // created and the second player's lives never appear in the HUD.
-    initAllLivesHUD([...this.onlineCritters.values()]);
+    initAllLivesHUD([...this.onlineCritters.values()], this.onlineLocalIndex());
+  }
+
+  /** Index of the local player inside the onlineCritters Map's insertion order.
+   *  Used to highlight the correct life-corner. Returns -1 if unknown. */
+  private onlineLocalIndex(): number {
+    const localSid = this.room?.sessionId;
+    if (!localSid) return -1;
+    let i = 0;
+    for (const sid of this.onlineCritters.keys()) {
+      if (sid === localSid) return i;
+      i++;
+    }
+    return -1;
   }
 
   /**
@@ -754,7 +858,7 @@ export class Game {
       c.isBot = !!p.isBot;
       if (wasBot !== c.isBot) {
         // Lives HUD shows a 🤖 badge per bot — rebuild so it appears.
-        initAllLivesHUD([...this.onlineCritters.values()]);
+        initAllLivesHUD([...this.onlineCritters.values()], this.onlineLocalIndex());
       }
       // Update ability states from server (for HUD) — guard ArraySchema access
       if (p.abilities && typeof p.abilities.length === 'number') {
@@ -1217,6 +1321,14 @@ export class Game {
       }
 
       case 'playing': {
+        // Offline pause: freeze input, bots, physics and cooldowns while
+        // the pause menu is up. Leave visuals (drag rotation etc.) alone.
+        // The DOM overlay is managed by setPaused().
+        if (this.paused) {
+          // Still update the HUD once so cooldown bars don't snap on resume.
+          updateAbilityHUD(this.player.abilityStates);
+          break;
+        }
         const effectiveDt = applyHitStop(dt);
         if (effectiveDt === 0) {
           updateAbilityHUD(this.player.abilityStates);
@@ -1434,8 +1546,11 @@ export class Game {
       .filter((p): p is string => typeof p === 'string');
     if (glbPaths.length > 0) preloadModels(glbPaths);
 
-    initAllLivesHUD(this.critters);
-    initAbilityHUD(this.player.abilityStates);
+    initAllLivesHUD(this.critters, this.playerIndex);
+    initAbilityHUD(
+      this.player.abilityStates,
+      getRosterEntry(this.player.config.name)?.id ?? null,
+    );
     hideOverlay();
   }
 

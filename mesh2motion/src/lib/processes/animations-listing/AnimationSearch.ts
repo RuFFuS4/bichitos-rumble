@@ -164,9 +164,14 @@ export class AnimationSearch extends EventTarget {
       const theme_name: string = this.theme_manager.get_current_theme()
       const is_custom_animation = animation_clip.metadata?.source_type === 'custom-import'
 
+      // [BICHITOS-FORK] Drop the `../` prefix — our fork serves the lab
+      // under `/animations/` (Vite `base: '/animations/'`). Upstream's
+      // `../animpreviews/` resolves to `/animpreviews/` (404); relative
+      // `animpreviews/` resolves to `/animations/animpreviews/` which is
+      // where the prebuild + publicDir actually places the webm files.
       const preview_data_src_attribute = is_custom_animation
         ? ''
-        : ` data-src="../animpreviews/${preview_folder}/${theme_name}_${anim_name}.webm"`
+        : ` data-src="animpreviews/${preview_folder}/${theme_name}_${anim_name}.webm"`
 
       const custom_animation_badge_html = is_custom_animation
         ? '<span class="anim-custom-badge" title="Custom animation" aria-label="Custom animation">C</span>'

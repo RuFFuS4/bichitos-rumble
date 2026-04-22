@@ -59,6 +59,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 14, speedMultiplier: 2.0, massMultiplier: 3.0 },
     { type: 'ground_pound', cooldown: 8.5, duration: 0.05, windUp: 0.5,
       radius: 4.2, force: 34 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
 
   // --- Bloque C: 7 remaining playables ---
@@ -87,6 +88,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 16, speedMultiplier: 2.3, massMultiplier: 1.7 },
     { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.35,
       radius: 4.6, force: 24 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
 
   // Sihans — Trapper: slow stomping specialist, long windUp, high force
@@ -95,6 +97,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 15, speedMultiplier: 2.1, massMultiplier: 2.0 },
     { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.6,
       radius: 3.5, force: 38 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
 
   // Kowalski — Mage: widest AoE, lowest force, ranged identity via area
@@ -103,6 +106,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 15, speedMultiplier: 2.4, massMultiplier: 1.5 },
     { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.4,
       radius: 5.0, force: 20 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
 
   // Cheeto — Assassin: fastest dash, mini AoE but dense
@@ -111,6 +115,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 26, speedMultiplier: 3.0, massMultiplier: 1.2 },
     { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.22,
       radius: 2.5, force: 30 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
 
   // Sebastian — Glass Cannon: small AoE, massive force, vicious charge
@@ -119,6 +124,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 22, speedMultiplier: 2.6, massMultiplier: 1.4 },
     { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.3,
       radius: 2.8, force: 40 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
 };
 

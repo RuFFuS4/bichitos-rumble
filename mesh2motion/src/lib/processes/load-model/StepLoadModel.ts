@@ -7,10 +7,15 @@ import { RigConfig } from '../../RigConfig.ts'
 import { Scene } from 'three/src/scenes/Scene.js'
 import { Mesh } from 'three/src/objects/Mesh.js'
 import { MathUtils } from 'three/src/math/MathUtils.js'
-import { BufferGeometry, Group, MeshPhongMaterial, Object3DEventMap, type Material, type Object3D } from 'three'
+import { BufferGeometry, Group, MeshPhongMaterial, Object3DEventMap, SkinnedMesh, type Material, type Object3D, type Skeleton } from 'three'
 import { ModalDialog } from '../../ModalDialog.ts'
 import { ModelCleanupUtility } from './ModelCleanupUtility.ts'
 import { PlatformUtils } from '../../PlatformUtils.ts'
+
+// [BICHITOS-FORK] Pre-rigged GLBs (Tripo Animate exports) ship a 39-bone
+// humanoid skeleton already bound to the mesh. Detection helper lives in
+// the Bichitos integration layer.
+import { isTripoRig } from '../../../BichitosTripoRetargeter.ts'
 
 // Note: EventTarget is a built-ininterface and do not need to import it
 export class StepLoadModel extends EventTarget {
@@ -38,6 +43,26 @@ export class StepLoadModel extends EventTarget {
 
   // controls whether to preserve all objects (bones, lights, etc.) or strip to meshes only
   private preserve_skinned_mesh: boolean = false
+
+  // [BICHITOS-FORK] When true, treat the loaded GLB as already containing
+  // a usable skeleton + skin weights. Skips the Fit Skeleton, Edit Skeleton,
+  // and Bind/Weight steps and jumps straight to the Animations Listing
+  // using the pre-existing rig. Set by `BichitosRosterPicker` before the
+  // load button fires.
+  private pre_rigged_mode: boolean = false
+
+  // [BICHITOS-FORK] When pre_rigged_mode triggers and the loaded GLB
+  // really does carry a Tripo-style rig, we cache the discovered
+  // SkinnedMesh instances + their shared Skeleton so the engine can hand
+  // them to StepWeightSkin without ever running the skinning algorithm.
+  // We also stash the entire loaded scene root — the engine moves its
+  // whole hierarchy (ParentNode → Armature → bones + SkinnedMesh) into
+  // a wrapper Group so rotate / scale transforms propagate to both
+  // mesh AND bones (critical: rotating the mesh alone leaves bones in
+  // place and skinning snaps vertices back).
+  private pre_rigged_skinned_meshes: SkinnedMesh[] = []
+  private pre_rigged_skeleton: Skeleton | null = null
+  private pre_rigged_root: Scene | null = null
 
   // for debugging, let's count these to help us test performance things better
   vertex_count = 0
@@ -257,6 +282,11 @@ export class StepLoadModel extends EventTarget {
     this.objects_count = 0
     this.mesh_has_broken_material = false
     this.preserve_skinned_mesh = false
+    // [BICHITOS-FORK] reset pre-rigged data so the next load starts clean
+    this.pre_rigged_mode = false
+    this.pre_rigged_skinned_meshes = []
+    this.pre_rigged_skeleton = null
+    this.pre_rigged_root = null
   }
 
   public reset_model_position (): void {
@@ -284,6 +314,63 @@ export class StepLoadModel extends EventTarget {
   public set_preserve_skinned_mesh (preserve: boolean): void {
     this.preserve_skinned_mesh = preserve
   }
+
+  // [BICHITOS-FORK] ----------------------------------------------------
+  /** Toggle pre-rigged mode. Call before triggering `#load-model-button`
+   *  so the next `process_loaded_scene` knows to keep the skeleton. */
+  public set_pre_rigged_mode (enabled: boolean): void {
+    this.pre_rigged_mode = enabled
+    if (!enabled) {
+      this.pre_rigged_skinned_meshes = []
+      this.pre_rigged_skeleton = null
+    }
+  }
+
+  public is_pre_rigged_mode (): boolean {
+    return this.pre_rigged_mode
+  }
+
+  /** Read the SkinnedMesh instances captured during the last pre-rigged
+   *  load. Empty if either the load wasn't pre-rigged or no skinned mesh
+   *  was actually found in the GLB. */
+  public get_pre_rigged_skinned_meshes (): SkinnedMesh[] {
+    return this.pre_rigged_skinned_meshes
+  }
+
+  public get_pre_rigged_skeleton (): Skeleton | null {
+    return this.pre_rigged_skeleton
+  }
+
+  /** The entire loaded GLB scene root (Tripo's ParentNode → Armature →
+   *  bones + SkinnedMesh). The engine moves its children into the
+   *  PreRiggedWrapper Group so rotate/scale transforms propagate. */
+  public get_pre_rigged_root (): Scene | null {
+    return this.pre_rigged_root
+  }
+
+  /** True when detection cached a valid pre-rigged skeleton on the
+   *  most recent load. Used by the "Use existing rig" button in Edit
+   *  Skeleton to decide whether to show itself. */
+  public has_pre_rigged_data (): boolean {
+    return this.pre_rigged_skinned_meshes.length > 0 && this.pre_rigged_skeleton !== null
+  }
+
+  /** Fire the `modelLoadedPreRigged` event against this step. Used by
+   *  the UI when the user clicks "Use existing rig" in Edit Skeleton —
+   *  the engine listens for the event and calls
+   *  `activate_pre_rigged_pipeline()`. */
+  public trigger_pre_rigged_activation (): boolean {
+    if (!this.has_pre_rigged_data()) {
+      console.warn('[BICHITOS-FORK] trigger_pre_rigged_activation: no cached data to activate')
+      return false
+    }
+    // Promote the cached scene into final_mesh_data for downstream
+    // accessors (the engine wrapper move operates on it).
+    if (this.pre_rigged_root) this.final_mesh_data = this.pre_rigged_root as Scene
+    this.dispatchEvent(new CustomEvent('modelLoadedPreRigged'))
+    return true
+  }
+  // [BICHITOS-FORK] end ------------------------------------------------
 
   public load_model_file (model_file_path: string | ArrayBuffer | null, file_extension: string): void {
     if (file_extension === 'fbx') {
@@ -365,6 +452,25 @@ export class StepLoadModel extends EventTarget {
   }
 
   private process_loaded_scene (loaded_scene: Scene): void {
+    // [BICHITOS-FORK] ALWAYS detect + cache a Tripo-style pre-rigged
+    // skeleton if the loaded GLB carries one. The detection is silent —
+    // it just stashes references so a later button click ("Use model's
+    // existing rig" in Edit Skeleton) can jump to AnimationsListing
+    // without reloading. The normal MM flow (Fit / Edit / Bind) runs
+    // uninterrupted on the parallel stripped copy.
+    //
+    // If `pre_rigged_mode` was set explicitly (e.g. by a button that
+    // wants to short-circuit the flow), we also dispatch the activation
+    // event here, which drives the engine into pre-rigged mode.
+    const detected = this.try_capture_pre_rigged_scene(loaded_scene, /*dispatchEvent*/ this.pre_rigged_mode)
+    if (this.pre_rigged_mode && detected) return
+    if (this.pre_rigged_mode && !detected) {
+      console.warn(
+        '[BICHITOS-FORK] pre_rigged_mode requested but no SkinnedMesh/Tripo rig detected in loaded GLB. Falling back to normal rigging flow.'
+      )
+      this.pre_rigged_mode = false
+    }
+
     if (this.preserve_skinned_mesh) {
       this.original_model_data = loaded_scene
     } else {
@@ -441,6 +547,58 @@ export class StepLoadModel extends EventTarget {
 
     this.dispatchEvent(new CustomEvent('modelLoaded'))
   }
+
+  // [BICHITOS-FORK] -----------------------------------------------------
+  /** Attempts to capture the pre-rigged data from a freshly-loaded scene.
+   *  Returns true when a usable SkinnedMesh + Tripo skeleton was found
+   *  and cached. Only dispatches `modelLoadedPreRigged` when `dispatch`
+   *  is true — detection is otherwise silent, for the "opt-in from
+   *  Edit Skeleton" flow where the normal MM rigging happens on the
+   *  stripped copy and the user later activates pre-rigged manually.
+   *  Returns false when the scene didn't carry what we need. */
+  private try_capture_pre_rigged_scene (loaded_scene: Scene, dispatch: boolean = true): boolean {
+    const skinned: SkinnedMesh[] = []
+    let skeleton: Skeleton | null = null
+
+    loaded_scene.traverse((child) => {
+      const sm = child as SkinnedMesh
+      if (sm?.isSkinnedMesh && sm.skeleton) {
+        skinned.push(sm)
+        // All Tripo critters share a single skeleton across mesh parts;
+        // grab the first one we find.
+        if (!skeleton) skeleton = sm.skeleton
+      }
+    })
+
+    if (!skinned.length || !skeleton) return false
+    if (!isTripoRig(skeleton)) {
+      console.warn(
+        '[BICHITOS-FORK] SkinnedMesh found but skeleton is not the Tripo rig — bone count or signature bones missing. Pre-rigged mode aborted.'
+      )
+      return false
+    }
+
+    // Keep the original scene as the canonical model data so downstream
+    // accessors (model_meshes, calculate_geometry_and_materials) still
+    // work without surprise — but we also publish the SkinnedMesh array
+    // for the engine to hand off directly to StepWeightSkin.
+    this.original_model_data = loaded_scene
+    this.original_model_data.name = 'PreRigged Scene'
+    this.original_model_data.traverse((child) => { child.castShadow = true })
+
+    this.pre_rigged_skinned_meshes = skinned
+    this.pre_rigged_skeleton = skeleton
+    this.pre_rigged_root = loaded_scene
+    // Only overwrite final_mesh_data when we're actually short-circuiting
+    // the flow. In silent-cache mode the normal flow needs the stripped
+    // scene reference downstream.
+    if (dispatch) {
+      this.final_mesh_data = loaded_scene as Scene
+      this.dispatchEvent(new CustomEvent('modelLoadedPreRigged'))
+    }
+    return true
+  }
+  // [BICHITOS-FORK] end -------------------------------------------------
 
   public model_meshes (): Scene {
     // if the scene has some children in it, that means we already built it

@@ -1,8 +1,8 @@
 # Submission Checklist — Bichitos Rumble
 
-## ⚠️ Pending user action
+## ✅ Submitted
 
-- [ ] **SUBMIT VIA GOOGLE FORM before May 1, 2026 @ 13:37 UTC** → https://forms.gle/bGG4e3uD9PUUJKUc7
+- [x] **SUBMITTED via Google Form on 2026-04-23** (well before May 1 deadline) → https://forms.gle/bGG4e3uD9PUUJKUc7
 
 ## Jam Info
 - **Deadline**: May 1, 2026 @ 13:37 UTC

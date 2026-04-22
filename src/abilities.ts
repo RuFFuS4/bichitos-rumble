@@ -221,8 +221,8 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   ],
 
   // Trunk — elephant Bruiser: slow, heavy, devastating
-  // Kit built from base factories with heavy tuning. No ultimate in Bloque B;
-  // adding one later is a pure data change.
+  // Kit built from base factories with heavy tuning. ULTI is a
+  // Frenzy placeholder (+speed +mass) until the final design lands.
   Trunk: [
     makeChargeRush({
       name: 'Trunk Ram',
@@ -241,6 +241,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       windUp: 0.5,
       cooldown: 8.5,
     }),
+    makeFrenzy({ name: 'Stampede', description: 'Enraged charge: +speed, +mass' }),
   ],
 
   // --- Bloque C: 7 remaining playables ---
@@ -283,6 +284,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Poison Cloud', description: 'Wide toxic burst, area control',
       radius: 4.6, force: 24, windUp: 0.35, cooldown: 7.0,
     }),
+    makeFrenzy({ name: 'Hypnosapo', description: 'Venom rush: +speed, +power' }),
   ],
 
   Sihans: [
@@ -295,6 +297,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Tremor', description: 'Long windup, devastating stomp',
       radius: 3.5, force: 38, windUp: 0.6, cooldown: 7.5,
     }),
+    makeFrenzy({ name: 'Diggy Rush', description: 'Tunnel frenzy: +speed, +power' }),
   ],
 
   Kowalski: [
@@ -307,6 +310,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Arctic Burst', description: 'Massive area blast, low force',
       radius: 5.0, force: 20, windUp: 0.4, cooldown: 7.0,
     }),
+    makeFrenzy({ name: 'Blizzard', description: 'Arctic fury: +speed, +power' }),
   ],
 
   Cheeto: [
@@ -319,6 +323,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Paw Stomp', description: 'Tight dense impact',
       radius: 2.5, force: 30, windUp: 0.22, cooldown: 6.0,
     }),
+    makeFrenzy({ name: 'Tiger Rage', description: 'Predator instinct: +speed, +power' }),
   ],
 
   Sebastian: [
@@ -331,6 +336,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Big Claw Slam', description: 'Small radius, brutal force',
       radius: 2.8, force: 40, windUp: 0.3, cooldown: 6.5,
     }),
+    makeFrenzy({ name: 'Red Claw', description: 'Glass-cannon rage: +speed, +power' }),
   ],
 };
 

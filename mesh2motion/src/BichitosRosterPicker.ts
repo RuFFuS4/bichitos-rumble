@@ -36,6 +36,14 @@
 // full list of deltas.
 // ---------------------------------------------------------------------------
 
+import {
+  MM_HUMAN_TO_TRIPO_DEFAULT,
+  MM_HUMAN_BONE_ORDER,
+  setActiveMapping,
+  getActiveMapping,
+  resetActiveMapping,
+} from './BichitosTripoRetargeter';
+
 interface RosterEntry {
   /** Matches the filename stem in `public/models/critters/<id>.glb`. */
   id: string;
@@ -208,6 +216,102 @@ const PANEL_CSS = `
   border-radius: 3px;
   font-size: 12px;
 }
+
+/* Bone pairing panel — shown below the roster grid when a pre-rigged
+   critter is loaded. Lets the user manually match MM template bones
+   against the model's own skeleton, one row at a time. Changes call
+   setActiveMapping() and reload the animation library so the new
+   mapping drives clip playback in real time. */
+#bichitos-bone-pairing-panel {
+  max-width: 340px;
+  background: rgba(255, 220, 92, 0.06);
+  border: 1px solid rgba(255, 220, 92, 0.35);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 0 0 14px 0;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  color: inherit;
+  display: none;
+}
+#bichitos-bone-pairing-panel.visible { display: block; }
+#bichitos-bone-pairing-panel h3 {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #ffdc5c;
+  font-weight: 700;
+}
+#bichitos-bone-pairing-panel .subtitle {
+  font-size: 10px;
+  opacity: 0.75;
+  margin-bottom: 10px;
+  line-height: 1.35;
+}
+#bichitos-bone-pairing-panel .bone-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+#bichitos-bone-pairing-panel .bone-row {
+  display: grid;
+  grid-template-columns: 85px 1fr;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+#bichitos-bone-pairing-panel .bone-row label {
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #9cd0ff;
+  text-align: right;
+  padding-right: 2px;
+  letter-spacing: 0.3px;
+}
+#bichitos-bone-pairing-panel .bone-row select {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #eee;
+  padding: 3px 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  width: 100%;
+}
+#bichitos-bone-pairing-panel .bone-row select:focus {
+  border-color: #ffdc5c;
+  outline: none;
+}
+#bichitos-bone-pairing-panel .actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+#bichitos-bone-pairing-panel .actions button {
+  flex: 1;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #eee;
+  padding: 6px 8px;
+  font-size: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+#bichitos-bone-pairing-panel .actions button:hover {
+  background: rgba(255, 220, 92, 0.15);
+  border-color: #ffdc5c;
+}
+#bichitos-bone-pairing-panel .status {
+  font-size: 9px;
+  opacity: 0.6;
+  margin-top: 6px;
+  font-style: italic;
+}
 `;
 
 function injectStyles(): void {
@@ -278,6 +382,219 @@ function markActiveCard(critterId: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// Bone pairing panel — C (manual Tripo ↔ MM mapping)
+// ---------------------------------------------------------------------------
+
+/** Human-readable labels for each MM bone so non-rig-nerds can parse
+ *  the list. Keyed by the same names as MM_HUMAN_BONE_ORDER. */
+const MM_BONE_LABELS: Record<string, string> = {
+  pelvis: 'hips',
+  spine_01: 'lower spine',
+  spine_02: 'mid spine',
+  spine_03: 'upper spine',
+  neck_01: 'neck',
+  head: 'head',
+  clavicle_l: 'L shoulder', upperarm_l: 'L upper arm', lowerarm_l: 'L forearm', hand_l: 'L hand',
+  clavicle_r: 'R shoulder', upperarm_r: 'R upper arm', lowerarm_r: 'R forearm', hand_r: 'R hand',
+  thigh_l: 'L thigh', calf_l: 'L calf', foot_l: 'L foot',
+  thigh_r: 'R thigh', calf_r: 'R calf', foot_r: 'R foot',
+};
+
+function buildBonePairingPanel(): HTMLElement {
+  const panel = document.createElement('div');
+  panel.id = 'bichitos-bone-pairing-panel';
+
+  const title = document.createElement('h3');
+  title.textContent = 'Bone Mapping';
+  panel.appendChild(title);
+
+  const subtitle = document.createElement('div');
+  subtitle.className = 'subtitle';
+  subtitle.innerHTML =
+    'Match Mesh2Motion template bones (left) to the bones in your model (right). ' +
+    'Changes reload animations on the fly. Set to <code>(skip)</code> to drop a bone.';
+  subtitle.querySelector('code')?.setAttribute('style', 'background: rgba(255,220,92,0.14); color: #ffdc5c; padding: 1px 4px; border-radius: 3px;');
+  panel.appendChild(subtitle);
+
+  const rowsContainer = document.createElement('div');
+  rowsContainer.className = 'bone-rows';
+  rowsContainer.id = 'bichitos-bone-rows';
+  panel.appendChild(rowsContainer);
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+
+  const resetBtn = document.createElement('button');
+  resetBtn.type = 'button';
+  resetBtn.textContent = 'Reset defaults';
+  resetBtn.addEventListener('click', () => {
+    resetActiveMapping();
+    // Re-render with defaults + trigger reload
+    const skel = getCurrentPreRiggedSkeleton();
+    if (skel) renderBonePairingRows(skel);
+    reloadAnimationsFromMapping();
+  });
+  actions.appendChild(resetBtn);
+
+  const reloadBtn = document.createElement('button');
+  reloadBtn.type = 'button';
+  reloadBtn.textContent = 'Reload anims';
+  reloadBtn.addEventListener('click', () => reloadAnimationsFromMapping());
+  actions.appendChild(reloadBtn);
+
+  panel.appendChild(actions);
+
+  const status = document.createElement('div');
+  status.className = 'status';
+  status.id = 'bichitos-bone-pairing-status';
+  status.textContent = 'Load a critter to see its bones.';
+  panel.appendChild(status);
+
+  return panel;
+}
+
+/** Rebuild the rows for the current pre-rigged skeleton. Each row = one
+ *  MM bone (label) + a <select> listing ALL bones from the loaded
+ *  model's skeleton plus a "(skip)" sentinel option. Pre-selects the
+ *  current active mapping value. */
+function renderBonePairingRows(skeleton: { bones: { name: string }[] }): void {
+  const container = document.getElementById('bichitos-bone-rows');
+  const panel = document.getElementById('bichitos-bone-pairing-panel');
+  const status = document.getElementById('bichitos-bone-pairing-status');
+  if (!container || !panel) return;
+
+  container.innerHTML = '';
+
+  const modelBoneNames = skeleton.bones.map((b) => b.name).slice().sort();
+  const mapping = getActiveMapping();
+
+  for (const mmName of MM_HUMAN_BONE_ORDER) {
+    const row = document.createElement('div');
+    row.className = 'bone-row';
+
+    const label = document.createElement('label');
+    const labelText = MM_BONE_LABELS[mmName] ?? mmName;
+    label.textContent = labelText;
+    label.title = `${mmName} (MM template)`;
+    row.appendChild(label);
+
+    const sel = document.createElement('select');
+    sel.dataset.mmBone = mmName;
+
+    // Skip option
+    const skip = document.createElement('option');
+    skip.value = '';
+    skip.textContent = '(skip)';
+    sel.appendChild(skip);
+
+    // All model bones
+    for (const bn of modelBoneNames) {
+      const opt = document.createElement('option');
+      opt.value = bn;
+      opt.textContent = bn;
+      sel.appendChild(opt);
+    }
+
+    // Preselect
+    sel.value = mapping[mmName] ?? '';
+
+    sel.addEventListener('change', () => onMappingRowChanged());
+    row.appendChild(sel);
+    container.appendChild(row);
+  }
+
+  if (status) {
+    status.textContent = `Model has ${modelBoneNames.length} bones. Edit rows to change how clips map.`;
+  }
+  panel.classList.add('visible');
+}
+
+function hideBonePairingPanel(): void {
+  const panel = document.getElementById('bichitos-bone-pairing-panel');
+  if (panel) panel.classList.remove('visible');
+}
+
+/** Add a "Use model's existing rig" button inside the Edit Skeleton
+ *  step (next to the Bind Pose button). Clicking it activates the
+ *  pre-rigged pipeline — skips bind, jumps to AnimationsListing, shows
+ *  the bone pairing panel. Only functional when the loaded GLB carried
+ *  a Tripo-style skeleton (detected silently during the normal load). */
+function injectUseExistingRigButton(): void {
+  if (document.getElementById('bichitos-use-existing-rig-btn')) return;
+  const bindPoseBtn = document.getElementById('action_bind_pose');
+  if (!bindPoseBtn) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'bichitos-use-existing-rig-btn';
+  btn.type = 'button';
+  btn.textContent = '🔗 Use existing rig (skip binding)';
+  btn.style.cssText = 'background: rgba(255, 220, 92, 0.15); border: 1px solid #ffdc5c; color: #ffdc5c; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; margin-right: 8px;';
+  btn.title = 'Use the skeleton that came with the model (Tripo Animate) instead of the MM template. Jumps straight to the animations step + bone mapping panel.';
+
+  btn.addEventListener('click', () => {
+    const engine = (window as unknown as {
+      __bichitos_mm_engine?: {
+        load_model_step: {
+          has_pre_rigged_data: () => boolean;
+          trigger_pre_rigged_activation: () => boolean;
+        };
+      };
+    }).__bichitos_mm_engine;
+    if (!engine) {
+      console.warn('[BichitosRosterPicker] engine not on window; button no-op');
+      return;
+    }
+    if (!engine.load_model_step.has_pre_rigged_data()) {
+      alert('This model doesn\'t ship a pre-rigged skeleton — continue with the MM template rig (click Bind Pose).');
+      return;
+    }
+    engine.load_model_step.trigger_pre_rigged_activation();
+  });
+
+  // Insert before the Bind Pose button
+  bindPoseBtn.parentNode?.insertBefore(btn, bindPoseBtn);
+}
+
+/** Read the current DOM state and push it as the new active mapping,
+ *  then reload animations so the change takes effect immediately. */
+function onMappingRowChanged(): void {
+  const rows = document.querySelectorAll<HTMLSelectElement>('#bichitos-bone-rows select[data-mm-bone]');
+  const mapping: Record<string, string> = {};
+  rows.forEach((sel) => {
+    const mm = sel.dataset.mmBone;
+    if (mm && sel.value) mapping[mm] = sel.value;
+    // Empty value ("(skip)") → simply omit the key.
+  });
+  setActiveMapping(mapping);
+  reloadAnimationsFromMapping();
+}
+
+function reloadAnimationsFromMapping(): void {
+  const engine = (window as unknown as {
+    __bichitos_mm_engine?: {
+      is_pre_rigged_active?: boolean;
+      reload_animations_for_current_mapping?: () => void;
+    };
+  }).__bichitos_mm_engine;
+  if (!engine || !engine.is_pre_rigged_active) return;
+  engine.reload_animations_for_current_mapping?.();
+  const status = document.getElementById('bichitos-bone-pairing-status');
+  if (status) {
+    const filled = Object.keys(getActiveMapping()).length;
+    status.textContent = `Mapping applied. ${filled} MM bones → model bones. Animations reloaded.`;
+  }
+}
+
+function getCurrentPreRiggedSkeleton(): { bones: { name: string }[] } | null {
+  const engine = (window as unknown as {
+    __bichitos_mm_engine?: {
+      load_model_step?: { get_pre_rigged_skeleton?: () => { bones: { name: string }[] } | null };
+    };
+  }).__bichitos_mm_engine;
+  return engine?.load_model_step?.get_pre_rigged_skeleton?.() ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // Load flow — wires into mesh2motion's existing #load-model-button path
 // ---------------------------------------------------------------------------
 
@@ -303,6 +620,14 @@ function loadCritter(critter: RosterEntry): void {
   }
   modelSelect.value = url;
 
+  // [BICHITOS-FORK] Normal MM flow — user goes through LoadSkeleton +
+  // EditSkeleton like any other import. A "Use model's existing rig"
+  // button we inject into the Edit Skeleton tools lets the user opt in
+  // to the pre-rigged path (skip bind, jump to AnimationsListing with
+  // bone pairing) when they want to. This keeps the lab predictable:
+  // rotate/scale/show-skeleton all work in their normal context, and
+  // the bone-pairing panel only appears after explicit opt-in.
+
   // Trigger mesh2motion's normal load path.
   loadButton.click();
   console.log(`[BichitosRosterPicker] loading ${critter.name} (${url}), suggested rig: ${critter.suggestedRig}`);
@@ -312,7 +637,8 @@ function loadCritter(critter: RosterEntry): void {
 
   // The skeleton dropdown gets populated asynchronously once the model
   // lands on the skeleton-selection step. We watch for it and preselect
-  // the suggested rig when it appears.
+  // the suggested rig when it appears. (No-op when pre-rigged path took
+  // over, since Skeleton step is skipped.)
   preselectSkeletonWhenReady(critter.suggestedRig);
 }
 
@@ -420,7 +746,42 @@ function boot(): void {
   injectStyles();
   const panel = buildPanel();
   loadModelTools.parentNode?.insertBefore(panel, loadModelTools);
+
+  const pairingPanel = buildBonePairingPanel();
+  loadModelTools.parentNode?.insertBefore(pairingPanel, loadModelTools);
+
+  injectUseExistingRigButton();
+
   attachExportHandlers();
+
+  // Hook into the pre-rigged load event so the pairing panel re-renders
+  // its rows with the new critter's bone list every time a card is
+  // clicked. Poll for the engine until ready (script loads in parallel
+  // with CustomModelUploadBootstrap).
+  const wireEngineListener = (): void => {
+    const engine = (window as unknown as {
+      __bichitos_mm_engine?: {
+        load_model_step?: {
+          addEventListener?: (ev: string, cb: () => void) => void;
+          get_pre_rigged_skeleton?: () => { bones: { name: string }[] } | null;
+        };
+      };
+    }).__bichitos_mm_engine;
+    if (!engine?.load_model_step?.addEventListener) {
+      setTimeout(wireEngineListener, 100);
+      return;
+    }
+    engine.load_model_step.addEventListener('modelLoadedPreRigged', () => {
+      const skel = engine.load_model_step?.get_pre_rigged_skeleton?.();
+      if (skel) renderBonePairingRows(skel);
+    });
+    engine.load_model_step.addEventListener('modelLoaded', () => {
+      // Regular (non-pre-rigged) load → hide the pairing panel.
+      hideBonePairingPanel();
+    });
+  };
+  wireEngineListener();
+
   console.log('[BichitosRosterPicker] mounted');
 }
 

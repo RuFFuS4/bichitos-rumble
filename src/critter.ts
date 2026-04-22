@@ -567,14 +567,30 @@ export class Critter {
     group.position.set(...entry.offset);
     group.position.y += entry.pivotY;
 
-    // Ensure all GLB materials support transparency (needed for immunity blink)
+    // Normalise GLB materials for our shading pipeline:
+    //   - transparent: true → needed for the immunity blink pass
+    //   - metalness/roughness neutralised when the source exported a
+    //     full-PBR rig (Meshy does `metalness: 1`), which reads as dark
+    //     matte without an envMap and kills the saturated colours the
+    //     base map actually contains. Forcing metalness=0 + roughness=0.7
+    //     lets the diffuse map drive the look, matching the flat cartoon
+    //     look from the source visor. Tripo exports already low-metal,
+    //     so we only touch materials that came in with > 0.5.
     group.traverse((node) => {
       const m = node as THREE.Mesh;
       if (!m.isMesh) return;
-      const mat = m.material as THREE.MeshStandardMaterial;
-      if (mat.isMeshStandardMaterial) {
-        mat.transparent = true;
-        mat.opacity = 1.0;
+      const raw = m.material;
+      const mats = Array.isArray(raw) ? raw : [raw];
+      for (const mat of mats) {
+        const std = mat as THREE.MeshStandardMaterial;
+        if (!std.isMeshStandardMaterial) continue;
+        std.transparent = true;
+        std.opacity = 1.0;
+        if (std.metalness > 0.5) {
+          std.metalness = 0;
+          std.roughness = 0.7;
+          std.needsUpdate = true;
+        }
       }
     });
 

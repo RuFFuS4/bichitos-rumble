@@ -6,6 +6,10 @@ import { RigConfig } from '../../RigConfig.ts'
 import { type AnimationClipMetadata, type TransformedAnimationClipPair } from './interfaces/TransformedAnimationClipPair.ts'
 import { LoadError, NoAnimationsError } from './AnimationImportErrors.ts'
 
+// [BICHITOS-FORK] Retargeter for clips authored against MM's human
+// template that need to drive a Tripo Animate skeleton.
+import { retargetClipForTripo } from '../../../BichitosTripoRetargeter.ts'
+
 export interface AnimationLoadProgress {
   loaded: number
   total: number
@@ -27,6 +31,13 @@ export class AnimationLoader extends EventTarget {
 
   private skeleton_type: SkeletonType | null = null
 
+  // [BICHITOS-FORK] When true, every freshly-loaded clip gets its track
+  // names rewritten from MM's human template names ('upperarm_l',
+  // 'spine_01', …) to the Tripo rig names ('L_Upperarm', 'Spine01', …)
+  // so the clips actually drive bones that exist on a pre-rigged
+  // critter. Toggled by Mesh2MotionEngine.activate_pre_rigged_pipeline.
+  private tripo_retarget_mode: boolean = false
+
   private create_default_metadata (): AnimationClipMetadata {
     return {
       source_type: 'default-library',
@@ -39,6 +50,11 @@ export class AnimationLoader extends EventTarget {
    */
   public set_animations_file_path (path: string): void {
     this.animations_file_path = path
+  }
+
+  // [BICHITOS-FORK] Toggle the post-load retargeting pass.
+  public set_tripo_retarget_mode (enabled: boolean): void {
+    this.tripo_retarget_mode = enabled
   }
 
   /**
@@ -231,13 +247,27 @@ export class AnimationLoader extends EventTarget {
     metadata_override: Partial<AnimationClipMetadata> = {}
   ): TransformedAnimationClipPair[] {
     // Deep clone the animations to avoid modifying originals
-    const cloned_animations = AnimationUtility.deep_clone_animation_clips(raw_animations)
+    let cloned_animations = AnimationUtility.deep_clone_animation_clips(raw_animations)
 
     // Clean track data (remove position tracks except for specific cases)
     AnimationUtility.clean_track_data(cloned_animations, this.skeleton_type)
 
     // Apply skeleton scaling to position keyframes
     AnimationUtility.apply_skeleton_scale_to_position_keyframes(cloned_animations, skeleton_scale)
+
+    // [BICHITOS-FORK] Retarget tracks to the Tripo skeleton naming
+    // convention. This runs AFTER track-cleaning and scale because both
+    // of those expect MM-template names; renaming earlier would silence
+    // them. Clips that retarget to nothing (only finger tracks, etc.)
+    // are dropped from the listing.
+    if (this.tripo_retarget_mode) {
+      const retargeted: AnimationClip[] = []
+      for (const clip of cloned_animations) {
+        const r = retargetClipForTripo(clip)
+        if (r) retargeted.push(r)
+      }
+      cloned_animations = retargeted
+    }
 
     // Create the transformed pairs
     return cloned_animations.map(clip => ({

@@ -15,10 +15,17 @@ import { Critter, type CritterConfig } from './critter';
 // Pedestal dimensions — beefed up from the first pass so the trophy
 // silhouette reads clearly at every viewport size. The critter sits
 // slightly above the rim to avoid feet clipping into the stone.
-const PEDESTAL_HEIGHT = 0.50;
-const PEDESTAL_RADIUS_TOP = 1.45;
-const PEDESTAL_RADIUS_BOT = 1.72;
+const PEDESTAL_HEIGHT = 0.55;
+const PEDESTAL_RADIUS_TOP = 1.55;
+const PEDESTAL_RADIUS_BOT = 1.85;
 const CRITTER_LIFT = PEDESTAL_HEIGHT + 0.06;
+
+// Auto-fit target — every critter is uniformly scaled so the max
+// dimension of its idle-pose silhouette (height OR width OR depth)
+// lands on this value. Preserves per-critter proportions (Trunk tall
+// and slim, Sebastian wide and short, Sihans long and low) while
+// keeping the roster visually coherent at the same "size on pedestal".
+const TARGET_SILHOUETTE_MAX = 1.9;
 
 // Manual rotation smoothing (drag → target, render → eased)
 const ROTATION_SMOOTH_SPEED = 12;
@@ -28,8 +35,23 @@ let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
 let camera: THREE.PerspectiveCamera | null = null;
 let holder: THREE.Group | null = null;
+/** Inner group that owns the per-critter uniform scale. Kept separate
+ *  from `holder` so drag rotation stays at identity for the fit math. */
+let fitWrapper: THREE.Group | null = null;
 let critter: Critter | null = null;
 let visible = false;
+
+// Auto-fit state — a short polling pass runs after each swap. It
+// accumulates the MAX silhouette envelope across ~1 second of idle
+// loop (some clips move enough that a single-frame measurement would
+// undersize the critter for parts of its cycle). Once the sample
+// window closes, applies the uniform scale and releases the interval.
+let fitIntervalId: number | null = null;
+let fitStartedAt = 0;
+let fitMaxDim = 0;
+const FIT_SAMPLE_MS = 900;
+const TMP_BOX = new THREE.Box3();
+const TMP_VEC = new THREE.Vector3();
 
 // Rotation state
 let targetRotationY = 0;
@@ -54,11 +76,12 @@ export function initPreview(canvasEl: HTMLCanvasElement): void {
 
   scene = new THREE.Scene();
 
-  // Slightly tighter framing so the critter + pedestal fill the frame
-  // instead of floating in a big dark field. Camera pitched a touch
-  // higher to get a 3/4 hero angle on the model.
-  camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
-  camera.position.set(0, 1.95, 4.8);
+  // Framing: the critter is uniformly scaled to ~1.9u silhouette, so
+  // the camera is tuned around that target. FOV 30° + distance 5.2u
+  // yields ~2.8u visible height → ~68% coverage with headroom for
+  // idle-loop wiggle. 3/4 hero angle (camera y=2.0, lookAt y=1.05).
+  camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+  camera.position.set(0, 2.0, 5.2);
   camera.lookAt(0, 1.05, 0);
 
   // Lighting — three-point rig. Key from front-right for shape, fill
@@ -83,9 +106,13 @@ export function initPreview(canvasEl: HTMLCanvasElement): void {
   // Pedestal — standard cylinder, will vary per critter later
   buildPedestal();
 
-  // Holder group that gets rotated by drag
+  // Holder group that gets rotated by drag. The inner fitWrapper owns
+  // the per-critter uniform scale so rotation never interferes with
+  // the auto-fit transform.
   holder = new THREE.Group();
   holder.position.y = CRITTER_LIFT;
+  fitWrapper = new THREE.Group();
+  holder.add(fitWrapper);
   scene.add(holder);
 
   // Pointer handlers for drag rotation (desktop + mobile via pointer events)
@@ -122,6 +149,15 @@ export function swapPreviewCritter(config: CritterConfig): void {
   swapCritter(config);
 }
 
+// Debug-only read hook for MCP / devtools during the character-select
+// polish pass. Returns the current preview critter + scene refs.
+// Removed before ship.
+if (typeof window !== 'undefined') {
+  (window as unknown as { __previewSnap?: () => unknown }).__previewSnap = () => ({
+    scene, holder, critter, camera,
+  });
+}
+
 /** Call every frame from main loop. Renders if visible. */
 export function tickPreview(dt: number): void {
   if (!visible || !renderer || !scene || !camera || !holder || !critter) return;
@@ -135,6 +171,65 @@ export function tickPreview(dt: number): void {
   critter.update(dt);
 
   renderer.render(scene, camera);
+}
+
+/**
+ * Samples the live bone silhouette. Tracks the max(h, w, d) so the
+ * scale fits the WIDEST-reaching pose across the idle loop — avoids
+ * undersizing for critters whose idle has wide arm swings.
+ *
+ * Runs every frame while the sample window is open; once it closes,
+ * applies the uniform scale and clears itself.
+ */
+function sampleAndMaybeApplyFit(): void {
+  if (!critter || !fitWrapper) return;
+  const root = critter.mesh;
+  root.updateMatrixWorld(true);
+  TMP_BOX.makeEmpty();
+  root.traverse((n) => {
+    if ((n as THREE.Bone).isBone) {
+      (n as THREE.Bone).getWorldPosition(TMP_VEC);
+      TMP_BOX.expandByPoint(TMP_VEC);
+    } else if ((n as THREE.Mesh).isMesh && !(n as THREE.SkinnedMesh).isSkinnedMesh) {
+      const m = n as THREE.Mesh;
+      if (!m.visible) return;
+      TMP_BOX.expandByObject(m);
+    }
+  });
+  if (!TMP_BOX.isEmpty()) {
+    const h = TMP_BOX.max.y - TMP_BOX.min.y;
+    const w = TMP_BOX.max.x - TMP_BOX.min.x;
+    const d = TMP_BOX.max.z - TMP_BOX.min.z;
+    const m = Math.max(h, w, d);
+    if (m > fitMaxDim) fitMaxDim = m;
+  }
+  if (performance.now() - fitStartedAt >= FIT_SAMPLE_MS) {
+    if (fitMaxDim > 0.2) {
+      fitWrapper.scale.setScalar(TARGET_SILHOUETTE_MAX / fitMaxDim);
+    }
+    if (fitIntervalId !== null) {
+      clearInterval(fitIntervalId);
+      fitIntervalId = null;
+    }
+  }
+}
+
+function startAutoFitPoll(): void {
+  if (fitIntervalId !== null) {
+    clearInterval(fitIntervalId);
+    fitIntervalId = null;
+  }
+  fitStartedAt = performance.now();
+  fitMaxDim = 0;
+  fitIntervalId = window.setInterval(() => {
+    sampleAndMaybeApplyFit();
+    // Hard stop guard — should be redundant with the time check
+    // inside, but keeps us safe if the critter dismounts mid-sample.
+    if (performance.now() - fitStartedAt > FIT_SAMPLE_MS + 2000 && fitIntervalId !== null) {
+      clearInterval(fitIntervalId);
+      fitIntervalId = null;
+    }
+  }, 60);
 }
 
 // ---------------------------------------------------------------------------
@@ -210,23 +305,28 @@ function buildPedestal(): void {
 }
 
 function swapCritter(config: CritterConfig): void {
-  if (!holder || !scene) return;
+  if (!holder || !scene || !fitWrapper) return;
 
   // Remove previous critter and dispose all its GPU resources.
   // Each Critter has 8 meshes (body, head, 2 eyes, 2 pupils), each with its
   // own geometry + material. Without explicit dispose, Three.js will NOT
   // release them and rapid arrow-key navigation would leak VRAM.
   if (critter) {
-    holder.remove(critter.mesh);
+    fitWrapper.remove(critter.mesh);
     disposeMeshTree(critter.mesh);
     critter = null;
   }
 
   // Create a new Critter. The constructor adds its mesh to the scene,
-  // so we move it into the holder group immediately.
+  // so we move it into the fitWrapper immediately.
   critter = new Critter(config, scene);
   scene.remove(critter.mesh);
-  holder.add(critter.mesh);
+  fitWrapper.add(critter.mesh);
+
+  // Reset uniform scale and start a fresh sample window. Samples the
+  // live idle silhouette for ~1s, then applies the max-dim fit.
+  fitWrapper.scale.setScalar(1);
+  startAutoFitPoll();
 }
 
 /** Recursively dispose all geometries and materials in a mesh tree. */
