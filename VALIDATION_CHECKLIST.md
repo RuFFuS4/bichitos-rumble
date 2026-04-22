@@ -177,8 +177,8 @@ Estado actual del roster — 8 estados skeletal target por bichito
 | Kowalski   | 8 / 8     | Tripo Animate, full kit (Ice Slide/Snowball/Ice Age) |
 | Trunk      | 8 / 8     | Tripo Animate, full kit (Ram/Grip/Ground Pound) |
 | Shelly     | 6 / 8     | Tripo Animate, idle/run/ULTI MegaShell/vic/def/fall. Ab_1 Shell Charge + Ab_2 Shell Shield procedurales (spin + hide limbs via bones) |
+| Kurama     | 8 / 8     | **Meshy AI** (primer import via-gltfpack), full kit (Fox Dash/Mirror Trick/Copycat ULTI). 14 MB (meshopt-compressed) |
 | Sergei     | 1 / 8     | solo Idle                                     |
-| Kurama     | 0 / 8     | pendiente Meshy/Tripo                         |
 | Sebastian  | 0 / 8     | pendiente Meshy/Tripo                         |
 | Sihans     | 0 / 8     | pendiente Meshy/Tripo                         |
 

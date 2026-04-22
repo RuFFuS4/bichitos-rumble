@@ -45,12 +45,12 @@ procedurales por política (ver `SUBMISSION_CHECKLIST.md`).
 | Kowalski   | **8 / 8**| Tripo Animate  | full kit (Ice Slide, Snowball, Ice Age)        |
 | Trunk      | **8 / 8**| Tripo Animate  | full kit (Ram, Grip, Ground Pound). Nota: la animación de ab_2 incluye el giro+lanzamiento pero **no el estiramiento horizontal de la trompa** — cuando toquemos la ability, el estiramiento irá procedural (mesh stretch). |
 | Shelly     | **6 / 8**| Tripo Animate  | idle / run / victory / defeat / fall + ab_3 Mega Shell. **Ab_1 Shell Charge** y **Ab_2 Shell Shield** van procedurales por diseño (spin rápido del mesh entero + hide head/hands/feet via bone scale, per `PROCEDURAL_PARTS.md`). |
+| Kurama     | **8 / 8**| Meshy AI       | full kit (Fox Dash = Run_and_Jump, Mirror Trick = Back_Jump, Copycat ULTI = Charged_Spell_Cast). Primer crítter via pipeline Meshy → gltfpack + meshopt compression. 14 MB (vs 70→2 MB de Tripo). |
 | Sergei     | 1 / 8    | Mixamo (Idle)  | resto procedural                               |
-| Kurama     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 | Sebastian  | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 | Sihans     | 0 / 8    | —              | pendiente Meshy / Tripo                        |
 
-Total: **38 / 72** estados (53%). La capa procedural de
+Total: **46 / 72** estados (64%). La capa procedural de
 `critter-animation.ts` cubre automáticamente lo que falta.
 
 ### Qué está realmente implementado hoy
