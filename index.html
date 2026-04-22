@@ -37,6 +37,24 @@
   <meta name="twitter:image"       content="https://www.bichitosrumble.com/og-image.png" />
   <meta name="twitter:image:alt"   content="Bichitos Rumble — cartoon arena brawler" />
 
+  <!-- Resource hints — first-paint optimization.
+       preload: title-loop music so it plays the instant the user
+         clicks through the title (not after a 200ms fetch gap).
+       prefetch: the 9 critter GLBs so the first match doesn't stall
+         at the "Loading Sergei…" step. Browsers lazily fetch these
+         at low priority while the title + menu are idle. Crossorigin
+         matches the `fetch()` call model-loader uses. -->
+  <link rel="preload"  as="audio" href="/audio/intro.mp3" />
+  <link rel="prefetch" as="fetch" href="/models/critters/sergei.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/trunk.glb"     crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/kurama.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/shelly.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/kermit.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/sihans.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/kowalski.glb"  crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/cheeto.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/sebastian.glb" crossorigin="anonymous" />
+
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a18; }
@@ -289,6 +307,19 @@
       border-radius: 50%;
       display: inline-block;
       border: 1px solid rgba(255,255,255,0.3);
+      background-size: cover;
+      background-position: center;
+      transition: width 0.2s, height 0.2s, border-radius 0.2s;
+    }
+    /* When the slot-thumbnail renderer resolves the 3D avatar for this
+       critter, the JS adds .has-avatar — bump the size and round to a
+       soft square so the mini-portrait actually reads. */
+    .lives-dot.has-avatar {
+      width: 22px;
+      height: 22px;
+      border-radius: 5px;
+      border-color: rgba(255, 255, 255, 0.45);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
     }
     .lives-hearts {
       color: #e74c3c;
