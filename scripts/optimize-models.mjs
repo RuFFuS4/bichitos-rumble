@@ -20,6 +20,7 @@ import { readFile, writeFile, readdir, stat, mkdir } from 'node:fs/promises';
 import { join, basename, extname, resolve } from 'node:path';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { MeshoptDecoder } from 'meshoptimizer';
 import { dedup, simplify, weld } from '@gltf-transform/functions';
 import { MeshoptSimplifier } from 'meshoptimizer';
 
@@ -99,7 +100,7 @@ async function optimizeModel(filePath) {
   console.log(`── ${name} ──`);
 
   // Read source
-  const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+  const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
   const document = await io.read(filePath);
 
   // Count source vertices

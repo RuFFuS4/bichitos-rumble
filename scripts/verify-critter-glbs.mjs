@@ -28,6 +28,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, basename, extname, resolve, relative } from 'node:path';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { MeshoptDecoder } from 'meshoptimizer';
 
 // ---------------------------------------------------------------------------
 // State resolver — MUST mirror STATE_KEYWORDS in src/critter-skeletal.ts.
@@ -149,7 +150,7 @@ async function reportFile(filePath) {
 
   let document;
   try {
-    const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+    const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
     document = await io.read(filePath);
   } catch (err) {
     console.log(`   ERROR reading GLB: ${err.message}\n`);

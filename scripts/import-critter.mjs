@@ -47,12 +47,26 @@
 //   node scripts/verify-critter-glbs.mjs public/models/critters/<id>.glb
 // ---------------------------------------------------------------------------
 
-import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
-import { resolve, dirname, join } from 'node:path';
+import { readFile, writeFile, mkdir, stat, unlink } from 'node:fs/promises';
+import { resolve, dirname, join as pathJoin } from 'node:path';
+import { spawn } from 'node:child_process';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, simplify, weld } from '@gltf-transform/functions';
+import { MeshoptDecoder } from 'meshoptimizer';
+import {
+  dedup, simplify, weld, textureCompress,
+} from '@gltf-transform/functions';
 import { MeshoptSimplifier } from 'meshoptimizer';
+import sharp from 'sharp';
+
+/**
+ * File-size threshold (bytes) above which we route through gltfpack.
+ * Meshy exports are typically 100-200 MB and need the skin-aware
+ * simplifier + meshopt compression to reach a shippable size; Tripo
+ * exports are ~70 MB and their skinned meshes are already light enough
+ * that the gltf-transform simplify in the default pipeline handles them.
+ */
+const GLTFPACK_THRESHOLD_BYTES = 80 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // CLI parse
@@ -71,6 +85,9 @@ const flags = {
   targetVerts: 5000,
   tolerance: 0.01,
   dryRun: false,
+  // Force the gltfpack route regardless of source size. Inverse flag
+  // below forces the plain route. Default: auto-detect by size.
+  viaGltfpack: /** @type {boolean | 'auto'} */ ('auto'),
 };
 
 for (let i = 2; i < argv.length; i++) {
@@ -79,6 +96,8 @@ for (let i = 2; i < argv.length; i++) {
   else if (a === '--target-verts' && argv[i + 1]) { flags.targetVerts = parseInt(argv[++i], 10); }
   else if (a === '--tolerance' && argv[i + 1])    { flags.tolerance = parseFloat(argv[++i]); }
   else if (a === '--dry-run')                     { flags.dryRun = true; }
+  else if (a === '--via-gltfpack')                { flags.viaGltfpack = true; }
+  else if (a === '--no-gltfpack')                 { flags.viaGltfpack = false; }
   else { console.error(`Unknown flag: ${a}`); usage(); process.exit(1); }
 }
 
@@ -102,7 +121,7 @@ async function main() {
   console.log(`  target : ${outPath}`);
   console.log(`  mapping: ${mapping.length} clips\n`);
 
-  const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+  const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
   const doc = await io.read(srcPath);
 
   // ─── Step 1. Rename animations by duration ─────────────────────────
@@ -135,36 +154,120 @@ async function main() {
     console.log(`     They will keep their NlaTrack.XXX name and won't resolve to a state.`);
   }
 
-  // ─── Step 2. Optimise geometry ─────────────────────────────────────
-  console.log(`\n── Step 2. Optimise geometry ──`);
+  // ─── Step 2. Optimise ──────────────────────────────────────────────
+  // Two routes:
+  //   - Plain (Tripo-sized sources): dedup + weld + simplify + texture
+  //     compress, all through gltf-transform. Fast, ~2-3 MB outputs.
+  //   - via-gltfpack (Meshy-sized sources): we only rename anims here,
+  //     then dedup + textureCompress to knock down textures, write to
+  //     a .tmp file, and delegate the heavy simplify + meshopt
+  //     quantization compression to the gltfpack CLI. Output ends up
+  //     ~2-5 MB even on 150+ MB sources; runtime decompresses via
+  //     MeshoptDecoder (wired in src/model-loader.ts).
+  console.log(`\n── Step 2. Optimise ──`);
   const srcVerts = countVertices(doc);
-  const srcSizeMB = ((await readFile(srcPath)).byteLength / 1024 / 1024).toFixed(1);
-  const ratio = Math.min(1.0, flags.targetVerts / srcVerts);
+  const srcBytes = (await readFile(srcPath)).byteLength;
+  const srcSizeMB = (srcBytes / 1024 / 1024).toFixed(1);
+  const autoGltfpack =
+    flags.viaGltfpack === true ||
+    (flags.viaGltfpack === 'auto' && srcBytes > GLTFPACK_THRESHOLD_BYTES);
   console.log(`   Source: ${srcVerts.toLocaleString()} verts, ${srcSizeMB} MB`);
-  console.log(`   Simplify ratio: ${ratio.toFixed(6)} (target ${flags.targetVerts})`);
+  console.log(`   Route : ${autoGltfpack ? 'via gltfpack (skin-aware)' : 'plain gltf-transform'}`);
 
   if (flags.dryRun) {
     console.log(`\n   --dry-run: skipping transform + write.\n`);
     return;
   }
 
+  if (autoGltfpack) {
+    await optimiseViaGltfpack(doc, io, outPath, id);
+  } else {
+    await optimisePlain(doc, srcVerts, flags.targetVerts);
+    await writeDoc(doc, io, outPath);
+  }
+  console.log(`\nNext: node scripts/verify-critter-glbs.mjs public/models/critters/${id}.glb\n`);
+}
+
+async function optimisePlain(doc, srcVerts, targetVerts) {
+  const ratio = Math.min(1.0, targetVerts / srcVerts);
+  console.log(`   Simplify ratio: ${ratio.toFixed(6)} (target ${targetVerts} verts)`);
+  // Plain pipeline — the one that's been shipping Tripo imports at
+  // 2-3 MB since 2026-04-21.
   await doc.transform(
     dedup(),
     weld({ tolerance: 0.0001 }),
     simplify({ simplifier: MeshoptSimplifier, ratio, error: 0.01 }),
   );
-
   const outVerts = countVertices(doc);
   console.log(`   Result: ${outVerts.toLocaleString()} verts`);
+}
 
-  // ─── Step 3. Write ─────────────────────────────────────────────────
-  console.log(`\n── Step 3. Write ──`);
+async function optimiseViaGltfpack(doc, io, outPath, id) {
+  // Pass 1: rename already applied in memory. dedup + texture compress
+  // (WebP, alpha-safe, ≤1024²) here — gltfpack's Node build can't do
+  // WebP itself (no platform WebP encoder), so we do it before handing
+  // off. Write to a .tmp next to the final path.
+  console.log(`   Pass 1: dedup + textureCompress (WebP ≤1024²) → .tmp`);
+  await doc.transform(
+    dedup(),
+    textureCompress({
+      encoder: sharp,
+      targetFormat: 'webp',
+      resize: [1024, 1024],
+      quality: 82,
+    }),
+  );
+  await mkdir(dirname(outPath), { recursive: true });
+  // gltfpack matches by extension to pick a reader — has to be .glb.
+  const tmpPath = outPath.replace(/\.glb$/, '.pre.glb');
+  const tmpBuffer = await io.writeBinary(doc);
+  await writeFile(tmpPath, Buffer.from(tmpBuffer));
+  const tmpSizeMB = (tmpBuffer.byteLength / 1024 / 1024).toFixed(1);
+  console.log(`   Wrote ${tmpSizeMB} MB → ${id}.pre.glb`);
+
+  // Pass 2: gltfpack handles the skin-aware simplify + meshopt
+  // compression. `-si 0.02` targets ~2% triangle count; `-c` enables
+  // meshopt quantization (requires MeshoptDecoder at runtime, wired
+  // in src/model-loader.ts). `-kn` keeps node names (we need the
+  // bones named for the skeletal resolver + critter-parts).
+  console.log(`   Pass 2: gltfpack -si 0.02 -c -kn → ${id}.glb`);
+  await runGltfpack(tmpPath, outPath);
+  await unlink(tmpPath).catch(() => { /* already gone */ });
+
+  const finalBytes = (await stat(outPath)).size;
+  const finalSizeKB = (finalBytes / 1024).toFixed(0);
+  const finalSizeMB = (finalBytes / 1024 / 1024).toFixed(2);
+  console.log(`   Wrote ${finalSizeKB} KB (${finalSizeMB} MB) → ${outPath}`);
+}
+
+function runGltfpack(inPath, outPath) {
+  return new Promise((resolveRun, rejectRun) => {
+    // -si 0.02 — simplify to 2% of original triangle count
+    // -c       — meshopt quantization compression
+    // -kn      — keep node names (needed for bone lookups in skeletal /
+    //            critter-parts)
+    // Invoked via `npx gltfpack` so we pick up the devDep install.
+    const child = spawn('npx', ['gltfpack', '-i', inPath, '-o', outPath, '-si', '0.02', '-c', '-kn'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
+    });
+    let stderr = '';
+    child.stdout.on('data', (c) => process.stdout.write(`     ${String(c)}`));
+    child.stderr.on('data', (c) => { stderr += String(c); });
+    child.on('error', rejectRun);
+    child.on('close', (code) => {
+      if (code === 0) resolveRun(undefined);
+      else rejectRun(new Error(`gltfpack exited ${code}: ${stderr.trim()}`));
+    });
+  });
+}
+
+async function writeDoc(doc, io, outPath) {
   await mkdir(dirname(outPath), { recursive: true });
   const outBuffer = await io.writeBinary(doc);
   await writeFile(outPath, Buffer.from(outBuffer));
   const outSizeKB = (outBuffer.byteLength / 1024).toFixed(0);
   console.log(`   Wrote ${outSizeKB} KB → ${outPath}`);
-  console.log(`\nNext: node scripts/verify-critter-glbs.mjs public/models/critters/${id}.glb\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +286,7 @@ async function resolveMapping(id, mapFlag) {
     return JSON.parse(raw);
   }
   // 3. Convention: scripts/mappings/<id>.json
-  const conventional = resolve(join('scripts', 'mappings', `${id}.json`));
+  const conventional = resolve(pathJoin('scripts', 'mappings', `${id}.json`));
   const info = await stat(conventional).catch(() => null);
   if (info && info.isFile()) {
     const raw = await readFile(conventional, 'utf8');

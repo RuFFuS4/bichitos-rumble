@@ -24,6 +24,7 @@
 
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { MeshoptDecoder } from 'meshoptimizer';
 
 const EPS = 1e-4;
 const path = process.argv[2];
@@ -32,7 +33,7 @@ if (!path) {
   process.exit(1);
 }
 
-const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
 const doc = await io.read(path);
 const anims = doc.getRoot().listAnimations();
 

@@ -33,6 +33,7 @@ import { readdir, stat } from 'node:fs/promises';
 import { basename, extname, resolve, join, relative } from 'node:path';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { MeshoptDecoder } from 'meshoptimizer';
 
 const DEFAULT_DIR = resolve('public/models/critters');
 
@@ -94,7 +95,7 @@ async function inspectOne(filePath) {
 
   let doc;
   try {
-    const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+    const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
     doc = await io.read(filePath);
   } catch (err) {
     console.log(`── ${id} ──  ERROR: ${err.message}\n`);

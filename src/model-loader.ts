@@ -14,15 +14,25 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { MeshoptDecoder } from 'meshoptimizer';
 
 // ---------------------------------------------------------------------------
 // Singleton loader setup
 // ---------------------------------------------------------------------------
 //
-// Draco compression is NOT currently used — our optimize-models.mjs pipeline
-// only applies geometry simplification, no Draco encoding. To enable Draco
-// in the future:
-//   1. Add draco() step to scripts/optimize-models.mjs
+// MeshoptDecoder is wired so we can read GLBs post-processed with
+// `gltfpack -c` (meshopt quantization compression). Meshy exports
+// multi-million-vert skinned meshes that the gltf-transform simplify
+// can't reduce because it isn't skin-aware. gltfpack can, but the
+// output requires this decoder at load time. Adds ~20 KB gzipped to
+// the bundle — acceptable trade-off for 90%+ size reduction on
+// Meshy-sourced GLBs.
+//
+// Draco compression is NOT currently used — our import-critter.mjs
+// pipeline uses meshopt (above) for Meshy inputs and plain simplify
+// for Tripo inputs (which already arrive near-optimal). To enable
+// Draco in the future:
+//   1. Add draco() step to scripts/import-critter.mjs
 //   2. Copy decoder from node_modules/three/examples/jsm/libs/draco/ to
 //      public/draco/
 //   3. Import DRACOLoader and wire:
@@ -32,6 +42,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 // ---------------------------------------------------------------------------
 
 const gltfLoader = new GLTFLoader();
+gltfLoader.setMeshoptDecoder(MeshoptDecoder);
 
 // ---------------------------------------------------------------------------
 // Cache: path → { original scene, animations, in-flight promise }
