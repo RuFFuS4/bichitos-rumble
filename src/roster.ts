@@ -149,8 +149,11 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Sihans',
     glbPath: './models/critters/sihans.glb',
     baseColor: 0x8b6914,
-    // Trapper mole (mass 1.15) — medium-heavy. Tripo mesh origin at feet.
-    scale: 2.7, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    // Trapper mole (mass 1.15). Meshy AI mesh imported 2026-04-24.
+    // Source bounds Y [0, 1.044], feet-at-origin (Mixamo convention).
+    // scale 1.53 matches the in-game ~1.6u chibi target (was 2.7 for
+    // the Tripo mesh at ~0.6u tall). rotation 0 (Mixamo faces -Z).
+    scale: 1.53, rotation: 0, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Trapper',

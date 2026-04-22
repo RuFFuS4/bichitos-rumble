@@ -1,0 +1,10 @@
+[
+  { "dur": 0.633,  "name": "Ability1BurrowRush" },
+  { "dur": 0.800,  "name": "Idle" },
+  { "dur": 1.033,  "name": "Ability3DiggyDiggyHole" },
+  { "dur": 2.500,  "name": "Fall" },
+  { "dur": 3.100,  "name": "Ability2Tunnel" },
+  { "dur": 6.933,  "name": "Defeat" },
+  { "dur": 8.000,  "name": "Run" },
+  { "dur": 11.300, "name": "Victory" }
+]
