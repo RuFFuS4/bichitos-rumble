@@ -353,28 +353,42 @@ never obstruct the camera's line of sight to critters.
     pointing +Z forward when applicable.
 ```
 
-### Pack 1 — JUNGLE TROPIC (🌴, Sergei / Cheeto)
+### Pack 1 — JUNGLE TROPIC (🌴, Sergei / Cheeto) · **SHIPPED 2026-04-23**
+
+Status: first pack delivered. 5 props + skybox + ground tile.
+Bush (6th prop) dropped because the IA output was unrecoverably
+heavy (6.3M verts — one mesh per leaf, no way to merge without
+manual Blender work). Can regenerate post-jam with a stricter
+prompt that forces single-mesh output.
 
 Palette: deep emerald greens (#1f5f2a – #3aa24a), warm earth browns
 (#5a3a1a – #8a5a2a), splashes of golden sunlight (#ffd86a), small
 pops of red-orange fruit (#e65a1a).
 
-| Prop | File | Dimensions |
-|------|------|------------|
-| Tall palm | `tree_palm_tall.glb` | 4.5 m, curved trunk, 6–8 drooping fronds, coconut cluster |
-| Mid palm | `tree_palm_mid.glb` | 3.2 m, straight, 5 fronds, no coconuts |
-| Broadleaf tree | `tree_jungle_broadleaf.glb` | 3.8 m, ficus/rubber, dangling vines |
-| Tropical bush | `bush_tropical.glb` | 1.0 × 1.2 m, dense leafy |
-| Tiki totem | `totem_tiki.glb` | 3.0 m, 3 grumpy faces, moss |
-| Stone ruin | `stone_ruin_block.glb` | 1.2 × 1.0 × 0.8 m, glyphs + ivy |
-| Ground tile | `ground_tile_jungle.glb` | 4 × 4 m, grass + leaves + dirt, tileable |
+| Prop | File | Dimensions | Final size |
+|------|------|------------|------------|
+| Tall palm | `tree_palm_tall.glb` | 4.5 m, curved trunk, 6–8 drooping fronds, coconut cluster | 3.2 MB |
+| Mid palm | `tree_palm_mid.glb` | 3.2 m, straight, 5 fronds, no coconuts | 3.4 MB |
+| Broadleaf tree | `tree_jungle_broadleaf.glb` | 3.8 m, ficus/rubber, dangling vines | 52 MB ⚠ |
+| Tiki totem | `totem_tiki.glb` | 3.0 m, 3 grumpy faces, moss | 0.5 MB |
+| Stone ruin | `stone_ruin_block.glb` | 1.2 × 1.0 × 0.8 m, glyphs + ivy | 0.6 MB |
+| ~~Tropical bush~~ | ~~`bush_tropical.glb`~~ | skipped (IA output 291 MB → 73 MB, too heavy) | — |
+| Ground tile | `public/images/arena-ground/jungle.png` (texture, not GLB) | 1024×1024 tileable | 2.4 MB |
 
-Skybox: 2048×1024 equirectangular PNG. Canopy silhouette at horizon
-(~15 % height). Warm midday sun + sunbeams + subtle fog. Upper half
-soft gradient green-teal → cream.
+Skybox: `public/images/skyboxes/jungle.png` — 2048×1024
+equirectangular PNG, canopy silhouette at horizon, warm midday sun
++ god rays, soft gradient green-teal → cream.
 
-Placement: palm trees lean outward; totems + broadleaves as 2–3
-focal points; bushes fill gaps.
+Placement: palm trees lean outward; totem + broadleaf as focal
+points; stone ruin as single storytelling anchor.
+
+**Pipeline tip for future packs**: the IA tool consistently outputs
+multi-million-vertex GLBs. Add this line to EVERY prop prompt:
+> `CRITICAL GEOMETRY CONSTRAINT: single merged mesh with one
+> material. Do NOT make each leaf a separate mesh. Low-poly
+> (<3000 tris). Think "Fall Guys obstacle" or "Minecraft plant".`
+`scripts/optimize-arena-props.mjs` + `scripts/compress-arena-textures.mjs`
+handle the rest — bring props from 60 MB to <1 MB consistently.
 
 ### Pack 2 — FROZEN TUNDRA (❄️, Kowalski)
 

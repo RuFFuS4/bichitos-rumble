@@ -22,6 +22,13 @@ playwright/.cache
 # hook. Not a source of truth — regenerated on every build/dev run.
 mesh2motion/static/models/critters/
 
+# Raw (pre-optimization) arena prop GLBs straight from the IA generator.
+# These are hundreds of MB each (1M+ vertices before simplification);
+# only the post-optimize output in public/models/arenas/<pack>/ ships.
+# Keep the raw source locally for re-runs without re-downloading from
+# the IA tool, but never commit.
+public/models/arenas/_raw/
+
 # OS / editor junk
 Thumbs.db
 .DS_Store
