@@ -293,3 +293,193 @@ ElevenLabs is a better fit than Suno here; skip for Suno.
 
 When an asset lands, update the table so future sessions know what's
 shipped vs still placeholder.
+
+---
+
+## 10 · Arena packs — 3D terrain variants (post-jam)
+
+Propuesta de 4 escenarios principales + 4 extras. Cada uno viene como
+un "pack" de props 3D + skybox + ground tile. El arena circular de
+gameplay (radius 12, 29 fragmentos colapsables) no cambia — lo que
+cambia es el **anillo decorativo exterior** (radius 14–22), la
+**textura del suelo** que reemplaza el verde de los fragments, y el
+**skybox**. Selección aleatoria por seed de partida (misma seed =
+mismo arena + mismo pack, reproducible).
+
+### Preamble global (ir en cada prompt)
+
+```
+# CONTEXT (for the generative 3D AI)
+
+"Bichitos Rumble" is a 4-player web-browser arena brawler built in
+Three.js. Critters are chunky chibi animals with oversized heads
+(gorilla, tiger, fox, turtle, frog, mole, penguin, crab, elephant)
+that fight by headbutting each other off a collapsing circular
+platform. Art direction:
+
+  - Chunky cartoon, bold black outlines (2–4 px equivalent in 3D).
+  - Slight cel-shading, NO realism, NO photorealistic textures.
+  - Vibrant saturated colours, soft AO, warm arcade feel.
+  - Reference mix: Fall Guys + Pummel Party + Smash Bros trophy.
+  - Silhouettes must read at 3/4 isometric from ~25 world units away.
+
+# CAMERA + ARENA BRIEFING (so props scale correctly)
+
+  - Arena is a circular platform, RADIUS 12 world units, made of ~29
+    irregular fragments (hex-ish) that collapse during play.
+  - Arena is centred at world origin (0, 0, 0) on the XZ plane.
+  - Pseudo-isometric camera: position ≈ (0, 23, 25), looking at the
+    centre. FOV 40°. So props are seen from a high-angle 3/4 view.
+  - Critters stand ~1.6 world units tall. Decorative props should
+    feel BIGGER than the critters (players are tiny vs the world).
+
+# WHERE THE PROPS GO
+
+Decorative props live in a RING OUTSIDE the fighting arena — between
+radius 14 and radius 22. The 0-to-12u disc is the combat surface
+(don't put anything there). Props cast silhouette against the sky,
+never obstruct the camera's line of sight to critters.
+
+# OUTPUT CONSTRAINTS
+
+  - GLB/GLTF format, Y-up, metres as units.
+  - Low-poly target: < 5 000 triangles per decorative prop, < 20 000
+    per full scene pack.
+  - 1024 × 1024 max textures, PNG/JPG baked. Metalness ≤ 0.3
+    (we render without an env map — fully metallic reads as dark grey).
+  - No embedded skeleton — props are static.
+  - No baked lighting — the game scene lights them at runtime.
+  - Origin of each prop at its base centre (feet/floor contact),
+    pointing +Z forward when applicable.
+```
+
+### Pack 1 — JUNGLE TROPIC (🌴, Sergei / Cheeto)
+
+Palette: deep emerald greens (#1f5f2a – #3aa24a), warm earth browns
+(#5a3a1a – #8a5a2a), splashes of golden sunlight (#ffd86a), small
+pops of red-orange fruit (#e65a1a).
+
+| Prop | File | Dimensions |
+|------|------|------------|
+| Tall palm | `tree_palm_tall.glb` | 4.5 m, curved trunk, 6–8 drooping fronds, coconut cluster |
+| Mid palm | `tree_palm_mid.glb` | 3.2 m, straight, 5 fronds, no coconuts |
+| Broadleaf tree | `tree_jungle_broadleaf.glb` | 3.8 m, ficus/rubber, dangling vines |
+| Tropical bush | `bush_tropical.glb` | 1.0 × 1.2 m, dense leafy |
+| Tiki totem | `totem_tiki.glb` | 3.0 m, 3 grumpy faces, moss |
+| Stone ruin | `stone_ruin_block.glb` | 1.2 × 1.0 × 0.8 m, glyphs + ivy |
+| Ground tile | `ground_tile_jungle.glb` | 4 × 4 m, grass + leaves + dirt, tileable |
+
+Skybox: 2048×1024 equirectangular PNG. Canopy silhouette at horizon
+(~15 % height). Warm midday sun + sunbeams + subtle fog. Upper half
+soft gradient green-teal → cream.
+
+Placement: palm trees lean outward; totems + broadleaves as 2–3
+focal points; bushes fill gaps.
+
+### Pack 2 — FROZEN TUNDRA (❄️, Kowalski)
+
+Palette: glacial ice blue (#8fd8ff – #3a8fc9), bright white
+(#f5faff), pale lavender shadow (#c8c0e8), silver-grey rock accents
+(#5a6a78), pops of orange on wooden signs (#f08a3a).
+
+| Prop | File | Dimensions |
+|------|------|------------|
+| Tall iceberg | `iceberg_tall.glb` | 4.0 m jagged spike, angular, translucent top |
+| Mid iceberg | `iceberg_mid.glb` | 2.5 m blocky, flat top |
+| Low iceberg | `iceberg_low.glb` | 1.2 m scatter block |
+| Snow pine | `pine_snow.glb` | 3.8 m conifer, snow-laden branches, dark green peeking |
+| Signpost | `signpost_wood.glb` | 2.0 m leaning wooden post + blank plate |
+| Ice shard | `ice_shard.glb` | 0.4–0.8 m crystalline, cluster-friendly |
+| Ground tile | `ground_tile_ice.glb` | 4 × 4 m packed snow + faint footprints + cracks |
+
+Skybox: 2048×1024. Night with aurora borealis ribbons (green +
+magenta). Distant snow-capped mountains at horizon (~20 % height).
+Few scattered stars. Deep navy (#0a1530) upper → soft purple
+(#6a4a8a) horizon.
+
+Placement: tall icebergs at radius 16–20 forming a "crown"; pines
+behind (20–22); signposts near-edge (14); cold and still vibe.
+
+### Pack 3 — DESERT DUNES (🏜️, Sihans)
+
+Palette: warm sand (#e6c178 – #d19b4a), burnt orange (#d35a1a), deep
+crimson rocks (#a33030), cactus green (#5a8c4a), pale bone cream
+(#f0e8d0), tiny turquoise accents (#40c0b0).
+
+| Prop | File | Dimensions |
+|------|------|------------|
+| Tall spire | `sandstone_spire_tall.glb` | 5.0 m pillar, wind-carved layers, tilted top |
+| Short spire | `sandstone_spire_short.glb` | 2.5 m fat-base spire |
+| Saguaro | `cactus_saguaro.glb` | 2.8 m classic, 2–3 arms, top flowers |
+| Desert palm | `palm_desert.glb` | 3.0 m thin, wispy fronds, exposed roots |
+| Minecart | `minecart_rusted.glb` | 2.0 × 1.0 × 1.0 m wooden + rusted iron |
+| Bones scatter | `bones_skull_scatter.glb` | 0.6 m skull + 4 ribs (single GLB) |
+| Tattered flag | `cloth_flag_tattered.glb` | 2.2 m pole + torn red/orange banner |
+| Ground tile | `ground_tile_sand.glb` | 4 × 4 m wind-rippled sand + small stones + subtle prints |
+
+Skybox: 2048×1024. Golden-hour sunset, sun at 5 % height. Gradient
+deep violet (#4a2a6a) → orange-pink (#f0805a) → dusty gold
+(#f0c870) horizon. Distant dune silhouette + thin pink clouds.
+
+Placement: spires at 16–20 forming a triangle; saguaros + palms
+between; minecart as a single storytelling anchor (15); bones at 14
+(close enough to see from combat).
+
+### Pack 4 — CORAL REEF BEACH (🌊, Shelly / Sebastian)
+
+Palette: turquoise water (#40c0c0 – #70e0d0), wet sand beige
+(#e8d0a0), coral red (#e25a3a – #f0805a), coral pink (#f09a9a),
+fresh palm green (#3aa24a), white shell accents.
+
+| Prop | File | Dimensions |
+|------|------|------------|
+| Red coral | `coral_stack_red.glb` | 3.0 m branching red formation |
+| Pink coral | `coral_stack_pink.glb` | 2.4 m curly cabbage-pink |
+| Brain coral | `coral_brain.glb` | 1.2 m round with swirly grooves |
+| Tilted palm | `palm_beach_tilted.glb` | 3.5 m 45°-tilt coconut palm |
+| Shipwreck piece | `shipwreck_hull_piece.glb` | 2.5 × 1.5 × 2.0 m wooden hull + barnacles |
+| Wet boulder | `boulder_wet.glb` | 1.5 m rounded + tiny tide pool with starfish |
+| Seashells | `seashell_scatter.glb` | 0.3 m cluster of 5–6 shells |
+| Starfish | `starfish_decor.glb` | 0.4 m orange, flat |
+| Ground tile | `ground_tile_beach.glb` | 4 × 4 m wet sand + darker shoreline + shells |
+
+Skybox: 2048×1024. Horizon at ~45 %. Upper: soft turquoise-blue
+(#70b8e0) with puffy cumulus. Lower: deeper turquoise (#40c0c0)
+with sun glint.
+
+Placement: coral stacks at 14–16 (they are the reef rim, closer);
+palms tilted outward at 18–22; shipwreck as single anchor (17);
+wet boulders in gaps. Ground darker toward outer edge (tide line).
+
+### Extras (post-jam stretch, already scoped for prompts)
+
+Si sobra ventana de IA generativa, los 4 hábitats restantes:
+
+| Extra pack | Hábitat de | Keywords visuales |
+|-----------|-----------|--------------------|
+| `savanna` | Trunk (elefante) | Acacias dispersas, baobab, hierba alta dorada, termiteros, cielo caluroso |
+| `kitsune_shrine` | Kurama (zorro) | Torii rojos, linternas de piedra, bambú, cerezos en flor, niebla suave |
+| `swamp` | Kermit (sapo) | Árboles retorcidos con musgo, nenúfares, raíces aéreas, niebla verde |
+| `jungle_moonlight` | Cheeto (tigre) | Variante nocturna del Pack 1: mismos props, skybox luna llena, luciérnagas |
+
+Mismo formato que los 4 principales (preamble + tabla de props +
+skybox + placement). Palettes y silueta a definir cuando se entre.
+
+### Sistema de carga (backend del feature — 2–3 h de dev)
+
+Cuando los assets lleguen:
+
+1. `public/models/arenas/<pack-id>/*.glb` — props + ground tile.
+2. `public/images/skyboxes/<pack-id>.png` — equirectangular.
+3. JSON de placement por pack: `public/arenas/<pack-id>.json` con
+   array `{ prop: 'tree_palm_tall', pos: [r, angleDeg], rotY, scale }`
+   (r = radio, ángulo en grados; el renderer lo traduce a XZ).
+4. Módulo nuevo `src/arena-decorations.ts` que, dado un `packId` y
+   el seed del arena, carga los GLBs + skybox + ground tile.
+5. Hook en `Arena.buildFromSeed(seed)` → llama a
+   `arenaDecorations.apply(packId, seed)` pasando un `packId`
+   elegido via hash del seed (o argumento del room config).
+6. Opción lab: `/tools.html` añade un picker de "force arena pack".
+
+Gameplay del arena (fragments collapse, falloff, respawn) no cambia.
+El packId es pura cosmética + audio ambient futuro.

@@ -325,3 +325,139 @@ Post-mortem del bug de rotación en `ERROR_LOG.md` entry 2026-04-17.
   lo pendiente de probar manualmente (gamepad, shake arena, 4P online,
   stats end-screen, Mesh2Motion, etc.) consolidado en un único lugar.
   Actualizar con cada feature sin validar.
+
+---
+
+## 📦 Post-Jam Backlog — consolidado 2026-04-23
+
+Todo lo acordado verbalmente con el usuario que NO entra en la ventana
+del jam pero queda prometido. Fuente única de verdad para cuando
+abramos el post-jam release. Ordenado por complejidad creciente.
+
+### A · Drop-in (< 1 h cada uno) — sólo faltan assets o pequeños edits
+
+- **Cinturones 3D integrados**. 16 PNG/GLB de cinturón llegando del
+  usuario → swap `icon: '🦍'` etc. en `src/badges.ts` + `.belt-icon`
+  innerHTML en `src/hall-of-belts.ts` + `.badge-toast-icon` en
+  `src/badge-toast.ts` + `online-belt-toast.ts` por `<img>` reales.
+  Todos los puntos de integración ya están marcados en los comentarios
+  del código con TODO "Phase 5" / "drop-in".
+- **Remaining HUD sprite integrations**. Hearts, bot-mask, belts-trophy,
+  sfx/music icons, critter-head fallbacks en life corners. La sprite
+  sheet y las clases CSS (`.sprite-hud-*`) ya están; sólo hay que
+  reemplazar los emojis 🔊 🎶 🏆 🤖 ❤ por los spans sprite con
+  fallback emoji. Ver `AI_PROMPTS.md` §8.
+- **Favicon multi-tamaño**. Hoy `/favicon-br.png` es un único tamaño.
+  Generar 16×16 + 32×32 + 192×192 y wire en `<head>`.
+
+### B · Features medianas (2–4 h cada una)
+
+- **Arena packs 3D — sistema de carga**. 4 packs principales (Jungle
+  Tropic, Frozen Tundra, Desert Dunes, Coral Reef Beach) + 4 extras
+  (Savanna, Kitsune Shrine, Swamp, Jungle Moonlight). Los **prompts
+  completos** (preamble + tabla de props + skybox + placement) viven
+  en `AI_PROMPTS.md §10`. Falta el **loader en código**:
+  `src/arena-decorations.ts` nuevo + hook en `Arena.buildFromSeed` +
+  JSON de placement per-pack + picker de debug en `/tools.html`.
+  El gameplay del arena (fragmentos, colapso, falloff) no se toca —
+  los packs son puramente cosmética + futuro audio ambient.
+- **Slayer Belt → ampliar last-hitter más allá de headbutts**. Hoy
+  `server/src/sim/physics.ts` marca attackerSid sólo en headbutt
+  collisions. Añadir el mismo stamp para ability knockbacks
+  (`ground_pound` impulsa al defensor → también cuenta) y para
+  `charge_rush` si el attacker colisiona durante el dash. Extender
+  la lógica en el effect dispatch de `server/src/sim/abilities.ts`.
+- **Change-nickname flow**. Ya tenemos el token en localStorage y el
+  endpoint `POST /api/player` acepta token match. Añadir un botón
+  "Change nickname" en el character-select que permita registrar un
+  apodo nuevo pasando el token actual + nuevo nickname; server lo
+  renombra si el token coincide y el nombre está libre.
+- **Display name para guests online**. Hoy si entras sin nickname eres
+  "guest" y no puntúas. Podríamos generar "Guest #1234" automático y
+  mostrarlo como tag, aunque sin credit de belts (marcado visual
+  distinto en el leaderboard — gris, sin posibilidad de ranking).
+- **Per-match kills overlay**. En el end-screen, mostrar "You killed
+  3 humans this match" si tienes identity online. Stats ya capturadas
+  en `InternalPlayerData.killsVsHumansThisMatch`.
+
+### C · Features grandes (6–12 h cada una, plan por diseño)
+
+- **Signature abilities definitivas por crítter**. 6 de los 9 ULTIs
+  son placeholder `frenzy` (Trunk Stampede, Kermit Hypnosapo, Sihans
+  Diggy Rush, Kowalski Blizzard, Cheeto Tiger Rage, Sebastian Red
+  Claw) + 8 Hab-2 placeholder. El plan priorizado está en
+  `CHARACTER_DESIGN.md §"Qué hacer si la urgencia dicta avanzar
+  antes"`:
+  1. Trunk Ground Pound con STUN (añadir estado `stunned` + timer).
+  2. Cheeto Tiger Roar + Sebastian Claw Sweep — conos direccionales.
+  3. Kowalski Snowball — sistema de proyectiles.
+  4. Cheeto Shadow Step + Sihans Tunnel — teleport simple.
+  5. Shelly Shell Shield — invulnerability + reflect.
+  6. Kurama Mirror Trick / Copycat, Kermit input-inversion, Sihans
+     runtime arena edits, Kowalski ice-surface — sistemas nuevos
+     muy grandes, dejar para el final o descartar.
+- **Feel pass per crítter**. Alinear `duration` / `windUp` /
+  `cooldown` de cada ability con la duración del clip esqueletal
+  correspondiente, SFX signature (Suno + Web Audio), VFX propio
+  (partículas, shockwaves dedicadas, squash/stretch en heavy clips).
+  Sergei quedó parked como pionero del proceso. Orden sugerido:
+  Sergei → Trunk → Cheeto → Kurama → Shelly → Kermit → Sihans →
+  Kowalski → Sebastian.
+- **Rebuild character selector**. Refinamiento pendiente que quedó
+  en pausa al pivotar a Online Belts. Auto-fit actual funciona pero
+  las poses Mixamo de los Meshy no-humanoid (Sebastian agazapado,
+  Sihans tumbado) quedan raras. Opciones: a) pedir regens a Meshy
+  con clip idle menos humanoide; b) hack procedural para levantar
+  el mesh cuando idle-pose height < 1.0 u; c) background animado
+  del escenario seleccionado (conecta con Arena Packs).
+- **Pattern C collapse** (non-radial cuts). El colapso actual es
+  radial desde fuera hacia dentro. Añadir patrones con cortes
+  diagonales / asimétricos. Cambio local en `arena-fragments.ts`.
+
+### D · Infra / calidad
+
+- **Lighthouse pass en prod URL**. Perf + accessibility + SEO +
+  best-practices. Objetivo: verde en los 4.
+- **Cross-device playtest real**. iOS Safari, Android Chrome, tablet
+  en landscape, desktop con 2-3 navegadores distintos, gamepad
+  (Xbox + PS + pro controllers), teclado internacional.
+- **Anti-cheat beyond rate-limit**. Hoy el Slayer Belt es
+  server-authoritative (client no puede inflar kills). Throne / Flash
+  / Ironclad / Hot Streak dependen del durationMs + lives + streak
+  que también derivan del server. Pero un endpoint futuro que acepte
+  input del cliente debería validar via token. Revisar si alguien
+  se inventa partidas vía requests manuales.
+- **Moderación nickname avanzada**. Lista de palabras prohibidas más
+  amplia (inglés + español), flag-and-report, soft-delete de cuentas
+  con nickname inapropiado (admin endpoint con ADMIN_TOKEN env).
+- **Backup SQLite**. Cron job que copie el .sqlite a S3/R2 cada
+  12–24 h. Railway volume es persistente pero no tolerante a DB
+  corruption; un backup fuera-de-Railway es barato.
+- **Allow reconnection online** (Colyseus `allowReconnection`). Hoy
+  una pérdida de red = out permanente. Post-jam queremos que un
+  disconnect reintroduzca al jugador con sus cooldowns / lives.
+- **Region-based matchmaking**. Hoy un único room pool en Railway
+  US. Si la base de jugadores crece, replicar server en EU + SA +
+  AP con matchmaking por latencia.
+- **Display name polish**. Reserved-words list mayor, username
+  collision prompts (sugerencias en vez de rechazo puro), longer
+  length con character-level validation.
+
+### E · Validación pendiente
+
+- **`VALIDATION_CHECKLIST.md` completo**. Hay secciones A–F (añadidas
+  2026-04-23) sin ejecutar aún. Son pruebas manuales que no se
+  pueden automatizar desde el IDE — gamepad físico, partidas
+  multi-dispositivo, render-quality checks, touch devices reales.
+  Retomar cuando el usuario tenga tiempo para la tanda de validación.
+
+---
+
+### Tracking posterior
+
+Cuando cerremos el jam (submit ya está hecho, deadline 1 may):
+1. Post-mortem corto en `BUILD_LOG.md` — qué funcionó, qué no, qué
+   sorprendió del playtest real.
+2. Roadmap post-jam ordenado por votación si hay comunidad.
+3. Cerrar features A primero (drop-ins rápidos), luego B, luego las
+   C grandes cuando haya ventana clara.
