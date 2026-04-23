@@ -7,7 +7,8 @@ partidas reales con varios clientes, archivos reales, etc).
 Orden de los bloques = orden recomendado para hacer el batch. Cada
 bloque se puede probar independientemente.
 
-Última actualización: 2026-04-20 (Blender MCP activo + Sergei primer rig).
+Última actualización: 2026-04-23 (UI pass: character-select auto-fit +
+HUD in-match rework + pause + 6 ULTIs + sprite system).
 
 ---
 
@@ -17,6 +18,90 @@ bloque se puede probar independientemente.
       [bichitosrumble.com](https://www.bichitosrumble.com)).
 - [ ] `npm install` si toca.
 - [ ] `npm run dev` levanta sin errores en http://localhost:5173.
+
+---
+
+## A · Character-select (post UI pass 2026-04-23)
+
+- [ ] Los 9 bichitos en el preview del podio se ven **a tamaño similar**
+      (no hay unos gigantes que se salen del frame y otros minúsculos).
+- [ ] Ningún bichito sale **tumbado fuera del anillo** o cortado por arriba.
+- [ ] Los Meshy (Kurama, Sergei, Sihans, Sebastian) se ven con **color plano**
+      vibrante, NO oscuros/metálicos.
+- [ ] Botones `🔊` y `🎶` visibles en el title, character-select, waiting
+      y end-screen (reachable en todas las pantallas — antes se ocultaban
+      con el resto del HUD fuera de match).
+- [ ] En el info pane cada bichito muestra **3 abilities** (J/K/L) con
+      chips dorados. Sergei, Kurama, Shelly mantienen su Frenzy original;
+      Trunk→Stampede, Kermit→Hypnosapo, Sihans→Diggy Rush, Kowalski→
+      Blizzard, Cheeto→Tiger Rage, Sebastian→Red Claw.
+- [ ] Cuando `/images/ability-icons.png` carga, cada ability row se ve con
+      su ilustración a la izquierda del chip. Si el asset falta, el row
+      colapsa sin icono (sin hueco vacío).
+
+---
+
+## B · In-match HUD (post UI pass 2026-04-23)
+
+- [ ] Las 4 vidas van en las **4 esquinas** del screen, no en columna
+      central arriba.
+- [ ] El corner del **local player** tiene borde/glow **dorado** (is-local).
+- [ ] Cada corner muestra avatar 70×70, nombre del crítter, corazones
+      16px, y badge 🤖 si es bot.
+- [ ] Timer central arriba es **grande** (~44px) y dorado; Alive count
+      pequeño debajo en mayúsculas.
+- [ ] Ningún corner pisa al **Vibe Jam badge** (bottom-right) ni al
+      **portal legend** (top-left).
+- [ ] Vibe Jam badge se ve más grande que antes (17px font, padding
+      generoso) y al hover salta arriba con fondo dorado.
+- [ ] Cuando un crítter muere su corner pierde opacidad (0.35).
+
+---
+
+## C · Countdown drop desincronizado
+
+- [ ] Al arrancar match, los 4 bichitos NO aterrizan todos a la vez.
+- [ ] El local player cae inmediato; los bots caen escalonados
+      (~0.15–0.35s de diferencia entre ellos).
+- [ ] Durante la caída cada crítter reproduce el clip `fall`
+      (brazos arriba / cuerpo extendido según el clip de su source).
+- [ ] Al tocar suelo: dust puff + thud + crítter pasa a idle animado
+      (NO se queda congelado en la pose final del fall).
+
+---
+
+## D · Pause menu offline (ESC)
+
+- [ ] En `vs Bots` mid-match, **ESC** abre un overlay con card central:
+      ▶ Resume · ↻ Restart match · ⏏ Quit to title.
+- [ ] Resume → cierra el overlay y sigue la partida desde el mismo frame
+      (sin saltos ni pérdida de cooldowns).
+- [ ] Restart match → reinicia limpio.
+- [ ] Quit to title → vuelve al title screen (limpia portal context).
+- [ ] ESC en **online** NO abre pause (intencional: server autoritativo).
+- [ ] ESC en title / select / waiting / end sigue siendo 'back' normal.
+
+---
+
+## E · Portal "Press P" hint
+
+- [ ] Durante una partida ofline (vs bots), al mirar el portal verde
+      (esquina trasera-derecha) ves **"PRESS P"** flotando encima del
+      label "NEXT GAME", con un bob suave.
+- [ ] Al pulsar P el hint desaparece y el portal se expande.
+- [ ] Al volver a pulsar P, el portal se minimiza y el hint reaparece.
+- [ ] En mobile/touch el texto cambia a **"TAP 🌀"**.
+
+---
+
+## F · Sprites + favicon
+
+- [ ] La pestaña del navegador muestra el favicon **BR** (marca cartoon).
+- [ ] Cuando `/images/hud-icons.png` está servido, los emojis 🔊 🎶 🏆 🤖
+      se reemplazan donde esté integrado el sprite (actualmente sólo en
+      ability icons; el resto sigue con emojis por diseño progresivo).
+- [ ] Si borras el archivo y recargas, los emojis siguen funcionando
+      (fallback).
 
 ---
 

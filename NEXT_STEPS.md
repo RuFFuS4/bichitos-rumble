@@ -1,17 +1,31 @@
 # Next Steps — Bichitos Rumble
 
-> **Deadline: May 1, 2026 @ 13:37 UTC**
-> **Game is LIVE on vibej.am** (user-confirmed submission 2026-04-18).
+> **Deadline: May 1, 2026 @ 13:37 UTC** (~8 días restantes desde 2026-04-23).
+> **Submitted to Vibe Jam** (Google Form enviado 2026-04-23).
+> **Game is LIVE on vibej.am** at https://www.bichitosrumble.com.
 > Single source of truth for what to work on next. Dispatch sessions:
 > read this first.
 
-## Roadmap hasta la entrega
+## Prioridades inmediatas (2026-04-23 en adelante)
 
-13 días restantes. Orden de trabajo decidido con scope honesto.
-Si una fase se atasca >2h, se corta y sigue la siguiente. Los 3
-innegociables (animaciones distintivas, habilidades finales, mejora
-de destrucción) son prioritarios; si algo cae por tiempo, es el
-último de los innegociables (destrucción iterada).
+Con el submit ya dentro, el juego queda en **polish puro** hasta el deadline.
+Orden acordado con el usuario:
+
+1. **Refinar character selector** — validar visualmente el auto-fit,
+   aún hay pulido por hacer en info pane / anim timing de idle.
+2. **Habilidades + timing de animaciones** — Sergei primero (feel pass
+   bloqueado desde hace días), luego resto del roster. Incluye alinear
+   durations de clip con `duration`/`windUp` de las abilities.
+3. **Sprites HUD restantes** — hearts, bot-mask, belts-trophy, sfx/music,
+   critter-head fallbacks en life corners.
+4. **Feel + VFX por ability** — partículas, shockwaves dedicadas,
+   squash/stretch cuando toque el clip heavy.
+5. **Lighthouse + cross-device playtest**.
+
+## Roadmap hasta la entrega (legacy, casi cerrado)
+
+Lo que sigue es roadmap original. La mayoría está tachado; queda lo
+que el usuario decida rescatar.
 
 ### Fase 1 · ESTA SEMANA (18-24 abril) — parcial
 - [x] Branding firma `@RGomezR14` en portada (bottom-left, link a X)

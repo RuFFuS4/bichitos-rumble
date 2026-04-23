@@ -11,6 +11,24 @@
 > section explain the trade-offs + sanity rules so we don't ship
 > something that doesn't fit.
 
+## Delivered assets (2026-04-23)
+
+Three prompts have already produced live assets integrated into the game:
+
+| Asset | Prompt section | File | Integration |
+|-------|---------------|------|-------------|
+| Favicon "BR" | §1 | `public/favicon-br.png` | `<link rel="icon">` in index.html + tools.html (SVG kept as fallback) |
+| HUD spritesheet | §8 (new) | `public/images/hud-icons.png` (4×7, 26 icons) | CSS sprite system `.sprite-hud-*`, activated when image loads. First uses pending integration (hearts / bot-mask / belts) |
+| Ability spritesheet | §9 (new) | `public/images/ability-icons.png` (3×9, 27 icons) | CSS sprite system `.sprite-ability-{critter}-{slot}`, integrated in character-select info pane + in-match cooldown HUD |
+
+Preload logic in `src/main.ts` adds `body.has-hud-sprites` /
+`body.has-ability-sprites` only if the backing PNG actually loads;
+emoji fallbacks stay if the asset is missing.
+
+**3D belts** (§ belts design, AI-generated render prompt used in chat
+on 2026-04-23) are still pending — user will generate and drop into
+`public/images/belts/` once done. 16 belts: 9 Champion + 7 Global.
+
 ---
 
 ## 1 · Favicon (32×32 → 16×16)

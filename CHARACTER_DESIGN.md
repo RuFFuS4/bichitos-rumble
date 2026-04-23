@@ -1,6 +1,6 @@
 # Character Design
 
-## Gap entre kits temporales y habilidades definitivas (2026-04-17)
+## Gap entre kits temporales y habilidades definitivas (actualizado 2026-04-23)
 
 IMPORTANTE — lo que hay en el juego ahora **no** es todavía el set final de
 habilidades diseñadas más abajo. Para cerrar el roster completo sin pararnos
@@ -12,7 +12,10 @@ en rediseño por personaje, todos los bichitos comparten 3 factories base:
 
 Cada personaje recibe un **kit temporal** reutilizando esas factories con
 tuning distinto (impulse/radius/force/cooldown/multipliers) y un nombre
-descriptivo. Solo Sergei coincide realmente con su diseño final.
+descriptivo. **Los 9 bichitos tienen ahora sus 3 slots ocupados (J/K/L)**
+tras la tanda del 2026-04-23 que añadió placeholder Frenzy a los 6 que
+aún no tenían ULTI. Solo Sergei coincide con su diseño final; los demás
+siguen siendo cascarón funcional con nombre temático.
 
 El siguiente bloque de habilidades no debe hacerse a ciegas: esta tabla
 marca exactamente qué sigue siendo placeholder.
@@ -22,14 +25,14 @@ marca exactamente qué sigue siendo placeholder.
 | Personaje  | Rol temporal | Kit temporal actual (tipos `+ nombre`) | Hab 1 definitiva diseño | Hab 2 definitiva diseño | ULTI definitiva diseño | Gap real |
 |------------|--------------|-----------------------------------------|-------------------------|--------------------------|--------------------------|----------|
 | **Sergei** | Balanced     | CR `Gorilla Rush` + GP `Shockwave` + F `Frenzy` | Charge Rush (dash) | Shockwave (onda área, no stun) | Frenzy (buff velocidad + daño) | **Alineado**. Sergei es el único personaje donde el kit temporal coincide en tipo y sensación con el diseño. |
-| **Trunk**  | Bruiser      | CR `Trunk Ram` + GP `Earthquake`        | Charge Rush (dash frontal) | **Trunk Grip** (agarra + lanza en dirección — targeted grab) | **Ground Pound** (pisotón con STUN de área) | H2 totalmente placeholder (grab/throw no existe). ULTI reusa GP pero sin stun — sólo knockback radial. Sin Frenzy. |
+| **Trunk**  | Bruiser      | CR `Trunk Ram` + GP `Earthquake` + F `Stampede` | Charge Rush (dash frontal) | **Trunk Grip** (agarra + lanza en dirección — targeted grab) | **Ground Pound** (pisotón con STUN de área) | H2 totalmente placeholder (grab/throw no existe). ULTI real pide STUN — hoy la L es un Frenzy placeholder ("Stampede"). |
 | **Kurama** | Trickster    | CR `Fox Dash` + GP `Mirror Burst` + F `Frenzy` | Charge Rush | **Mirror Trick** (deja copia 2s que absorbe daño) | **Copycat** (copia la ULTI del último enemigo golpeado) | H2 y ULTI totalmente placeholder. No hay sistema de ilusiones ni de copia de abilities; Frenzy se usa como relleno de ULTI. |
 | **Shelly** | Tank         | CR `Shell Charge` + GP `Shell Slam` + F `Frenzy` | Charge Rush (caparazón rodando) | **Shell Shield** (invulnerable + inmóvil + refleja daño) | **Mega Shell** (roda gigante empujando todo) | H2 requiere sistema de invulnerabilidad + reflect. ULTI pide movimiento rodante continuo. Ambos placeholder. Frenzy rellena ULTI. |
-| **Kermit** | Controller   | CR `Leap Forward` + GP `Poison Cloud`   | Charge Rush (salto con patas) | **Poison Cloud** (nube que oculta visión de los que están dentro) | **Hypnosapo** (invierte controles de enemigos tocados) | H2 comparte nombre pero el efecto real (zona bloqueadora de visión) no está — es solo knockback radial. ULTI totalmente placeholder (invertir inputs de otros). Sin Frenzy. |
-| **Sihans** | Trapper      | CR `Burrow Rush` + GP `Tremor`          | Charge Rush (bajo tierra + emerge) | **Tunnel** (teleport con zonas lentas en entrada/salida) | **Diggy Diggy Hole** (crea hoyo permanente en el mapa) | H2 requiere teleport + efecto de terreno persistente. ULTI requiere modificar la mesh del arena en runtime. Ambos totalmente placeholder. Sin Frenzy. |
-| **Kowalski** | Mage       | CR `Ice Slide` + GP `Arctic Burst`      | Charge Rush (deslizar panza) | **Snowball** (proyectil a distancia con slow 50%) | **Ice Age** (congela suelo área grande, enemigos resbalan) | Sin sistema de proyectiles (H2 es placeholder). Sin sistema de slipping surface (ULTI placeholder). Sin Frenzy. |
-| **Cheeto** | Assassin     | CR `Pounce` + GP `Paw Stomp`            | Charge Rush (salto felino) | **Shadow Step** (teleport detrás del enemigo más cercano + golpe) | **Tiger Roar** (empuje cónico, no radial) | H2 requiere target-selection + teleport. ULTI pide cono direccional, ahora es radial. Ambos placeholder. Sin Frenzy. |
-| **Sebastian** | Glass Cannon | CR `Claw Rush` + GP `Big Claw Slam`  | Charge Rush (desplazamiento lateral + pinza) | **Claw Sweep** (barrido en abanico frontal) | **Crab Slash** (carga lateral que mata o se cae del mapa) | H1 casi pero no es lateral. H2 pide cono direccional, ahora es radial. ULTI requiere detección "o mato o muero". Todo placeholder funcional. Sin Frenzy. |
+| **Kermit** | Controller   | CR `Leap Forward` + GP `Poison Cloud` + F `Hypnosapo` | Charge Rush (salto con patas) | **Poison Cloud** (nube que oculta visión de los que están dentro) | **Hypnosapo** (invierte controles de enemigos tocados) | H2 comparte nombre pero el efecto real (zona bloqueadora de visión) no está — es sólo knockback radial. ULTI real pide input-inversion — hoy es Frenzy placeholder con el nombre correcto ("Hypnosapo"). |
+| **Sihans** | Trapper      | CR `Burrow Rush` + GP `Tremor` + F `Diggy Rush` | Charge Rush (bajo tierra + emerge) | **Tunnel** (teleport con zonas lentas en entrada/salida) | **Diggy Diggy Hole** (crea hoyo permanente en el mapa) | H2 requiere teleport + efecto de terreno persistente. ULTI pide modificar la mesh del arena en runtime — hoy es Frenzy placeholder ("Diggy Rush"). |
+| **Kowalski** | Mage       | CR `Ice Slide` + GP `Arctic Burst` + F `Blizzard` | Charge Rush (deslizar panza) | **Snowball** (proyectil a distancia con slow 50%) | **Ice Age** (congela suelo área grande, enemigos resbalan) | Sin sistema de proyectiles (H2 placeholder). Sin superficies resbaladizas (ULTI real); hoy L es Frenzy placeholder ("Blizzard"). |
+| **Cheeto** | Assassin     | CR `Pounce` + GP `Paw Stomp` + F `Tiger Rage` | Charge Rush (salto felino) | **Shadow Step** (teleport detrás del enemigo más cercano + golpe) | **Tiger Roar** (empuje cónico, no radial) | H2 requiere target-selection + teleport. ULTI pide cono direccional — hoy L es Frenzy placeholder ("Tiger Rage"). |
+| **Sebastian** | Glass Cannon | CR `Claw Rush` + GP `Big Claw Slam` + F `Red Claw` | Charge Rush (desplazamiento lateral + pinza) | **Claw Sweep** (barrido en abanico frontal) | **Crab Slash** (carga lateral que mata o se cae del mapa) | H1 casi pero no es lateral. H2 pide cono direccional, ahora es radial. ULTI real pide detección "o mato o muero" — hoy L es Frenzy placeholder ("Red Claw"). |
 
 ### Cobertura skeletal (2026-04-21)
 

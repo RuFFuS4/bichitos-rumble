@@ -1,6 +1,48 @@
 # Memory — Bichitos Rumble
 
-## Key Decisions
+## Key Decisions (latest at top)
+
+### 2026-04-23 — Character-select auto-fit + HUD rework + sprites
+
+- **`preview.ts` has a `fitWrapper` inside `holder`** that applies a
+  per-critter uniform scale. The scale is computed during a 900ms sample
+  window of the idle loop, taking `max(h, w, d)` of the bone bounding
+  box and normalising to `TARGET_SILHOUETTE_MAX = 1.9u`. Preserves
+  proportions per critter (Trunk tall/slim, Sebastian wide/short).
+- **Meshy matte material fix**: `Critter.attachGlbMesh` forces
+  `metalness=0 + roughness=0.7` whenever the source PBR came in with
+  `metalness > 0.5`. Meshy exports at `metalness=1` without an envMap,
+  which rendered as dark grey. Tripo materials are untouched.
+- **Settings HUD always visible**: `setMatchHudVisible` used to
+  `display:none` the entire `#hud`, killing `#hud-settings` (SFX+music).
+  Fixed — now the function only toggles `body.match-active` and CSS
+  gates individual children. Root stays visible so 🔊/🎶 are reachable
+  on every screen.
+- **Lives in 4 corners** (TL/TR/BL/BR) instead of centered top column.
+  70×70 avatars, critter name, hearts, local-player highlighted in gold.
+- **6 ULTIs added** (placeholder `frenzy`) so every critter shows 3
+  slots: Trunk Stampede / Kermit Hypnosapo / Sihans Diggy Rush /
+  Kowalski Blizzard / Cheeto Tiger Rage / Sebastian Red Claw. Client +
+  server mirrored.
+- **Countdown drop is staggered**: player (index 0) falls immediately;
+  bots cascade with `i × (0.15..0.35)s` + jitter. Each critter plays
+  its `fall` clip on gravity onset and snaps to `idle` on landing.
+- **Offline pause menu (ESC → Resume/Restart/Quit)** in vs-bots only.
+  Online doesn't pause (authoritative server).
+- **Portal "Press P" hint** — 3D sprite above each portal, inverse
+  opacity to the main label. Switches to "TAP 🌀" on touch.
+- **Sprite sheet system** `.sprite-hud-*` + `.sprite-ability-*`, activated
+  by `body.has-hud-sprites` / `body.has-ability-sprites` classes only
+  when the backing PNG loads. Emoji fallbacks stay otherwise. Sheets
+  live at `public/images/hud-icons.png` (4×7, 26 icons) and
+  `public/images/ability-icons.png` (3×9, 27 icons). First integration:
+  ability icons in character-select info pane + in-match cooldown HUD.
+- **Favicon**: `/favicon-br.png` (AI-generated BR mark) primary, SVG
+  kept as secondary.
+- **Submitted to Vibe Jam Google Form on 2026-04-23** (well before
+  the May 1 deadline). Repo is now polish-only.
+
+## Key Decisions (historical)
 - **Online multiplayer delivered** (Colyseus authoritative, Railway hosted,
   up to 4 players per room with 60s auto bot-fill, bot-takeover on
   disconnect). Architecture: NO Vercel Functions for realtime, NO

@@ -9,6 +9,148 @@
 
 ---
 
+## 2026-04-23 — UI pass: selector polish + HUD rework + 6 ULTIs + sprite system
+
+Tanda grande de pulido visual/UX. El roster ya está cerrado (9/9 skeletal
++ 68/72 states, 2026-04-22), y el submit al Vibe Jam Google Form está
+enviado — a partir de aquí todo es polish y depth dentro de sistemas
+existentes, sin tocar la mecánica core.
+
+### Character-select presentable
+
+**Problema**: el preview 3D del podio tenía discrepancias fuertes entre
+los bichitos Tripo (Trunk 1.93u, Shelly 1.86u) y los Meshy
+(Sebastian 0.56u en pose idle agazapada, Sihans 0.74u tumbado).
+Escalas de roster calibradas para gameplay no funcionaban para el
+preview del menu. Además los modelos Meshy se veían mate/oscuros
+porque llegaban con `metalness: 1` y la escena no tiene envMap.
+
+**Fix**:
+- `preview.ts` gana un `fitWrapper` anidado dentro del `holder` que
+  aplica una escala uniforme per-critter. Se mide el `max(h, w, d)`
+  del bounding box de los bones durante ~900ms del idle loop (para
+  capturar el wiggle del ciclo) y se escala a `TARGET_SILHOUETTE_MAX
+  = 1.9u`. Preserva proporciones individuales (Trunk sigue siendo
+  alto y delgado, Sebastian sigue siendo ancho y bajo).
+- Max dims post-fit: Trunk 1.90 / Kurama 1.56 / Sergei 1.62 /
+  Shelly 1.92 / Kermit 1.90 / Sihans 1.38 / Kowalski 1.49 /
+  Cheeto 1.80 / Sebastian 1.62. Antes el rango era 0.56–1.93
+  (factor 3.4×), ahora 1.38–1.92 (factor 1.4×).
+- `Critter.attachGlbMesh` ahora normaliza materiales PBR: si
+  `metalness > 0.5` (caso Meshy), lo fuerza a `metalness=0 +
+  roughness=0.7` para que el diffuse map conduzca el look. Tripo
+  sin tocar. Con eso, Kurama/Sergei/Sihans/Sebastian dejan de
+  verse mate y muestran el color plano del source.
+- Canvas del preview 380×340 → 500×440 (+31% área), pedestal
+  radius 1.45→1.55 + height 0.50→0.55, cámara FOV 32°→30° y
+  distance 4.8→5.2u, halo radial más intenso (opacity 0.10→0.15).
+- Info pane del selector con panel oscuro + blur + border. Role
+  label en gold letter-spaced, stats bars 10px con glow, keybind
+  `J`/`K`/`L` ahora son chips gold-outlined en vez de texto
+  monospace gris.
+
+### HUD in-match reorganizado
+
+**Problema**: las vidas de los 4 jugadores iban en una columna central
+arriba del timer. Poco protagonismo, difícil distinguir al local player.
+
+**Fix**:
+- Cuatro contenedores `.player-life-corner` en TL/TR/BL/BR.
+  Avatar 70×70px (antes 22), nombre del crítter, hearts 16px,
+  highlight gold para el local player (`is-local`), opacity 0.35
+  cuando muere.
+- Margins dodgeadores: TL top 118px (baja del portal-legend), TR
+  top 72px (baja de settings), BL bottom 24px, BR bottom 62px
+  (arriba del Vibe Jam widget). Nada se pisa.
+- Top-center hero cluster: timer **44px bold gold** (antes 18px)
+  + Alive count **uppercase letter-spaced** debajo. Se lee desde
+  la otra punta del monitor.
+- Vibe Jam badge overridde vía `!important`: 14px→17px, padding
+  7/14→11/20, hover translateY + fondo gold.
+
+### Bugfix crítico: botones SFX/Música invisibles en title/select
+
+`setMatchHudVisible(false)` estaba haciendo `hudRoot.style.display =
+'none'`, ocultando también `#hud-settings` donde viven 🔊 / 🎶.
+Violaba el contrato del submission checklist ("reachable on every
+screen"). Refactor: la función solo togglea `body.match-active`; el
+CSS ya gatea los hijos match-only (`#hud-top-center`, `#hud-lives`,
+`#ability-bar-container`, `#overlay`). El `#hud` root queda siempre
+visible para los settings.
+
+### Sistema de sprites + favicon AI-generados
+
+Los prompts de AI_PROMPTS.md ahora tienen arte. Tres assets:
+
+- `public/images/hud-icons.png` (4×7 grid, 26 iconos: corazones,
+  inmunidad, cabezas de los 9 crítters, bot-mask, timer/skull/
+  trophy/crown, sfx/music on/off, scoreboard, belts)
+- `public/images/ability-icons.png` (3×9 grid, 27 iconos: 9
+  crítters × 3 habilidades J/K/L)
+- `public/favicon-br.png` (marca BR cartoon)
+
+Sistema CSS `.sprite-hud` + `.sprite-ability` con positions en
+porcentaje (no pixels, resiliente a cambios de tamaño del asset).
+`main.ts` preloadea las imágenes y añade `body.has-hud-sprites` /
+`body.has-ability-sprites` solo si cargan sin error; si faltan, el
+emoji fallback mantiene el juego funcional.
+
+Primera integración: **abilities en el info pane del character
+select** y **abilities en el HUD de cooldowns in-match**. Los hearts,
+bot-badge, belts-trophy y otros quedan para siguiente tanda.
+
+Favicon PNG añadido en index.html y tools.html como primero en la
+cascada, SVG anterior queda como fallback.
+
+### Gap cerrado de ULTIs
+
+Los 6 crítters que no tenían slot L (Trunk, Kermit, Sihans, Kowalski,
+Cheeto, Sebastian) reciben ahora un `frenzy` placeholder con nombre
+temático: Stampede / Hypnosapo / Diggy Rush / Blizzard / Tiger Rage /
+Red Claw. Mecánica placeholder (+speed +mass), nombres correctos. Los
+9 bichitos muestran las 3 abilities en el info pane. Cliente + server
+espejados.
+
+### Feel: countdown drop desincronizado + clip fall
+
+- `initCountdownDrops` ahora reparte un `delay` escalonado por índice:
+  player (i=0) cae al instante; los bots i=1..3 retardan
+  `i * (0.15..0.35s)` + jitter. Alturas entre 10–16u.
+- `updateCountdownDrops` espera el `delay` de cada critter (hover en
+  altura), dispara `playSkeletal('fall')` cuando la gravedad toma, y
+  fuerza `playSkeletal('idle', { force: true })` al aterrizar para
+  cancelar el `clampWhenFinished` del clip fall.
+
+### UX: pausa offline + hint "Press P" sobre portal
+
+- Menú pause offline (vs bots): **ESC** durante `phase === 'playing'`
+  muestra card central con Resume / Restart match / Quit to title.
+  `this.paused` cortocircuita input + bots + física dentro del
+  case `'playing'`. Online no se ve afectado (authoritative server).
+- Cada portal gana un sprite 3D **"PRESS P"** (o "TAP 🌀" en touch)
+  flotando encima del label principal. Opacidad **inversa** al
+  expansion state: visible cuando el portal está minimizado (dice
+  cómo abrirlo), invisible cuando ya está expandido. Bob suave para
+  atraer la vista, contra-escala para lectura consistente.
+
+### Archivo "Google Form submit"
+
+`SUBMISSION_CHECKLIST.md` marcado: submit enviado 2026-04-23, ocho
+días antes del deadline. A partir de ahora el repo es ABSOLUTAMENTE
+sólo polish — el jam ya está registrado.
+
+### Pendientes inmediatos post-tanda
+
+- Validar visualmente en preview deploy (screenshots → iterar).
+- Completar integración de sprites HUD (hearts, bot-mask, belts,
+  sfx/music icons, critter-head fallbacks en corners).
+- Refinar character selector antes de pasar a abilities/timings.
+- Feel pass per-critter empezando por Sergei.
+- Actualizar el resto de .md (este log, character design, validation)
+  tras esta tanda.
+
+---
+
 ## 2026-04-20 — Blender MCP online + Sergei first rigging pass
 
 Segundo carril del animation pipeline activado. Hasta hoy solo teníamos
