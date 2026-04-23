@@ -1,0 +1,10 @@
+node_modules/
+dist/
+# Local SQLite DB for Online Belts — never commit.
+# Railway mounts a persistent volume at $DATA_DIR in prod.
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.env.local

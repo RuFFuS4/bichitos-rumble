@@ -41,6 +41,8 @@ import {
 import type { Room } from 'colyseus.js';
 import { getStateCallbacks } from 'colyseus.js';
 import { sendInput, onAbilityFired, type AbilityFiredEvent } from './network';
+import { ensureOnlineIdentity } from './hud/nickname-modal';
+import { type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
@@ -167,6 +169,10 @@ export class Game {
    *  short-circuits (no input, no bot AI, no physics) and the DOM pause
    *  menu overlay is shown. Toggled by ESC and the pause buttons. */
   private paused: boolean = false;
+  /** Set after the nickname modal resolves (or from localStorage cache)
+   *  when the player enters online mode. Sent with match-result writes so
+   *  the server can credit stats to the right player row. Null offline. */
+  private onlineIdentity: OnlineIdentity | null = null;
 
 
   constructor(scene: THREE.Scene) {
@@ -539,8 +545,19 @@ export class Game {
   /**
    * Enter character select in "online" mode. Reuses the offline select UI.
    * Confirming a playable character connects to the server with that name.
+   *
+   * Gated by the nickname modal: if no local identity is cached, we
+   * prompt for a nickname + register it before showing the select. On
+   * cancel, we stay on the title screen.
    */
-  public enterOnlineCharacterSelect(): void {
+  public async enterOnlineCharacterSelect(): Promise<void> {
+    try {
+      const identity = await ensureOnlineIdentity();
+      this.onlineIdentity = identity;
+    } catch (_err) {
+      // User cancelled the nickname modal → stay on title screen.
+      return;
+    }
     this.selectForOnline = true;
     this.enterCharacterSelect();
   }
@@ -615,7 +632,18 @@ export class Game {
       showOverlay('Connecting...');
 
       const { connectToBrawl, getDefaultServerUrl } = await import('./network');
-      const room = await connectToBrawl(getDefaultServerUrl(), { critterName });
+      // Pass playerId+token if we have an online identity — the server
+      // uses this to credit match stats to the right row for the Online
+      // Belts (Fase 3 wires the room handler; for now we just attach it
+      // to the join options so the handshake carries it).
+      const joinOpts: Record<string, unknown> = { critterName };
+      if (this.onlineIdentity) {
+        const { getDeviceToken } = await import('./online-identity');
+        joinOpts.playerId = this.onlineIdentity.playerId;
+        joinOpts.playerToken = getDeviceToken();
+        joinOpts.nickname = this.onlineIdentity.nickname;
+      }
+      const room = await connectToBrawl(getDefaultServerUrl(), joinOpts);
       this.enterOnline(room);
     } catch (err) {
       console.error('[Game] online connect failed:', err);

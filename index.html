@@ -477,6 +477,99 @@
     }
     .full-overlay.hidden { display: none; }
 
+    /* Nickname modal — single gate before the player enters online
+       multiplayer. Sits on its own z-index so it always reads above
+       title/select even during weird transitions. */
+    #nickname-modal { z-index: 50; }
+    #nickname-modal .nickname-card {
+      background: rgba(10, 10, 24, 0.85);
+      border: 1px solid rgba(255, 220, 92, 0.4);
+      border-radius: 18px;
+      padding: 34px 40px 28px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      min-width: 360px;
+      max-width: 480px;
+      width: 90%;
+    }
+    #nickname-modal .nickname-title {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 2.5px;
+      color: #ffdc5c;
+      margin: 0;
+      text-align: center;
+    }
+    #nickname-modal .nickname-sub {
+      font-size: 13px;
+      line-height: 1.4;
+      opacity: 0.75;
+      text-align: center;
+      margin: 0;
+      max-width: 380px;
+    }
+    #nickname-modal .nickname-input {
+      width: 100%;
+      padding: 12px 14px;
+      font: 600 18px/1 'Segoe UI', Arial, sans-serif;
+      letter-spacing: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 10px;
+      color: #fff;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    #nickname-modal .nickname-input:focus {
+      border-color: rgba(255, 220, 92, 0.65);
+      background: rgba(255, 255, 255, 0.12);
+    }
+    #nickname-modal .nickname-error {
+      font-size: 13px;
+      color: #ff8866;
+      min-height: 18px;
+      text-align: center;
+      font-weight: 600;
+    }
+    #nickname-modal .nickname-buttons {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+    }
+    #nickname-modal .nickname-btn {
+      flex: 1;
+      font: 700 15px/1 'Segoe UI', Arial, sans-serif;
+      letter-spacing: 0.5px;
+      padding: 11px 18px;
+      border-radius: 10px;
+      background: rgba(255, 220, 92, 0.22);
+      border: 1px solid rgba(255, 220, 92, 0.55);
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.15s, border-color 0.15s;
+    }
+    #nickname-modal .nickname-btn:hover:not(:disabled) {
+      background: rgba(255, 220, 92, 0.38);
+      border-color: rgba(255, 220, 92, 0.95);
+      transform: translateY(-1px);
+    }
+    #nickname-modal .nickname-btn:disabled {
+      opacity: 0.45;
+      cursor: wait;
+    }
+    #nickname-modal .nickname-btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    #nickname-modal .nickname-btn-secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255, 255, 255, 0.55);
+    }
+
     /* Pause menu — offline only. Card-style panel centred on a slightly
        dimmer overlay so the game scene is still visible in the background. */
     #pause-menu { z-index: 40; }
@@ -2281,6 +2374,35 @@
       <span class="desktop-only">Press <kbd>T</kbd> to leave</span>
       <span class="touch-only">Tap T to leave</span>
     </span>
+  </div>
+
+  <!-- Online nickname modal. Opens once the player taps "Online
+       Multiplayer" if no cached identity exists (localStorage). The
+       nickname + device token pair is sent to the server, which
+       either registers a new row or reclaims an existing one that
+       matches the token. See src/online-identity.ts. -->
+  <div id="nickname-modal" class="full-overlay hidden">
+    <div class="nickname-card">
+      <h2 class="nickname-title">PICK YOUR NICKNAME</h2>
+      <p class="nickname-sub">
+        Needed to compete for Online Belts (Throne, Flash, Ironclad,
+        Slayer, Hot Streak). Stored per device — no login, no password.
+      </p>
+      <input
+        id="nickname-input"
+        class="nickname-input"
+        type="text"
+        maxlength="16"
+        placeholder="3–16 chars · letters/digits/-/_"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div id="nickname-error" class="nickname-error" aria-live="polite"></div>
+      <div class="nickname-buttons">
+        <button id="btn-nickname-confirm" class="nickname-btn" type="button">▶ Play online</button>
+        <button id="btn-nickname-cancel" class="nickname-btn nickname-btn-secondary" type="button">Cancel</button>
+      </div>
+    </div>
   </div>
 
   <!-- Pause menu (offline vs-bots only). Opens on ESC; backing card lets

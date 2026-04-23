@@ -6,9 +6,14 @@ import { Server } from 'colyseus';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { createServer } from 'http';
 import { BrawlRoom } from './BrawlRoom.js';
+import { handleApiRequest } from './api.js';
 
 const PORT = Number(process.env.PORT) || 2567;
-const httpServer = createServer((req, res) => {
+const httpServer = createServer(async (req, res) => {
+  // REST API (Online Belts leaderboards + nickname register). Short-circuits
+  // when the URL matches /api/*, otherwise falls through to health/info.
+  if (await handleApiRequest(req, res)) return;
+
   // Health check endpoint for hosting platforms (Fly.io, Railway)
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -27,5 +32,6 @@ gameServer.define('brawl', BrawlRoom);
 
 gameServer.listen(PORT).then(() => {
   console.log(`[server] listening on ws://localhost:${PORT}`);
-  console.log(`[server] health: http://localhost:${PORT}/health`);
+  console.log(`[server] health:   http://localhost:${PORT}/health`);
+  console.log(`[server] api:      http://localhost:${PORT}/api/leaderboard`);
 });

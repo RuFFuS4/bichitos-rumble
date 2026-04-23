@@ -27,6 +27,7 @@ import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed } from '
 import { createAbilityStates, tickPlayerAbilities } from './sim/abilities.js';
 import { ArenaSim } from './sim/arena.js';
 import { computeBotInput } from './sim/bot.js';
+import { verifyPlayer, recordMatchResult } from './db.js';
 
 /** Seconds of open waiting before the server fills empty slots with bots. */
 const WAITING_TIMEOUT = 60;
@@ -44,6 +45,11 @@ interface InputMessage {
 
 interface JoinOptions {
   critterName?: string;
+  /** Online identity from src/online-identity.ts (optional — guests can
+   *  still play online, they just don't earn Online Belts). */
+  playerId?: string;
+  playerToken?: string;
+  nickname?: string;
 }
 
 /**
@@ -65,6 +71,14 @@ interface InternalPlayerData {
   anticipationTimer: number;
   headbuttTimer: number;
   hasInput: boolean;
+  // Online-belt identity (only set for human players who registered a
+  // nickname via the REST API and passed verifyPlayer on join). Null for
+  // bots and for humans who skipped the nickname modal.
+  onlinePlayerId: string | null;
+  /** Kills this match that were humans (not bots). TODO(belts-v2): wire
+   *  headbutt last-hitter tracking to credit the actual slayer. For now
+   *  stays at 0 — Slayer Belt will need a follow-up. */
+  killsVsHumansThisMatch: number;
 }
 
 function newInternal(): InternalPlayerData {
@@ -72,6 +86,8 @@ function newInternal(): InternalPlayerData {
     inputMoveX: 0, inputMoveZ: 0,
     inputHeadbutt: false, inputAbility1: false, inputAbility2: false, inputUltimate: false,
     respawnTimer: 0, anticipationTimer: 0, headbuttTimer: 0, hasInput: false,
+    onlinePlayerId: null,
+    killsVsHumansThisMatch: 0,
   };
 }
 
@@ -85,6 +101,10 @@ export class BrawlRoom extends Room<GameState> {
   private arenaSim!: ArenaSim;
   /** Monotonic counter for bot sessionIds (bot_1, bot_2, …). */
   private botCounter = 0;
+  /** Epoch ms at the moment 'playing' started — used for durationMs in
+   *  the Online Belts recorded stats. Set in transitionFromCountdown and
+   *  read once on endMatch. Null until the match actually starts. */
+  private playingStartedAtMs: number | null = null;
 
   onCreate(_options: unknown) {
     this.tickInterval = 1000 / SIM.tickRate;
@@ -167,7 +187,17 @@ export class BrawlRoom extends Room<GameState> {
 
     const p = this.buildPlayerSchema(client.sessionId, critterName, spawn, /*isBot*/ false);
     this.state.players.set(client.sessionId, p);
-    this.internal.set(client.sessionId, newInternal());
+    const internal = newInternal();
+    // Verify the online identity if the client supplied one. Only a
+    // verified identity gets credited on match-end; guests (no identity
+    // or failed verification) play normally but earn nothing for belts.
+    if (options.playerId && options.playerToken && verifyPlayer(options.playerId, options.playerToken)) {
+      internal.onlinePlayerId = options.playerId;
+      console.log(`[BrawlRoom] ${client.sessionId} online identity verified (${options.nickname ?? options.playerId})`);
+    } else if (options.playerId) {
+      console.log(`[BrawlRoom] ${client.sessionId} failed identity verification — playing as guest`);
+    }
+    this.internal.set(client.sessionId, internal);
     console.log(`[BrawlRoom] ${client.sessionId} joined roomId=${this.roomId} (${this.state.players.size}/${this.maxClients})`);
 
     // 4 humans: start the match NOW, no need to wait out the timer.
@@ -350,6 +380,53 @@ export class BrawlRoom extends Room<GameState> {
     this.state.winnerSessionId = winnerSessionId;
     this.lock().catch(() => { /* already locked or disposing */ });
     console.log(`[BrawlRoom] match ended reason=${reason} winner=${winnerSessionId} (locked)`);
+
+    this.recordOnlineBeltStats(winnerSessionId);
+  }
+
+  /**
+   * Persist per-player match stats for the Online Belts feature. Called
+   * once at endMatch. Only players with a VERIFIED online identity
+   * (nickname + token validated on join) get credited; guests are
+   * ignored so they don't pollute leaderboards.
+   *
+   * killsVsHumans is tracked via internal.killsVsHumansThisMatch, which
+   * is 0 in v1 — TODO(belts-v2): wire last-hitter tracking in physics.ts
+   * so the Slayer Belt has real data. The other four belts (Throne,
+   * Flash, Ironclad, Hot Streak) are fully live today.
+   */
+  private recordOnlineBeltStats(winnerSessionId: string): void {
+    const durationMs = this.playingStartedAtMs !== null
+      ? Date.now() - this.playingStartedAtMs
+      : 0;
+
+    for (const [sid, p] of this.state.players) {
+      const internal = this.internal.get(sid);
+      if (!internal?.onlinePlayerId) continue;      // guest or bot → skip
+      if (p.isBot) continue;                        // bot-takeover edge case
+
+      const won = sid === winnerSessionId;
+      const livesLeft = Math.max(0, p.lives);
+      try {
+        recordMatchResult({
+          playerId: internal.onlinePlayerId,
+          won,
+          durationMs,
+          livesLeft,
+          killsVsHumans: internal.killsVsHumansThisMatch,
+          critterName: p.critterName,
+        });
+        console.log(
+          `[Belts] recorded ${won ? 'WIN' : 'loss'} for ${internal.onlinePlayerId} ` +
+          `(${p.critterName}, lives=${livesLeft}, ms=${durationMs})`,
+        );
+      } catch (err) {
+        console.error('[Belts] failed to record match result:', err);
+      }
+    }
+
+    // Reset the stamp so a subsequent re-countdown starts fresh.
+    this.playingStartedAtMs = null;
   }
 
   // -------------------------------------------------------------------------
@@ -367,6 +444,9 @@ export class BrawlRoom extends Room<GameState> {
         if (this.state.countdownLeft <= 0) {
           this.state.phase = 'playing';
           this.state.matchTimer = SIM.match.duration;
+          // Stamp the real-clock start so Online Belts can report a
+          // meaningful durationMs even if simulation ticks get throttled.
+          this.playingStartedAtMs = Date.now();
         }
         // During countdown: freeze positions but still apply friction to zero any residual velocity
         for (const p of this.state.players.values()) {
