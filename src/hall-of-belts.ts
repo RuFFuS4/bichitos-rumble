@@ -34,23 +34,29 @@ const ONLINE_BELT_META: Array<{
   id: OnlineBeltId;
   name: string;
   icon: string;
+  imgPath: string;
   criterion: string;
   /** Format the raw metric into something human-readable. */
   format: (entry: LeaderboardEntry) => string;
 }> = [
   { id: 'throne-online',    name: 'Throne Belt',    icon: '👑',
+    imgPath: './images/belts/throne-online.png',
     criterion: 'Most online wins',
     format: (e) => `${e.value} wins` },
   { id: 'flash-online',     name: 'Flash Belt',     icon: '⚡',
+    imgPath: './images/belts/flash-online.png',
     criterion: 'Fastest online win',
     format: (e) => `${(e.value / 1000).toFixed(1)}s` },
   { id: 'ironclad-online',  name: 'Ironclad Belt',  icon: '🛡️',
+    imgPath: './images/belts/ironclad-online.png',
     criterion: 'Best lives-per-match ratio (min 5 matches)',
     format: (e) => `${e.value.toFixed(2)} lives/match (${e.secondaryValue} matches)` },
   { id: 'slayer-online',    name: 'Slayer Belt',    icon: '🗡️',
+    imgPath: './images/belts/slayer-online.png',
     criterion: 'Most human kills',
     format: (e) => `${e.value} kills` },
   { id: 'hot-streak-online', name: 'Hot Streak Belt', icon: '🔥',
+    imgPath: './images/belts/hot-streak-online.png',
     criterion: 'Longest win streak',
     format: (e) => `${e.value} in a row` },
 ];
@@ -181,11 +187,15 @@ function renderOfflineSlot(badge: BadgeDef, isUnlocked: boolean): HTMLDivElement
   const slot = document.createElement('div');
   slot.className = `belt-slot ${isUnlocked ? 'unlocked' : 'locked'} belt-${badge.category}`;
   slot.setAttribute('role', 'listitem');
-  // Tooltip content for desktop hover — on touch, the description is
-  // inline below the name.
   slot.setAttribute('title', `${badge.name}\n${badge.description}`);
+  // AI-generated PNG + emoji fallback. If the img errors (404 etc.),
+  // the onerror handler falls back to the emoji character. Locked
+  // badges always show the padlock regardless of asset availability.
+  const iconHtml = isUnlocked
+    ? `<img class="belt-img" src="${escapeHtml(badge.imgPath)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${badge.icon}'}))">`
+    : '🔒';
   slot.innerHTML = `
-    <div class="belt-icon">${isUnlocked ? badge.icon : '🔒'}</div>
+    <div class="belt-icon">${iconHtml}</div>
     <div class="belt-name">${escapeHtml(badge.name)}</div>
     <div class="belt-desc">${escapeHtml(badge.description)}</div>
   `;
@@ -256,9 +266,10 @@ function renderOnlineColumn(
         `;
       }).join('');
 
+  const iconHtml = `<img class="belt-img-online" src="${escapeHtml(meta.imgPath)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${meta.icon}'}))">`;
   col.innerHTML = `
     <div class="belt-online-head">
-      <div class="belt-online-icon">${meta.icon}</div>
+      <div class="belt-online-icon">${iconHtml}</div>
       <div class="belt-online-meta">
         <div class="belt-online-name-big">${escapeHtml(meta.name)}</div>
         <div class="belt-online-criterion">${escapeHtml(meta.criterion)}</div>

@@ -21,6 +21,7 @@ import { getCachedIdentity } from './online-identity';
 interface BeltMeta {
   name: string;
   icon: string;
+  imgPath: string;
   /** Format the raw numeric metric into human-readable text. Mirrors
    *  hall-of-belts.ts ONLINE_BELT_META so the toast reads consistently
    *  with the leaderboard column. */
@@ -28,11 +29,16 @@ interface BeltMeta {
 }
 
 const BELT_META: Record<BeltChangedEvent['belt'], BeltMeta> = {
-  'throne-online':    { name: 'Throne Belt',    icon: '👑', format: (v) => `${v} wins` },
-  'flash-online':     { name: 'Flash Belt',     icon: '⚡', format: (v) => `${(v / 1000).toFixed(1)}s` },
-  'ironclad-online':  { name: 'Ironclad Belt',  icon: '🛡️', format: (v) => `${v.toFixed(2)} lives/match` },
-  'slayer-online':    { name: 'Slayer Belt',    icon: '🗡️', format: (v) => `${v} kills` },
-  'hot-streak-online': { name: 'Hot Streak Belt', icon: '🔥', format: (v) => `${v} in a row` },
+  'throne-online':    { name: 'Throne Belt',    icon: '👑', imgPath: './images/belts/throne-online.png',
+                        format: (v) => `${v} wins` },
+  'flash-online':     { name: 'Flash Belt',     icon: '⚡', imgPath: './images/belts/flash-online.png',
+                        format: (v) => `${(v / 1000).toFixed(1)}s` },
+  'ironclad-online':  { name: 'Ironclad Belt',  icon: '🛡️', imgPath: './images/belts/ironclad-online.png',
+                        format: (v) => `${v.toFixed(2)} lives/match` },
+  'slayer-online':    { name: 'Slayer Belt',    icon: '🗡️', imgPath: './images/belts/slayer-online.png',
+                        format: (v) => `${v} kills` },
+  'hot-streak-online': { name: 'Hot Streak Belt', icon: '🔥', imgPath: './images/belts/hot-streak-online.png',
+                        format: (v) => `${v} in a row` },
 };
 
 let toastEl: HTMLDivElement | null = null;
@@ -95,6 +101,17 @@ function ensureToast(): HTMLDivElement {
         font-size: 28px;
         line-height: 1;
         filter: drop-shadow(0 0 10px rgba(255, 220, 92, 0.5));
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #online-belt-toast .obt-img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
       }
       #online-belt-toast .obt-text {
         font-size: 15px;
@@ -145,10 +162,12 @@ export function showOnlineBeltToast(ev: BeltChangedEvent): void {
     : `<strong>${escapeHtml(ev.nickname)}</strong> now holds the <strong>${meta.icon} ${escapeHtml(meta.name)}</strong>`;
 
   el.classList.toggle('is-me', isMe);
+  // Prefer AI-generated PNG, fallback to emoji via onerror.
+  const iconHtml = `<img class="obt-img" src="${meta.imgPath}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${meta.icon}'}))">`;
   el.innerHTML = `
     <div class="obt-head">${head}</div>
     <div class="obt-body">
-      <div class="obt-icon">${meta.icon}</div>
+      <div class="obt-icon">${iconHtml}</div>
       <div class="obt-text">
         ${body}
         <span class="obt-value">${escapeHtml(meta.format(ev.value))}</span>

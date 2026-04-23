@@ -29,6 +29,12 @@ mesh2motion/static/models/critters/
 # the IA tool, but never commit.
 public/models/arenas/_raw/
 
+# Raw belt assets pre-optimization — optimizer writes clean copies to
+# public/models/belts/ and public/images/belts/. The _raw/ counterparts
+# are only for local re-runs.
+public/models/_raw/
+public/images/_raw/
+
 # OS / editor junk
 Thumbs.db
 .DS_Store

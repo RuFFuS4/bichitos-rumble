@@ -68,7 +68,7 @@ export function maybeShowBadgeToast(): void {
     clearRecentlyUnlocked();
     return;
   }
-  renderToast(badge.icon, badge.name, badge.description);
+  renderToast(badge.icon, badge.imgPath, badge.name, badge.description);
 }
 
 /**
@@ -91,12 +91,14 @@ export function dismissBadgeToast(): void {
 // Internal
 // ---------------------------------------------------------------------------
 
-function renderToast(icon: string, name: string, desc: string): void {
+function renderToast(icon: string, imgPath: string, name: string, desc: string): void {
   if (!toastEl) return;
   const iconEl = toastEl.querySelector('.badge-toast-icon') as HTMLDivElement;
   const nameEl = toastEl.querySelector('.badge-toast-name') as HTMLDivElement;
   const descEl = toastEl.querySelector('.badge-toast-desc') as HTMLDivElement;
-  iconEl.textContent = icon;
+  // Prefer the AI-generated PNG; if it 404s the onerror handler swaps
+  // in a plain span with the emoji character.
+  iconEl.innerHTML = `<img class="belt-img" src="${imgPath}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${icon}'}))">`;
   nameEl.textContent = name;
   descEl.textContent = desc;
 

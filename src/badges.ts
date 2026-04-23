@@ -57,10 +57,15 @@ export interface BadgeDef {
   name: string;
   /** Short description surfaced in tooltips and the Hall of Belts. */
   description: string;
-  /** Placeholder emoji shown in the toast + Hall of Belts until the real
-   *  PNG assets land (Phase 5). Chosen for silhouette legibility at the
-   *  small sizes the UI uses. Swap to SVG masks later if desired. */
+  /** Emoji fallback — shown by the UI ONLY if the PNG at `imgPath` fails
+   *  to load (404 / offline / etc). Chosen for silhouette legibility at
+   *  small sizes. */
   icon: string;
+  /** Path to the AI-generated belt PNG. UI code sets
+   *  `<img src={imgPath} onerror={revert-to-emoji}>` so swap is
+   *  progressive — if the asset isn't shipped yet, the emoji layer
+   *  keeps the game functional. */
+  imgPath: string;
   /** Only for `category: 'champion'` — which critter this belongs to. */
   critter?: string;
   /** Pure predicate — true when the player's stats meet the criteria. */
@@ -93,15 +98,19 @@ const CHAMPIONS: ChampionSpec[] = [
 ];
 
 function championBadges(): BadgeDef[] {
-  return CHAMPIONS.map(({ critter, flavour, icon }) => ({
-    id: `${critter.toLowerCase()}-champion`,
-    category: 'champion' as const,
-    name: `${critter} — ${flavour}`,
-    description: `Win ${CHAMPION_WINS_THRESHOLD} matches with ${critter}.`,
-    icon,
-    critter,
-    condition: (s: Stats) => (s.byCritter[critter]?.wins ?? 0) >= CHAMPION_WINS_THRESHOLD,
-  }));
+  return CHAMPIONS.map(({ critter, flavour, icon }) => {
+    const id = `${critter.toLowerCase()}-champion`;
+    return {
+      id,
+      category: 'champion' as const,
+      name: `${critter} — ${flavour}`,
+      description: `Win ${CHAMPION_WINS_THRESHOLD} matches with ${critter}.`,
+      icon,
+      imgPath: `./images/belts/${id}.png`,
+      critter,
+      condition: (s: Stats) => (s.byCritter[critter]?.wins ?? 0) >= CHAMPION_WINS_THRESHOLD,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +124,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Speedrun Belt',
     description: `Win a match in ${SPEEDRUN_MAX_SECS} seconds or less.`,
     icon: '⚡',
+    imgPath: './images/belts/speedrun-belt.png',
     condition: (s) =>
       s.fastestWinSecs !== null && s.fastestWinSecs <= SPEEDRUN_MAX_SECS,
   },
@@ -124,6 +134,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Iron Will',
     description: 'Win a match without losing a single life.',
     icon: '🛡️',
+    imgPath: './images/belts/iron-will.png',
     condition: (s) => s.noDeathWins >= 1,
   },
   {
@@ -132,6 +143,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Untouchable',
     description: 'Win a match without taking a single headbutt.',
     icon: '👻',
+    imgPath: './images/belts/untouchable.png',
     condition: (s) => s.noHitWins >= 1,
   },
   {
@@ -140,6 +152,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Survivor',
     description: `Reach ${SURVIVOR_WINS_THRESHOLD} total wins across the roster.`,
     icon: '🏔️',
+    imgPath: './images/belts/survivor.png',
     condition: (s) => s.totalWins >= SURVIVOR_WINS_THRESHOLD,
   },
   {
@@ -148,6 +161,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Globetrotter',
     description: 'Win at least one match with every playable critter.',
     icon: '🌍',
+    imgPath: './images/belts/globetrotter.png',
     condition: (s) => {
       // Every critter in CHAMPIONS must have at least 1 win.
       for (const { critter } of CHAMPIONS) {
@@ -162,6 +176,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Arena Apex',
     description: 'Win a match with only one life left (comeback victory).',
     icon: '🔥',
+    imgPath: './images/belts/arena-apex.png',
     condition: (s) => s.comebackWins >= 1,
   },
   {
@@ -170,6 +185,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Pain Tolerance',
     description: `Win at least one match after taking ${PAIN_TOLERANCE_MIN_HITS}+ headbutts.`,
     icon: '💪',
+    imgPath: './images/belts/pain-tolerance.png',
     // Coarse heuristic: cumulative hits received ≥ threshold AND ≥1 total
     // win. Phase 2 may refine with per-match tracking if the bar feels off.
     condition: (s) => {

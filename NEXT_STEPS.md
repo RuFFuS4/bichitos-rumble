@@ -6,6 +6,29 @@
 > Single source of truth for what to work on next. Dispatch sessions:
 > read this first.
 
+## Bugs observados en sesión (2026-04-23 tarde) — arreglar próxima
+
+Bugs detectados en partida real, captura que el usuario pasó el 23 abril.
+Actualmente NO resueltos, entrar al inicio de la próxima sesión:
+
+- **HUD avatar in-game incoherente entre bichitos**. En la misma
+  partida, Sergei y Sebastian muestran el sprite HUD correctamente
+  (cabeza chibi del `hud-icons.png`), mientras que Shelly y Kowalski
+  muestran el thumbnail 3D renderizado (que es el fallback). Causa
+  probable: el sprite overlay `<span class="sprite-hud-{slug}">` NO
+  se aplica en algunos porque el slug no coincide con el identifier
+  esperado, o el thumbnail 3D que va de backgroundImage se pinta
+  encima. Revisar `runtime.ts initAllLivesHUD` y `.lives-avatar-sprite`
+  z-order vs la prop `background-image: url(<thumb>)` del padre.
+- **Tamaños de personajes in-game poco uniformes**. El auto-fit del
+  character-select aplica sólo al preview (fitWrapper en
+  `preview.ts`); en la arena real se usan los `scale` por-crítter
+  del roster calibrados para hitbox + feel. Revisar si hace falta
+  un segundo auto-fit análogo para gameplay, o si el roster se
+  recalibra manualmente ahora que los Meshy están integrados.
+  Ver captura de la partida — el gorila Sergei se ve grande vs la
+  tortuga Shelly, que se ve muy pequeña.
+
 ## Prioridades inmediatas (2026-04-23 en adelante)
 
 Con el submit ya dentro, el juego queda en **polish puro** hasta el deadline.
