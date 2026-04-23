@@ -20,12 +20,13 @@ const PEDESTAL_RADIUS_TOP = 1.55;
 const PEDESTAL_RADIUS_BOT = 1.85;
 const CRITTER_LIFT = PEDESTAL_HEIGHT + 0.06;
 
-// Auto-fit target — every critter is uniformly scaled so the max
-// dimension of its idle-pose silhouette (height OR width OR depth)
-// lands on this value. Preserves per-critter proportions (Trunk tall
-// and slim, Sebastian wide and short, Sihans long and low) while
-// keeping the roster visually coherent at the same "size on pedestal".
-const TARGET_SILHOUETTE_MAX = 1.9;
+// Auto-fit target — every critter is uniformly scaled so its
+// bind-pose HEIGHT lands on this value. Height (not max-dim) because
+// that's what the user reads: a gorilla should be as tall on-pedestal
+// as an elephant even if the gorilla's bind-pose is shorter in world
+// units. Width goes wherever the mesh wants. This keeps the roster
+// "same height, different build" which is what we want visually.
+const TARGET_HEIGHT = 1.9;
 
 // Manual rotation smoothing (drag → target, render → eased)
 const ROTATION_SMOOTH_SPEED = 12;
@@ -41,17 +42,12 @@ let fitWrapper: THREE.Group | null = null;
 let critter: Critter | null = null;
 let visible = false;
 
-// Auto-fit state — a short polling pass runs after each swap. It
-// accumulates the MAX silhouette envelope across ~1 second of idle
-// loop (some clips move enough that a single-frame measurement would
-// undersize the critter for parts of its cycle). Once the sample
-// window closes, applies the uniform scale and releases the interval.
-let fitIntervalId: number | null = null;
-let fitStartedAt = 0;
-let fitMaxDim = 0;
-const FIT_SAMPLE_MS = 900;
-const TMP_BOX = new THREE.Box3();
-const TMP_VEC = new THREE.Vector3();
+// Auto-fit state — we poll for `critter.bindPoseHeight` every frame
+// until it flips from null to a real number (GLB finished loading).
+// The scale is applied in one shot and the polling stops. No pop:
+// the number comes from bind-pose geometry (measured in Critter.attachGlbMesh
+// before the mixer ever runs), so idle-clip wiggle never re-triggers it.
+let fitApplied = false;
 
 // Rotation state
 let targetRotationY = 0;
@@ -76,13 +72,15 @@ export function initPreview(canvasEl: HTMLCanvasElement): void {
 
   scene = new THREE.Scene();
 
-  // Framing: the critter is uniformly scaled to ~1.9u silhouette, so
-  // the camera is tuned around that target. FOV 30° + distance 5.2u
-  // yields ~2.8u visible height → ~68% coverage with headroom for
-  // idle-loop wiggle. 3/4 hero angle (camera y=2.0, lookAt y=1.05).
-  camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
-  camera.position.set(0, 2.0, 5.2);
-  camera.lookAt(0, 1.05, 0);
+  // Framing: critters are uniformly scaled to ~1.9u height. Camera is
+  // pulled back a touch (distance 6.2u, slightly lower lookAt) so tall
+  // bichitos don't clip the top edge and the pedestal feels "further
+  // away" — more stage presence, less mugshot. FOV 32° gives just
+  // enough perspective without distorting the silhouette at that
+  // distance.
+  camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
+  camera.position.set(0, 2.15, 6.2);
+  camera.lookAt(0, 0.95, 0);
 
   // Lighting — three-point rig. Key from front-right for shape, fill
   // from behind-left (cool) for silhouette, ambient keeps shadows lifted.
@@ -162,6 +160,15 @@ if (typeof window !== 'undefined') {
 export function tickPreview(dt: number): void {
   if (!visible || !renderer || !scene || !camera || !holder || !critter) return;
 
+  // Apply the uniform scale the FRAME the GLB finishes loading
+  // (Critter.attachGlbMesh writes `bindPoseHeight`). One assignment,
+  // no interval, no pop. After this the number doesn't change.
+  if (!fitApplied && fitWrapper && critter.bindPoseHeight && critter.bindPoseHeight > 0.1) {
+    const k = TARGET_HEIGHT / critter.bindPoseHeight;
+    fitWrapper.scale.setScalar(k);
+    fitApplied = true;
+  }
+
   // Ease current rotation toward target
   const f = Math.min(dt * ROTATION_SMOOTH_SPEED, 1);
   currentRotationY += (targetRotationY - currentRotationY) * f;
@@ -171,65 +178,6 @@ export function tickPreview(dt: number): void {
   critter.update(dt);
 
   renderer.render(scene, camera);
-}
-
-/**
- * Samples the live bone silhouette. Tracks the max(h, w, d) so the
- * scale fits the WIDEST-reaching pose across the idle loop — avoids
- * undersizing for critters whose idle has wide arm swings.
- *
- * Runs every frame while the sample window is open; once it closes,
- * applies the uniform scale and clears itself.
- */
-function sampleAndMaybeApplyFit(): void {
-  if (!critter || !fitWrapper) return;
-  const root = critter.mesh;
-  root.updateMatrixWorld(true);
-  TMP_BOX.makeEmpty();
-  root.traverse((n) => {
-    if ((n as THREE.Bone).isBone) {
-      (n as THREE.Bone).getWorldPosition(TMP_VEC);
-      TMP_BOX.expandByPoint(TMP_VEC);
-    } else if ((n as THREE.Mesh).isMesh && !(n as THREE.SkinnedMesh).isSkinnedMesh) {
-      const m = n as THREE.Mesh;
-      if (!m.visible) return;
-      TMP_BOX.expandByObject(m);
-    }
-  });
-  if (!TMP_BOX.isEmpty()) {
-    const h = TMP_BOX.max.y - TMP_BOX.min.y;
-    const w = TMP_BOX.max.x - TMP_BOX.min.x;
-    const d = TMP_BOX.max.z - TMP_BOX.min.z;
-    const m = Math.max(h, w, d);
-    if (m > fitMaxDim) fitMaxDim = m;
-  }
-  if (performance.now() - fitStartedAt >= FIT_SAMPLE_MS) {
-    if (fitMaxDim > 0.2) {
-      fitWrapper.scale.setScalar(TARGET_SILHOUETTE_MAX / fitMaxDim);
-    }
-    if (fitIntervalId !== null) {
-      clearInterval(fitIntervalId);
-      fitIntervalId = null;
-    }
-  }
-}
-
-function startAutoFitPoll(): void {
-  if (fitIntervalId !== null) {
-    clearInterval(fitIntervalId);
-    fitIntervalId = null;
-  }
-  fitStartedAt = performance.now();
-  fitMaxDim = 0;
-  fitIntervalId = window.setInterval(() => {
-    sampleAndMaybeApplyFit();
-    // Hard stop guard — should be redundant with the time check
-    // inside, but keeps us safe if the critter dismounts mid-sample.
-    if (performance.now() - fitStartedAt > FIT_SAMPLE_MS + 2000 && fitIntervalId !== null) {
-      clearInterval(fitIntervalId);
-      fitIntervalId = null;
-    }
-  }, 60);
 }
 
 // ---------------------------------------------------------------------------
@@ -323,10 +271,14 @@ function swapCritter(config: CritterConfig): void {
   scene.remove(critter.mesh);
   fitWrapper.add(critter.mesh);
 
-  // Reset uniform scale and start a fresh sample window. Samples the
-  // live idle silhouette for ~1s, then applies the max-dim fit.
+  // Reset uniform scale and clear the "fit applied" flag. tickPreview
+  // re-applies the scale the first frame critter.bindPoseHeight is
+  // populated (Critter.attachGlbMesh writes it synchronously when the
+  // GLB lands). For procedural-only critters (no GLB) bindPoseHeight
+  // stays null and fitWrapper.scale stays at 1 — the procedural
+  // spheres are already hand-sized.
   fitWrapper.scale.setScalar(1);
-  startAutoFitPoll();
+  fitApplied = false;
 }
 
 /** Recursively dispose all geometries and materials in a mesh tree. */

@@ -226,6 +226,13 @@ export class Critter {
    */
   parts: ReturnType<typeof import('./critter-parts').createCritterParts> | null = null;
 
+  /** Height of the GLB in BIND POSE world space, measured once at
+   *  attach. Used by the character-select preview to apply a uniform
+   *  scale synchronously (no pop), independent of idle-clip wiggle.
+   *  Null until the async GLB load completes; 0 for procedural-only
+   *  critters that have no GLB. */
+  bindPoseHeight: number | null = null;
+
   constructor(config: CritterConfig, scene: THREE.Scene) {
     this.config = config;
     this.mesh = new THREE.Group();
@@ -617,6 +624,20 @@ export class Critter {
 
     this.mesh.add(group);
     this.glbMesh = group;
+
+    // Measure bind-pose silhouette NOW, before the mixer touches the
+    // skeleton. This gives a stable value the character-select preview
+    // uses to apply a uniform scale synchronously — no "pop" on swap,
+    // no dependency on the idle clip's wiggle. Box3.setFromObject on
+    // a SkinnedMesh + its armature returns the geometry bbox in bind
+    // pose (vertices as exported, pre-skinning deformation).
+    {
+      group.updateMatrixWorld(true);
+      const bbox = new THREE.Box3().setFromObject(group);
+      if (!bbox.isEmpty()) {
+        this.bindPoseHeight = bbox.max.y - bbox.min.y;
+      }
+    }
 
     // Skeletal animation setup — only if the GLB shipped clips. The mixer
     // binds to the cloned group so each Critter has its own animation state.

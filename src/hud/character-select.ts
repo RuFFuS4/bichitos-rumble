@@ -156,13 +156,7 @@ export function hideCharacterSelect(): void {
   characterSelect.classList.add('hidden');
 }
 
-// ---- Info pane: name, role, tagline, animated stat bars -----------------
-
-/** Relative normalization: bars fill based on min/max across the current preset pool. */
-function normalize(value: number, min: number, max: number): number {
-  if (max <= min) return 0.5;
-  return Math.max(0, Math.min(1, (value - min) / (max - min)));
-}
+// ---- Info pane: name, role, tagline, animated stat pips -----------------
 
 function paintInfoPane(roster: RosterEntry[], presets: CritterConfig[], idx: number): void {
   const entry = roster[idx];
@@ -188,14 +182,21 @@ function paintInfoPane(roster: RosterEntry[], presets: CritterConfig[], idx: num
     const powerMin = Math.min(...presets.map(p => p.headbuttForce));
     const powerMax = Math.max(...presets.map(p => p.headbuttForce));
 
-    const MIN_FILL = 0.18;
-    const rel = (v: number, min: number, max: number) =>
-      MIN_FILL + normalize(v, min, max) * (1 - MIN_FILL);
+    // Map each raw stat to a 1..PIP_COUNT band so we can render it as
+    // discrete pips rather than a continuous bar. Matches the cartoon
+    // "quantized vibes" the rest of the HUD has.
+    const PIP_COUNT = 5;
+    const toLevel = (v: number, min: number, max: number) => {
+      if (max <= min) return PIP_COUNT;
+      const t = Math.max(0, Math.min(1, (v - min) / (max - min)));
+      // Round but always show at least 1 pip so nothing reads as "empty".
+      return Math.max(1, Math.round(t * (PIP_COUNT - 1)) + 1);
+    };
 
-    const stats: { label: string; pct: number }[] = [
-      { label: 'Speed',  pct: rel(config.speed, speedMin, speedMax) * 100 },
-      { label: 'Weight', pct: rel(config.mass, massMin, massMax) * 100 },
-      { label: 'Power',  pct: rel(config.headbuttForce, powerMin, powerMax) * 100 },
+    const stats: { label: string; level: number }[] = [
+      { label: 'Speed',  level: toLevel(config.speed, speedMin, speedMax) },
+      { label: 'Weight', level: toLevel(config.mass, massMin, massMax) },
+      { label: 'Power',  level: toLevel(config.headbuttForce, powerMin, powerMax) },
     ];
 
     for (const s of stats) {
@@ -206,21 +207,25 @@ function paintInfoPane(roster: RosterEntry[], presets: CritterConfig[], idx: num
       label.className = 'stat-label';
       label.textContent = s.label;
 
-      const bg = document.createElement('div');
-      bg.className = 'stat-bar-bg';
-
-      const fill = document.createElement('div');
-      fill.className = 'stat-bar';
-      fill.style.width = '0%';
-      bg.appendChild(fill);
+      const pips = document.createElement('div');
+      pips.className = 'stat-pips';
+      for (let i = 0; i < PIP_COUNT; i++) {
+        const pip = document.createElement('span');
+        pip.className = 'stat-pip';
+        pips.appendChild(pip);
+      }
 
       row.appendChild(label);
-      row.appendChild(bg);
+      row.appendChild(pips);
       infoStats.appendChild(row);
 
-      requestAnimationFrame(() => {
-        fill.style.width = s.pct.toFixed(1) + '%';
-      });
+      // Animate the fill-in one pip at a time for a tiny "level up" feel
+      // on slot swap. 45 ms per pip is enough to read, short enough not
+      // to delay the user.
+      const pipEls = pips.children;
+      for (let i = 0; i < s.level && i < pipEls.length; i++) {
+        setTimeout(() => pipEls[i].classList.add('on'), 45 * i);
+      }
     }
   }
 

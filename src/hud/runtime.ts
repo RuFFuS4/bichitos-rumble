@@ -65,14 +65,24 @@ export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = 
     corner.style.display = '';
     if (i === localPlayerIndex) corner.classList.add('is-local');
 
-    // Avatar: coloured dot as instant fallback, upgraded to a 3D
-    // thumbnail once getCritterThumbnail resolves. Same pattern the
-    // character-select slots + waiting-room slots use, so the cache
-    // hit rate is high by the time the match actually starts (the
-    // thumbnails were rendered when the user browsed the roster).
+    // Avatar: prefer the AI-generated HUD sprite (public/images/hud-icons.png)
+    // — same chibi head the user designed for the HUD spritesheet. Falls
+    // back to the 3D thumbnail render if the sprite sheet hasn't loaded
+    // (body.has-hud-sprites not set), and to the coloured dot if even
+    // that fails (no GLB yet).
     const dot = document.createElement('span');
-    dot.className = 'lives-dot';
+    dot.className = 'lives-dot has-avatar';
     dot.style.background = '#' + c.config.color.toString(16).padStart(6, '0');
+
+    // Sprite layer: a child span that only paints when the body class
+    // 'has-hud-sprites' is active (CSS rule in index.html). If it paints,
+    // it covers the coloured dot AND the 3D thumbnail behind it, so the
+    // layering is fallback-on-fallback and doesn't flicker.
+    const slug = c.config.name.toLowerCase();
+    const spriteOverlay = document.createElement('span');
+    spriteOverlay.className = `sprite-hud sprite-hud-${slug} lives-avatar-sprite`;
+    dot.appendChild(spriteOverlay);
+
     const entry = getRosterEntry(c.config.name);
     if (entry) {
       getCritterThumbnail(entry).then((url) => {
@@ -80,8 +90,7 @@ export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = 
         dot.style.backgroundImage = `url(${url})`;
         dot.style.backgroundSize = 'cover';
         dot.style.backgroundPosition = 'center';
-        dot.classList.add('has-avatar');
-      }).catch(() => { /* leave the coloured dot */ });
+      }).catch(() => { /* leave the coloured dot + sprite overlay */ });
     }
 
     const name = document.createElement('span');
