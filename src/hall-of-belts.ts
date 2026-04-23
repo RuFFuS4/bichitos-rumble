@@ -16,8 +16,44 @@
 
 import { BADGE_CATALOG, type BadgeDef } from './badges';
 import { getStats } from './stats';
+import {
+  fetchAllLeaderboards,
+  getCachedIdentity,
+  type LeaderboardEntry,
+  type OnlineBeltId,
+} from './online-identity';
 
 let modalEl: HTMLDivElement | null = null;
+/** 'offline' (original 16 badges) or 'online' (5 competitive belts). */
+type BeltsTab = 'offline' | 'online';
+let currentTab: BeltsTab = 'offline';
+
+// Belt definitions for the online tab — the server is the source of truth
+// for who holds what, but the display metadata lives here.
+const ONLINE_BELT_META: Array<{
+  id: OnlineBeltId;
+  name: string;
+  icon: string;
+  criterion: string;
+  /** Format the raw metric into something human-readable. */
+  format: (entry: LeaderboardEntry) => string;
+}> = [
+  { id: 'throne-online',    name: 'Throne Belt',    icon: '👑',
+    criterion: 'Most online wins',
+    format: (e) => `${e.value} wins` },
+  { id: 'flash-online',     name: 'Flash Belt',     icon: '⚡',
+    criterion: 'Fastest online win',
+    format: (e) => `${(e.value / 1000).toFixed(1)}s` },
+  { id: 'ironclad-online',  name: 'Ironclad Belt',  icon: '🛡️',
+    criterion: 'Best lives-per-match ratio (min 5 matches)',
+    format: (e) => `${e.value.toFixed(2)} lives/match (${e.secondaryValue} matches)` },
+  { id: 'slayer-online',    name: 'Slayer Belt',    icon: '🗡️',
+    criterion: 'Most human kills',
+    format: (e) => `${e.value} kills` },
+  { id: 'hot-streak-online', name: 'Hot Streak Belt', icon: '🔥',
+    criterion: 'Longest win streak',
+    format: (e) => `${e.value} in a row` },
+];
 
 /**
  * One-time DOM setup. Idempotent. Call at boot from main.ts.
@@ -34,16 +70,37 @@ export function initHallOfBelts(): void {
     <div class="belts-panel" role="dialog" aria-label="Hall of Belts">
       <div class="belts-header">
         <h2 class="belts-title">🏆 Hall of Belts</h2>
+        <div class="belts-tabs" role="tablist">
+          <button class="belts-tab" data-tab="offline" role="tab" aria-selected="true">
+            <span class="belts-tab-icon">🏅</span> Offline (16)
+          </button>
+          <button class="belts-tab" data-tab="online" role="tab" aria-selected="false">
+            <span class="belts-tab-icon">🌐</span> Online (5)
+          </button>
+        </div>
         <div class="belts-progress"></div>
         <button class="belts-close" data-belts-close="1" aria-label="Close">✕</button>
       </div>
-      <div class="belts-grid" role="list"></div>
+      <div class="belts-body">
+        <div class="belts-grid" role="list"></div>
+      </div>
       <div class="belts-footer">
-        <kbd>B</kbd> or <kbd>Esc</kbd> to close · locked belts show the criterion
+        <kbd>B</kbd> or <kbd>Esc</kbd> to close · hover a belt for details
       </div>
     </div>
   `;
   document.body.appendChild(modalEl);
+
+  // Tab switch handlers
+  modalEl.querySelectorAll<HTMLButtonElement>('.belts-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tab = (btn.dataset.tab as BeltsTab) ?? 'offline';
+      if (tab === currentTab) return;
+      currentTab = tab;
+      syncTabSelection();
+      rebuildContent();
+    });
+  });
 
   // Close on backdrop click, close button, or explicit [data-belts-close]
   modalEl.addEventListener('click', (e) => {
@@ -65,7 +122,8 @@ export function initHallOfBelts(): void {
 export function openHallOfBelts(): void {
   if (!modalEl) initHallOfBelts();
   if (!modalEl) return;
-  rebuildGrid();
+  syncTabSelection();
+  rebuildContent();
   modalEl.classList.remove('hidden');
   modalEl.setAttribute('aria-hidden', 'false');
   document.body.classList.add('belts-modal-open');
@@ -86,7 +144,22 @@ export function isHallOfBeltsOpen(): boolean {
 // Rendering
 // ---------------------------------------------------------------------------
 
-function rebuildGrid(): void {
+function syncTabSelection(): void {
+  if (!modalEl) return;
+  modalEl.querySelectorAll<HTMLButtonElement>('.belts-tab').forEach((btn) => {
+    const active = btn.dataset.tab === currentTab;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', String(active));
+  });
+}
+
+function rebuildContent(): void {
+  if (!modalEl) return;
+  if (currentTab === 'offline') rebuildOfflineGrid();
+  else rebuildOnlineGrid();
+}
+
+function rebuildOfflineGrid(): void {
   if (!modalEl) return;
   const stats = getStats();
   const unlocked = new Set(stats.unlockedBadges);
@@ -94,16 +167,17 @@ function rebuildGrid(): void {
   const grid = modalEl.querySelector('.belts-grid') as HTMLDivElement;
   const progress = modalEl.querySelector('.belts-progress') as HTMLDivElement;
 
+  grid.className = 'belts-grid belts-grid-offline';
   grid.innerHTML = '';
   for (const badge of BADGE_CATALOG) {
-    grid.appendChild(renderSlot(badge, unlocked.has(badge.id)));
+    grid.appendChild(renderOfflineSlot(badge, unlocked.has(badge.id)));
   }
 
   const won = BADGE_CATALOG.filter((b) => unlocked.has(b.id)).length;
   progress.textContent = `${won} / ${BADGE_CATALOG.length} unlocked`;
 }
 
-function renderSlot(badge: BadgeDef, isUnlocked: boolean): HTMLDivElement {
+function renderOfflineSlot(badge: BadgeDef, isUnlocked: boolean): HTMLDivElement {
   const slot = document.createElement('div');
   slot.className = `belt-slot ${isUnlocked ? 'unlocked' : 'locked'} belt-${badge.category}`;
   slot.setAttribute('role', 'listitem');
@@ -116,6 +190,86 @@ function renderSlot(badge: BadgeDef, isUnlocked: boolean): HTMLDivElement {
     <div class="belt-desc">${escapeHtml(badge.description)}</div>
   `;
   return slot;
+}
+
+// ---------------------------------------------------------------------------
+// Online tab — fetches leaderboards from the server and lays them out as
+// five columns, one per belt, with the current holder on top and the top-10
+// under them. The user's own row is highlighted when present.
+// ---------------------------------------------------------------------------
+
+function rebuildOnlineGrid(): void {
+  if (!modalEl) return;
+  const grid = modalEl.querySelector('.belts-grid') as HTMLDivElement;
+  const progress = modalEl.querySelector('.belts-progress') as HTMLDivElement;
+  grid.className = 'belts-grid belts-grid-online';
+  grid.innerHTML = '<div class="belts-online-loading">Loading leaderboards…</div>';
+
+  const identity = getCachedIdentity();
+  progress.textContent = identity
+    ? `Playing as ${identity.nickname}`
+    : 'No nickname yet — pick one in Online Multiplayer to compete';
+
+  // The response is small (5 belts × 10 rows ≈ a few KB), so a single
+  // fetch replaces whatever loading state was rendered.
+  fetchAllLeaderboards()
+    .then((byBelt) => {
+      if (currentTab !== 'online' || !modalEl) return;  // tab might have switched away
+      grid.innerHTML = '';
+      for (const meta of ONLINE_BELT_META) {
+        const entries = byBelt[meta.id] ?? [];
+        grid.appendChild(renderOnlineColumn(meta, entries, identity?.playerId ?? null));
+      }
+    })
+    .catch((err) => {
+      console.warn('[hall-of-belts] leaderboard fetch failed:', err);
+      if (currentTab !== 'online' || !modalEl) return;
+      grid.innerHTML = `
+        <div class="belts-online-error">
+          Could not reach the server. Try again in a moment.
+        </div>
+      `;
+    });
+}
+
+function renderOnlineColumn(
+  meta: typeof ONLINE_BELT_META[number],
+  entries: LeaderboardEntry[],
+  myPlayerId: string | null,
+): HTMLDivElement {
+  const col = document.createElement('div');
+  col.className = 'belt-online-col';
+  const holder = entries[0];
+  const holderText = holder ? `${escapeHtml(holder.nickname)} — ${escapeHtml(meta.format(holder))}` : 'Nobody yet — be the first';
+
+  const rowsHtml = entries.length === 0
+    ? '<li class="belt-online-empty">No rankings yet</li>'
+    : entries.slice(0, 10).map((e, i) => {
+        const isMe = myPlayerId && e.playerId === myPlayerId;
+        const cls = `belt-online-row${i === 0 ? ' holder' : ''}${isMe ? ' is-me' : ''}`;
+        return `
+          <li class="${cls}">
+            <span class="belt-online-rank">#${i + 1}</span>
+            <span class="belt-online-name">${escapeHtml(e.nickname)}</span>
+            <span class="belt-online-value">${escapeHtml(meta.format(e))}</span>
+          </li>
+        `;
+      }).join('');
+
+  col.innerHTML = `
+    <div class="belt-online-head">
+      <div class="belt-online-icon">${meta.icon}</div>
+      <div class="belt-online-meta">
+        <div class="belt-online-name-big">${escapeHtml(meta.name)}</div>
+        <div class="belt-online-criterion">${escapeHtml(meta.criterion)}</div>
+      </div>
+    </div>
+    <div class="belt-online-holder">
+      Current holder: <strong>${holderText}</strong>
+    </div>
+    <ol class="belt-online-list">${rowsHtml}</ol>
+  `;
+  return col;
 }
 
 function escapeHtml(s: string): string {
