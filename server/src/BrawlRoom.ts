@@ -27,7 +27,10 @@ import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed } from '
 import { createAbilityStates, tickPlayerAbilities } from './sim/abilities.js';
 import { ArenaSim } from './sim/arena.js';
 import { computeBotInput } from './sim/bot.js';
-import { verifyPlayer, recordMatchResult } from './db.js';
+import {
+  verifyPlayer, recordMatchResult,
+  getAllBeltHolders, diffBeltHolders,
+} from './db.js';
 
 /** Seconds of open waiting before the server fills empty slots with bots. */
 const WAITING_TIMEOUT = 60;
@@ -390,16 +393,30 @@ export class BrawlRoom extends Room<GameState> {
    * (nickname + token validated on join) get credited; guests are
    * ignored so they don't pollute leaderboards.
    *
+   * Also detects belt changes: snapshots all 5 belt holders before the
+   * match-result writes and again after, and broadcasts a 'beltChanged'
+   * message to every client in the room for each belt whose holder is
+   * now a different player than before. The cliente muestra un toast
+   * tipo "X has taken the Throne Belt!".
+   *
    * killsVsHumans is tracked via internal.killsVsHumansThisMatch, which
-   * is 0 in v1 — TODO(belts-v2): wire last-hitter tracking in physics.ts
-   * so the Slayer Belt has real data. The other four belts (Throne,
-   * Flash, Ironclad, Hot Streak) are fully live today.
+   * is 0 en v1 — se rellena cuando Fase 6 (last-hitter tracking in
+   * physics.ts) lande; entonces el Slayer Belt tendrá datos reales.
    */
   private recordOnlineBeltStats(winnerSessionId: string): void {
     const durationMs = this.playingStartedAtMs !== null
       ? Date.now() - this.playingStartedAtMs
       : 0;
 
+    // Snapshot BEFORE so we can diff belt changes afterwards.
+    let beltsBefore: ReturnType<typeof getAllBeltHolders> | null = null;
+    try {
+      beltsBefore = getAllBeltHolders();
+    } catch (err) {
+      console.error('[Belts] failed to snapshot pre-match holders:', err);
+    }
+
+    let anyWriteSucceeded = false;
     for (const [sid, p] of this.state.players) {
       const internal = this.internal.get(sid);
       if (!internal?.onlinePlayerId) continue;      // guest or bot → skip
@@ -416,12 +433,36 @@ export class BrawlRoom extends Room<GameState> {
           killsVsHumans: internal.killsVsHumansThisMatch,
           critterName: p.critterName,
         });
+        anyWriteSucceeded = true;
         console.log(
           `[Belts] recorded ${won ? 'WIN' : 'loss'} for ${internal.onlinePlayerId} ` +
           `(${p.critterName}, lives=${livesLeft}, ms=${durationMs})`,
         );
       } catch (err) {
         console.error('[Belts] failed to record match result:', err);
+      }
+    }
+
+    // Diff against the post-match snapshot only if at least one write
+    // actually landed — pointless otherwise.
+    if (anyWriteSucceeded && beltsBefore) {
+      try {
+        const beltsAfter = getAllBeltHolders();
+        const changes = diffBeltHolders(beltsBefore, beltsAfter);
+        for (const change of changes) {
+          console.log(
+            `[Belts] CHANGE ${change.belt}: ` +
+            `new holder ${change.holder.nickname} (${change.holder.playerId})`,
+          );
+          this.broadcast('beltChanged', {
+            belt: change.belt,
+            nickname: change.holder.nickname,
+            playerId: change.holder.playerId,
+            value: change.holder.value,
+          });
+        }
+      } catch (err) {
+        console.error('[Belts] failed to diff holders post-match:', err);
       }
     }
 
@@ -608,15 +649,32 @@ export class BrawlRoom extends Room<GameState> {
       }
     }
 
-    // 4. Collisions + knockback (player vs player)
-    resolveCollisions(players);
+    // 4. Collisions + knockback (player vs player).
+    // `this.internal` is passed so headbutt hits can be attributed for
+    // Online Belts Slayer credit when the defender eventually falls.
+    resolveCollisions(players, this.internal);
 
     // 5. Falloff detection — uses the authoritative fragment layout
     checkFalloff(players, this.internal, (x, z) => this.arenaSim.isOnArena(x, z));
 
     // 6. Falling animation + respawn countdown
-    const toRespawn = updateFalling(players, this.internal, dt);
-    for (const sid of toRespawn) {
+    const fallResult = updateFalling(players, this.internal, dt);
+    // Credit Slayer-Belt kills: every `death` carries the sessionId of
+    // the last-attacker (if the hit was recent enough). If that attacker
+    // is a human with a verified online identity, bump their per-match
+    // counter — BrawlRoom.recordOnlineBeltStats reads it on endMatch.
+    for (const death of fallResult.deaths) {
+      const killerSid = death.attackerSid;
+      if (!killerSid) continue;
+      const killer = this.state.players.get(killerSid);
+      if (!killer || killer.isBot) continue;            // bot → no credit
+      const killerInternal = this.internal.get(killerSid);
+      if (!killerInternal?.onlinePlayerId) continue;    // guest → no credit
+      const victim = this.state.players.get(death.victimSid);
+      if (!victim || victim.isBot) continue;            // killed a bot → skip (Slayer is vs HUMANS only)
+      killerInternal.killsVsHumansThisMatch += 1;
+    }
+    for (const sid of fallResult.toRespawn) {
       const p = this.state.players.get(sid);
       if (!p) continue;
       // Pick a position GUARANTEED to be on solid ground. With the irregular

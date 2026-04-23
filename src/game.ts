@@ -40,7 +40,8 @@ import {
 } from './portal';
 import type { Room } from 'colyseus.js';
 import { getStateCallbacks } from 'colyseus.js';
-import { sendInput, onAbilityFired, type AbilityFiredEvent } from './network';
+import { sendInput, onAbilityFired, onBeltChanged, type AbilityFiredEvent } from './network';
+import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
 import { type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
@@ -715,6 +716,11 @@ export class Game {
 
     // Ability fire events → trigger client-side VFX + audio
     onAbilityFired(room, (ev: AbilityFiredEvent) => this.handleAbilityFired(ev));
+
+    // Online Belts: if the server detects a belt changed hands after this
+    // match, it broadcasts `beltChanged` to the whole room. Toast it so
+    // everyone sees who just took what.
+    onBeltChanged(room, (ev) => showOnlineBeltToast(ev));
 
     // Attach leave handler — if the server drops us unexpectedly we
     // surface it. Intentional leaves (restartMatch, back-to-title)

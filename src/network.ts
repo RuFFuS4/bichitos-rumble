@@ -56,6 +56,23 @@ export function onAbilityFired(room: Room, cb: (ev: AbilityFiredEvent) => void):
   room.onMessage('abilityFired', cb);
 }
 
+/** Payload broadcast by BrawlRoom when an Online Belt changes hands. */
+export interface BeltChangedEvent {
+  belt:
+    | 'throne-online'
+    | 'flash-online'
+    | 'ironclad-online'
+    | 'slayer-online'
+    | 'hot-streak-online';
+  nickname: string;
+  playerId: string;
+  value: number;
+}
+
+export function onBeltChanged(room: Room, cb: (ev: BeltChangedEvent) => void): void {
+  room.onMessage('beltChanged', cb);
+}
+
 /**
  * Resolve the server URL to use.
  *

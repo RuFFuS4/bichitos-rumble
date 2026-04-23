@@ -363,6 +363,45 @@ export function getBeltHolder(belt: OnlineBeltId): LeaderboardEntry | null {
   return top[0] ?? null;
 }
 
+/** Snapshot of all 5 belt holders at one point in time. Pairs with
+ *  `diffBeltHolders()` so the BrawlRoom can detect belt changes after
+ *  a match-result write. */
+export type BeltHolders = Record<OnlineBeltId, LeaderboardEntry | null>;
+
+export function getAllBeltHolders(): BeltHolders {
+  return {
+    'throne-online':    getBeltHolder('throne-online'),
+    'flash-online':     getBeltHolder('flash-online'),
+    'ironclad-online':  getBeltHolder('ironclad-online'),
+    'slayer-online':    getBeltHolder('slayer-online'),
+    'hot-streak-online': getBeltHolder('hot-streak-online'),
+  };
+}
+
+/**
+ * Compute which belts changed hands between two holder snapshots. A belt
+ * "changed" if:
+ *   - it was unheld and now has a holder (first winner), OR
+ *   - the playerId of the holder is different from before.
+ * Returns the list of changed belts with the NEW holder (the one to toast).
+ */
+export function diffBeltHolders(
+  before: BeltHolders,
+  after: BeltHolders,
+): Array<{ belt: OnlineBeltId; holder: LeaderboardEntry }> {
+  const out: Array<{ belt: OnlineBeltId; holder: LeaderboardEntry }> = [];
+  const belts = Object.keys(after) as OnlineBeltId[];
+  for (const belt of belts) {
+    const prev = before[belt];
+    const curr = after[belt];
+    if (!curr) continue;               // no holder now → nothing to toast
+    if (!prev || prev.playerId !== curr.playerId) {
+      out.push({ belt, holder: curr });
+    }
+  }
+  return out;
+}
+
 /** Stats summary for a single player (used by the client to show "your ranks"). */
 export function getPlayerStats(playerId: string): {
   wins_online: number;

@@ -13,6 +13,7 @@ import {
 } from './audio';
 import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
+import { initOnlineBeltToast } from './online-belt-toast';
 import { updateDustPuffs } from './dust-puff';
 
 // ---------------------------------------------------------------------------
@@ -202,6 +203,11 @@ if (isLikelyMobile()) {
 // surface an unlock. Cheap (one div), idempotent, no runtime cost until
 // Game calls maybeShowBadgeToast().
 initBadgeToast();
+
+// Online Belt toast — same pre-create pattern. Fired when the BrawlRoom
+// broadcasts a `beltChanged` message (online match ended with a change
+// of holder). Listener is wired per-room inside Game.enterOnline.
+initOnlineBeltToast();
 
 // Hall of Belts modal — also pre-created so the first B-press / button
 // click from character-select opens instantly. The grid is rebuilt each
