@@ -77,7 +77,7 @@ First validate the game loop with a local/simulated prototype:
 2. **Structural cleanup only at milestones**: no refactoring for its own sake; only after completing important systems; keep dev momentum
 3. **Complexity control**: no long multi-responsibility functions; keep gameplay/visual separation clean; don't mix unrelated systems in the same file
 4. **Protect working code**: don't rewrite systems that work without clear reason; evaluate impact before modifying existing code
-5. **Branch discipline**: work in dev; merge to main only when a functional block is stable and playable; avoid massive unintegrated changes
+5. **Branch discipline**: work in feature branches off `dev`; merge to `dev` only when the slice is complete; merge `dev` to `main` only when a functional block is stable and playable; avoid massive unintegrated changes. See "Git workflow" for naming and merge policy.
 6. **Document decisions**: important decisions in BUILD_LOG.md; structural changes noted
 
 ## Coding rules
@@ -115,9 +115,61 @@ Keep these files updated when relevant:
 - Explain plans, changes, risks, and next steps in Spanish.
 
 ## Git workflow
-- Never work directly on main.
-- Use dev as the integration branch. (Development)
-- Keep changes small and reviewable before merging to main.
+
+### Branch structure
+- `main` — production. Only receives merges from `dev`.
+- `dev` — integration branch. Only receives merges from feature branches.
+- Feature branches — one per task, created from `dev`.
+
+### Branch naming
+Hybrid format: `<agent>/<type>/<slug>`
+
+- **Agent prefix**: `claude/` or `codex/` — identifies who authored the work.
+- **Type**: `feature`, `fix`, `perf`, `docs`, `refactor`.
+- **Slug**: short kebab-case description.
+
+Examples:
+- `claude/feature/anim-lab-export`
+- `codex/fix/hud-null-guard`
+- `claude/perf/model-preload`
+- `codex/docs/character-sheet`
+
+### Workflow per task
+1. `git checkout dev && git pull --ff-only`
+2. `git checkout -b <agent>/<type>/<slug>`
+3. Work and commit in the feature branch (small commits are fine — they will be squashed).
+4. Before merging: sync `dev` and resolve any conflicts on the feature branch, not on `dev`.
+5. Merge into `dev` following the merge policy below.
+6. Delete the feature branch after merging.
+
+### Merge policy
+
+**Feature branch → `dev`**
+- **Default**: squash merge (`git merge --squash`) — keeps `dev` history clean.
+- **Exception**: merge commit (`git merge --no-ff`) only when the feature is large and intermediate commits carry real context (multi-phase refactors with intentional checkpoints).
+
+**`dev` → `main`**
+- Always merge commit (`git merge --no-ff`). Every merge to `main` marks a stable playable milestone.
+
+### Conflict resolution
+When two agents touch the same code, the **second agent to merge** resolves conflicts.
+
+- **Hard-stop zones — pause and ask the user before resolving**:
+  - gameplay systems (physics, collisions, abilities)
+  - networking / Colyseus room logic
+  - scoring, lives, respawn
+  - build config / deploy pipeline
+  - asset structure / file naming conventions
+- **Safe zones — resolve and explain in the commit message**:
+  - documentation
+  - comments
+  - obvious non-critical changes (import ordering, formatting)
+
+### Rules
+- Never commit directly to `main` or `dev`.
+- Never force-push to `main` or `dev`.
+- Keep feature branches short-lived — merge or delete within a session when possible.
+- If a feature branch lives across sessions, note it in `BUILD_LOG.md`.
 
 ## Debugging priorities
 - If the game does not render correctly, stop feature work.

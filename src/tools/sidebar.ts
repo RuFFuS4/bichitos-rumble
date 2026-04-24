@@ -391,6 +391,119 @@ const CSS = `
   margin-top: 4px;
 }
 
+/* Badges + Parts panels --------------------------------------------------- */
+#lab-sidebar .lab-badges-list,
+#lab-sidebar .lab-parts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px 2px 6px;
+}
+#lab-sidebar .lab-badge-row,
+#lab-sidebar .lab-parts-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px solid #262b3a;
+  border-radius: 4px;
+  background: #171a26;
+  font-size: 11px;
+}
+#lab-sidebar .lab-badge-row.is-unlocked {
+  border-color: rgba(255, 220, 92, 0.55);
+  background: rgba(255, 220, 92, 0.08);
+}
+#lab-sidebar .lab-badge-icon {
+  width: 22px;
+  font-size: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+#lab-sidebar .lab-badge-name {
+  flex: 1;
+  color: #cdd3e2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#lab-sidebar .lab-badge-btn,
+#lab-sidebar .lab-parts-btn {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 10px;
+  background: #262b3a;
+  color: #cdd3e2;
+  border: 1px solid #353b52;
+  border-radius: 3px;
+  cursor: pointer;
+}
+#lab-sidebar .lab-badge-btn:hover,
+#lab-sidebar .lab-parts-btn:hover {
+  background: #353b52;
+}
+#lab-sidebar .lab-parts-name {
+  flex: 0 0 110px;
+  color: #cdd3e2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+#lab-sidebar .lab-parts-slider {
+  flex: 1;
+  min-width: 60px;
+}
+#lab-sidebar .lab-parts-row .lab-val {
+  flex: 0 0 32px;
+  text-align: right;
+  font-size: 10px;
+  color: #7f869d;
+  font-variant-numeric: tabular-nums;
+}
+
+/* P/W/S table ------------------------------------------------------------- */
+#lab-sidebar .lab-pws-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 2px 6px;
+}
+#lab-sidebar .lab-pws-row {
+  display: grid;
+  grid-template-columns: 1fr 24px 24px 24px 34px 38px 30px;
+  gap: 2px;
+  align-items: center;
+  padding: 3px 4px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: #cdd3e2;
+  border-bottom: 1px solid #1e2232;
+}
+#lab-sidebar .lab-pws-row.lab-pws-header {
+  color: #7f869d;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-bottom: 1px solid #2a2f44;
+}
+#lab-sidebar .lab-pws-name {
+  font-weight: 600;
+}
+#lab-sidebar .lab-pws-col {
+  text-align: center;
+  font-weight: 700;
+}
+#lab-sidebar .lab-pws-col[data-sign="1"]  { color: #72c77d; }
+#lab-sidebar .lab-pws-col[data-sign="-1"] { color: #d36f7a; }
+#lab-sidebar .lab-pws-col[data-sign="0"]  { color: #7f869d; }
+#lab-sidebar .lab-pws-stat {
+  text-align: right;
+  color: #9097a8;
+}
+
 body.lab-mode #title-screen,
 body.lab-mode #character-select,
 body.lab-mode #end-screen { display: none !important; }
@@ -687,6 +800,73 @@ export function mountLabSidebar(devApi: DevApi): void {
       .catch(() => {});
   });
 
+  // ---- Badges (collapsed — BADGES_DESIGN testing) ----------------------
+  // Lets us unlock / lock / reset the belt system without playing 20+
+  // matches to hit every condition. Operates directly on localStorage
+  // via DevApi; any action that rewrites the stats blob triggers a
+  // page reload so in-memory state stays coherent.
+  const badgesSec = section(tuningGroup, 'Badges', { collapsed: true });
+  const badgesInfo = document.createElement('div');
+  badgesInfo.className = 'lab-info';
+  badgesSec.appendChild(badgesInfo);
+  const badgesList = document.createElement('div');
+  badgesList.className = 'lab-badges-list';
+  badgesSec.appendChild(badgesList);
+  const badgesBtns = row(badgesSec);
+  button(badgesBtns, 'Unlock all', () => {
+    devApi.unlockAllBadges();
+    refreshBadgesPanel();
+  }, 'primary');
+  button(badgesBtns, 'Lock all (reload)', () => devApi.lockAllBadges());
+  button(badgesBtns, 'Trigger toast demo', () => {
+    const id = devApi.triggerBadgeToastDemo();
+    if (id === null) alert('Every badge is already unlocked. Hit "Lock all" first.');
+    else refreshBadgesPanel();
+  });
+  button(badgesBtns, 'Clear ALL stats (reload)', () => {
+    if (confirm('Wipe picks / wins / badges / everything? Page reloads.')) {
+      devApi.clearAllStats();
+    }
+  });
+
+  // ---- P/W/S read-only table (Power / Weight / Speed levels) ----------
+  // Quick reference of every critter's -2..+2 tuple + the numbers it
+  // derives. Edit src/pws-stats.ts + rebuild to rebalance — this panel
+  // just mirrors what's live.
+  const pwsSec = section(tuningGroup, 'P/W/S stats', { collapsed: true });
+  const pwsInfo = document.createElement('div');
+  pwsInfo.className = 'lab-info';
+  pwsInfo.textContent = 'Edit src/pws-stats.ts to rebalance. Read-only here.';
+  pwsSec.appendChild(pwsInfo);
+  const pwsList = document.createElement('div');
+  pwsList.className = 'lab-pws-list';
+  pwsSec.appendChild(pwsList);
+
+  // ---- Critter parts (collapsed — prototype ability effects) -----------
+  // Live sliders over every bone of the selected critter. Drag to 0 to
+  // hide a body part (e.g. Shelly Head + L_Foot + R_Foot for the "hide
+  // in shell" effect). Only works during a match (the parts handle
+  // resolves when the GLB attaches).
+  const partsSec = section(tuningGroup, 'Critter parts', { collapsed: true });
+  const partsInfo = document.createElement('div');
+  partsInfo.className = 'lab-info';
+  partsSec.appendChild(partsInfo);
+  const partsCritterRow = row(partsSec);
+  let partsCritterName = 'Sergei';
+  select(
+    partsCritterRow, 'Critter', names, partsCritterName,
+    (v) => { partsCritterName = v; refreshPartsPanel(); },
+  );
+  const partsList = document.createElement('div');
+  partsList.className = 'lab-parts-list';
+  partsSec.appendChild(partsList);
+  const partsBtns = row(partsSec);
+  button(partsBtns, 'Reset bones', () => {
+    devApi.resetCritterBones(partsCritterName);
+    refreshPartsPanel();
+  }, 'primary');
+  button(partsBtns, 'Refresh list', () => refreshPartsPanel());
+
   // ---- Footer note + sibling-tool links --------------------------------
   const note = document.createElement('div');
   note.className = 'lab-note';
@@ -703,7 +883,15 @@ export function mountLabSidebar(devApi: DevApi): void {
     'Other internal tools: ' +
     '<a href="/animations" target="_blank" rel="noopener" ' +
     'style="color:#ffdc5c;text-decoration:none;">🎬 /animations</a> ' +
-    '<span style="opacity:0.55">(mesh2motion-based animation lab)</span>';
+    '<span style="opacity:0.55">(mesh2motion — create clips)</span>' +
+    '<br>' +
+    '<a href="/anim-lab.html" target="_blank" rel="noopener" ' +
+    'style="color:#ffdc5c;text-decoration:none;">🎞️ /anim-lab</a> ' +
+    '<span style="opacity:0.55">(validate + override runtime clip mapping)</span>' +
+    '<br>' +
+    '<a href="/calibrate.html" target="_blank" rel="noopener" ' +
+    'style="color:#ffdc5c;text-decoration:none;">📏 /calibrate</a> ' +
+    '<span style="opacity:0.55">(tune per-critter scale / pivot / rotation)</span>';
   root.appendChild(siblingLinks);
 
   // =======================================================================
@@ -719,6 +907,150 @@ export function mountLabSidebar(devApi: DevApi): void {
     refreshInputPanel();
     refreshRecordingPanel();
     refreshSkeletalPanel();
+    refreshBadgesPanel();
+    refreshPartsPanel();
+    refreshPWSPanel();
+  }
+
+  /**
+   * Render the P/W/S table. Signed integers displayed with explicit +/-
+   * (no + for 0). Also shows the numeric stats each tuple derives, for
+   * quick cross-check when tuning.
+   */
+  function refreshPWSPanel(): void {
+    const snap = devApi.getPWSSnapshot();
+    pwsList.innerHTML = '';
+
+    // Header row — labels only.
+    const header = document.createElement('div');
+    header.className = 'lab-pws-row lab-pws-header';
+    header.innerHTML = `
+      <span class="lab-pws-name">Name</span>
+      <span class="lab-pws-col">P</span>
+      <span class="lab-pws-col">W</span>
+      <span class="lab-pws-col">S</span>
+      <span class="lab-pws-stat">spd</span>
+      <span class="lab-pws-stat">mass</span>
+      <span class="lab-pws-stat">hb</span>
+    `;
+    pwsList.appendChild(header);
+
+    const fmt = (n: number) => n > 0 ? `+${n}` : String(n);
+    for (const row of snap) {
+      const r = document.createElement('div');
+      r.className = 'lab-pws-row';
+      r.innerHTML = `
+        <span class="lab-pws-name">${row.name}</span>
+        <span class="lab-pws-col" data-sign="${Math.sign(row.p)}">${fmt(row.p)}</span>
+        <span class="lab-pws-col" data-sign="${Math.sign(row.w)}">${fmt(row.w)}</span>
+        <span class="lab-pws-col" data-sign="${Math.sign(row.s)}">${fmt(row.s)}</span>
+        <span class="lab-pws-stat">${row.speed.toFixed(1)}</span>
+        <span class="lab-pws-stat">${row.mass.toFixed(2)}</span>
+        <span class="lab-pws-stat">${row.force.toFixed(0)}</span>
+      `;
+      pwsList.appendChild(r);
+    }
+  }
+
+  /**
+   * Render the badge list with per-badge Lock/Unlock toggles + the
+   * aggregate "X / 16 unlocked" counter. Cheap — runs on refresh tick
+   * (every 250ms via the global poll) but iterating 16 items is fine.
+   */
+  function refreshBadgesPanel(): void {
+    const snap = devApi.getBadgesSnapshot();
+    const unlocked = snap.filter((b) => b.unlocked).length;
+    badgesInfo.textContent = `${unlocked} / ${snap.length} unlocked · localStorage key: br-stats-v2`;
+
+    // Rebuild in place. Cheap enough that we don't need diff logic.
+    badgesList.innerHTML = '';
+    for (const b of snap) {
+      const r = document.createElement('div');
+      r.className = 'lab-badge-row' + (b.unlocked ? ' is-unlocked' : '');
+      r.innerHTML = `
+        <span class="lab-badge-icon">${b.icon}</span>
+        <span class="lab-badge-name">${escapeText(b.name)}</span>
+        <button class="lab-badge-btn">${b.unlocked ? 'Lock' : 'Unlock'}</button>
+      `;
+      const btn = r.querySelector('.lab-badge-btn') as HTMLButtonElement;
+      btn.addEventListener('click', () => {
+        if (b.unlocked) devApi.lockBadge(b.id);
+        else {
+          devApi.unlockBadge(b.id);
+          refreshBadgesPanel();
+        }
+        // lockBadge triggers a reload via writeStatsDirect, so we only
+        // explicitly refresh after an unlock (no reload).
+      });
+      badgesList.appendChild(r);
+    }
+  }
+
+  /**
+   * Render the bone list + sliders for the currently-selected critter.
+   * Slider drag sets the bone's uniform scale live; the change survives
+   * until the match rebuilds or the "Reset bones" button fires.
+   */
+  function refreshPartsPanel(): void {
+    const snap = devApi.getCritterPartsSnapshot(partsCritterName);
+    partsInfo.textContent = snap.bones.length === 0
+      ? `${partsCritterName} — no parts handle (start a match first)`
+      : `${partsCritterName} — ${snap.bones.length} bones, ${snap.primitiveCount} primitives`;
+
+    partsList.innerHTML = '';
+    for (const boneName of snap.bones) {
+      const r = document.createElement('div');
+      r.className = 'lab-parts-row';
+      const label = document.createElement('span');
+      label.className = 'lab-parts-name';
+      label.textContent = boneName;
+      r.appendChild(label);
+
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = '0.01';
+      slider.max = '1.5';
+      slider.step = '0.01';
+      slider.value = '1';
+      slider.className = 'lab-parts-slider';
+      slider.addEventListener('input', () => {
+        const v = parseFloat(slider.value);
+        devApi.scaleCritterBone(partsCritterName, boneName, v);
+        val.textContent = v.toFixed(2);
+      });
+      r.appendChild(slider);
+
+      const val = document.createElement('span');
+      val.className = 'lab-val';
+      val.textContent = '1.00';
+      r.appendChild(val);
+
+      const hide = document.createElement('button');
+      hide.className = 'lab-parts-btn';
+      hide.textContent = 'Hide';
+      hide.title = `Scale ${boneName} to 0.01`;
+      hide.addEventListener('click', () => {
+        slider.value = '0.01';
+        val.textContent = '0.01';
+        devApi.scaleCritterBone(partsCritterName, boneName, 0.01);
+      });
+      r.appendChild(hide);
+
+      partsList.appendChild(r);
+    }
+  }
+
+  /** Tiny HTML escape — avoids sneaky names in the critter list from
+   *  landing as HTML. We control the catalog but the function is cheap
+   *  and keeps future input-from-elsewhere safe. */
+  function escapeText(s: string): string {
+    return s.replace(/[&<>"']/g, (c) =>
+      c === '&' ? '&amp;' :
+      c === '<' ? '&lt;' :
+      c === '>' ? '&gt;' :
+      c === '"' ? '&quot;' :
+                  '&#39;',
+    );
   }
 
   /**

@@ -2,9 +2,10 @@
 // Server-side ability system
 // ---------------------------------------------------------------------------
 //
-// Generic architecture ready for all 3 ability types. Bloque A wires only
-// `charge_rush` end-to-end. `ground_pound` and `frenzy` have config and
-// state slots but their fire effects are TODO for Bloque B.
+// Generic architecture wiring all 3 ability types authoritatively. Each
+// per-kit definition lives here (cooldown / duration / windUp / effect
+// overrides); the client mirrors the timings via clientside prediction
+// of cooldown bars but never decides whether an ability fires.
 //
 // Flow per tick:
 //   1. Check input — if input flag set AND ability ready, activate
@@ -47,17 +48,20 @@ export interface AbilityDef {
 // factory overrides so offline and online feel identical per critter.
 const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Sergei: [
-    { type: 'charge_rush',  cooldown: 4.5, duration: 0.32, windUp: 0.06,
-      impulse: 18, speedMultiplier: 2.4, massMultiplier: 2.2 },
-    { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.35,
-      radius: 3.2, force: 30 },
-    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+    { type: 'charge_rush',  cooldown: 4.0, duration: 0.28, windUp: 0.04,
+      impulse: 20, speedMultiplier: 2.6, massMultiplier: 2.2 },
+    { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.30,
+      radius: 3.5, force: 34 },
+    { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.35,
+      frenzySpeedMult: 1.45, frenzyMassMult: 1.5 },
   ],
   Trunk: [
-    { type: 'charge_rush',  cooldown: 5.0, duration: 0.40, windUp: 0.06,
-      impulse: 14, speedMultiplier: 2.0, massMultiplier: 3.0 },
-    { type: 'ground_pound', cooldown: 8.5, duration: 0.05, windUp: 0.5,
-      radius: 4.2, force: 34 },
+    { type: 'charge_rush',  cooldown: 4.5, duration: 0.35, windUp: 0.08,
+      impulse: 16, speedMultiplier: 2.1, massMultiplier: 3.5 },
+    { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.60,
+      radius: 4.5, force: 40 },
+    { type: 'frenzy',       cooldown: 18.0, duration: 3.0, windUp: 0.45,
+      frenzySpeedMult: 1.25, frenzyMassMult: 1.80 },
   ],
 
   // --- Bloque C: 7 remaining playables ---
@@ -86,6 +90,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 16, speedMultiplier: 2.3, massMultiplier: 1.7 },
     { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.35,
       radius: 4.6, force: 24 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
 
   // Sihans — Trapper: slow stomping specialist, long windUp, high force
@@ -94,6 +99,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 15, speedMultiplier: 2.1, massMultiplier: 2.0 },
     { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.6,
       radius: 3.5, force: 38 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
 
   // Kowalski — Mage: widest AoE, lowest force, ranged identity via area
@@ -102,6 +108,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 15, speedMultiplier: 2.4, massMultiplier: 1.5 },
     { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.4,
       radius: 5.0, force: 20 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
 
   // Cheeto — Assassin: fastest dash, mini AoE but dense
@@ -110,6 +117,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 26, speedMultiplier: 3.0, massMultiplier: 1.2 },
     { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.22,
       radius: 2.5, force: 30 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
 
   // Sebastian — Glass Cannon: small AoE, massive force, vicious charge
@@ -118,6 +126,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 22, speedMultiplier: 2.6, massMultiplier: 1.4 },
     { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.3,
       radius: 2.8, force: 40 },
+    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
   ],
 };
 

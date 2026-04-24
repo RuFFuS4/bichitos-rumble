@@ -1,8 +1,8 @@
 # Submission Checklist — Bichitos Rumble
 
-## ⚠️ Pending user action
+## ✅ Submitted
 
-- [ ] **SUBMIT VIA GOOGLE FORM before May 1, 2026 @ 13:37 UTC** → https://forms.gle/bGG4e3uD9PUUJKUc7
+- [x] **SUBMITTED via Google Form on 2026-04-23** (well before May 1 deadline) → https://forms.gle/bGG4e3uD9PUUJKUc7
 
 ## Jam Info
 - **Deadline**: May 1, 2026 @ 13:37 UTC
@@ -49,10 +49,29 @@
 - [x] **Skeletal animation loader** — drops Mixamo/Tripo animated GLBs in `public/models/critters/` and the engine picks them up; procedural layer coexists and steps aside for heavy clips
 - [x] Title screen
 - [x] Victory/defeat screen
-- [x] 3D rotatable preview in character select
-- [ ] Skeletal animations populated for the roster (user in flight: Mixamo + Blender + Tripo pipeline)
-- [ ] Signature per-critter abilities (gap vs placeholders tracked in CHARACTER_DESIGN.md)
+- [x] 3D rotatable preview in character select (auto-fit uniform scale per critter via `max(h,w,d)` sampling over 900ms — all 9 read at ~1.9u regardless of Tripo vs Meshy source)
+- [x] **Matte-Meshy materials fixed** — `metalness=0 + roughness=0.7` forced whenever source PBR came in with `metalness>0.5`. Restores the flat-colour look from the Meshy visor.
+- [x] Skeletal animations populated for the roster — **9/9 completos** 🎉 (Cheeto 8/8, Kermit 7/8 + Hypnosapo procedural, Kowalski 8/8, Trunk 8/8, Shelly 6/8 + Shell Charge/Shell Shield procedurales, Kurama 8/8 via Meshy, Sebastian 6/8 + Claw Rush/Crab Slash procedurales via Meshy, Sihans 8/8 via Meshy, Sergei 8/8 via Meshy). User pipeline: Meshy AI + Tripo Animate → `scripts/import-critter.mjs`.
+- [x] **3 abilities per critter (J / K / L)** — Sergei's 3-slot kit is the design-final; the other 8 critters carry a themed `frenzy` placeholder as their ULTI (Trunk Stampede, Kermit Hypnosapo, Sihans Diggy Rush, Kowalski Blizzard, Cheeto Tiger Rage, Sebastian Red Claw). Client + server kits mirrored.
+- [x] **Countdown drop desync'd** — critters hover at random altitudes (10–16u) with per-index delay (player instant, bots staggered 0.15–0.35s each) and play their `fall` clip under gravity, snapping to `idle` on landing.
+- [x] **Offline pause menu** — ESC during `phase === 'playing'` (vs-bots only) opens a card with Resume / Restart / Quit-to-title. Freezes input + bots + physics; online path unaffected.
+- [x] **"Press P" portal hint** — sprite floats above each portal when it's minimized (inverse opacity to the main label), switches to "TAP 🌀" on touch devices.
+- [x] **HUD lives in 4 corners** — TL/TR/BL/BR with big avatars (70×70), critter name, hearts 16px, local-player gold highlight. Margins dodge the Vibe Jam widget + portal legend.
+- [x] **Top-centre hero cluster** — timer 44px gold + Alive count uppercase letter-spaced. Readable from arm's length.
+- [x] **Sprite system + AI-generated icons** — `/images/hud-icons.png` (4×7 grid, 26 icons) and `/images/ability-icons.png` (3×9 grid, 27 icons) preloaded by `main.ts`. Body classes `has-hud-sprites` / `has-ability-sprites` activate sprites only on load; emoji fallbacks stay on if the asset 404s. First integration live: abilities in character-select info pane + cooldown HUD. Hearts / bot-mask / belts-trophy / SFX / music icons pending next tanda.
+- [x] **Favicon** — `/favicon-br.png` (AI-generated BR mark) as primary, previous SVG kept as fallback.
+- [ ] Signature per-critter abilities (6 out of 9 ULTIs are `frenzy` placeholders; gap tracked in CHARACTER_DESIGN.md)
 - [ ] Particle effects (beyond shockwave rings)
+- [ ] Remaining sprite integrations (hearts, bot-mask, belts, sfx/music icons, critter-head fallbacks)
+
+### Skeletal state policy (congelada 2026-04-21)
+- **8 estados target** por bichito: `idle`, `run`, `ability_1`,
+  `ability_2`, `ability_3` (ULTI), `victory`, `defeat`, `fall`.
+- **Procedurales para todos** (no se autorizan clips): `headbutt_anticip`,
+  `headbutt_lunge`, `hit`, `walk` (descartado), `respawn` (cubierto por
+  inmunidad + parpadeo).
+- Excepciones per-critter sólo si se especifica (ej. Kermit `ability_3`
+  Hypnosapo = efecto emissivo procedural porque no hay clip).
 
 ## Input / Accessibility
 - [x] Keyboard support (WASD + Space/J/K/L + R/T)

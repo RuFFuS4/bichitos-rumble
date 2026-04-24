@@ -119,7 +119,13 @@ Deployment:
 
 AI-assisted content:
 - **Tripo AI** — all 9 critter GLB models.
-- **Suno** — 3 MP3 tracks (intro / ingame / special).
+- **Tripo Animate** — primary rigging + animation source for the
+  critters that ship skeletal clips (currently Cheeto, Kermit, Kowalski,
+  Trunk).
+- **Meshy AI** — alternative auto-rigger, kept in the stack for
+  non-humanoid morphologies where Tripo Animate struggles.
+- **Suno** — 3 MP3 tracks (intro / ingame / special) with exponential
+  crossfade between phases.
 
 All AI-generated assets are baked into the bundle as static files; no
 runtime calls to any external AI service from the shipped build.
@@ -132,8 +138,28 @@ Full stack details: [`STACK.md`](STACK.md).
 Procedural animation layer gives each critter distinct idle bob, run
 cadence, lean and squash/stretch derived from their mass+speed stats.
 Skeletal animation loader is wired — drop a GLB with embedded clips
-from Mixamo or Tripo Animate into `public/models/critters/` and the
-engine picks them up automatically.
+from Mixamo / Tripo Animate / Meshy into `public/models/critters/` and
+the engine picks them up automatically.
+
+Skeletal coverage at 2026-04-22: **4 / 9** critters shipping the full
+eight-state kit (idle / run / ability_1 / ability_2 / ultimate /
+victory / defeat / fall). Pipeline: `npm run import:critter <id>
+<source.glb>` with a duration-mapping JSON under `scripts/mappings/`.
+See [`CHARACTER_DESIGN.md`](CHARACTER_DESIGN.md) for the per-critter
+table.
+
+**Stats are driven by a single P/W/S tuple** per critter
+(Power / Weight / Speed, each -2..+2). `src/pws-stats.ts` derives the
+raw numeric stats (speed / mass / headbuttForce) via a linear mapping
+and the server imports the same table byte-identical, so rebalancing
+is a 3-character edit per row that propagates to both client + server.
+
+The arena is a stone platform floating high in a painted sky (custom
+shader skydome + distant cloud disc) — when a fragment collapses it
+tumbles away under gravity instead of vanishing. Countdown entry: the
+fighters drop from the sky with a gravity arc, a dust puff + thud fire
+as each one lands. The 3-2-1 digits ramp colour with urgency (red →
+amber → yellow) and GO! paints in green with a radial burst.
 
 Online supports up to 4 humans per room with automatic bot-fill. The
 waiting room shows the lineup with human/bot badges and a visible
@@ -141,7 +167,16 @@ countdown.
 
 Vibe Jam portal integration is live: exit portal (webring) and return
 portal; players arriving via `?portal=true` skip menus and drop
-straight into a match.
+straight into a match. A warp transition plays for ~650 ms before each
+redirect so the hand-off feels like a portal trip, not a hard-cut.
+
+**Local achievement system** (BADGES) — 16 WWE-style belts
+(9 per-critter Champions + 7 global trophies like Speedrun / Iron
+Will / Pain Tolerance) that unlock as you play. Progress persists in
+localStorage. A floating toast surfaces new unlocks on the end-screen;
+the full catalogue lives in a "Hall of Belts" modal accessible from
+character-select (button or **B** key). Placeholder emoji icons until
+the generated PNGs drop (prompts in [`AI_PROMPTS.md`](AI_PROMPTS.md)).
 
 ## More docs
 
@@ -151,7 +186,14 @@ straight into a match.
 | [`ONLINE.md`](ONLINE.md) | Online 4P flow, bot-fill, edge cases |
 | [`DEV_TOOLS.md`](DEV_TOOLS.md) | Internal `/tools.html` lab |
 | [`GAME_DESIGN.md`](GAME_DESIGN.md) | Core design pillars |
-| [`CHARACTER_DESIGN.md`](CHARACTER_DESIGN.md) | Roster + abilities |
+| [`CHARACTER_DESIGN.md`](CHARACTER_DESIGN.md) | Roster + abilities + skeletal coverage |
 | [`RULES.md`](RULES.md) | Gameplay rules |
-| [`BUILD_LOG.md`](BUILD_LOG.md) | Sprint history |
+| [`ASSET_PIPELINE.md`](ASSET_PIPELINE.md) | GLB optimization + import flow |
+| [`BLENDER_MCP.md`](BLENDER_MCP.md) | Tripo Animate / Meshy cleanup via Blender (standby) |
+| [`BADGES_DESIGN.md`](BADGES_DESIGN.md) | WWE-belt achievement system (live in Phases 1-4) |
+| [`PROCEDURAL_PARTS.md`](PROCEDURAL_PARTS.md) | Per-critter bone/primitive playbook for future abilities |
+| [`AI_PROMPTS.md`](AI_PROMPTS.md) | Prompt library for generative asset passes |
+| [`BUILD_LOG.md`](BUILD_LOG.md) | Sprint history (pre-launch in `docs/archive/`) |
 | [`NEXT_STEPS.md`](NEXT_STEPS.md) | Roadmap to jam deadline |
+| [`SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md) | Jam deliverables gate |
+| [`VALIDATION_CHECKLIST.md`](VALIDATION_CHECKLIST.md) | Manual QA batch |

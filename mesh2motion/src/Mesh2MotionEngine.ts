@@ -20,7 +20,7 @@ import { StepExportToFile } from './lib/processes/export-to-file/StepExportToFil
 import { StepWeightSkin } from './lib/processes/weight-skin/StepWeightSkin.ts'
 
 import { ProcessStep } from './lib/enums/ProcessStep.ts'
-import { type Bone, Group, Scene, type Skeleton, type Vector3 } from 'three'
+import { type Bone, Group, type Object3D, Scene, type Skeleton, type Vector3 } from 'three'
 import type BoneTesterData from './lib/interfaces/BoneTesterData.ts'
 
 import { SkeletonType } from './lib/enums/SkeletonType.ts'
@@ -66,6 +66,26 @@ export class Mesh2MotionEngine {
   public skeleton_helper: CustomSkeletonHelper | THREE.SkeletonHelper | undefined = undefined
   public use_custom_skeleton_helper: boolean = true // retargeting doesn't use this
   public debugging_visual_object: Group = new Group()
+
+  // [BICHITOS-FORK] Set to true when the loaded GLB carried a usable
+  // pre-rigged skeleton (Tripo Animate). Disables the Fit Skeleton and
+  // Edit Skeleton UI steps and tells BindPose to skip skin computation.
+  public is_pre_rigged_active: boolean = false
+
+  // [BICHITOS-FORK] Group that wraps a pre-rigged critter's SkinnedMesh
+  // plus its Armature / bone hierarchy so rotate + scale buttons can
+  // operate on one handle. Null when not in pre-rigged mode.
+  public pre_rigged_wrapper: Group | null = null
+
+  // [BICHITOS-FORK] Cumulative rotation the user applied to the mesh via
+  // the rotate-X/Y/Z buttons during the LoadSkeleton / EditSkeleton
+  // phases (before activating pre-rigged). Tripo rigs come with a fixed
+  // rest orientation that may not match how the lab expects the model to
+  // face — user often rotates +90°X or similar to stand the mesh up.
+  // We replay that rotation on the pre-rigged wrapper at activation time
+  // so the mesh appears in the same orientation the user just finished
+  // working with in Load/Edit Skeleton.
+  public cumulative_pre_rigged_rotation = new THREE.Euler(0, 0, 0)
 
   // when editing the skeleton, what type of mesh will we see
   public mesh_preview_display_type: ModelPreviewDisplay = ModelPreviewDisplay.WeightPainted
@@ -311,6 +331,82 @@ export class Mesh2MotionEngine {
     }
   }
 
+  // [BICHITOS-FORK] -----------------------------------------------------
+  /**
+   * Wire a freshly-loaded pre-rigged GLB into the lab pipeline. Called
+   * by the EventListener that fires on `modelLoadedPreRigged`. Hands the
+   * captured SkinnedMeshes + Skeleton off to StepWeightSkin (so its
+   * accessors return them without ever running the skinning algorithm),
+   * locks the skeleton type to Human (Tripo's rig is humanoid → uses
+   * MM's human animation library after retargeting via
+   * BichitosTripoRetargeter), then jumps straight to BindPose. BindPose
+   * detects `is_pre_rigged_active`, skips the expensive skin-weight
+   * computation, and auto-transitions to AnimationsListing as usual.
+   */
+  public activate_pre_rigged_pipeline (): void {
+    const skinned = this.load_model_step.get_pre_rigged_skinned_meshes()
+    const skeleton = this.load_model_step.get_pre_rigged_skeleton()
+    if (!skinned.length || !skeleton) {
+      console.warn('[BICHITOS-FORK] activate_pre_rigged_pipeline called without pre-rigged data; aborting.')
+      return
+    }
+
+    // [BICHITOS-FORK] clean slate before wiring the new critter — otherwise
+    // a second card click stacks the previous critter's mesh + armature +
+    // ParentNode empties in the scene.
+    this.clean_pre_rigged_scene_state()
+
+    // Wrap the ENTIRE loaded GLB hierarchy (ParentNode → Armature →
+    // bones + SkinnedMesh) into one Group. Critical invariant: bones +
+    // skinned mesh MUST share the same wrapped parent — otherwise a
+    // rotation on the wrapper rotates just the mesh while bones stay
+    // put, and the skinning algorithm snaps vertices right back to
+    // their bind-time world positions. Moving the whole loaded-scene
+    // hierarchy at once keeps the Tripo bone structure intact.
+    const wrapper = new Group()
+    wrapper.name = 'PreRiggedWrapper'
+    const loaded_root = this.load_model_step.get_pre_rigged_root()
+    if (loaded_root) {
+      // Move children (not the scene itself) into wrapper. `.children`
+      // is a live array so iterate by copying first.
+      const kids = [...loaded_root.children]
+      for (const child of kids) {
+        wrapper.add(child)
+      }
+    }
+    // Replay any rotate-X/Y/Z button presses the user hit during the
+    // normal Load/Edit Skeleton flow so the pre-rigged mesh lands in
+    // the same orientation they were just working with. Without this
+    // the wrapper defaults to rotation (0,0,0) which is Tripo's rest
+    // orientation — often sideways compared to MM's expected forward,
+    // producing the "mesh came out rotated weirdly" complaint.
+    wrapper.rotation.copy(this.cumulative_pre_rigged_rotation)
+
+    this.pre_rigged_wrapper = wrapper
+    this.scene.add(wrapper)
+
+    this.is_pre_rigged_active = true
+
+    // Hand the captured rig to StepWeightSkin so its accessors return
+    // the existing SkinnedMeshes / Skeleton without recomputation.
+    this.weight_skin_step.set_pre_rigged_data(skinned, skeleton)
+
+    // Lock the skeleton type to Human so AnimationsListing fetches the
+    // right animation library (animations are then retargeted on load).
+    this.load_skeleton_step.set_skeleton_type(SkeletonType.Human)
+
+    // Tell the animations step to retarget every clip from MM's human
+    // template names to Tripo names on load, so the clips actually
+    // animate the bones present in the pre-rigged skeleton.
+    this.animations_listing_step.set_tripo_retarget_mode(true)
+
+    // Jump straight to BindPose — the existing BindPose handler skips
+    // skin recomputation when is_pre_rigged_active is set, then transitions
+    // to AnimationsListing automatically.
+    this.process_step_changed(ProcessStep.BindPose)
+  }
+  // [BICHITOS-FORK] end -------------------------------------------------
+
   // the retargeting functionality also uses, so expose this out publicly
   public show_animation_player (show: boolean): void {
     if (this.ui.dom_animation_player === null) {
@@ -400,10 +496,21 @@ export class Mesh2MotionEngine {
     }
     else if (this.process_step === ProcessStep.BindPose) {
       this.transform_controls.enabled = false // shouldn't be editing bones
-      this.calculate_skin_weighting_for_models()
 
-      this.remove_skinned_meshes_from_scene() // clean up in case we had skinned meshes in scene previously
-      this.scene.add(...this.weight_skin_step.final_skinned_meshes()) // add final skinned mesh to scene
+      // [BICHITOS-FORK] Skip skin recomputation when the GLB shipped its
+      // own bound skeleton — StepWeightSkin already holds the pre-rigged
+      // SkinnedMeshes via set_pre_rigged_data() (handed off in
+      // activate_pre_rigged_pipeline). The downstream calls below still
+      // work because StepWeightSkin's accessors return the cached data.
+      if (!this.is_pre_rigged_active) {
+        this.calculate_skin_weighting_for_models()
+        this.remove_skinned_meshes_from_scene() // clean up in case we had skinned meshes in scene previously
+        this.scene.add(...this.weight_skin_step.final_skinned_meshes()) // add final skinned mesh to scene
+      }
+      // When pre-rigged, the SkinnedMeshes are already inside the
+      // `PreRiggedWrapper` Group that activate_pre_rigged_pipeline added
+      // to the scene — re-adding via `scene.add(...)` would detach them
+      // from the wrapper and break rotate/scale on the group handle.
 
       this.weight_skin_step.weight_painted_mesh_group().visible = false // hide weight painted mesh
       this.process_step_changed(ProcessStep.AnimationsListing)
@@ -428,6 +535,19 @@ export class Mesh2MotionEngine {
 
       if (this.skeleton_helper !== undefined) {
         this.skeleton_helper.hide() // hide skeleton helper in animations listing step
+      }
+
+      // [BICHITOS-FORK] When pre-rigged, the user never visited LoadModel
+      // or LoadSkeleton steps — so the rotate-model and skeleton-scale
+      // tools are still hidden. Keep them visible here so they can
+      // orient / resize the wrapper group from the animations pane.
+      if (this.is_pre_rigged_active) {
+        if (this.ui.dom_load_model_tools !== null) {
+          this.ui.dom_load_model_tools.style.display = 'flex'
+        }
+        if (this.ui.dom_load_skeleton_tools !== null) {
+          this.ui.dom_load_skeleton_tools.style.display = 'flex'
+        }
       }
     }
 
@@ -545,8 +665,70 @@ export class Mesh2MotionEngine {
     }
   }
 
+  // [BICHITOS-FORK] -----------------------------------------------------
+  /**
+   * Re-run the AnimationsListing load with the current TripoRetargeter
+   * mapping so clip track names reflect any edits the user just made in
+   * the bone-pairing UI panel. Resets the step's cached clip list,
+   * re-fetches + retargets the animation library, re-applies to the
+   * skinned mesh. Safe to call repeatedly; no-op when not in pre-rigged
+   * mode (mapping doesn't apply to the standard flow).
+   */
+  public reload_animations_for_current_mapping (): void {
+    if (!this.is_pre_rigged_active) return
+    const skinned = this.weight_skin_step.final_skinned_meshes()
+    if (!skinned.length) return
+    // Lock skeleton type to Human again in case something else touched it.
+    this.load_skeleton_step.set_skeleton_type(SkeletonType.Human)
+    this.animations_listing_step.set_tripo_retarget_mode(true)
+    this.animations_listing_step.begin(this.load_skeleton_step.skeleton_type(), this.load_skeleton_step.skeleton_scale())
+    this.animations_listing_step.load_and_apply_default_animation_to_skinned_mesh(skinned)
+  }
+
+  /**
+   * Remove every artifact from a previous pre-rigged critter load —
+   * SkinnedMesh, loose bones, and the Tripo-style `*_Parent` empties
+   * plus the armature Object3D itself if present. Run at the start of
+   * `activate_pre_rigged_pipeline()` so the incoming critter gets a
+   * clean scene. Upstream `remove_imported_model()` and
+   * `remove_skinned_meshes_from_scene()` don't match Tripo naming, so
+   * without this helper everything stacks on a second card click.
+   */
+  public clean_pre_rigged_scene_state (): void {
+    const to_remove: THREE.Object3D[] = []
+    for (const child of this.scene.children) {
+      const name = child.name || ''
+      const is_skinned = (child as THREE.SkinnedMesh).isSkinnedMesh === true
+      const is_bone = (child as THREE.Bone).isBone === true
+      const is_tripo_parent = /(_Parent|^ParentNode$)/.test(name)
+      const is_armature = name.toLowerCase().includes('armature')
+      const is_wrapper = name === 'PreRiggedWrapper'
+      if (is_skinned || is_bone || is_tripo_parent || is_armature || is_wrapper) {
+        to_remove.push(child)
+      }
+    }
+    for (const obj of to_remove) {
+      Utility.remove_object_with_children(obj)
+    }
+    // Reset engine-level state so the new load starts from zero.
+    this.is_pre_rigged_active = false
+    this.pre_rigged_wrapper = null
+    // Cumulative rotation is per-load — a new critter click should
+    // start without inheriting the previous critter's rotations.
+    this.cumulative_pre_rigged_rotation.set(0, 0, 0)
+  }
+  // [BICHITOS-FORK] end -------------------------------------------------
+
   public remove_skinned_meshes_from_scene (): void {
-    const existing_skinned_meshes = this.scene.children.filter((child: THREE.Object3D) => child.name.includes('Skinned Mesh'))
+    // [BICHITOS-FORK] Match by `isSkinnedMesh` in addition to the legacy
+    // 'Skinned Mesh' name check. Upstream assumed every SkinnedMesh in
+    // the scene was one it created itself (with that literal name prefix).
+    // Tripo-rigged critters we load ship their SkinnedMesh already named
+    // '<critter>_Mesh' (e.g. 'Sergei_Mesh') — the original filter never
+    // matched them, so a second click left the previous critter in scene.
+    const existing_skinned_meshes = this.scene.children.filter((child: THREE.Object3D) =>
+      child.name.includes('Skinned Mesh') || (child as THREE.SkinnedMesh).isSkinnedMesh === true
+    )
     existing_skinned_meshes.forEach((existing_skinned_mesh: THREE.Object3D) => {
       Utility.remove_object_with_children(existing_skinned_mesh)
     })

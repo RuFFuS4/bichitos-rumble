@@ -148,22 +148,63 @@ export class EventListeners {
       this.bootstrap.process_step = this.bootstrap.process_step_changed(ProcessStep.LoadSkeleton)
     })
 
+    // [BICHITOS-FORK] Pre-rigged GLB short-circuit. When the load model
+    // step detects an existing Tripo skeleton it skips Fit + Edit and
+    // jumps straight to BindPose with the captured rig data. The
+    // BindPose handler in Mesh2MotionEngine knows to use the pre-rigged
+    // SkinnedMesh / Skeleton instead of running the skinning algorithm,
+    // and BindPose auto-transitions to AnimationsListing right after.
+    this.bootstrap.load_model_step.addEventListener('modelLoadedPreRigged', () => {
+      this.bootstrap.activate_pre_rigged_pipeline()
+    })
+
     this.bootstrap.ui.dom_bind_pose_button?.addEventListener('click', () => {
       this.bootstrap.setup_weight_skinning_config()
       this.bootstrap.process_step_changed(ProcessStep.BindPose)
     })
 
     // rotate model after loading it in to orient it correctly
+    // [BICHITOS-FORK] Two rotation paths:
+    //   1. Pre-rigged mode: rotate the wrapper Group (live transform),
+    //      because rotating skin geometry would desync the bones.
+    //   2. Normal MM mode (Load/Edit Skeleton): rotate the geometry
+    //      vertices (upstream behaviour) AND track the cumulative
+    //      rotation on the engine. If the user later opts into the
+    //      pre-rigged path, that cumulative rotation is replayed onto
+    //      the wrapper so the mesh keeps the orientation the user set.
+    const rotatePreRigged = (axis: 'x' | 'y' | 'z', angleDeg: number): boolean => {
+      const w = this.bootstrap.pre_rigged_wrapper
+      if (!this.bootstrap.is_pre_rigged_active || !w) return false
+      const rad = (angleDeg * Math.PI) / 180
+      if (axis === 'x') w.rotation.x += rad
+      else if (axis === 'y') w.rotation.y += rad
+      else w.rotation.z += rad
+      return true
+    }
+
+    const trackCumulativeRotation = (axis: 'x' | 'y' | 'z', angleDeg: number): void => {
+      const rad = (angleDeg * Math.PI) / 180
+      if (axis === 'x') this.bootstrap.cumulative_pre_rigged_rotation.x += rad
+      else if (axis === 'y') this.bootstrap.cumulative_pre_rigged_rotation.y += rad
+      else this.bootstrap.cumulative_pre_rigged_rotation.z += rad
+    }
+
     this.bootstrap.ui.dom_rotate_model_x_button?.addEventListener('click', () => {
+      if (rotatePreRigged('x', 90)) return
       this.bootstrap.load_model_step.rotate_model_geometry('x', 90)
+      trackCumulativeRotation('x', 90)
     })
 
     this.bootstrap.ui.dom_rotate_model_y_button?.addEventListener('click', () => {
+      if (rotatePreRigged('y', 90)) return
       this.bootstrap.load_model_step.rotate_model_geometry('y', 90)
+      trackCumulativeRotation('y', 90)
     })
 
     this.bootstrap.ui.dom_rotate_model_z_button?.addEventListener('click', () => {
+      if (rotatePreRigged('z', 90)) return
       this.bootstrap.load_model_step.rotate_model_geometry('z', 90)
+      trackCumulativeRotation('z', 90)
     })
 
     // Reset model position to import state

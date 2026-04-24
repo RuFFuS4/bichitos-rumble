@@ -51,6 +51,9 @@ export function resolveCollisions(critters: Critter[]): void {
           triggerCameraShake(FEEL.shake.headbutt);
           applyImpactFeedback(b);
           playSound('headbuttHit');
+          // Badge aggregation: count the hit on the receiver. Used by
+          // Untouchable / Pain Tolerance evaluation via recordWin().
+          b.matchStats.hitsReceived++;
         } else if (b.isHeadbutting) {
           a.vx -= nx * force * massRatioA;
           a.vz -= nz * force * massRatioA;
@@ -60,6 +63,7 @@ export function resolveCollisions(critters: Critter[]): void {
           triggerCameraShake(FEEL.shake.headbutt);
           applyImpactFeedback(a);
           playSound('headbuttHit');
+          a.matchStats.hitsReceived++;
         } else {
           // Normal collision — gentle nudge
           a.vx -= nx * force * massRatioA;

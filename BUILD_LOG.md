@@ -1,2373 +1,1464 @@
 # Build Log — Bichitos Rumble
 
-## 2026-04-08 — Phase 1: First Playable Prototype
+> **Active entries from 2026-04-20 onward.** The first two weeks of
+> development (prototype → roster → first public deploy → online 4P →
+> gamepad → skeletal loader → /animations lab → arena shake) are
+> archived verbatim in
+> [`docs/archive/BUILD_LOG-pre-launch-2026.md`](docs/archive/BUILD_LOG-pre-launch-2026.md).
+> If you need context for a decision older than 2026-04-20, look there.
 
-### What was built
-- Full project scaffolding (Vite + TypeScript + Three.js)
-- Circular arena with 6 collapsible concentric rings
-- 4 critters with big-head design (body + head + eyes)
-- Player movement (WASD/arrows) with acceleration + friction
-- Headbutt attack (Space) with cooldown and knockback
-- Mass-based collision physics
-- Bot AI (chase nearest + headbutt when close)
-- Progressive arena destruction (every 15s)
-- Fall-off-edge elimination
-- Match state machine (countdown → playing → ended)
-- DOM-based HUD (alive count, timer, overlays)
-- Fast restart with R key
+---
 
-### Files created
-- `package.json`, `tsconfig.json`, `vite.config.ts`, `index.html`
-- `src/main.ts`, `src/game.ts`, `src/arena.ts`, `src/critter.ts`
-- `src/player.ts`, `src/bot.ts`, `src/physics.ts`
-- `src/camera.ts`, `src/hud.ts`
-- Documentation: README, RULES, STACK, GAME_DESIGN, BUILD_LOG, PROMPTS, SUBMISSION_CHECKLIST, MEMORY, ERROR_LOG
+## 2026-04-24 — Server ability kit sync for Sergei + Trunk
 
-### Bug fix: canvas rendering at 0x0
-- `renderer.setSize()` was called when `window.innerWidth` was 0
-- Extracted `syncSize()` in camera.ts with fallbacks
-- Added guard in game loop to re-sync if canvas is still 0
+Codex pass para desbloquear playtest online/offline coherente.
 
-### Camera adjustment
-- Moved to pseudo-isometric: FOV 32, position (0, 34, 14), lookAt (0, 0, -1)
+Durante el barrido inicial detecté que `src/abilities.ts` ya tenía los
+valores del feel pass de Sergei y Trunk, pero
+`server/src/sim/abilities.ts` seguía con tuning anterior. Eso hacía que
+los cooldowns, windUp, duración, impulso, radio/fuerza y multipliers de
+frenzy no coincidieran entre partida local y simulación online.
 
-### Design update: 2 abilities per critter
-- Changed from 1 to 2 special abilities per critter
-- Controls: J (ability 1), K (ability 2)
-- Updated all documentation files
+Fix aplicado:
+- **Sergei** server kit sincronizado con el cliente: Gorilla Rush
+  `4.0s / 0.28s / windUp 0.04 / impulse 20`, Shockwave
+  `radius 3.5 / force 34 / cooldown 6.0`, Frenzy
+  `duration 2.5 / cooldown 15.0 / speed ×1.45 / mass ×1.5`.
+- **Trunk** server kit sincronizado con el cliente: Trunk Ram
+  `cooldown 4.5 / duration 0.35 / windUp 0.08 / impulse 16 / mass ×3.5`,
+  Earthquake `radius 4.5 / force 40 / windUp 0.60 / cooldown 7.5`,
+  Stampede `duration 3.0 / speed ×1.25 / mass ×1.80`.
 
-## 2026-04-08 — Vertical Slice: Ability System
+No se toca gameplay nuevo ni UI. Es una corrección de consistencia para
+que el siguiente playtest no dé resultados distintos según modo.
 
-### What was built
-- **Ability architecture** (`src/abilities.ts`): config-driven system with `AbilityDef` + `AbilityState` types, `EFFECT_MAP` dispatch (no monolithic switch), `canActivateAbility()` / `activateAbility()` separation, per-type helpers
-- **Rojo's 2 abilities**:
-  - **Charge Rush (J)**: directional dash, speed x2.2, mass x1.5, impulse 12, cooldown 4s, duration 0.35s
-  - **Ground Pound (K)**: AoE radial knockback, force 18, radius 3.5, wind-up 0.25s (slow 30%), cooldown 6s, shockwave VFX (expanding torus)
-- **Effective stats**: `effectiveSpeed` and `effectiveMass` getters on Critter, used by player, bot, and physics
-- **Visual feedback**: emissive glow (orange for Charge Rush, yellow→red for Ground Pound), body squish during wind-up
-- **HUD cooldown bars**: CSS-based, renders any number of ability slots, shows active/cooldown/ready states
-- **Bot ability AI**: heuristics for ability usage (Ability 1 at mid-range, Ability 2 when surrounded)
+---
 
-### Architecture decisions
-- Config-driven: adding a critter = adding an entry in `CRITTER_ABILITIES` record
-- Per-type effect helpers via `EFFECT_MAP` dispatch table, not a switch
-- `canActivateAbility()` separated from `activateAbility()` for reuse in bot AI
-- `updateVisuals()` in critter.ts is visual-only, no gameplay logic
-- HUD renders from array of states (not hardcoded to 2 slots)
+## 2026-04-25 — Smoke test anim-lab + Feel pass Trunk (first override use)
 
-### Files created
-- `src/abilities.ts` (new — ~200 lines)
+Primera sesión productiva usando `/anim-lab.html` para validar el estado
+del mapping de clips antes de un feel pass.
 
-### Files modified
-- `src/critter.ts` — abilityStates, effectiveSpeed/Mass, updateVisuals, public body/head
-- `src/player.ts` — J/K input, effectiveSpeed
-- `src/physics.ts` — effectiveMass in collision calculations
-- `src/bot.ts` — effectiveSpeed, ability heuristics
-- `src/hud.ts` — initAbilityHUD, updateAbilityHUD
-- `src/game.ts` — ability update step in game loop, HUD wiring
-- `index.html` — ability bar CSS and container div
+### Smoke test (Fase 1)
 
-### Provisional tuning values (iterate during playtesting)
-- Charge Rush: cooldown 4s, duration 0.35s, speedMult 2.2, massMult 1.5, impulse 12
-- Ground Pound: cooldown 6s, windUp 0.25s, slowDuringWindUp 0.3, radius 3.5, force 18
-- Bot ability chance: ~2% per frame for Ability 1, ~1.5% per frame for Ability 2
-- Shockwave VFX duration: 300ms
-- All values centralized in `CHARGE_RUSH` and `GROUND_POUND` consts in `src/abilities.ts`
+Recorrido por Sergei / Trunk / Shelly en el lab:
 
-## 2026-04-08 — Game Feel Foundation
+- **Sergei** (10 clips Meshy): idle/run/abilities todos exact o prefix,
+  sin ambigüedad. El caso frágil `Run` vs `Running` lo gana `Run` por
+  Tier 1 — confirmado.
+- **Trunk** (8 clips Tripo): mapping problemático detectado — el GLB
+  lleva clip names del diseño FINAL (Ram/Grip/GroundPound) pero el
+  kit placeholder del código es `[charge_rush, ground_pound, frenzy]`,
+  así que slot K reproduce el clip de Grip (agarre) y slot L el clip
+  de GroundPound (pisotón). Visualmente equivocado.
+- **Shelly** (6 clips Tripo): ab_1 y ab_2 `missing` — pero por DISEÑO
+  (procedural Shell Charge + Shell Shield). Documentado en
+  `PROCEDURAL_PARTS.md` + `CHARACTER_DESIGN.md §"Cobertura skeletal"`.
 
-### What was built
-- **`src/gamefeel.ts`** (new) — centralized game feel system with:
-  - **Hit stop**: global time freeze on impact (headbutt 0.045s, ground pound 0.06s). Uses `applyHitStop(dt)` in game loop — returns 0 during freeze, rendering continues.
-  - **Scale feedback**: squash/stretch deformation via `mesh.scale` with quadratic ease-out interpolation back to normal. Three presets: `applyImpactFeedback` (Y squash), `applyDashFeedback` (Z stretch), `applyLandingFeedback` (Y squash + XZ spread).
-  - **FEEL config object**: all values (durations, scale targets, hit stop times) centralized in one editable const.
-- **Headbutt anticipation**: 0.08s wind-up phase where head retracts and body squashes before the lunge. Sells the hit before it happens.
-- **Separation maintained**: `gamefeel.ts` is purely visual/timing — no gameplay logic. Physics triggers feedback functions, game loop applies hit stop wrapper.
+### Override productivo (Fase 2)
 
-### Integration points
-- `physics.ts` → `triggerHitStop()` + `applyImpactFeedback()` on headbutt collisions
-- `abilities.ts` → `applyDashFeedback()` on Charge Rush fire, `applyLandingFeedback()` + `triggerHitStop()` on Ground Pound fire, `applyImpactFeedback()` on each hit target
-- `critter.ts` → `updateScaleFeedback()` called every frame, headbutt anticipation phase before lunge
-- `game.ts` → `applyHitStop(dt)` wraps the entire playing phase, returns effectiveDt
+Entra la primera entrada real al `ANIMATION_OVERRIDES` record:
 
-### Files created
-- `src/gamefeel.ts` (~130 lines)
-
-### Files modified
-- `src/critter.ts` — headbutt anticipation phase, updateScaleFeedback integration, reset cleanup
-- `src/physics.ts` — hit stop + impact feedback on headbutt collisions
-- `src/abilities.ts` — dash/landing/impact feedback + hit stop on ground pound
-- `src/game.ts` — hit stop wrapper around playing phase
-
-### Provisional tuning values (in FEEL const, `src/gamefeel.ts`)
-- Hit stop: headbutt 0.045s, ground pound 0.06s, generic 0.03s
-- Headbutt anticipation: 0.08s, head retract -0.15, body squash 0.85
-- Impact scale: X/Z 1.3, Y 0.7, duration 0.15s
-- Dash scale: X 0.85, Y 0.9, Z 1.3, duration 0.2s
-- Landing scale: X/Z 1.2, Y 0.65, duration 0.2s
-
-### Design decisions
-- Hit stop freezes gameplay dt to 0 but keeps rendering — screen doesn't actually pause, just game logic
-- Scale feedback uses WeakMap per critter — no memory leaks, auto-cleanup
-- Anticipation is gameplay (delays the headbutt) not just visual — creates risk/reward timing
-- All feedback functions are standalone (applyImpactFeedback, applyDashFeedback, etc.) — easy to call from any new ability type
-
-## 2026-04-09 — Game Feel Tuning Pass
-
-### Goal
-Make Rojo feel aggressive, weighty, and direct. Eliminate floaty/mushy sensation.
-
-### All value changes (old → new)
-
-**Movement:**
-| Value | Old | New | Notes |
-|-------|-----|-----|-------|
-| Friction | `vx *= 0.92` (frame-dep.) | `pow(0.5, dt/0.06)` | Frame-independent. Stops in ~0.3s |
-| Acceleration | 1.0x implicit | 1.4x | Snappier response |
-| Max speed | None | 16 | Caps extreme knockback stacking |
-
-**Headbutt:**
-| Value | Old | New | Notes |
-|-------|-----|-----|-------|
-| Anticipation duration | 0.08s | 0.12s | Readable wind-up |
-| Head retract | -0.15 | -0.30 | Visible coil |
-| Body squash | 0.85 | 0.70 | Dramatic compression |
-| Lunge duration | 0.2s (hardcoded) | 0.15s | Sharper snap |
-| Head extend | 0.3 (hardcoded) | 0.45 | Reaches further |
-| Velocity boost | None | 4.0 | Micro-lunge into hit |
-| Cooldown | 0.5s (hardcoded) | 0.45s | Slightly faster |
-| Recoil | 0.2x (hardcoded) | 0.35x | Both feel the hit |
-
-**Collisions:**
-| Value | Old | New | Contrast |
-|-------|-----|-----|----------|
-| Normal push | 6 (hardcoded) | 3.0 | Gentle nudge |
-| Headbutt mult. | 2.5 (hardcoded) | 3.5 | Rojo: 14×3.5=49 |
-| Push ratio | 6x | **16x** | Clear hit vs. bump |
-
-**Charge Rush:**
-| Value | Old | New | Notes |
-|-------|-----|-----|-------|
-| Impulse | 12 | 16 | Stronger launch |
-| Speed mult. | 2.2x | 2.5x | Faster |
-| Mass mult. | 1.5x | 2.0x | Freight train |
-| Duration | 0.35s | 0.30s | Shorter, more intense |
-| Wind-up | 0 | 0.06s | Micro-anticipation |
-| Steering | 100% | **15%** | Directional commitment |
-
-**Ground Pound:**
-| Value | Old | New | Notes |
-|-------|-----|-----|-------|
-| Wind-up | 0.25s | 0.35s | Longer, more readable |
-| Slow during | 0.3x | 0.15x | Nearly rooted |
-| Force | 18 | 28 | +55% knockback |
-| Wind-up squash | 0.7 (hardcoded) | 0.50 | Extreme compression |
-| Landing scaleY | 0.65 | 0.45 | Dramatic pancake |
-| Landing scaleX | 1.2 | 1.45 | Wide spread |
-
-**Hit stop:**
-| Value | Old | New |
-|-------|-----|-----|
-| Headbutt | 0.045s | 0.07s |
-| Ground Pound | 0.06s | 0.09s |
-| Generic | 0.03s | 0.04s |
-
-### Config centralization
-Moved ALL hardcoded values from critter.ts, physics.ts, abilities.ts into FEEL config in gamefeel.ts.
-- Friction formula is now frame-independent (exponential decay with half-life)
-- Ability defs (CHARGE_RUSH, GROUND_POUND) read from FEEL at init
-- Collision forces, recoil factor, headbutt timings all from FEEL
-
-### Provisional values (still need playtesting)
-- `frictionHalfLife: 0.06` — might need 0.08 if stopping feels too abrupt
-- `headbutt.lunge.velocityBoost: 4.0` — might need reduction if headbutt overshoots
-- `chargeRush.steerFactor: 0.15` — might need 0.25 if charge feels too rigid
-- `groundPound.force: 28` — might be too strong at point-blank, could need falloff curve adjustment
-- `collision.normalPushForce: 3.0` — might need 4.0 if critters clip through each other
-- `movement.maxSpeed: 16` — watch if knockbacks feel capped/unsatisfying
-
-### Files modified
-- `src/gamefeel.ts` — restructured FEEL config with movement, headbutt, collision, chargeRush, groundPound sections
-- `src/critter.ts` — frame-independent friction, velocity cap, headbutt micro-lunge, all refs to FEEL
-- `src/physics.ts` — removed hardcoded PUSH_FORCE/HEADBUTT_MULTIPLIER/recoil, reads FEEL
-- `src/abilities.ts` — CHARGE_RUSH/GROUND_POUND read from FEEL, wind-up added to charge
-- `src/player.ts` — accelerationScale, charge rush steering reduction
-- `src/bot.ts` — same changes + adjusted bot speed factor (0.7→0.55 with accelerationScale)
-
-## 2026-04-09 — Movement fix: drift + speed
-
-### Bug found: critters drift to death after releasing controls
-**Root cause:** Exponential friction (`vx *= pow(0.5, dt/halfLife)`) decays asymptotically — it approaches zero but never reaches it. A velocity of 0.01 moves the critter ~0.6 units/minute, enough to slowly slide off the arena edge over time. Combined with impulses from headbutt (velocityBoost 4.0) and charge rush (impulse 16), residual velocity after these actions kept critters moving indefinitely.
-
-### Fixes applied
-
-**1. Velocity dead zone** — snap to 0 when speed < 0.15:
+```ts
+trunk: { ability_2: 'Ability3GroundPound' }
 ```
-if (speed < deadZone) { vx = 0; vz = 0; }
+
+El slot K (Earthquake = ground_pound) ahora reproduce el clip de
+pisotón correcto. Slot L (Stampede = frenzy) queda en su auto
+(Ability3GroundPound via prefix) — observación menor documentada:
+el elefante hace un pisotón breve antes del buff, visualmente lee
+como "planta patas antes de embestir". Si tras playtest molesta,
+opciones discutidas en `CHARACTER_DESIGN.md §"Trunk — feel pass"`.
+
+### Policy de overrides documentada
+
+`src/animation-overrides.ts` cabecera ampliada con:
+- Cuándo añadir override (dos criterios explícitos).
+- Cuándo NO añadir (lista de estados procedurales-by-design:
+  Shelly ab_1/ab_2, Sebastian ab_1/ab_3, Kermit ab_3).
+- Qué estados son `missing` en todos los críttrs por default
+  (headbutt_*, hit, respawn) y no necesitan override.
+
+### Bug fix del anim-lab
+
+El lab mutaba `ANIMATION_OVERRIDES[entryId]` en cada `loadCritter()`,
+lo que **destruía** entradas authored al cargar un crítter sin
+session override. Fix: snapshot `AUTHORED_BASELINE` al boot + merge
+de session sobre baseline en cada load. Descubierto al primer QA
+real (el override de Trunk no se aplicaba porque el lab lo nuke-aba
+al clickar la card).
+
+### Feel pass Trunk (Fase 3)
+
+Siguiendo la plantilla de Sergei:
+
+- **Trunk Ram (J, charge_rush)**: impulse 14→16, duration 0.40→0.35,
+  cooldown 5.0→4.5, windUp 0.08 explícito, speedMult 2.0→2.1,
+  massMult 3.0→3.5 (máximo del roster — bulldozer), `clipPlaybackRate
+  5.0×` para que el clip de 4.58s se vea en ~0.92s.
+- **Earthquake (K, ground_pound)**: radius 4.2→4.5 (más ancho que
+  Sergei 3.5), force 34→40, windUp 0.5→0.60 (telegraph), cooldown
+  8.5→7.5, `clipPlaybackRate 2.8×` para clip de 1.96s (override
+  activo).
+- **Stampede (L, frenzy)**: duration 4.0→3.0 (frente a Sergei 2.5 —
+  Trunk bruiser aguanta más), speedMult 1.3→1.25 (menos que Sergei
+  1.45 — ya era lento), massMult 1.35→1.80 (bulldozer ×2),
+  cooldown 18.0, windUp 0.40→0.45.
+
+VFX: ninguno nuevo. `spawnShockwaveRing` reutilizado — el `radius:
+4.5` y `force: 40` generan un ring más grande + shake más fuerte que
+Sergei sin tocar código.
+
+Typecheck + build limpios. Feel pass log actualizado en
+`CHARACTER_DESIGN.md`.
+
+---
+
+## 2026-04-25 — Animation Validation Lab + overrides system
+
+Sesión de control: antes de meterme en feel pass de Trunk (siguiente
+crítter del roster), construyo una herramienta para evitar repetir el
+bug "Sergei Running vs Run" por otra vía, y para que los próximos
+feel-passes arranquen con visibilidad total de qué clip va a cada
+state.
+
+### Qué había ya
+
+Investigado antes de tocar:
+- **`/animations` (mesh2motion)**: editor de animaciones para
+  PRODUCIR clips. No es validador runtime. Descartado para este scope.
+- **Panel "Skeletal clips" en `/tools.html`**: colapsado por defecto,
+  sólo muestra los clips del crítter "player" de una partida activa,
+  no permite cambiar crítter fluido, no explica el tier del resolver,
+  no permite overrides, no exporta. Insuficiente.
+
+Conclusión: crear herramienta nueva.
+
+### Nuevo: `/anim-lab.html` (cuarto entry Vite)
+
+Estructura paralela a `/calibrate.html`:
+- **Panel izquierdo** — roster picker (9 críttrs clickables).
+- **Viewport** — Three.js scene, orbit camera, lit, solo el critter.
+- **Panel derecho**:
+  - Playback: Play/Pause/Restart/Stop/Loop + speed slider.
+  - Clips in GLB: lista de todos los clips con duración, state
+    resuelto, y botón Play individual.
+  - Resolved mapping: los 13 logical states con dropdown de override
+    por state + badge del tier resolver (exact/prefix/contains/
+    override/missing con colores distintos).
+  - Export overrides: dumpa al clipboard un snippet pasteable para
+    `src/animation-overrides.ts`.
+
+Archivos nuevos:
+- `anim-lab.html` (HTML entry).
+- `src/animlab/main.ts` (lógica — 380 LOC).
+
+Build: el nuevo chunk `animLab-*.js` pesa 7.4 KB gzipped.
+
+### Arquitectura del mapping — decisión
+
+**SoT del mapping de clips**: `src/animation-overrides.ts` (nuevo).
+Record sparse:
+```ts
+export const ANIMATION_OVERRIDES: Record<string, Partial<Record<SkeletalState, string>>> = {
+  // sergei: { run: 'Run' },  // example (not currently needed)
+};
 ```
-This kills micro-drift completely. The threshold of 0.15 is imperceptible to the player.
-
-**2. Dual friction model** — faster braking when no input:
-- `frictionHalfLife: 0.08` when holding a direction (slightly relaxed for higher top speed)
-- `idleFrictionHalfLife: 0.03` when no input (critter plants almost instantly)
-- `hasInput` flag set by player.ts/bot.ts each frame, read by critter.ts
-
-**3. Speed increase for Rojo:**
-- Base speed: 8 → 10 (+25%)
-- accelerationScale: 1.4 → 1.6 (+14%)
-- maxSpeed: 16 → 20 (+25%)
-- Net effect: Rojo's effective acceleration is 10 × 1.6 = 16 (was 8 × 1.4 = 11.2, +43% total)
-
-### Value changes
-
-| Value | Old | New |
-|-------|-----|-----|
-| Rojo speed | 8 | 10 |
-| accelerationScale | 1.4 | 1.6 |
-| maxSpeed | 16 | 20 |
-| frictionHalfLife | 0.06 | 0.08 |
-| idleFrictionHalfLife | — | 0.03 |
-| velocityDeadZone | — | 0.15 |
-
-### Provisional values (still tuning)
-- `idleFrictionHalfLife: 0.03` — might feel too abrupt, try 0.04 if braking is jarring
-- `velocityDeadZone: 0.15` — safe value, could go lower to 0.1 if needed
-- Rojo speed 10 — might need 11-12 if still feels slow relative to arena size
-
-### Files modified
-- `src/gamefeel.ts` — added idleFrictionHalfLife, velocityDeadZone, raised accelScale/maxSpeed
-- `src/critter.ts` — added hasInput flag, dual friction model, dead zone clamping, Rojo speed 8→10
-- `src/player.ts` — sets critter.hasInput based on input vector
-- `src/bot.ts` — sets bot.hasInput based on target availability
-
-## 2026-04-09 — Lives & Respawn System
-
-### What was built
-- **3 lives per critter** (default, configurable in `FEEL.lives.default`)
-- **Fall → respawn cycle**: critter falls off arena → loses 1 life → after 0.8s delay → respawns near center with 1.5s of immunity
-- **Permanent elimination** only when all lives are spent
-- **Immunity system**: during immunity critter blinks (opacity toggle), cannot be knocked back, cannot headbutt, cannot be targeted by collisions
-- **HUD lives indicator**: red hearts (♥♥♥) in top bar
-- **Respawn position**: random point at 40% of current arena radius (safe from edge)
-
-### Flow
-1. Critter goes off arena edge → `startFalling()` called
-2. `lives--`, critter falls with animation for 0.8s
-3. If `lives > 0`: `respawnAt()` places critter near center, sets immunity 1.5s
-4. If `lives === 0`: `eliminate()` — permanently removed
-5. Win condition: last critter with `alive === true` (all others permanently eliminated)
-
-### Config values (in `FEEL.lives`)
-| Value | Setting |
-|-------|---------|
-| Default lives | 3 |
-| Immunity duration | 1.5s |
-| Respawn delay | 0.8s |
-| Blink rate | 8 blinks/sec |
-
-### Files created/modified
-- `src/gamefeel.ts` — added `FEEL.lives` section
-- `src/critter.ts` — added `lives`, `immunityTimer`, `falling`, `isImmune`, `startFalling()`, `updateFalling()`, `respawnAt()`, immunity blink in `updateVisuals()`
-- `src/physics.ts` — skip falling critters in collisions, skip knockback on immune critters, split `checkFalloff` + `updateFalling`
-- `src/game.ts` — respawn handling, win condition uses `alive` (permanent), respawn position picker
-- `src/hud.ts` — `updateLivesHUD()` function
-- `index.html` — lives display element (♥♥♥)
-
-### Provisional values
-- `immunityDuration: 1.5` — might be too long if it breaks combat flow, try 1.0
-- `respawnDelay: 0.8` — might need 0.5 for faster pace
-- `default: 3` lives — will vary per critter in the future (2-3)
-
-## 2026-04-09 — All-critters lives HUD + match timing
-
-### Changes
-- **Lives HUD shows all 4 critters**: each row has a colored dot (matching critter color) + red hearts. Eliminated critters show ✖ at 35% opacity.
-- **Match duration**: 90s → **120s** (more time for 3-life matches)
-- **Collapse interval**: 15s → **20s** (6 rings over 120s = arena fully collapsed by end)
-- **Match timing centralized** in `FEEL.match` (duration, collapseInterval, countdown)
-- Removed hardcoded `MATCH_DURATION`, `COLLAPSE_INTERVAL`, `COUNTDOWN_SECS` from game.ts
-
-### Timing math
-- 6 rings × 20s = arena fully collapsed at 120s (matches game duration exactly)
-- With 3 lives, average match has ~8-10 falls total → frenetic last 40s as arena shrinks
-
-### Files modified
-- `src/gamefeel.ts` — added `FEEL.match` section
-- `src/game.ts` — reads all timing from FEEL, passes critters array to HUD
-- `src/hud.ts` — `initAllLivesHUD(critters)` + `updateAllLivesHUD(critters)` replace single-player lives
-- `index.html` — lives container div + CSS for lives panel
-
-### Provisional values
-- `match.duration: 120` — might need 100 if matches feel too long
-- `match.collapseInterval: 20` — could try 18 for faster pressure ramp
-
-## 2026-04-09 — Game Feel Pass: Visual Expression
-
-### What was built
-First serious pass to reduce "orthopedic" feel. All changes are visual-only — no gameplay logic modified.
-
-**1. Bounce overshoot in scale feedback:**
-- Replaced simple ease-out with 3-phase bounce: deform → return → overshoot → settle
-- Impact, dash, and landing effects now have configurable `bounceOvershoot` (1.05–1.12)
-- Gives squash/stretch a springy, cartoon quality instead of flat interpolation
-
-**2. Headbutt recovery pose:**
-- Head no longer snaps to z=0 after lunge — bounces back briefly (`headOvershoot: -0.12`)
-- Body stretches Y slightly during recovery (`bodyStretch: 1.15`) before settling
-- Creates a "rebound" feel after each hit
-
-**3. Knockback tilt:**
-- Critters tilt backward when hit (`tiltAngle: 0.25 rad` on body, half on head)
-- Smooth sine-based lean → return over 0.3s
-- Sells the hit direction without needing knockback arcs
-
-**4. Visual state contrast improved:**
-- **Headbutt anticipation**: white glow (distinct from abilities)
-- **Headbutt active**: yellow-gold glow, high intensity (0.8)
-- **Charge Rush**: orange glow + head tucks down (-0.08 Y offset)
-- **Ground Pound wind-up**: yellow glow + body squash + head drops
-- **Cooldown state**: muted glow (50% intensity)
-- **Idle**: subtle critter-color emissive
-
-**5. Stronger scale values:**
-- Impact: scaleY 0.7→0.6, duration 0.15→0.2
-- Dash: scaleZ 1.4→1.5, scaleX 0.80→0.75
-- Landing: scaleY 0.45→0.4, scaleX 1.45→1.5, duration 0.25→0.3
-
-### New FEEL config sections
-- `impact.bounceOvershoot`, `dash.bounceOvershoot`, `landing.bounceOvershoot`
-- `headbuttRecovery { headOvershoot, bodyStretch, duration }`
-- `knockbackReaction { tiltAngle, duration }`
-
-### New gamefeel.ts functions
-- `applyKnockbackTilt(critter)` — triggered by `applyImpactFeedback`
-- `updateKnockbackTilt(critter, dt)` — updates body/head rotation.x
-- `applyHeadbuttRecovery(critter)` — triggered at end of headbutt lunge
-- `updateHeadbuttRecovery(critter, dt)` — animates head bounce-back + body stretch
-- `bounceEase(t, overshoot)` — 3-phase ease with overshoot for scale feedback
-
-### Architecture notes
-- All new visual systems use WeakMap per critter (same pattern as scale feedback)
-- Called from `critter.update()` alongside `updateScaleFeedback()` — clean separation
-- No gameplay logic touched — physics, abilities, collision all unchanged
-- Hooks ready for future: VFX particles, camera shake, sound triggers can attach at the same points
-
-### Also in this session
-- Jam widget added to index.html (`<script async>`, non-blocking)
-- Future organic arena collapse documented in GAME_DESIGN.md and MEMORY.md
-
-## 2026-04-10 — Vercel deploy configuration
-
-### What was built
-- **`vercel.json`** created at project root with SPA configuration:
-  - `framework: "vite"` — explicit detector
-  - `buildCommand: "npm run build"` — runs `tsc && vite build`
-  - `outputDirectory: "dist"` — Vite's default
-  - `devCommand: "npm run dev"` — for `vercel dev`
-  - `rewrites: [{ source: "/(.*)", destination: "/index.html" }]` — SPA fallback: any unknown URL falls back to `index.html`, preventing 404s on reload. Assets with real files in `dist/` still serve directly (Vercel rewrite rules skip existing files).
-
-### Build verified
-- `npx vite build` → 16 modules, 493 KB (125 KB gzip), ~770ms
-- `dist/index.html` correctly references `./assets/index-XXXX.js` (relative path, no absolute path issues)
-- `base: './'` in `vite.config.ts` ensures relative URLs work on any subpath
-
-### Environments (configured in Vercel dashboard, not vercel.json)
-- **Production**: `main` branch → publishes to primary URL
-- **Preview**: `dev` branch + all other branches/PRs → auto-generated preview URLs
-- Single `vercel.json` serves both environments identically
-
-### Deploy steps (manual, one-time)
-1. Connect GitHub repo `RuFFuS4/bichitos-rumble` to Vercel project
-2. Import project → Vercel auto-detects Vite framework and `vercel.json`
-3. Set production branch to `main` in Vercel → Settings → Git
-4. Push to `dev` → generates preview URL
-5. Merge to `main` when stable → publishes to production URL
-
-### Files created/modified
-- `vercel.json` (new)
-- `BUILD_LOG.md`, `README.md`, `SUBMISSION_CHECKLIST.md` — deploy docs
-
-## 2026-04-10 — Sprint: Real deploy + cleanup pass
-
-Goal: leave the project actually deployed and accessible, plus a controlled
-cleanup pass before continuing to grow new features.
-
-### Real deploy live
-**Public URL: https://www.bichitosrumble.com**
-
-- Vercel project `ruffus4s-projects/bichitos-rumble` created via `vercel deploy`
-- Production deploy verified end-to-end:
-  - `/` → 200, serves the game HTML with bundle `index-DF621XLp.js`
-  - `/test` → 200, SPA rewrite serves `index.html`
-  - `/cualquier-ruta-loca` → 200, SPA rewrite confirmed
-  - HTML contains expected markers: `Bichitos Rumble`, `hud-lives`,
-    `ability-bar-container`, jam widget script
-- Custom domain `www.bichitosrumble.com` already aliased to production deploy
-- Preview-style URL `bichitos-rumble-...vercel.app` returns 401 due to
-  Vercel Deployment Protection on the project (custom domain bypasses it)
-- `.vercel/` was added to `.gitignore` automatically by `vercel link`
-- `dev` merged into `main` (fast-forward), both branches now contain the
-  full sprint state and are pushed to GitHub
-
-### Git ↔ Vercel integration status
-- The current deploy was done via `vercel deploy --prod` from the CLI.
-  This is a real, working production deploy, but it is NOT yet wired to
-  push-triggered deployments.
-- To enable `main → production` and `dev → preview` automatically on push,
-  the GitHub repo must be connected to the Vercel project from the dashboard:
-  Project → Settings → Git → Connect Git Repository.
-- Until that step is done, deploys must be triggered manually with
-  `npx vercel deploy --prod` from the project root.
-
-### Code cleanup pass
-Before deploying, did a controlled review of `src/` and applied 5 targeted
-fixes. Nothing was rewritten, no behaviour changed, build/tests stayed green.
-
-| Issue | File | Type | Fix |
-|---|---|---|---|
-| `FALL_SPEED = 12` defined but unused | `physics.ts` | Dead code | Removed |
-| `isHitStopped()` exported but unused | `gamefeel.ts` | Dead export | Removed |
-| `initialRadius` field defined but never read | `arena.ts` | Dead field | Removed |
-| `position.y -= 12 * dt` magic number duplicating `FALL_SPEED` | `critter.ts` | Hardcode | Moved to `FEEL.lives.fallSpeed` |
-| `fireEffect(state, critter, [], null!)` in activateAbility | `abilities.ts` | Type landmine | Removed; firing happens fully inside `updateAbilities`, which always has scene |
-
-The `null!` fix is structural: previously, abilities with `windUp <= 0`
-fired their effect inside `activateAbility` with a `null!` scene. Any
-future ability with no wind-up that needed scene (e.g. spawning a VFX)
-would have crashed. Now `activateAbility` only sets state; `updateAbilities`
-fires the effect on the same frame (player.ts → bot.ts → updateAbilities)
-with a real scene reference. Same behaviour, no landmine.
-
-### Verification
-- `npx tsc --noEmit` → clean, zero errors
-- `npm run build` → 16 modules, 493 KB (125 KB gzip), 565 ms
-- `npx vite preview` local → `/`, `/test`, `/assets/...` all 200
-- Vercel build in iad1 → READY, restored cache, build 1.66s
-- Public URL responds 200, content matches local build
-
-### Files modified
-- `src/abilities.ts` — `activateAbility` no longer fires effect; tick handles it
-- `src/arena.ts` — removed unused `initialRadius`
-- `src/critter.ts` — fall speed reads `FEEL.lives.fallSpeed`
-- `src/gamefeel.ts` — added `lives.fallSpeed`, removed `isHitStopped`
-- `src/physics.ts` — removed dead `FALL_SPEED` const
-- `.gitignore` — added `.vercel/` (auto by vercel link)
-
-### What this sprint achieved
-- Project is now publicly playable at a stable, custom URL
-- Branches `main` and `dev` are both up to date and pushed
-- Codebase has 5 fewer landmines/duplicates
-- vercel.json + SPA rewrite verified against real Vercel infra
-- Deploy flow is documented and reproducible
-
-## 2026-04-10 — Sprint: Visible presentation
-
-Goal: give the public build actual game shape — a front-facing flow and
-the first real identity for each critter, without touching deep systems.
-
-### What was built
-
-**1. Full game flow with three new screens**
-- **Title screen** — oversized `BICHITOS RUMBLE` title with a yellow→red
-  gradient on "RUMBLE", tagline, blinking "Press SPACE to start" prompt,
-  and a subtle controls hint at the bottom.
-- **Character select** — 4 cards in a row, each showing a colored preview
-  circle (critter color), name, uppercase role label, one-line tagline,
-  and raw stats (SPD/MAS/HIT). Arrow keys / A-D navigate, SPACE confirms.
-  The selected card scales up, highlights, and lifts slightly.
-- **End screen** — large VICTORY / ELIMINATED / SURVIVED / TIME UP label
-  with per-result color (green/red/yellow), critter-specific subtitle,
-  and R restart / T title prompt.
-
-All three share a common `.full-overlay` style: blurred dark gradient
-background so the 3D scene stays visible but dimmed behind them.
-
-**2. Critters actually differentiated**
-Each critter now has a unique role, tagline, stats, and ability tuning.
-Abilities use the same base types (dash + AoE) but feel distinct:
-
-| Critter | Role | Ability 1 | Ability 2 |
-|---|---|---|---|
-| **Rojo** | Balanced | Charge Rush (standard) | Ground Pound (standard) |
-| **Azul** | Skirmisher | Quick Dash (faster, shorter, lighter) | Sharp Stomp (smaller radius, lower cooldown) |
-| **Verde** | Crusher | Heavy Charge (slower, 3x mass) | Earthquake (huge radius, huge force, long wind-up) |
-| **Morado** | Glass Cannon | Blitz (longest impulse, lighter mass) | Shockwave (mid radius, strong force) |
-
-Stats are also tuned per critter (Rojo balanced, Azul faster/lighter,
-Verde slower/heavier, Morado fastest/lightest). Abilities use a factory
-pattern (`makeChargeRush(overrides)`, `makeGroundPound(overrides)`) so
-tuning stays readable and config-driven.
-
-**3. Game state machine expanded**
-Added `title` and `character_select` phases before `countdown`. Full flow:
-```
-title → character_select → countdown → playing → ended
-                                                   ↓
-                                                   restart → countdown
-                                                   back    → title
-```
-The player no longer always controls critter[0]. `playerIndex` is set
-from `selectedIdx` on each match start. Bot AI loop skips the player
-slot, so any of the 4 critters can be the player.
-
-**4. Edge-detected input for menus**
-`player.ts` now tracks a `freshKeys: Set<string>` of keys pressed since
-the last consume. The keydown listener adds to the set (ignoring
-`e.repeat` so held keys don't re-fire). `consumeKey(code)` returns
-true exactly once per physical press, cleanly distinguishing held-Space
-during combat from fresh Space to confirm a menu selection.
-
-### Files changed
-- `src/abilities.ts` — factory functions + 4 unique ability sets
-- `src/critter.ts` — `role` + `tagline` fields, differentiated presets
-- `src/player.ts` — `freshKeys` Set, `consumeKey` edge detection, `clearFreshKeys`
-- `src/hud.ts` — `showTitleScreen`, `showCharacterSelect`,
-  `updateCharacterSelect`, `showEndScreen`, `showMatchHud`, `EndResult` type
-- `src/game.ts` — new phase types, `enterTitle/CharacterSelect/Countdown/Ended`,
-  player slot by index, input handling per phase
-- `index.html` — 3 full overlay markups + CSS for title/select/end + cards
-
-### Verification
-- `npx tsc --noEmit` → clean
-- `npm run build` → 16 modules, 497 KB (127 KB gzip), 557 ms
-- HTML served locally contains all new markers: `title-screen`,
-  `character-select`, `end-screen`, `game-title`, `critter-cards`,
-  `BICHITOS`, `Choose your`
-- Synthetic keyboard input could not be verified inside the headless
-  preview tool (`requestAnimationFrame` doesn't tick when the preview
-  tab is not focused, so the game loop doesn't advance), but the code
-  is sound and will be verified on the live Vercel deploy.
-
-### Intentionally not in this sprint
-- No sound effects
-- No screen shake
-- No particle systems
-- No camera polish beyond what already exists
-- No bot AI improvements
-- No refactor
-
-## 2026-04-10 — Sprint: Game feel impact + input abstraction
-
-Focus: make hits feel weighty, fix the two most broken critters, and
-prepare the input path for future mobile without implementing touch yet.
-No new systems, no refactor.
-
-### 1. Critical review of the live build (static)
-Static code review of what's deployed on www.bichitosrumble.com.
-Not a live playtest — I can't actually play it — but a predictable list
-of problems based on the code:
-
-| Issue | Severity |
-|---|---|
-| Hit impacts lack drama (only subtle scale + tilt) | **High** |
-| Ground Pound shockwave is a hairline ring, barely visible | **High** |
-| Verde Earthquake covers 40% of arena with 40 force — "I win" button | **High** |
-| Morado is too fragile between its ability cooldowns | Medium |
-| Azul's "faster" (+10% vs Rojo) is imperceptible | Medium |
-| Bots use the same logic regardless of critter | Low (out of scope) |
-| Camera is fixed (no player follow) | Low |
-
-### 2. Game feel: visible impact
-
-**Camera shake** — new system in `gamefeel.ts`:
-- `triggerCameraShake(intensity)` — stacks by max, decays quadratically
-- `updateCameraShake(camera, baseX, baseY, baseZ, dt)` — writes absolute
-  position each frame (no drift)
-- Decay: 0.18s. Headbutt: 0.22 amplitude. Ground Pound: 0.45 amplitude.
-- Main loop calls it after `game.update()` and before render
-- Base camera position snapshotted at init so shake never accumulates
-- Triggered from `physics.ts` (headbutt collisions) and from
-  `abilities.ts fireGroundPound` (every slam, not only hits)
-
-**Hit flash** — new system in `gamefeel.ts`:
-- `applyHitFlash(critter)` sets a 0.11s timer via WeakMap
-- `tickHitFlash(critter, dt)` returns current intensity 0..1
-- Integrated into `applyImpactFeedback` — every time a critter gets
-  hit (headbutt or ground pound AoE), the target flashes white
-- `critter.update()` calls `tickHitFlash` AFTER `updateVisuals` so the
-  flash always overrides the state emissive (body + head both go white)
-- Clear, unambiguous "I got hit" read
-
-**Ground Pound shockwave rebuilt**:
-- Old: single TorusGeometry with tube 0.12, 300ms, 0.8 opacity
-- New: **two concentric rings**
-  - Outer red torus (tube **0.28**), eases out to `maxRadius × 1.1`,
-    450ms duration
-  - Inner white flash (tube 0.18), grows faster, fades in half the time
-- Much more readable at a glance
-
-### 3. Critter tuning
-
-Fine-tuned 5 values based on predicted imbalances:
-
-| Critter | Change | Why |
-|---|---|---|
-| **Azul** | `speed 11 → 12` | +10% vs Rojo was imperceptible |
-| **Azul** | `Quick Dash impulse 20 → 22` | Match the new baseline, feels distinctly faster |
-| **Verde** | `Earthquake radius 4.8 → 4.2` | 40% arena coverage was oppressive |
-| **Verde** | `Earthquake force 40 → 34` | Still the hardest-hitting AoE, no longer game-ending |
-| **Verde** | `Earthquake cooldown 7.5 → 8.5` | More downtime between slams |
-| **Morado** | `headbuttForce 11 → 13` | No longer helpless between Blitz cooldowns |
-| **Morado** | `Blitz cooldown 3.5 → 3.0` | Burst comes around more often — rewards the glass cannon playstyle |
-
-### 4. Input abstraction layer (for future mobile)
-
-New file **`src/input.ts`** (~140 lines). Device-agnostic input layer.
-Game logic and player controller no longer read physical keys — they
-read from this module's abstract API. Adding touch input later means
-adding one new backend file; no changes to game/player code.
-
-**Public read API:**
-- `getMoveVector(): { x, z }` — normalized movement vector
-- `isHeld(action)` — action is one of `'headbutt' | 'ability1' | 'ability2'`
-- `consumeMenuAction(action)` — edge-detected, `'confirm' | 'back' | 'left' |
-  'right' | 'up' | 'down' | 'restart'`
-- `clearMenuActions()` — drop stale edges on phase transitions
-
-**Public write API (for device backends):**
-- `_setMove(x, z)`, `_setHeld(action, value)`, `_pushMenuAction(action)`
-
-**Capability detection:**
-- `hasTouchSupport()` — probes `ontouchstart` and `navigator.maxTouchPoints`
-- `isNarrowViewport()` — `innerWidth < 900`
-- `isLikelyMobile()` — combination of both
-
-**Keyboard backend**: always active, lives inside `input.ts`. Edge
-detection via `e.repeat` check. WASD/Arrows cover movement AND menu
-navigation; Space/Enter confirm; T/Escape back; R restart.
-
-**How to add touch later** (documented inline in `input.ts`):
-1. Create `src/input-touch.ts`
-2. Listen to touchstart/touchmove/touchend
-3. Call `_setMove`, `_setHeld`, `_pushMenuAction` based on UI state
-4. Import from `main.ts` conditionally via `isLikelyMobile()`
-
-`player.ts` rewritten to use `getMoveVector()` + `isHeld()`. `game.ts`
-rewritten to use `consumeMenuAction()` on all menu transitions.
-`clearMenuActions()` is called on every phase entry to kill stale edges
-from in-game key presses leaking into menus.
-
-### Files created/modified
-- `src/input.ts` (NEW) — full abstraction layer + keyboard backend
-- `src/player.ts` — no keyboard access, reads input abstract API
-- `src/game.ts` — `consumeMenuAction` instead of `consumeKey`,
-  `clearMenuActions` on every phase entry
-- `src/abilities.ts` — tuning for Azul/Verde/Morado, camera shake on
-  ground pound, rebuilt `spawnShockwaveRing` (2 concentric rings)
-- `src/critter.ts` — baseline stat tuning, hit flash integrated into
-  `update()` (runs after `updateVisuals` to override emissive)
-- `src/physics.ts` — `triggerCameraShake` on headbutt connect
-- `src/gamefeel.ts` — `FEEL.shake`, `FEEL.hitFlash`, camera shake system,
-  hit flash system, `applyImpactFeedback` now triggers hit flash
-- `src/main.ts` — snapshot base camera position, call `updateCameraShake`
-  after game.update and before render
-
-### Verification
-- `npx tsc --noEmit` → clean
-- `npm run build` → 17 modules (16 → +input.ts), 499 KB (127 KB gzip), 749 ms
-- All config values centralized in FEEL
-- No gameplay logic changed — only visual/tuning/abstraction
-
-### Intentionally NOT in this sprint
-- Touch input implementation (only the abstraction base is ready)
-- Sound effects
-- Bot AI changes
-- Refactor
-- Particle systems beyond the shockwave rebuild
-- Camera follow / cinematic camera
-
-## 2026-04-10 — Sprint: Cleanup + audio + mobile + ULTI design
-
-Focused consolidation sprint before growing further. 5 blocks, all small
-or medium, no refactor.
-
-### 1. Cleanup pass
-- **Leak fixed** in `src/preview.ts swapCritter`: each Critter creates 8
-  geometries + 8 materials (body, head, 2 eyes, 2 pupils). When the
-  player navigates the character select with arrow keys, the old critter
-  was removed from the holder group but its GPU resources were NOT
-  disposed. Rapid navigation would accumulate orphan allocations.
-  Added `disposeMeshTree()` helper that traverses a tree and calls
-  `dispose()` on every mesh's geometry + material. Called before setting
-  `critter = null`.
-- Audited `.dispose()` sites across src/: shockwave rings in
-  `abilities.ts` already dispose correctly (4 disposes per slam). Arena
-  and main-scene critters are persistent — no leak path.
-- Audited console.logs: 4 diagnostic logs in `main.ts` remain
-  intentionally (they saved us during the WebGL context bug sprint).
-- Audited pointer listeners in `preview.ts` and `input.ts`: registered
-  once, never removed, correct.
-
-### 2. Future improvements documented in MEMORY.md
-- **Character select polish**: slot slide-in transitions, stat bar bounce
-  keyframes, selection tick sound
-- **Per-critter pedestals** in the preview system: architecture sketch
-  with `pedestal` field on `CritterConfig`, builder map in preview.ts
-- **Winner posing screen**: reuse preview.ts on the end overlay, fade
-  out arena, show the winning critter on its pedestal
-
-### 3. ULTI system design — `ULTI_DESIGN.md` (new file)
-Full design doc for the Ultimate Ability system. NOT implemented.
-
-Key points:
-- **Structure**: reuse existing ability system. Ulti = third slot in
-  `CRITTER_ABILITIES[name]`. Adds `isUltimate?: boolean` to `AbilityDef`.
-- **New ability types** added to the `AbilityType` union:
-  `'rampage' | 'phantom_strike' | 'titan_slam' | 'glass_storm'`
-- **Input**: `KeyL` on desktop (natural extension of J/K). 4th touch
-  button on mobile with golden border + pulse when ready.
-- **HUD**: third slot in `#ability-bar-container`, 1.3× bigger, gold
-  accents, circular radial fill instead of linear bar.
-- **Character select**: ulti box below the stat bars with "ULTIMATE"
-  label, ulti name in critter color, one-line description.
-- **Per-critter concepts**:
-  - Rojo — "Rampage": 3s invincible berserker mode (spam headbutts)
-  - Azul — "Phantom Strike": teleport behind nearest + 3× headbutt
-  - Verde — "Titan Slam": jump offscreen, land with screen-wide slam
-  - Morado — "Glass Storm": spin and fire 5 mini-Blitzes in a star
-- **Estimated implementation effort**: 5-6h when the user greenlights
-
-### 4. Audio system — `src/audio.ts` (new file)
-First audio pass using the **Web Audio API directly with synthesized
-sounds**. No Howler, no asset files, zero network latency, 0 KB added
-to static assets.
-
-**6 sounds, all synthesized:**
-- `headbuttHit`: 170→60 Hz sine thump + high-passed noise crack (140 ms)
-- `groundPound`: 80→35 Hz sawtooth + low-passed noise rumble (450 ms)
-- `abilityFire`: 220→660 Hz triangle sweep + band-passed noise (180 ms)
-- `fall`: 440→80 Hz descending sine (550 ms)
-- `respawn`: C5-E5-G5 triangle arpeggio (300 ms total)
-- `victory`: C5-E5-G5-C6 triangle chord held (900 ms)
-
-**Architecture:**
-- `AudioContext` lazily created on first `play()` call (respects browser
-  autoplay policies — always triggered by a user key press or tap)
-- Shared noise buffer allocated once, reused by every noise-based sound
-- Master gain node (0.35) connected to destination
-- `setMuted(bool)` and `isMuted()` for future settings menu
-- `play(name: SoundName)` public API
-
-**Wired into gameplay:**
-- `physics.ts` → `'headbuttHit'` on every headbutt collision
-- `abilities.ts` → `'abilityFire'` in fireChargeRush, `'groundPound'` in
-  fireGroundPound
-- `critter.ts` → `'fall'` in startFalling(), `'respawn'` in respawnAt()
-- `game.ts` → `'victory'` in enterEnded('win', ...)
-
-### 5. Mobile touch controls
-Full working touch backend using the existing input abstraction. No
-changes to game logic or player controller — the touch module just
-writes into `_setMove` / `_setHeld` via the abstract API.
-
-**New file**: `src/input-touch.ts` (~160 lines)
-- `initTouchInput()` — idempotent setup, adds `touch-mode` class to body
-- **Virtual joystick** (left bottom, 140 px base, 62 px handle):
-  - Pointer events with pointer capture (handles drag outside the base)
-  - Center recomputed on resize / orientationchange
-  - Clamp to 50 px radius, normalize to ±1, dead zone 12% for jitter
-  - Handle visually follows the finger within the base
-  - On release → `_setMove(0, 0)` and reset handle
-- **3 action buttons** (right bottom):
-  - Triangular cluster: J top-right, headbutt (larger, ⚡) bottom-right,
-    K bottom-left
-  - Pointer events with pointer capture
-  - pointerdown → `_setHeld(action, true)` + `.pressed` class (scale + glow)
-  - pointerup / leave → `_setHeld(action, false)`
-
-**Activation**: `main.ts` calls `initTouchInput()` only if
-`isLikelyMobile()` returns true (from `input.ts` — capability probe,
-not user-agent sniffing). Desktop users never see the touch UI.
-
-**CSS**:
-- `#touch-controls` fixed, pointer-events: none (children are auto)
-- Hidden by default; shown only when `body.touch-mode` is set
-- `touch-action: none` on joystick and buttons to prevent browser scroll
-- `user-select: none` and `-webkit-tap-highlight-color: transparent` to
-  kill mobile defaults
-
-**Compatibility with desktop**: the keyboard backend in `input.ts`
-stays active regardless. Both write into the same abstract state. A
-desktop user never initializes the touch backend, so DOM touch listeners
-don't exist. A mobile user with an external keyboard would get both.
-
-### Files created / modified
-**Created:**
-- `src/audio.ts` (~210 lines)
-- `src/input-touch.ts` (~160 lines)
-- `ULTI_DESIGN.md` (design doc)
-
-**Modified:**
-- `src/preview.ts` — disposeMeshTree helper, called on swapCritter
-- `src/physics.ts` — playSound('headbuttHit') on collisions
-- `src/abilities.ts` — playSound('abilityFire' / 'groundPound')
-- `src/critter.ts` — playSound('fall' / 'respawn')
-- `src/game.ts` — playSound('victory') on win
-- `src/main.ts` — initTouchInput() conditionally
-- `index.html` — touch controls markup + CSS
-- `MEMORY.md` — future improvements documented
-
-### Verification
-- `npx tsc --noEmit` → clean
-- `npm run build` → 17 modules (audio + input-touch added), 508 KB
-  (130 KB gzip), 605 ms
-- Size growth: +5 KB (~1 KB gzip) for audio system and touch controls
-
-### Intentionally NOT in this sprint
-- ULTI system implementation (design only, awaiting go)
-- Touch UI polish (final positions, animations)
-- Audio settings menu (mute button)
-- Custom sound sources (all synthesized)
-- Winner posing screen (documented, not built)
-- Per-critter pedestals (documented, not built)
-
-## 2026-04-10 — Sprint: Playtest fixes + docs refresh
-
-First playtest report from the user surfaced 4 concrete issues. Small,
-targeted fixes. No refactor. Also a full docs refresh across the project.
-
-### Playtest issues reported and fixed
-
-**1. Immunity blink was invisible**
-Root cause: the critter materials were created without `transparent: true`.
-When `updateVisuals()` tried to set opacity and flip transparent mid-frame,
-Three.js silently ignored the opacity changes (would need `needsUpdate`
-to recompile the shader).
+
+Hoy el record está **vacío** — el resolver automático ya maneja
+todos los casos del roster actual. El file existe como escape hatch
+documentado para el primer crítter futuro cuyos clip names
+confundan al resolver.
+
+**Resolver ampliado a 4 tiers**:
+- **Tier 0 — override** (nuevo): `ANIMATION_OVERRIDES[critterId]?.[state]`.
+  Consultado primero si el `SkeletalAnimator` recibe `critterId`. Si
+  el override apunta a un clip presente en el GLB, gana. Si no
+  existe, fallback al resolver automático (best-effort, no hard
+  contract).
+- **Tiers 1-3** (existían): exact → prefix → contains, sin cambios.
+
+`SkeletalAnimator` ahora acepta `critterId` opcional en el
+constructor. Propagado desde `Critter.attachGlbMesh` con
+`entry.id`. `listClips()` amplía su shape para incluir `duration` +
+`source` (el tier que ganó). Nuevo getter `getResolveReport()`
+devuelve el estado completo de los 13 logical states — usado tanto
+por la tabla del lab como potencialmente por cualquier futuro
+debug/telemetría.
+
+### Integración en `/tools.html`
+
+El sidebar del dev lab gana 3 links al final (reemplaza el único que
+tenía a `/animations`):
+- `🎬 /animations` — mesh2motion (create clips).
+- `🎞️ /anim-lab` — validate + override runtime mapping.
+- `📏 /calibrate` — roster scale/pivot/rotation.
+
+Consistencia de navegación interna sin linkar ninguna desde la
+portada del juego (las tres con `noindex` meta).
+
+### Cero regresiones
+
+- Typecheck cliente + servidor limpios.
+- `npx vite build` OK: 4 HTML entries (index/tools/calibrate/anim-lab),
+  6.62 s.
+- No se toca el resolver de los 3 tiers existentes — se AÑADE el
+  Tier 0 como capa opcional sobre lo que ya había.
+- Overrides vacíos por default → comportamiento idéntico al anterior
+  para los críttrs actuales. Sergei `run → Run` sigue resolviendo
+  por Tier 1 (exact), verificado en el lab.
+
+### Commit + push
+
+Rama: `dev`. Commit próximo con todos los cambios acumulados desde el
+último push (handoff de ayer noche quedó sin commit en el remote —
+esta sesión cierra el backlog).
+
+---
+
+## 2026-04-24 noche tardía — Closing handoff (fin de sesión larga)
+
+Sesión maratón. El usuario cierra para reenganchar desde móvil en la
+próxima, así que el foco fue **dejar todo bien atado** en docs +
+confirmar cero regresiones por QA visual real (screenshots MCP).
+
+### Descubierto y corregido vía screenshots reales
+
+Descubrí que la QA por DOM que hice antes (`preview_eval` + DOM
+inspection) daba pase verde pero **escondía dos bugs visuales** que
+sólo se ven con screenshot real:
+
+1. **Specificity de sprites 2D** — `.sprite-hud { width: 24px }`
+   ganaba a `.slot-avatar-sprite { width: 100% }` por orden de
+   declaración. Resultado: sprites pintando 24×24 en la esquina del
+   slot (y del lives-dot), dejando ver el baseColor detrás. DOM
+   reportaba `spriteVisible: true`, pero visualmente era un desastre.
+   Fix: compound selectors `.sprite-hud.slot-avatar-sprite` y
+   `.sprite-hud.lives-avatar-sprite` suben specificity a (0,0,2).
+
+2. **Labels de debug en `hud-icons.png`** — la sheet v1 llevaba
+   captions ("5. ELEPHANT", "6. FOX 9-TAILS", …) bajo cada icon
+   pensados como referencia para el artist pass. Con el fix del
+   specificity los sprites pasaron a cubrir el slot entero y los
+   labels se empezaron a ver. Intenté limpiarlos con
+   `trim-hud-sheet.mjs` (alpha=0 en la zona del label). El usuario
+   pasó poco después `HUD_mejorado.png` — sheet v2 authored limpia
+   en grid 4×6 (antes 4×7). Creé
+   `scripts/rebuild-hud-sheet.mjs` que extrae cells del authored y
+   recompone un grid uniforme de 256×256 sin margen. CSS actualizado
+   a `background-size: 400% 600%` y positions recalibrados.
+
+### Handoff — documentación reorganizada
+
+- **`NEXT_STEPS.md`** reescrito con estructura priorizada:
+  - 🟢 AHORA MISMO (unblocked) — Trunk feel pass en cabeza.
+  - 🟡 Bloqueado por asset del usuario (ability-icons v2 mejorado).
+  - 🔵 Bloqueado por QA manual (lista remitida a
+    `VALIDATION_CHECKLIST.md`).
+  - 🟣 Post-jam / backlog.
+  - 🚫 NO TOCAR salvo bug real — zonas cerradas del proyecto.
+  - ✅ Snapshot del proyecto: scripts activos vs obsoletos, docs al
+    día, etc.
+  - 📚 Guía de MCP screenshots (viewport portrait / rAF pausado /
+    browser cache).
+- **`MEMORY.md`** gana una sección nueva al tope "Fuentes de verdad"
+  con:
+  - Escala visual (IN_GAME_TARGET_HEIGHT = 1.7, roster.scale ya no
+    es la SoT visible).
+  - Sheet HUD canónica (HUD_mejorado.png → rebuild-hud-sheet.mjs →
+    hud-icons.png).
+  - Specificity de sprites (lección aprendida).
+  - Clip resolver 3-tier + eps 1e-3.
+  - Arena packs aleatorios + sync.
+  - MCP Preview limitaciones + workarounds.
+  - Scripts activos vs obsoletos.
+- **`VALIDATION_CHECKLIST.md`** añade sección "Tanda 2026-04-24"
+  con la checklist específica para la próxima ronda de QA visual
+  manual (selector, HUD, calibrate, escala in-game, Trunk feel pass
+  cuando llegue, HUD de abilities cuando llegue).
+
+### Trunk feel pass — decisión de NO avanzar ahora
+
+El usuario explicitó "si no ves seguro avanzar sin QA manual seria,
+entonces no fuerces código". Trunk feel pass requiere verificación
+visual del timing + impact + recovery — algo que no puedo validar sin
+que él juegue la partida. Como va a estar en móvil en la próxima
+sesión y no puede hacer playtesting cómodo, **opto por no tocar
+código de gameplay**. Dejo la receta completamente detallada en
+`NEXT_STEPS.md §"AHORA MISMO"` con scope estrecho para que cuando
+pueda hacer QA, la ejecute sin replanteamientos.
+
+### Estado del repo tras este handoff
+
+- Sheet HUD: v2 integrada y verificada (selector + HUD in-match +
+  calibrate lab).
+- Typecheck cliente + servidor limpios.
+- `npx vite build` limpia (3 HTML entries, 5-7s).
+- Docs actualizadas y consistentes entre sí.
+- 0 cambios de gameplay respecto a la sesión anterior — sólo assets
+  + CSS + docs.
+
+---
+
+## 2026-04-24 noche — Arena pack visual fixes + character selector polish
+
+Intervención en dos frentes tras captures del usuario:
+
+### Arena pack visual fixes (A + B + C)
+
+**A · props fuera del terreno**: los props flotaban sobre el skybox
+hemisferio inferior porque no había superficie bajo ellos (arena
+jugable acaba en r=12). Fix: nuevo `outerRing` decorativo (radius
+11.9–18 u, altura `FRAG.arenaHeight`) texturizado con el ground
+tile del pack — se renderiza entre el arena jugable y el void,
+dando piso visual a los props. Además `loadPackPropMeshes` mide
+bbox tras scale y desplaza Y para que `bbox.min.y === 0`: los GLB
+con origin en el centro del mesh ya no se hunden por debajo del
+arena. Se ve como un suelo continuo desde r=0 hasta r=18.
+
+**B · skybox equivocado**: `tex.mapping =
+EquirectangularReflectionMapping` estaba mal aplicado (ese mapping
+es para reflejos PBR, no para pintar sphere inside-out). Fix:
+`tex.mapping = UVMapping` (default) + `ClampToEdgeWrapping` —
+la sphere ya tiene UVs equirect naturales. Los skyboxes
+generados por IA (sunset desert, aurora tundra, dusk kitsune)
+ahora se ven en toda su resolución.
+
+**C · decoración cae con el arena**: nuevo queue
+`fallingDecorations` + asociación determinística prop→batch via
+proximidad angular (`computePropBatchIndex`). Cuando un batch
+colapsa (offline `collapseCurrentBatch` + online `syncFromServer`)
+los props con `batchIdx === N` entran en caída con gravedad +
+tumble. El `outerRing` cae como pieza única cuando colapsa el
+último batch. Mecánica independiente de `fallingFragments` —
+misma cadencia de tick pero colas separadas.
+
+### Character selector — intervención estructural (4 sub-bugs)
+
+**2.1 Miniaturas 3D → 2D sprite-hud**. `buildSlotAvatar` ahora
+añade un `<span class="sprite-hud sprite-hud-{id}
+slot-avatar-sprite">` superpuesto al slot. Si
+`body.has-hud-sprites` está activa (sheet cargado), el chibi 2D
+cubre el slot. Thumbnail 3D se queda SOLO como fallback cuando
+el sheet no carga — cuando sí carga, ni se genera (ahorro de
+GPU cycles). CSS nuevo `.slot-avatar-sprite` con inset absoluto.
+Mismo patrón que el HUD in-match, consistencia garantizada.
+
+**2.3 Clip resolver → 3 tiers**. Antes: exact + contains. Ahora:
+exact → prefix → contains. "Run" gana sobre "Running" en tier 1
+(exact); "Idle_Alert" gana sobre "MyAbilityIdleSlam" en tier 2
+(prefix) cuando no hay exact. `isClipEffectivelyStatic` eps
+subido 1e-4 → 1e-3: idles con breath micro-motion (~0.5 mm) ya
+no caen en la criba de "clip efectivamente estático" y se drop
+accidentalmente. Causa real de "Sergei reproduce desordenado":
+era un idle que se descartaba como static y caía a un clip
+fallback inapropiado.
+
+**2.4 Info pane stats alignment**. Grid CSS con columnas fijas
+`grid-template-columns: 70px auto` + `width: fit-content`
+centrado. Labels (SPEED / WEIGHT / POWER) alineados a la derecha
+en columna 1, pips a la izquierda en columna 2, sin stretching.
+Antes un flex libre hacía que rows se alineasen distinto según
+cuántos pips estaban on.
+
+**2.2a Auto-fit sobre idle-pose height**. `attachGlbMesh`
+reordenado: mide bind pose → crea skeletal → `play('idle')` +
+`update(0.033)` (1 frame) → re-mide bbox en idle pose → aplica
+`IN_GAME_TARGET_HEIGHT = 1.7 u` sobre esa medida. La bind pose
+(T-pose-ish export) era mala referencia porque los idles suelen
+diferir hasta 15% en silhouette — ahora cada crítter termina
+realmente a 1.7 u en idle real, no en T-pose teórica.
+
+**2.2b Roster calibration lab**. Tercer entry point Vite:
+`/calibrate.html`. Página dedicada con los 9 playable críttrs en
+grid 3x3, cámara orbit con drag + wheel zoom, labels flotantes.
+Click selecciona un crítter → sidebar con sliders `scale`,
+`pivotY`, `rotationY` que mutan la transform en vivo. Botón
+"Re-fit all to target" recompone el auto-fit a una altura
+custom (permite probar 1.5, 1.7, 1.9 u sin recompilar). Botón
+"Export roster.ts snippet" dumpa el diff al clipboard + consola
+como comentarios pasteables. Sin Colyseus, sin HUD, sin match:
+puro Three.js + DOM controls, 6 KB gzipped. URL: `/calibrate.html`
+en dev, también en producción (con `noindex` meta por si acaso).
+
+Archivos tocados:
+- `src/arena.ts` — outerRing, fallingDecorations, collapseOuterRing,
+  collapsePropBatch, computePropBatchIndex, tickFallingDecorations
+- `src/arena-decorations.ts` — mapping UVMapping, Y-offset por prop
+- `src/main.ts` — refactored `setSceneSkyboxTexture` + `setSceneFogColor`
+- `src/critter.ts` — auto-fit sobre idle pose post-mixer
+- `src/critter-skeletal.ts` — 3-tier clip resolver + eps 1e-3
+- `src/hud/character-select.ts` — sprite 2D en slots
+- `index.html` — CSS `.slot-avatar-sprite`, stats-row grid
+- `calibrate.html` + `src/calibrate/main.ts` — lab nuevo
+- `vite.config.ts` — entry `calibrate`
+
+Typecheck + vite build limpios en ambos frentes.
+
+---
+
+## 2026-04-24 tarde — Arena decorations loader: packs aleatorios por partida
+
+Cerrado el bloque B del post-jam ahead of schedule. Cada partida ahora
+rolea un `packId` distinto entre los 5 biomas (jungle / frozen_tundra /
+desert_dunes / coral_beach / kitsune_shrine) y aplica skybox +
+fog + ground texture + props al arena sin tocar una sola línea de la
+lógica de colapso.
+
+### Nuevo módulo: `src/arena-decorations.ts`
+
+Catálogo único de los 5 packs. Por cada uno:
+- Lista de GLB filenames (5-8 props).
+- `fogColor` sintonizado con el horizonte del skybox.
+- Override opcional `propScale` per-prop (usado para encoger el
+  `tree_jungle_broadleaf` de 54 MB que aplastaba la composición).
+
+**Layout determinístico**: `layoutPackProps(packId, seed)` usa
+`mulberry32(seed ^ packIdHash)` para distribuir los props en un anillo
+fuera del radio jugable (r 14.5–18.5). Cliente y servidor calculan el
+mismo layout a partir de los mismos inputs → 0 bytes de sincronización
+extra en la wire. Cada prop tiene jitter de ángulo, radio, rotY y
+escala (0.9–1.15×) sobre la base del pack.
+
+**Loaders**: `loadPackGroundTexture`, `loadPackSkyboxTexture`,
+`loadPackPropMeshes`. Cache de texturas propia + reutiliza el cache de
+`model-loader` para GLBs.
+
+**Failure mode**: si un asset 404s, el prop se vuelve un `THREE.Group`
+vacío y un console.debug. La partida nunca rompe por falta de
+cosmética.
+
+### Sincronización cliente ↔ servidor
+
+- `server/src/state/GameState.ts`: campo nuevo
+  `@type('string') arenaPackId: string = 'jungle'`. Default 'jungle' →
+  graceful degradation para builds viejos.
+- `server/src/BrawlRoom.transitionToCountdown`: rolea `packId` uniforme
+  y lo asigna al state. Lista de pack IDs duplicada inline en el
+  server (pequeña, estable, evita dependencia client→server).
+- `src/game.ts update()` online: lee `state.arenaPackId`, verifica con
+  `isArenaPackId()` (guard contra valores no válidos) y lo pasa a
+  `arena.syncFromServer(seed, level, warn, packId)`.
+
+### Cambios en `src/arena.ts`
+
+- `buildFromSeed(seed, packId?)`: packId opcional → acepta la llamada
+  legacy (sin pack) y la nueva. Si se pasa, dispara `applyPack()`
+  async; si no, usa `clearPack()` para mantener el look default.
+- Nueva propiedad privada `decorationsGroup: THREE.Group | null`.
+  Se añade a `scene` directamente, NO a `this.group` (fragments), así
+  que NUNCA entra en el iterador de collapse.
+- `applyPack(packId, seed)`:
+  1. Bump de `packApplyToken` — loaders async más viejos detectan
+     que están obsoletos y bailan sin tocar la escena.
+  2. Fog + clearColor sincrónico (evita 1 frame con horizonte erróneo).
+  3. Ground texture async → aplica map a los materials de los fragment
+     "top" meshes (heurística: el flag `receiveShadow` lo identifica).
+  4. Skybox async → `setSceneSkyboxTexture()` en main.ts swapea el
+     material del `skyDome` (shader → MeshBasicMaterial textured).
+  5. Props: `layoutPackProps()` + `loadPackPropMeshes()` → nuevo group
+     con los 5-8 meshes posicionados → add a scene.
+- `clearPack()`: revierte skybox al shader default, fog al color
+  original, drop decorationsGroup, `clearGroundTexture()` limpia el
+  `.map` de todos los fragments.
+- `syncFromServer(..., packId?)`: si packId cambia sin re-seed,
+  `applyPack()` se llama sin rebuild de fragments. Caso raro pero
+  soportado.
+- `getCurrentPackId()`: getter público usado por `debugForceArenaSeed`
+  para no perder el pack al recalcular layout en el lab.
+
+### Cambios en `src/main.ts`
+
+Export nuevo:
+- `setSceneSkyboxTexture(tex | null)`: swap del material del skyDome.
+  Null → vuelve al shader procedural (menús, title).
+- `setSceneFogColor(color | null)`: mutación in-place del color de
+  `scene.fog` + clearColor del renderer. Null → defaults original.
+
+El mesh del skyDome se anota ahora como
+`THREE.Mesh<SphereGeometry, Material>` para que TS acepte la
+reasignación entre ShaderMaterial y MeshBasicMaterial.
+
+### Game flow offline / online
+
+- **Offline** (`enterCountdown` + `debugStartOfflineMatch`): rolea
+  `getRandomPackId()` por partida. `debugStartOfflineMatch` acepta
+  `options.packId?: string` si el lab quiere forzar un pack.
+  `debugForceArenaSeed` preserva el pack del partido en curso.
+- **Online**: lee del state, pasa al syncFromServer.
+
+### Typecheck
+
+Cliente y servidor limpios post-cambios. No se tocó ninguna lógica de
+física / collapse / síntesis de audio / skeletal, solo la capa visual.
+
+---
+
+## 2026-04-24 tarde — Arena packs ×2 más (Kitsune Shrine + Coral Reef Beach)
+
+Con los otros 2 packs generados, cerramos el set de 5 packs cosméticos
+para el loader de decoraciones (pendiente por implementar, es el
+siguiente bloque B del post-jam roadmap).
+
+- **Kitsune Shrine**: 7 props, **12 MB**. `bamboo_cluster.glb`
+  (5.6 MB, 127k verts) y `sakura_tree.glb` (2.7 MB, 65k verts) son
+  los problemáticos — IA modeló tallos/blossoms individualmente
+  pese al prompt restringido. Aggressive-simplify + compress-textures
+  probados; ninguno recupera (el peso es ~100% geometría).
+  Aceptados por política `tree_jungle_broadleaf`: valen la pena por
+  identidad visual del pack. Los otros 5 props (torii×2,
+  stone_lantern×2, kitsune_statue) bajo 1.5 MB cada uno.
+- **Coral Reef Beach**: 8 props finales, **12 MB**. De los 9 raws,
+  el usuario entregó 2 variantes de starfish (`lying_flat` y
+  `lying_ground`); la primera bajó a 274 KB / 5393 verts, la
+  segunda a 720 KB / 11k verts — promovida la `lying_flat` como
+  canónica `starfish_decor.glb`. `palm_beach_tilted.glb` (5.9 MB,
+  130k verts) y `coral_brain.glb` (2.5 MB, 62k verts) son los
+  problemáticos (fronds / grooves modelados en geom pese al
+  prompt retry ultra-estricto). Corales branching y la shipwreck
+  entraron limpios bajo 1 MB cada uno.
+- Los prompts retry de Beach (reescritos esta mañana con wording
+  "blob / dome / wedge / clump" + referencias a Minecraft / Lego)
+  redujeron muchísimo el problema original (1M+ caras) pero no
+  lo eliminaron del todo en los 2 props más orgánicos.
+- Bug menor del pipeline: el usuario entregó `seashell_scatter.glb.glb`
+  (doble extensión). Renombrado al copiar — no afecta al optimize.
+- Lección actualizada en `ARENA_PROMPTS.md` para el siguiente pack
+  que alguien genere: incluso con el prompt ultra-estricto,
+  palmeras y árboles con canopy siguen saliendo con cientos de
+  miles de verts. La regla definitiva: "árbol = 1 trunk + 1
+  canopy dome, ZERO detail extra". Cualquier cosa más delicada
+  colapsa el optimizer.
+
+Estado final de packs para el loader (pendiente implementar):
+Jungle (5), Tundra (6), Desert (7), Shrine (7), Beach (8) →
+33 props repartidos en 5 biomas.
+
+---
+
+## 2026-04-24 — Arena packs ×2, HUD/tamaños fixes, feel pass Sergei
+
+Mañana de integración tras cerrar los cinturones. Cuatro bloques
+independientes que caen uno detrás de otro; ninguno toca mecánica
+core, todo es polish + assets.
+
+### Frozen Tundra + Desert Dunes integrados
+
+Mismo pipeline que Jungle:
+1. El usuario genera props con la IA + skybox + ground texture.
+2. Copio raws a `public/models/arenas/_raw/<pack>/` (gitignored).
+3. `scripts/optimize-arena-props.mjs --pack <name>` (meshopt +
+   gltf-transform simplify + sharp texture pass).
+4. Si algún prop sale monstruoso (>5 MB o >100k verts), aggressive
+   simplify o prompt retry.
+
+- **Frozen Tundra**: 6 props, **2.3 MB**. El `pine_snow.glb` falló
+  al primer intento (4.2M verts por per-needle geometry, insalvable
+  — misma patología que el `bush_tropical` de Jungle). Prompt de
+  "retry" más estricto ("low-poly Christmas tree stacked cones,
+  NO needles") generó dos opciones; option1 bajó a 4527 verts /
+  420 KB, adoptada como principal. Lección burned-in en
+  `ARENA_PROMPTS.md` como patrón canónico para formas naturales
+  delicadas.
+- **Desert Dunes**: 7 props, **3.6 MB**. `palm_desert.glb` original
+  (910k verts, 53 MB raw) fue el prop problemático del pack.
+  Recuperado con la 2ª variante `palm_desert_optional.glb` que el
+  usuario había generado como backup (790 KB, 14k verts) —
+  adoptada como principal; la primera va al limbo de los raws.
+- Los **prompts del Coral Reef Beach** se reescribieron por
+  completo con wording ultra-estricto anti-multi-mesh: formas
+  delicadas ("branches", "fronds", "planks", "shells") sustituidas
+  por sólidas ("blob", "dome", "wedge", "clump") + referencias
+  explícitas a Minecraft/Lego/Fall Guys/Fortnite.
+
+Estado de packs: Jungle (5 props, ships), Tundra (6, ships), Desert
+(7, ships). Faltan Beach (prompts listos, pendiente regen usuario)
+y Kitsune (prompts originales, no empezado).
+
+### Bug #1: HUD avatar incoherente entre bichitos
+
+Síntoma reportado el 23 abril por el usuario: en la misma partida
+Sergei/Sebastian pintaban correctamente su cabeza chibi del sprite
+`hud-icons.png`, pero Shelly/Kowalski caían al thumbnail 3D
+renderizado como si el sprite no hubiese cargado.
+
+**Diagnóstico**: el sprite sheet tiene padding transparente
+alrededor de cada cabeza. El thumbnail 3D del `.lives-dot` se
+cargaba como `background-image` del padre **en todos los casos**;
+se filtraba por los bordes transparentes del sprite overlay. Los
+sprites con silueta ancha (Sergei gorila, Sebastian cangrejo)
+tapaban más el thumbnail → invisible; los de silueta estrecha
+(Shelly tortuga baja, Kowalski pingüino esbelto) dejaban ver el
+thumbnail por los lados → confusión visual.
+
+**Fix** (`src/hud/runtime.ts initAllLivesHUD`): saltar la carga
+del thumbnail 3D si `body.has-hud-sprites` está activa. El
+`.lives-dot` queda con el `baseColor` sólido bajo el sprite,
+coherencia total entre los 4 corners. Thumbnail se mantiene como
+fallback degradado cuando el sprite sheet no carga (tablet con
+asset fallido, etc.).
+
+### Bug #2: tamaños in-game no uniformes
+
+Alturas post-scale del roster varían de 1.38u (Cheeto) a ~2.0u
+(Trunk) porque cada `scale` se calibró a ojo sobre meshes con
+distintas alturas raw (Tripo ~0.6u, Meshy ~1–2.4u). Usuario
+reporta que Sergei se ve "grande" y Shelly "pequeña" cuando el
+design dice lo contrario.
+
+**Fix** (`src/critter.ts attachGlbMesh`): auto-fit visual análogo
+al del preview. Nueva constante `IN_GAME_TARGET_HEIGHT = 1.7` u;
+tras medir `bindPoseHeight`, se escala el `group` GLB con
+`k = 1.7/bindPoseHeight`. Física 100% intacta — el auto-fit
+toca `group.scale` (inner mesh visible), no `this.mesh` (parent
+que lleva `physicsRadius`, position, headbutt cone).
+
+### Feel pass Sergei (primero del roster, plantilla para los demás)
+
+El feel pass queda "parked" desde hace una semana por la prioridad
+de cinturones + arenas. Hoy se cierra sobre Sergei; los otros 8
+heredan la plantilla.
+
+**Clip durations reales** (`scripts/inspect-clips.mjs`):
+- `Ability1GorillaRush` 1.03 s
+- `Ability2Shockwave` 0.80 s
+- `Ability3Frenzy` 2.43 s
+
+**Gaps identificados**:
+- Gorilla Rush: clip 1.03 s vs ability active 0.32 s → strike pose
+  llegaba tarde, se sentía torpe en vez de ágil. Fix: **acelerar el
+  clip a 2.3×** (clip efectivo 0.45 s, alineado con windUp 0.04 +
+  active 0.28 + tail). Además ajustar los valores numéricos
+  aguas abajo (impulse 18→20, speedMult 2.4→2.6, cooldown 4.5→4.0).
+- Shockwave: clip 0.80 s vs 0.35 total → alineado, sin cambio de
+  playback. Bumps de signature: radius 3.2→3.5, force 30→34.
+- Frenzy: clip 2.43 s vs buff 4.0 s → clip terminaba mid-buff,
+  falta impacto. Fix: **acortar buff a 2.5 s matching clip** y
+  subir multiplicadores (speed 1.3→1.45, mass 1.35→1.5) para que
+  la ventana corta sea más intensa. Cooldown 18→15 s porque dura
+  menos tiempo.
+
+**Infra reutilizable añadida**:
+- `AbilityDef.clipPlaybackRate?: number` — campo opcional. Si
+  está, al disparar la ability se pasa al `skeletal.play()` como
+  `timeScale`. Any ability de cualquier crítter puede reutilizarlo.
+- `SkeletalAnimator.play()` ahora acepta `opts.timeScale` que
+  setea `action.setEffectiveTimeScale()`.
+
+**VFX añadido**:
+- `spawnFrenzyBurst()` en `abilities.ts` — battle-cry ring dorado
+  + flash rojo central, 600 ms, radio 2.5 u. Se dispara al activar
+  Frenzy. Complementa el emissive pulse rojo ya existente.
+- Camera shake en el frame de activación de Frenzy (0.55× de la
+  del Ground Pound).
+
+**SFX**: pendiente. Por ahora Frenzy + charge_rush comparten el
+mismo `'abilityFire'` sintetizado. Plan: SFX signature por crítter
+via Suno + Web Audio. Post-jam probablemente, mencionado en
+`NEXT_STEPS.md`.
+
+Plantilla numérica completa en `CHARACTER_DESIGN.md` §"Feel pass
+log" para los próximos 8 críttrs. Orden acordado:
+Sergei → Trunk → Cheeto → Kurama → Shelly → Kermit → Sihans →
+Kowalski → Sebastian.
+
+---
+
+## 2026-04-23 — UI pass: selector polish + HUD rework + 6 ULTIs + sprite system
+
+Tanda grande de pulido visual/UX. El roster ya está cerrado (9/9 skeletal
++ 68/72 states, 2026-04-22), y el submit al Vibe Jam Google Form está
+enviado — a partir de aquí todo es polish y depth dentro de sistemas
+existentes, sin tocar la mecánica core.
+
+### Character-select presentable
+
+**Problema**: el preview 3D del podio tenía discrepancias fuertes entre
+los bichitos Tripo (Trunk 1.93u, Shelly 1.86u) y los Meshy
+(Sebastian 0.56u en pose idle agazapada, Sihans 0.74u tumbado).
+Escalas de roster calibradas para gameplay no funcionaban para el
+preview del menu. Además los modelos Meshy se veían mate/oscuros
+porque llegaban con `metalness: 1` y la escena no tiene envMap.
+
+**Fix**:
+- `preview.ts` gana un `fitWrapper` anidado dentro del `holder` que
+  aplica una escala uniforme per-critter. Se mide el `max(h, w, d)`
+  del bounding box de los bones durante ~900ms del idle loop (para
+  capturar el wiggle del ciclo) y se escala a `TARGET_SILHOUETTE_MAX
+  = 1.9u`. Preserva proporciones individuales (Trunk sigue siendo
+  alto y delgado, Sebastian sigue siendo ancho y bajo).
+- Max dims post-fit: Trunk 1.90 / Kurama 1.56 / Sergei 1.62 /
+  Shelly 1.92 / Kermit 1.90 / Sihans 1.38 / Kowalski 1.49 /
+  Cheeto 1.80 / Sebastian 1.62. Antes el rango era 0.56–1.93
+  (factor 3.4×), ahora 1.38–1.92 (factor 1.4×).
+- `Critter.attachGlbMesh` ahora normaliza materiales PBR: si
+  `metalness > 0.5` (caso Meshy), lo fuerza a `metalness=0 +
+  roughness=0.7` para que el diffuse map conduzca el look. Tripo
+  sin tocar. Con eso, Kurama/Sergei/Sihans/Sebastian dejan de
+  verse mate y muestran el color plano del source.
+- Canvas del preview 380×340 → 500×440 (+31% área), pedestal
+  radius 1.45→1.55 + height 0.50→0.55, cámara FOV 32°→30° y
+  distance 4.8→5.2u, halo radial más intenso (opacity 0.10→0.15).
+- Info pane del selector con panel oscuro + blur + border. Role
+  label en gold letter-spaced, stats bars 10px con glow, keybind
+  `J`/`K`/`L` ahora son chips gold-outlined en vez de texto
+  monospace gris.
+
+### HUD in-match reorganizado
+
+**Problema**: las vidas de los 4 jugadores iban en una columna central
+arriba del timer. Poco protagonismo, difícil distinguir al local player.
+
+**Fix**:
+- Cuatro contenedores `.player-life-corner` en TL/TR/BL/BR.
+  Avatar 70×70px (antes 22), nombre del crítter, hearts 16px,
+  highlight gold para el local player (`is-local`), opacity 0.35
+  cuando muere.
+- Margins dodgeadores: TL top 118px (baja del portal-legend), TR
+  top 72px (baja de settings), BL bottom 24px, BR bottom 62px
+  (arriba del Vibe Jam widget). Nada se pisa.
+- Top-center hero cluster: timer **44px bold gold** (antes 18px)
+  + Alive count **uppercase letter-spaced** debajo. Se lee desde
+  la otra punta del monitor.
+- Vibe Jam badge overridde vía `!important`: 14px→17px, padding
+  7/14→11/20, hover translateY + fondo gold.
+
+### Bugfix crítico: botones SFX/Música invisibles en title/select
+
+`setMatchHudVisible(false)` estaba haciendo `hudRoot.style.display =
+'none'`, ocultando también `#hud-settings` donde viven 🔊 / 🎶.
+Violaba el contrato del submission checklist ("reachable on every
+screen"). Refactor: la función solo togglea `body.match-active`; el
+CSS ya gatea los hijos match-only (`#hud-top-center`, `#hud-lives`,
+`#ability-bar-container`, `#overlay`). El `#hud` root queda siempre
+visible para los settings.
+
+### Sistema de sprites + favicon AI-generados
+
+Los prompts de AI_PROMPTS.md ahora tienen arte. Tres assets:
+
+- `public/images/hud-icons.png` (4×7 grid, 26 iconos: corazones,
+  inmunidad, cabezas de los 9 crítters, bot-mask, timer/skull/
+  trophy/crown, sfx/music on/off, scoreboard, belts)
+- `public/images/ability-icons.png` (3×9 grid, 27 iconos: 9
+  crítters × 3 habilidades J/K/L)
+- `public/favicon-br.png` (marca BR cartoon)
+
+Sistema CSS `.sprite-hud` + `.sprite-ability` con positions en
+porcentaje (no pixels, resiliente a cambios de tamaño del asset).
+`main.ts` preloadea las imágenes y añade `body.has-hud-sprites` /
+`body.has-ability-sprites` solo si cargan sin error; si faltan, el
+emoji fallback mantiene el juego funcional.
+
+Primera integración: **abilities en el info pane del character
+select** y **abilities en el HUD de cooldowns in-match**. Los hearts,
+bot-badge, belts-trophy y otros quedan para siguiente tanda.
+
+Favicon PNG añadido en index.html y tools.html como primero en la
+cascada, SVG anterior queda como fallback.
+
+### Gap cerrado de ULTIs
+
+Los 6 crítters que no tenían slot L (Trunk, Kermit, Sihans, Kowalski,
+Cheeto, Sebastian) reciben ahora un `frenzy` placeholder con nombre
+temático: Stampede / Hypnosapo / Diggy Rush / Blizzard / Tiger Rage /
+Red Claw. Mecánica placeholder (+speed +mass), nombres correctos. Los
+9 bichitos muestran las 3 abilities en el info pane. Cliente + server
+espejados.
+
+### Feel: countdown drop desincronizado + clip fall
+
+- `initCountdownDrops` ahora reparte un `delay` escalonado por índice:
+  player (i=0) cae al instante; los bots i=1..3 retardan
+  `i * (0.15..0.35s)` + jitter. Alturas entre 10–16u.
+- `updateCountdownDrops` espera el `delay` de cada critter (hover en
+  altura), dispara `playSkeletal('fall')` cuando la gravedad toma, y
+  fuerza `playSkeletal('idle', { force: true })` al aterrizar para
+  cancelar el `clampWhenFinished` del clip fall.
+
+### UX: pausa offline + hint "Press P" sobre portal
+
+- Menú pause offline (vs bots): **ESC** durante `phase === 'playing'`
+  muestra card central con Resume / Restart match / Quit to title.
+  `this.paused` cortocircuita input + bots + física dentro del
+  case `'playing'`. Online no se ve afectado (authoritative server).
+- Cada portal gana un sprite 3D **"PRESS P"** (o "TAP 🌀" en touch)
+  flotando encima del label principal. Opacidad **inversa** al
+  expansion state: visible cuando el portal está minimizado (dice
+  cómo abrirlo), invisible cuando ya está expandido. Bob suave para
+  atraer la vista, contra-escala para lectura consistente.
+
+### Archivo "Google Form submit"
+
+`SUBMISSION_CHECKLIST.md` marcado: submit enviado 2026-04-23, ocho
+días antes del deadline. A partir de ahora el repo es ABSOLUTAMENTE
+sólo polish — el jam ya está registrado.
+
+### Pendientes inmediatos post-tanda
+
+- Validar visualmente en preview deploy (screenshots → iterar).
+- Completar integración de sprites HUD (hearts, bot-mask, belts,
+  sfx/music icons, critter-head fallbacks en corners).
+- Refinar character selector antes de pasar a abilities/timings.
+- Feel pass per-critter empezando por Sergei.
+- Actualizar el resto de .md (este log, character design, validation)
+  tras esta tanda.
+
+---
+
+## 2026-04-20 — Blender MCP online + Sergei first rigging pass
+
+Segundo carril del animation pipeline activado. Hasta hoy solo teníamos
+`/animations` (Mesh2Motion) como ruta de rigging. Los no-humanoides
+(Shelly, Sebastian, Kermit, Sihans) salían demasiado deformados del lab
+y Tripo Animate externo tiene coste/tiempo impredecibles. Con
+[`ahujasid/blender-mcp`](https://github.com/ahujasid/blender-mcp) ahora
+podemos pedirle a Claude que edite la escena de Blender via scripts `bpy`
+sin salir del IDE, y Blender actúa como motor visual de verificación.
+
+### Instalación (una sola vez)
+
+- `uv` package manager ya presente en el PATH (winget dejó `uvx.exe`).
+- Addon `tools/blender-mcp/addon.py` descargado del repo upstream
+  (v1.2, compat Blender 3.0+).
+- `.mcp.json` en la raíz define el servidor `blender` que arranca con
+  `uvx blender-mcp`.
+- `.claude/settings.local.json` autoriza el servidor vía
+  `enabledMcpjsonServers: ["blender"]` (per-user, gitignored).
+- Addon instalado dentro de Blender (`Edit > Preferences > Add-ons >
+  Install` apuntando al addon.py) y activado.
+- Viewport 3D → sidebar (`N`) → pestaña BlenderMCP → **Connect**.
+- Reinicio de Claude Code → tools `mcp__blender__*` disponibles.
+
+Playbook completo en `BLENDER_MCP.md` (setup + workflow por crítter +
+troubleshooting). `STACK.md` ya menciona el servidor como tooling
+opcional de animación.
+
+### Primer crítter rigged: Sergei (gorila)
+
+Sergei elegido como sanity check del flujo MCP porque es humanoide
+(el caso "fácil") antes de meterse con los raros. Estado al cierre:
+
+- Mesh importado en Blender desde `public/models/critters/sergei.glb`.
+- Armature creado y pesado a cuerpo/brazos/piernas — bones visibles
+  en el viewport.
+- Re-exportado sobrescribiendo `public/models/critters/sergei.glb`
+  (434 KB → 1.06 MB, el salto corresponde a skeleton + weights).
+- `src/roster.ts` tunea Sergei: `scale 2.0 → 2.3`, `pivotY 0.98 → 1.0`.
+  La versión rigged se lee un 15% más pequeña visualmente comparada
+  con los demás críters procedurales; el bump iguala silueta.
+- Clips de animación **aún no añadidos** — primero validamos que el
+  mesh con rig se renderiza bien en runtime; después aplicamos clips.
+
+### Bug colateral: cloned SkinnedMesh → physics moves, vertices stay
+
+Al cargar Sergei rigged, el thumbnail del character select aparecía
+como una malla plana centrada en el origen mientras el carrusel
+intentaba rotarlo — la transform del `Group` se movía, los vértices
+no seguían.
+
+Causa: `deepCloneWithMaterials` en `src/model-loader.ts` usaba
+`source.clone(true)`. Para un `SkinnedMesh`, `clone(true)` NO rebuilda
+el skeleton; el `SkinnedMesh.skeleton.bones` del clon sigue apuntando
+a los bones del `Armature` ORIGINAL cacheado en el loader. Al rotar
+el clon, el nodo empty se mueve pero los vértices permanecen bound
+al skeleton fuente. `SkeletonUtils.clone()` de Three.js está hecho
+para exactamente este caso (rebuild de bones re-escaneando la jerarquía
+del clon).
 
 Fix:
-- Materials now initialized with `transparent: true, opacity: 1.0` from
-  the constructor. Harmless when fully opaque.
-- Blink uses a **square wave** (not sine) for crisper on/off
-- During "on" frames: white emissive tint at intensity 0.8 (head) / 0.5 (body)
-- During "off" frames: opacity drops to **0.15** (was 0.3, now clearly
-  dramatic)
-- Rate remains at `FEEL.lives.blinkRate` (8 Hz)
+- Detectar con un `traverse` si el source contiene `SkinnedMesh`.
+- Si sí → `SkeletonUtils.clone(source)`.
+- Si no → fallback a `source.clone(true)` (sigue siendo más barato
+  para modelos no rigged, que siguen siendo la mayoría hoy).
+- Comentario en `src/model-loader.ts` explica el síntoma y la razón
+  para que nadie regresione el código.
 
-**2. Arena rings disappeared with no warning**
-Root cause: the old code turned the ring red and called `setTimeout` for
-600 ms before hiding. No blink, no margin — and the `currentRadius`
-shrunk IMMEDIATELY, so critters on the ring were already "off arena"
-during those 600 ms and started falling.
+Entrada paralela en `ERROR_LOG.md` (`[2026-04-20]`) con Where/Symptom/
+Cause/Fix/Lesson.
 
-Fix: rewrote `arena.ts` with a proper warning system.
-- New `CollapseWarning` struct tracked in `this.warnings[]`
-- Each warning has a 1.5s timer during which the ring blinks red with an
-  accelerating rhythm (4 Hz → 16 Hz over the warning duration)
-- Intensity ramps up too (0.3 → 1.0)
-- Square-wave blink for crispness
-- **Critically**: `currentRadius` is NOT shrunk until the ring actually
-  disappears at the end of the warning. Players have real physical
-  margin to step off during the blink.
-- The 20s collapse interval kept — effective playable time per ring is
-  18.5s + 1.5s warning
+### Observación pendiente (para mañana)
 
-**3. Sound toggle button**
-Added a top-right settings cluster with a single 🔊/🔇 toggle button.
-- `src/audio.ts` exposes `toggleMuted()`, `loadMutedState()`,
-  `isMuted()`
-- Mute state persisted in localStorage under `bichitos.muted`
-- Loaded at init in `main.ts` before the button wiring
-- Button reflects state visually (icon + `.muted` class for opacity)
-- Only one toggle for now (covers all SFX since there's no music yet);
-  settings UI has room for a second button when/if music is added
+En Blender el modelo se ve orientado con el front facing +X (no +Z
+como sería natural), por eso aparece "lying down" al hacer el
+viewport. El juego compensa con `rotation: -Math.PI / 2` en `roster.ts`
+y por eso el character select renderiza el gorila correctamente
+(validado en pantalla). Idea del usuario: añadir un plane de
+referencia de suelo en Blender (collection `_reference` o similar
+con export-exclude) para validar visualmente la orientación antes de
+cada re-export. Apuntado como primera tarea de mañana.
 
-**4. Mobile UX fixes**
-User couldn't play on mobile because:
-- "Press SPACE to start" was shown but there's no keyboard
-- No way to confirm character selection without a keyboard
-- End screen asked for "R to restart"
-- Portrait mode was the default and broke the layout
-- Desktop hints cluttered the mobile screen
+### Files changed
 
-Fixes:
+- `.mcp.json` (new) — servidor `blender` vía `uvx blender-mcp`.
+- `.claude/settings.local.json` — `enabledMcpjsonServers: ["blender"]`.
+- `tools/blender-mcp/addon.py` (new) — addon upstream (v1.2).
+- `BLENDER_MCP.md` (new) — setup + workflow + troubleshooting.
+- `STACK.md` — sección Blender MCP bajo animation tooling.
+- `public/models/critters/sergei.glb` — export con armature + weights.
+- `src/model-loader.ts` — `SkeletonUtils.clone()` para skinned meshes.
+- `src/roster.ts` — Sergei transform tuning (scale, pivotY).
+- `VALIDATION_CHECKLIST.md` — sección 14 (Blender-rigged validation).
+- `ERROR_LOG.md` — entrada SkinnedMesh clone bug.
+- `NEXT_STEPS.md` — Fase 3 refleja los dos carriles activos.
+- `BUILD_LOG.md` — esta entrada.
 
-*Portrait landscape lock*:
-- New `#rotate-prompt` overlay with a rotating phone icon and "Please
-  rotate your device" text
-- CSS `@media (orientation: portrait)` + `body.touch-mode` combo → only
-  appears on touch devices in portrait, invisible on desktop
+### Verification (pendiente mañana)
 
-*Desktop/touch hint differentiation*:
-- Added `.desktop-only` and `.touch-only` CSS classes
-- `body.touch-mode .desktop-only { display: none !important }` hides
-  keyboard hints on mobile
-- Without `body.touch-mode`, `.touch-only` elements are hidden
-- Title, character select, and end screens now carry both versions of
-  their prompt text
+- Typecheck + build local — no corrido aún (se pospone a la primera
+  sesión de mañana).
+- Recarga del juego y character select: Sergei rigged debería
+  renderizar igual que antes (sin el rig se veía bien, con el rig
+  debe verse idéntico hasta que se añadan clips).
+- In-game: movimiento, headbutt, abilities, fall — todos los estados
+  del engine deben seguir funcionando porque los clips aún no están
+  attachados; el procedural layer (`critter-animation.ts`) sigue
+  activo.
+- Consola: no debe aparecer el mensaje
+  `[Critter] skeletal animator attached: Sergei | clips: ...` todavía
+  porque no hay clips en el GLB — si aparece es un bug.
+- `npm run verify:glbs` (tool de 2e8b1eb) debería seguir pasando.
 
-*Tap menus*:
-- `hud.ts` registers click listeners on the title screen and end screen
-  overlays (work for both mouse click and touch tap)
-- Exposes `setTitleTapHandler`, `setEndTapHandler`, `setSlotClickHandler`
-  for game.ts to wire phase transitions
-- `game.ts` registers: title tap → enterCharacterSelect, end tap →
-  enterCountdown, slot click → select-or-confirm logic
-- Slot click on unselected slot → select + refresh preview
-- Slot click on already-selected slot → confirm and enter match
-- Locked slots ignore clicks
-- The keyboard flow still works unchanged (arrow keys + Space + T)
+### Estado al cierre de la sesión (sleep point 2026-04-20)
 
-### Files created / modified
-**Modified only** (no new files this sprint):
-- `src/critter.ts` — materials with transparent: true, dramatic blink
-- `src/arena.ts` — collapse warning system, deferred radius shrink
-- `src/audio.ts` — toggleMuted, loadMutedState, localStorage persistence
-- `src/hud.ts` — settings button ref, tap handlers + setters,
-  setSlotClickHandler with select-or-confirm logic
-- `src/game.ts` — wire tap/click handlers in constructor
-- `src/main.ts` — load mute state, wire sound button
-- `index.html` — settings button, rotate prompt, desktop-only/touch-only
-  classes on all menu hints
+- Blender MCP: instalado + addon activo + conexión Claude ↔ Blender
+  verificada (tools `mcp__blender__*` disponibles).
+- Sergei: rigged + exportado + `SkeletonUtils` fix en loader.
+- No commit todavía — todo sigue uncommitted en `dev`. `git status`:
+  `M STACK.md`, `M public/models/critters/sergei.glb`, `M src/model-loader.ts`,
+  `M src/roster.ts`, `?? .mcp.json`, `?? BLENDER_MCP.md`, `?? tools/`.
 
-### Docs refreshed in this sprint
-- **STACK.md**: added `audio.ts`, `input.ts`, `input-touch.ts`,
-  `preview.ts` to the architecture list; updated `player.ts` description
-  to reflect input abstraction
-- **GAME_DESIGN.md**: updated Rojo abilities table with current values,
-  added per-critter ability listings for Azul/Verde/Morado, updated
-  Arena section with warning blink, updated Phase 1 → Current Scope,
-  Game Feel section expanded with shake/flash/immunity/ring-warning/audio
-- **RULES.md**: updated match duration (90 → 120), collapse interval
-  (15 → 20), critter stats table (new speed/mass/power values per
-  preset), added mobile controls section, added per-critter ability
-  table, added lives + immunity mechanics
-- **SUBMISSION_CHECKLIST.md**: checked off sound effects, screen shake,
-  hit flash, arena warning, immunity blink, rotatable preview; checked
-  off git auto-deploy and mobile support in Deployment
-- **README.md**: updated Deployment section (git auto-deploy is now
-  active), added Mobile controls section, updated Tech Stack (two
-  renderers, Web Audio), updated Status to v0.3
-- **MEMORY.md**: added Mobile Support, Audio, Arena Collapse, and
-  Immunity Blink sections with the decisions made this sprint
+### Plan para mañana (continuación)
 
-Not touched:
-- `CLAUDE.md` — project rules, unchanged
-- `ULTI_DESIGN.md` — future design, unchanged
-- `ERROR_LOG.md` — no new recurring errors
-- `PROMPTS.md` — only the initial kickoff prompt, sprint history is in
-  BUILD_LOG instead
+1. Levantar dev server y validar visualmente que Sergei rigged
+   renderiza correctamente en character select + partida.
+2. Añadir plane de referencia de suelo en Blender (excluir del
+   export) para cross-check de orientación.
+3. Si Sergei OK → añadir primer clip (idle) via Mixamo download
+   o bpy keyframes, re-exportar, verificar que `SkeletalAnimator`
+   lo engancha (console log + `/tools.html` → OBSERVE → Skeletal
+   clips).
+4. Si el flujo se confirma fluido → repetir con **Shelly** (tortuga):
+   el verdict real del MCP está en los no-humanoides.
+5. Commit de todo el bloque una vez validado.
+
+---
+
+## 2026-04-20 (sesión 2) — Pose-state cleanup + dead-clip filter + cleanup template
+
+Sesión de mañana: validación visual de Sergei + descubrimiento del
+verdadero bug "T-pose en headbutt" + protocolo reutilizable para
+futuros crítters.
+
+### Bug 1: T-pose snap en headbutt/abilities (resuelto)
+
+Síntoma reportado por usuario: con Sergei en partida, idle/run se ven
+bien pero al hacer headbutt o ability la malla salta a T-pose durante
+toda la duración de la action y luego vuelve a idle.
+
+**Diagnóstico** (vía `mcp__blender__execute_blender_code`, inspeccionando
+fcurves):
+- Idle y Run = 51 fcurves cada uno (16 bones de 39 keyed con 5 keyframes).
+  Animaciones reales con `value_range > 0`.
+- Las otras 11 actions (Ability1Rush, Ability2Shockwave, Ability3Frenzy,
+  Anticip, Defeat, Fall, HeadbuttLunge, Hit, Respawn, Victory, Walk) =
+  **390 fcurves cada una = 39 bones × 10 channels**, con 2 keyframes
+  por fcurve y `value_range = 0.00000`. Snapshots auto-generados del
+  bind pose. Cada action al reproducirse fuerza todos los bones al
+  rest pose → T-pose snap visible.
+
+**Fix en dos capas**:
+
+(a) **Filtro runtime defensivo** (`src/critter-skeletal.ts`):
+añadido `isClipEffectivelyStatic(clip, eps=1e-4)` que verifica
+que cada track tenga variance > eps entre keyframes (per-component
+para Vec3/Quat). Llamado en el constructor del `SkeletalAnimator`
+antes de registrar las actions; descarta clips muertos y logea
+`[SkeletalAnimator] dropped N static (bind-pose) clip(s): <names>`
+en consola. Permite que el resolver caiga al fallback "no clip"
+para esos states → la action previa (idle/run) sigue corriendo en
+vez de ser clobbered.
+
+(b) **Limpieza source** (Blender + re-export): borradas las 11
+actions placeholder vía bpy. Sergei.glb resultante ahora ship sólo
+Idle + Run reales. Verifier confirma `2/13 covered` (el resto
+queda como `—`, sin matching, lo cual está OK).
+
+Validado end-to-end con preview server: durante un headbutt,
+`skeletal.getCurrentState()` se mantiene en `'idle'` y
+`isHeavyClipActive()` queda `false` toda la ventana → idle sigue
+corriendo, no hay T-pose snap. Misma cosa para abilities.
+
+### Bug 2: pose state pegado (vista en Blender + en juego "torcido")
+
+Tras validar el fix anterior, el usuario reportó que Sergei se sigue
+viendo torcido / acuclillado en Object Mode de Blender y en juego, aun
+en el bind pose / frame 0 / sin action activa. Pero en Edit Mode el
+armature aparece en T-pose limpio (cuerpo vertical, brazos
+horizontales).
+
+**Diagnóstico**: el rest pose del armature es T-pose limpio, pero los
+`pose_bone.rotation_quaternion` no estaban en identidad. Tripo3D (o
+algún paso intermedio) exportó el rig con un pose state baked: aunque
+Edit Mode muestra los huesos en sus posiciones rest, Pose/Object Mode
+muestra el resultado de aplicar las rotaciones de pose acumuladas.
+
+**Fix**: limpiar los pose transforms de cada bone a identidad:
+```python
+for pb in arm_obj.pose.bones:
+    pb.rotation_mode = 'QUATERNION'
+    pb.location = (0, 0, 0)
+    pb.rotation_quaternion = (1, 0, 0, 0)
+    pb.scale = (1, 1, 1)
+```
++ detach action + frame_set(0). Los renders ortográficos confirman
+T-pose limpio en RIGHT/FRONT/TOP. La leve forward-lean residual de
++6.27° en spine es del rest pose mismo (gorila ligeramente hunched
+por diseño), aceptable.
+
+Re-exportado sergei.glb con el pose state limpio → en juego el bind
+pose ahora ES T-pose, y al cargar Idle action se ve la pose authored
+encima del T-pose (V de brazos del character select).
+
+### Otros ajustes Blender hechos en esta sesión
+
+- `_reference` collection con `_REFERENCE_FLOOR` (plane 5×5 a z=feet
+  level, wireframe) y `_REFERENCE_FORWARD` (cono a +X). Ambos con
+  `hide_render=True`. Sirven como referencia visual sin contaminar el
+  export gracias a `use_selection=True`.
+- ParentNode rotation reset (-3° de yaw → 0°).
+
+### Template + checklist documentado
+
+Para no repetir todo este diagnóstico con cada crítter futuro:
+
+- **`tools/blender-mcp/critter-cleanup.py`** — script Python con
+  pipeline completo (force OBJECT mode → clear pose → reset parent
+  rotation → detect+remove placeholder actions → snapshot metrics
+  → render 3 vistas → opcional re-export). Edita `CRITTER_ID` al
+  inicio y corre. Idempotente, no destructivo si `do_export=False`
+  (default).
+- **`BLENDER_MCP.md`** — sección "Per-critter sanity checklist
+  (post-import)" con los 7 pasos + descripción del fallback runtime.
+
+### Files changed
+
+- `src/critter-skeletal.ts` — filtro `isClipEffectivelyStatic` +
+  filtrado en constructor + log de drops.
+- `tools/blender-mcp/critter-cleanup.py` (new) — pipeline reutilizable.
+- `BLENDER_MCP.md` — checklist de 7 pasos + reference floor + runtime
+  fallback.
+- `public/models/critters/sergei.glb` — re-exportado dos veces:
+  primero sin placeholders (1064 KB → 811 KB), luego con pose state
+  limpio (811 → 778 KB). Backup en `sergei.glb.bak` por si revertir.
+- `scripts/inspect-sergei-clips.mjs` (new, throwaway) — diagnóstico
+  ad-hoc de duración/variance por clip vía `@gltf-transform`.
+- `tools/sergei-pose-baseline.json` (new) — snapshot de bones y
+  métricas para diff posterior.
+- `tools/sergei-views/` y `tools/sergei-views-cleared/` (new) —
+  renders OpenGL de los 3 ejes ortográficos.
 
 ### Verification
-- `npx tsc --noEmit` → clean
-- `npm run build` → 509 KB (130 KB gzip), 604 ms
-- Size growth: +1.5 KB vs previous sprint
 
-### Intentionally NOT in this sprint
-- ULTI system implementation (still awaiting go)
-- Winner posing screen (documented, not built)
-- Per-critter pedestals (documented, not built)
-- Background music (settings button has room when added)
-- Touch UI visual polish beyond functional
+- Typecheck (`npx tsc --noEmit`) — clean.
+- `node scripts/verify-critter-glbs.mjs public/models/critters/sergei.glb`
+  → `2 clips, 2/13 covered` (Idle + Run resuelven, resto sin
+  placeholders sucios).
+- `node scripts/inspect-sergei-clips.mjs` → variance > 0 en ambos
+  clips reales.
+- Preview dev server `npm run dev` → consola muestra
+  `[Critter] skeletal animator attached: Sergei | clips: Idle, Run`.
+  Headbutt eval test: state se mantiene en `'idle'` toda la duración
+  (anticip + lunge + recovery), `isHeavyClipActive()` siempre `false`.
+- Validación visual final pendiente del usuario en su navegador
+  (preview cerrado para evitar interferencia con su test).
 
-### Next sprint options
-1. **Implement ULTI system** following `ULTI_DESIGN.md` (5–6 h)
-2. **Winner posing screen** on end overlay using preview.ts
-3. **Per-critter pedestals** in the preview scene
-4. **Playtest report round 2** on the fixes delivered in this sprint
-5. **Background music** (would also need a second toggle button)
+### Estado al cierre
 
----
+- Sergei: rigged + clean T-pose bind + Idle/Run reales + transform
+  tuning estable. Listo para autoring de animaciones distintivas
+  cuando llegue el momento.
+- Pipeline para futuros crítters documentado y scripteado.
+- Próximo crítter sugerido: Shelly (tortuga) — primer no-humanoide
+  para validar el flujo Blender MCP en un caso difícil. El template
+  necesitará ajustes (los nombres de bones cambian por morfología).
 
-## 2026-04-12 — Phase A: Engine Preparation for 9-Character Roster
+## 2026-04-21 — Cheeto animated (8 clips) + skeletal policy + tooling cleanup
 
-### Context
-The 4 current critters (Rojo, Azul, Verde, Morado) are **placeholders/scaffolding**.
-The real target roster is 9 characters defined in `CHARACTER_DESIGN.md`, each with
-2 abilities + 1 ultimate. This sprint prepares the engine to absorb N critters,
-3 abilities per critter, and per-critter stats — without implementing any final
-character or changing gameplay.
+Primera integración completa post-decisión "Blender MCP en standby" —
+Cheeto entra con 8 clips de Tripo Animate por el camino rápido
+`gltf-transform` (sin roundtrip a Blender). Además, política definitiva
+de estados esqueléticos para el resto del roster y limpieza general
+de herramientas / residuos.
 
-### Discipline constraint
-Avoid gameplay/HUD/input coupling, avoid hiding state in visual layer. Do NOT
-introduce networking abstractions — only clean up local architecture.
+### Cheeto — 8 clips integrados
 
-### Tasks completed (6 commits, 8 files, +351 / −42 lines)
+Source: Tripo Animate exportando con clips en NLA tracks
+(`NlaTrack`, `NlaTrack.001`, …). 71.4 MB / 1.03 M verts.
 
-| Task | Commit | What |
-|------|--------|------|
-| T1 | `969c5a4` | `headbuttCooldown?: number` in `CritterConfig` — per-critter override, falls back to `FEEL.headbutt.cooldown` |
-| T2 | `938f296` | Dynamic match builder: pure `buildMatchRoster()` + `rebuildCritters()` + `Critter.dispose()` for GPU cleanup |
-| T3 | `3c770d3` | `AbilityTag` type + `tags` field on `AbilityDef` + `findAbilityByTag()` helper. Bot AI fully decoupled from slot indices |
-| T4 | `ef7df30` | `HeldAction.ultimate` + `KeyL` mapping + null-safe hook in `player.ts`. Reserved `#critter-info-ulti` in character select |
-| T5 | `c6f9980` | 4th touch button (`data-action="ultimate"`) in 2×2 cluster layout (200×200). No backend changes needed |
-| T6 | `ede05ad` | `src/stats.ts` — localStorage persistence (`br-stats-v1`). Zero gameplay imports. Hooks in `game.ts`: pick / outcome / fall |
+Pipeline aplicado:
+1. Rename por duración — las 8 durations del source matchean exacto
+   con la tabla pasada por el usuario (tolerance 0.01 s).
+2. `dedup + weld + simplify` (meshoptimizer, ratio 0.0048) → 31 966
+   verts / 2.66 MB.
+3. Write a `public/models/critters/cheeto.glb`.
 
-### Key decisions
-- **Bot AI uses semantic tags, not slot indices.** `findAbilityByTag('mobility')` / `findAbilityByTag('aoe_push')` means critters can reorder or omit abilities without breaking the bot. Unknown tags are silently ignored.
-- **Match builder is a pure function.** `buildMatchRoster(playerIdx, presets, botCount)` wraps around the presets array. `rebuildCritters()` disposes old Three.js resources before spawning new ones — no GPU leaks on roster changes.
-- **Stats module has zero coupling.** `src/stats.ts` receives plain strings (`critterName`) and a `'win'|'lose'` enum. Does not import Critter, Game, HUD, or anything from gameplay. Only `game.ts` calls the 3 recording functions.
-- **Ultimate slot is null-safe.** `abilityStates[2]` is `undefined` for current placeholders. `player.ts` guards with `&& critter.abilityStates[2]`. HUD iterates `states.length` — 3rd slot auto-appears when a critter has 3 abilities.
-- **Touch layout shifted from triangle (3 buttons) to 2×2 grid (4 buttons).** Headbutt stays bottom-right as the largest button.
+Mapeo final:
 
-### Files touched
-- `src/critter.ts` — T1 (optional field), T2 (dispose method)
-- `src/game.ts` — T2 (match builder, rebuildCritters), T6 (stats hooks)
-- `src/abilities.ts` — T3 (AbilityTag, tags field, findAbilityByTag)
-- `src/bot.ts` — T3 (full rewrite to tag-based decisions)
-- `src/input.ts` — T4 (ultimate in HeldAction union + KeyL mapping)
-- `src/player.ts` — T4 (ultimate hook with null guard)
-- `index.html` — T4 (critter-info-ulti placeholder), T5 (4th touch button + CSS)
-- `src/stats.ts` — T6 (new file)
+| Source NLA     | Dur (s) | Nombre final          | Estado runtime |
+|----------------|---------|-----------------------|----------------|
+| NlaTrack.005   | 1.292   | `Run`                 | run            |
+| NlaTrack.007   | 2.750   | `Ability1Pounce`      | ability_1      |
+| NlaTrack.001   | 3.583   | `Ability3TigerRoar`   | ability_3      |
+| NlaTrack.006   | 3.667   | `Fall`                | fall           |
+| NlaTrack.004   | 3.875   | `Ability2ShadowStep`  | ability_2      |
+| NlaTrack.003   | 6.000   | `Idle`                | idle           |
+| NlaTrack.002   | 6.292   | `Defeat`              | defeat         |
+| NlaTrack       | 10.792  | `Victory`             | victory        |
 
-### Verification
-- `npx tsc --noEmit` → clean after every commit
-- `npm run build` → 512 KB (131 KB gzip), 600 ms — +3 KB vs previous sprint
-- `buildMatchRoster` tested in isolation: N=9, idx=8 wraps correctly, idx=99 and idx=-1 safe, N=0 returns []
-- Stats module exercised in Node mock: pick/win/loss/fall counters persist and reload correctly
-- Module coupling audit: stats imports 0, input imports 0, bot imports only critter+abilities+gamefeel, HUD imports only types
+Los 8 clips pasan `isClipEffectivelyStatic` (max_var entre 0.068 y
+1.998). Ninguno sufrió el flatten a 2-keyframes que afectó a Kermit
+en el roundtrip por Blender — confirma que cuando el source ya está
+limpio, saltarse Blender es la ruta correcta.
 
-### Open debts (small)
-- No runtime browser test framework — all validation is build + static + isolated Node
-- 4th touch button not tested on a real mobile device yet (code path identical to J/K)
-- Stats are collected but not displayed anywhere yet (intentional — display is a later task)
+### Política skeletal definitiva (decisión 2026-04-21)
 
----
+Tras discutir el perfil de cada bichito, se congelan 8 estados
+esqueléticos como target universal y se descarta todo lo demás del
+pipeline de clips. La capa procedural de `critter-animation.ts`
+cubre el resto sin regresión.
 
-## 2026-04-12 — Phase B: Sergei (first real roster character)
+Estados skeletal target (los 8):
+`idle`, `run`, `ability_1`, `ability_2`, `ability_3` (ULTI),
+`victory`, `defeat`, `fall`.
 
-### What was built
-Sergei (gorilla, Balanced) — first character from the final 9-character roster.
-Validates the 3-ability pipeline from Phase A.
+Estados procedurales / descartados:
+- `walk` — **eliminado** (todos usan `run`; el procedural sway+bob
+  cubre el intermedio).
+- `headbutt_anticip` + `headbutt_lunge` — **procedurales para todos**
+  (squash/stretch existente). Excepción por bichito solo si el
+  usuario lo pide explícito.
+- `respawn` — **sin clip**. La inmunidad corta + parpadeo actual
+  cubre el feedback de aparición.
+- `hit` — **procedural para todos**. No parece justificar clip
+  esqueletal distinto al tilt/shake ya implementado.
 
-Kit: Gorilla Rush (J, charge_rush), Shockwave (K, ground_pound), Frenzy (L, buff ultimate).
-Frenzy is a pure stat buff: +30% speed, +35% mass for 4s with 18s cooldown.
+Este bloque se aplicará a `STATE_KEYWORDS` + `SkeletalState` en
+`src/critter-skeletal.ts` **después** de tener los 9 bichitos
+integrados, para evitar tocar el resolver mientras el contenido
+sigue entrando. El cambio es compatible: hoy el resolver ya tolera
+los 13 estados y sólo resuelve lo que encuentra.
 
-### Files changed (4 files, +87 / −1 lines)
-- `src/gamefeel.ts` — `FEEL.frenzy` tuning section
-- `src/abilities.ts` — `'frenzy'` AbilityType, `'buff'` AbilityTag, `makeFrenzy()`,
-  `fireFrenzy()`, Sergei in CRITTER_ABILITIES
-- `src/critter.ts` — Sergei in CRITTER_PRESETS, frenzy visual in updateVisuals()
-- `src/bot.ts` — `'buff'` tag heuristic
+### Cobertura skeletal al cierre
 
-### Key decisions
-- Frenzy multipliers are conservative (speed ×1.3, mass ×1.35) pending playtest
-- Frenzy visual: pulsing deep-red glow via `sin(Date.now())`, no VFX system
-- Bot uses Frenzy when near enemy (dist < 3.5), low probability (0.8%/frame)
+| Bichito    | Cobertura | Detalle                                       |
+|------------|-----------|-----------------------------------------------|
+| Cheeto     | **8 / 8** | full kit desde Tripo Animate                  |
+| Kermit     | **7 / 8** | ability_3 Hypnosapo = flicker procedural      |
+| Sergei     | 1 / 8     | solo Idle por ahora                           |
+| Kowalski   | 0 / 8     | pendiente                                     |
+| Kurama     | 0 / 8     | pendiente                                     |
+| Sebastian  | 0 / 8     | pendiente                                     |
+| Shelly     | 0 / 8     | pendiente                                     |
+| Sihans     | 0 / 8     | pendiente                                     |
+| Trunk      | 0 / 8     | pendiente                                     |
 
----
+Global: **16 / 72** estados (22%). El usuario está generando los
+restantes vía Meshy AI + Tripo.
 
-## 2026-04-13 — Visual Pipeline + Sergei GLB Integration
+### Tooling — pipeline genérico + limpieza
 
-### What was built
-Complete 3D model loading pipeline, validated end-to-end with Sergei.
-
-### New files (7)
-- `STYLE_LOCK.md` — mandatory visual rules
-- `ASSET_PIPELINE.md` — asset integration guide + optimization record
-- `scripts/optimize-models.mjs` — reproducible GLB optimization pipeline
-- `public/models/critters/sergei.glb` — 425 KB, 7K verts (from 40 MB, 956K verts)
-- `public/draco/` — Draco WASM decoder (1.1 MB, for future compressed models)
-- `src/model-loader.ts` — GLTFLoader + cache + deep clone + material isolation
-- `src/roster.ts` — 13-entry data-driven roster (9 real + 4 internal)
-
-### Modified files (5)
-- `src/critter.ts` — async GLB swap, procedural fallback, configurable radius
-- `src/hud.ts` — roster-aware grid (playable/wip/locked status)
-- `src/game.ts` — display roster for select, preload in countdown, confirm guard
-- `index.html` — WIP slot CSS
-- `package.json` — devDeps for gltf-transform + meshoptimizer
-
-### Key decisions
-- **Procedural mesh always built** (sync), GLB swaps in async. Body/head stay as
-  invisible references — existing code runs harmlessly on hidden meshes.
-- **Deep clone + material isolation** per critter instance. Textures shared (read-only).
-- **Race guard** in attachGlbMesh: discards GLB if critter was disposed during load.
-- **Placeholders invisible in UX** (status 'internal'), used only for bots.
-- **Only Sergei GLB integrated**. Other 8 have roster entries with WIP status.
-
-### Verification
-- Build: 624 KB JS (163 KB gzip) — +111 KB from GLTFLoader/DRACOLoader
-- Optimization: Sergei 956K → 7K verts, 40 MB → 425 KB
-- Typecheck clean
-
-### Open debts
-- Sergei GLB never validated visually in browser (scale/pivotY may need tuning)
-- public/draco/ (1.1 MB) is currently unused — models are not Draco-compressed
-- 8 remaining GLBs need optimization before integration
-
----
-
-## 2026-04-13 — Compliance Fix: Widget URL Update
-
-### What was fixed
-Jam widget URL changed from `jam.pieter.com` to `vibej.am`. Updated in:
-- `index.html` (the actual widget script tag)
-- `README.md` (jam link)
-- `SUBMISSION_CHECKLIST.md` (widget reference + added deadline/form info)
-
-### Jam deadline
-May 1, 2026 @ 13:37 UTC. Submission form: https://forms.gle/bGG4e3uD9PUUJKUc7
-
----
-
-## 2026-04-13 — Post-validation fixes + merge to production
-
-### Fixes applied (4 commits)
-- Sergei GLB transform corrected: scale 2.0, rotation -π/2, pivotY 0.98
-  (model was 0.93 units underground due to wrong pivotY)
-- Stale abilities bug in WIP character select (early return skipped clear)
-- Touch controls hidden in title/select/ended (CSS `.match-active` gate)
-- `__tune()` debug tool gated behind `import.meta.env.DEV`
-
-### Merge
-15 commits merged dev → main (fast-forward). Production verified at
-bichitosrumble.com. All features from Phase A, Phase B, and GLB pipeline
-now live.
-
-### Current production state
-- 9-character roster grid (1 playable: Sergei with 3D GLB model)
-- 8 WIP characters with planned ability info
-- 4 internal placeholders for bot matches
-- Widget: vibej.am/2026/widget.js (verified)
-- Bundle: 624 KB JS (163 KB gzip) + 425 KB Sergei GLB + 1.1 MB Draco decoder
-
----
-
-## 2026-04-14 — Portal feature closed + operational cleanup
-
-### Portal feature — final state
-Full arc of commits for the Vibe Jam portal (`3fe20d8` → `6df5c15`):
-- `3fe20d8` feat: portal integration (exit + start portal scaffolding)
-- `26193e8` feat: portal end-screen P/B flow + exit/return URLs
-- `4f4b4dc` fix: clear portal context when returning to title (T)
-- `1c69c95` polish: portal visuals + end screen + countdown pop
-- `4f49d3f` feat: portal minimize/expand system + HUD legend
-- `5a8fb06` fix: vertical door orientation + usable only when expanded
-- `6df5c15` fix: particles orbit vertical ring + bump count to 28
-
-Closing summary:
-- Exit portal (green): always present, redirects to vibej.am/portal/2026
-- Start portal (orange): only when arriving via `?portal=true&ref=...`
-- Both minimized by default (0.5× scale, dim, tight hitbox disabled)
-- Expand with P (desktop) or mobile toggle button
-- Usable only when expanded (expansionT > 0.7), preventing combat accidents
-- HUD legend panel top-left explaining portal colors + P key hint
-- URL context cleanup on T (back to title) via history.replaceState
-- 17 days to deadline, no further portal iterations unless bug
-
-### Operational cleanup (2026-04-14)
-- Removed `public/draco/` (unused decoder, 1.1 MB). Sergei GLB is not
-  Draco-compressed and optimize-models.mjs doesn't apply Draco. Decoder
-  files were not being fetched at runtime so initial load was unaffected,
-  but they were dead storage on deploy.
-- Removed DRACOLoader instantiation from `model-loader.ts`. Documented
-  how to re-enable in a block comment if Draco is added later.
-- Committed `CHARACTER_DESIGN.md` (was untracked — design reference for
-  the 9-character roster).
-- Updated docs to match reality post-merge:
-  - SUBMISSION_CHECKLIST: Portal marked done, Submit Google Form moved
-    to top as pending user action.
-  - README: Status section mentions portal + minimize/expand. Controls
-    table adds P and B keys with their phase-dependent behavior.
-  - MEMORY: Next Priorities rewritten for the last 17 days — prioritize
-    Google Form submission, Lighthouse measurement, 2-3 more playable
-    characters with real GLBs.
-
-### Bundle after cleanup
-- 622 KB JS (163 KB gzip)
-- 425 KB Sergei GLB
-- Draco decoder removed → no longer in deploy
-
----
-
-## 2026-04-16 — Fix: arena visual desync (Bloque B 3a follow-up)
-
-### What was fixed
-Bug: "outer ring stays rendered on one client even after server shrunk the radius."
-Diagnosed by the previous commit (diagnostic logging). Root cause: `syncFromServer`
-was using `collapsedRings` counter to determine ring visibility, but `collapsedRings`
-could arrive in a partial or delayed state relative to `arenaRadius`.
-
-### Fix
-Replaced counter-based visibility with a **geometric check**:
+**`scripts/import-critter.mjs`** (new) — reemplaza el throwaway
+`import-cheeto.mjs` con un CLI reutilizable:
 
 ```
-const outerEdge = (i + 1) * ringWidth;
-ring.visible = outerEdge <= radius + 0.1;
+node scripts/import-critter.mjs <id> <source.glb> [flags]
+
+Flags:
+  --map <file|json>     mapping (default: scripts/mappings/<id>.json)
+  --target-verts <N>    vertex budget (default 5000)
+  --tolerance <S>       duration-match tolerance (default 0.01 s)
+  --dry-run             print plan + ratio, don't write
 ```
 
-`arenaRadius` is the most reliable field — it already drives player falloff on both
-clients. If a client correctly falls off the shrunken arena, its `radius` is correct,
-and the ring will now also correctly disappear.
+**`scripts/mappings/<id>.json`** es la convención: array de
+`{ dur, name }` con las durations en segundos y los nombres que
+queremos en el GLB final (deben matchear los keywords de
+`STATE_KEYWORDS`).
 
-The epsilon (0.1) keeps the outermost ring visible during the warning phase (when
-radius is still at max but the ring is blinking, not yet removed).
+Fixture de referencia: `scripts/mappings/cheeto.json`.
 
-### Optimization added
-`syncFromServer` no longer runs material traversals every frame. It tracks the
-last synced `radius` and `warningRingIndex`:
-- Visibility updates: only on `radius` change (every ~20s in normal play)
-- Blink traversal: every frame only while a ring is warning
-- Color restoration: only once on the frame when `warningRingIndex` transitions
+**Borrados en esta sesión**:
+- `scripts/import-cheeto.mjs` (sustituido por genérico).
+- `scripts/inspect-cheeto-source.mjs`, `scripts/inspect-cheeto-clips.mjs`,
+  `scripts/inspect-sergei-clips.mjs` (diagnósticos ad-hoc).
+- `public/models/critters/sergei.glb.bak`,
+  `public/animations/models/critters/sergei.glb.bak` (backups
+  obsoletos — el GLB actual lleva días estable).
+- `tools/sergei-pose-baseline.json`, `tools/sergei-views/`,
+  `tools/sergei-views-cleared/` (renders de diagnóstico del
+  cleanup de Sergei, ya no necesarios).
 
-This eliminates ~15 material.color/emissive writes per frame in stable state.
+**`package.json`** — añadidos dos scripts npm:
+- `npm run verify:glbs` → `node scripts/verify-critter-glbs.mjs`
+- `npm run import:critter` → `node scripts/import-critter.mjs`
 
-### Files changed
-- `src/arena.ts` — `syncFromServer` rewritten, `reset()` clears sync tracking
-- `src/game.ts` — removed diagnostic logs, simplified `syncFromServer` call
+### Docs sincronizadas
 
-### Bundle
-- 769 KB JS (209 KB gzip) — includes Colyseus; pre-existing chunking advisory
-
----
-
-## 2026-04-17 — Bloque B #3b: Irregular Fragment Collapse
-
-### What changed
-Replaced the uniform 6-ring collapse system with seed-deterministic irregular
-sector fragments. Both offline and online modes now use the same fragment system.
-
-### Architecture
-- **Shared generator** (`src/arena-fragments.ts` + `server/src/sim/arena-fragments.ts`):
-  mulberry32 PRNG seeded per match. Generates 29 fragments: 1 immune center
-  (r=0..2.5) + 28 collapsible sectors across 3 radial bands with angular jitter (25%).
-  Collapse schedule: outer band → inner, shuffled within each band, 4-5 batches of
-  4-8 pieces. Mixed timing: first batch at 20s, then 8-10s between.
-- **Server ArenaSim**: seed-based, tracks alive[], collapseLevel, warningBatch.
-  `isOnArena(x,z)` checks all alive fragments (polar sector test).
-- **Client Arena**: ExtrudeGeometry sectors + CircleGeometry immune center.
-  `buildFromSeed(seed)` for deterministic mesh generation. Offline: `update(dt)`.
-  Online: `syncFromServer(seed, level, warningBatch)`.
-
-### State sync (GameState)
-- `arenaSeed`: sent once per match (deterministic layout generation)
-- `arenaCollapseLevel`: completed batch count (0..totalBatches)
-- `arenaWarningBatch`: batch currently blinking (-1 if none)
-- `arenaRadius`: approximate max playable radius (for camera/respawn)
-
-### Verified behaviour
-- 120s simulation: 4 batches collapse by t≈53s, center immune persists
-- isOnArena spatial queries correct (center=true, void=false)
-- Both compilation targets clean, bundle +32KB (800 KB total)
-
-### Files created
-- `src/arena-fragments.ts`, `server/src/sim/arena-fragments.ts`
+- `BUILD_LOG.md` — esta entrada.
+- `SUBMISSION_CHECKLIST.md` — cobertura skeletal (2/9) +
+  política de estados.
+- `VALIDATION_CHECKLIST.md` — sección 9 actualizada con la tabla
+  de 9 bichitos y los 8 estados target.
+- `CHARACTER_DESIGN.md` — columna "Anim" en la tabla de estado.
 
 ### Files changed
-- `src/arena.ts` — full rewrite (fragment meshes, buildFromSeed, syncFromServer)
-- `src/game.ts` — offline: buildFromSeed on countdown; online: seed-based sync
-- `server/src/sim/arena.ts` — full rewrite (fragment-based ArenaSim)
-- `server/src/state/GameState.ts` — new fields (arenaSeed, arenaCollapseLevel, etc.)
-- `server/src/sim/physics.ts` — checkFalloff now receives isOnArena callback
-- `server/src/BrawlRoom.ts` — seed generation on countdown, fragment state sync
-- `server/src/sim/config.ts` — removed ring-specific values
 
----
-
-## 2026-04-18 — Lab v2: DevApi layer + bots/gameplay/perf/input panels
-
-### Why
-The v1 lab (matchup tuner + arena inspector + animation sliders + playback)
-was useful but the sidebar was calling `game.debug*` directly and any new
-capability was heading straight into `Game`. With 5 days to jam and more
-debug tools planned (bots, events, cooldown injection, perf, input,
-gamepad) that was going to bloat `Game` fast. Added a DevApi layer.
-
-### Architecture change
-- **New file `src/tools/dev-api.ts`** (~270 LOC): `DevApi` class wrapping
-  `Game` + `WebGLRenderer`. Owns every new lab capability. Game keeps only
-  its 5 existing `debug*` primitives (speedScale, startOfflineMatch,
-  forceArenaSeed, getArenaInfo, endMatchImmediately) — no new ones added.
-- Sidebar (`src/tools/sidebar.ts`) now receives `DevApi` instead of `Game`.
-- `src/tools/main.ts` instantiates DevApi once, passes to sidebar, ticks
-  it each frame after render so `renderer.info` perf counters reflect the
-  current frame.
-
-### Debug surface delivered
-1. **Bot AI panel (priority 1)** — per-bot behaviour dropdown (normal / idle
-   / passive / aggressive / chase / ability_only) + bulk "all bots" control.
-   Backed by new `Critter.debugBotBehaviour` field read each frame in
-   `bot.ts`. Defaults to `normal` in production so nothing changes there.
-2. **Gameplay panel (priority 2)** — live event log (headbutt, ability
-   cast/end, fall, respawn, eliminate, collapse warn/batch, match start/end)
-   via edge-detection polling (no engine patching), player cooldown bars,
-   Reset-CDs / Force J / Force K / Force L buttons, teleport player to
-   centre, teleport bots to presets (center/corners/line/bunch).
-3. **Performance panel (priority 3)** — FPS (30-sample rolling average),
-   frame ms, draw calls, triangles, geometries, textures, critter count,
-   arena fragments alive/total. All from `renderer.info` + `DevApi` arena
-   math.
-4. **Input panel (priority 4)** — live move vector, held-actions chips
-   (headbutt/ability1/ability2/ultimate), held KeyboardEvent codes,
-   gamepad list via `navigator.getGamepads()`. Base ready for future
-   gamepad + touch debug.
-
-### Discarded / deferred on purpose
-- **Online / netcode debug (priority 5)** — not implemented. The current
-  online path only has 2-player rooms and the safety cost of adding
-  mutable hooks to real rooms is too high for this jam. The DevApi note
-  at the bottom of the file spells out the contract: online debug must be
-  read-only by default; any mutation requires an explicit "connect as
-  debug observer" opt-in.
-- **Replay from mid-collapse** — skipped, covered well enough via
-  `Force Seed` + `Replay Last` for deterministic reproduction.
-- **Reaction-speed toggle on bots** — skipped, aggressive/passive/
-  ability_only already cover the axes we actually wanted to isolate.
-
-### Safety posture on `tools.html`
-- `<meta name="robots" content="noindex, nofollow">` +
-  `<meta name="googlebot" content="noindex, nofollow">` added.
-- Banner "INTERNAL DEV TOOL · not for players" at top of sidebar.
-- Title tag → "Bichitos Rumble — Lab (internal)".
-- No link from the game UI at any point. Access via direct URL only.
-- All mutations target the LOCAL game instance; no server/room write paths
-  are exposed.
-
-### Files created
-- `src/tools/dev-api.ts`
-
-### Files changed
-- `src/tools/sidebar.ts` — rewritten to take `DevApi`; 4 new panels added.
-- `src/tools/main.ts` — instantiates `DevApi`, ticks it each frame.
-- `tools.html` — noindex meta + updated title.
-- `src/critter.ts` — new `debugBotBehaviour: BotBehaviourTag = 'normal'` field.
-- `src/bot.ts` — honours `bot.debugBotBehaviour` (idle/passive/aggressive/
-  chase/ability_only/normal). Zero effect in production (default 'normal').
-- `src/input.ts` — exports `getHeldKeyCodes()` and `getHeldActionsSnapshot()`
-  for the Input panel. Game code still reads via `getMoveVector`/`isHeld`.
-
-### Bundle impact
-- `dist/assets/tools-*.js`: 10.04 kB → 25.58 kB (gzip 3.94 → 8.21 kB).
-  Internal-only bundle, acceptable.
-- `dist/assets/index-*.js` (main game): unchanged at 3.07 kB.
-- `dist/assets/input-touch-*.js` (shared): +0.21 kB (two input exports).
-
-### How to use (lab-side, console)
-- `__devApi.setAllBotsBehaviour('idle')` — freeze every bot in place.
-- `__devApi.setBotBehaviour(1, 'aggressive')` — bot at index 1 gets 3×
-  ability fire rate + lower headbutt threshold.
-- `__devApi.forceAbility(0)` — fire the player's J slot ignoring CD.
-- `__devApi.resetPlayerCooldowns()` — all player cooldowns back to 0.
-- `__devApi.teleportBotsPreset('corners')` — scatter bots to the 4 corners.
-- `__devApi.getEventLog()` — last 60 events (timestamp + type + actor).
-
-Sidebar surfaces all of the above as buttons/dropdowns too.
-
----
-
-## 2026-04-19 — Lab v2.1: dropdown fix + full match recorder + DEV_TOOLS.md
-
-### What changed
-
-1. **Fix**: individual bot dropdowns in the Bots panel never opened. Root
-   cause: `refreshBotsPanel` called `innerHTML = ''` every 250 ms and
-   recreated every `<select>`, so the browser tore down the dropdown
-   before it could render. Rewritten to cache row elements per
-   `bot.index`, only update state on the existing DOM, and skip
-   overwriting a select's `value` while it has focus (would close the
-   open dropdown). Added the same guard pattern to any future panel
-   that renders live lists with interactive widgets.
-2. **Exhaustive match recorder** inside `DevApi`:
-   - Session auto-starts with each `startMatch`. Previous session (if
-     not downloaded) is overwritten.
-   - Captures: every `GameplayEvent` (uncapped), every `LabAction`
-     (force_ability, teleport_player, teleport_bots,
-     set_bot_behaviour, set_all_bots_behaviour, reset_cooldowns,
-     force_seed, set_speed, end_match), and one `RecordingSnapshot`
-     every 200 ms with every critter's full state (pos/vel/lives/
-     abilities/behaviour/etc), arena (collapseLevel/warning/radius) and
-     perf (fps/frameMs/drawCalls/triangles).
-   - Outcome auto-detected: `last_standing` when alive count drops to 1,
-     `user_stopped` when `endMatch` is called, `match_timeout` when
-     finalised without a survivor emerging.
-   - Two download buttons in the sidebar: **Download JSON** (raw dump)
-     + **Download MD** (human summary with events-by-type table,
-     per-critter stats, arena timeline, lab actions, sampling stats).
-   - Filename pattern: `bichitos-<ISO>-<player>-<bot1>-<bot2>-<bot3>.<ext>`.
-   - Typical session size: 0.5–1.5 MB JSON for a 90 s match.
-3. **`DEV_TOOLS.md`** added — single source of truth for the lab's
-   architecture, panels, event types, recording format, how to extend,
-   safety boundaries and TODOs. Living document: updated whenever the
-   lab grows.
-
-### Files created
-- `DEV_TOOLS.md`
-
-### Files changed
-- `src/tools/dev-api.ts` — new types (RecordingSession, RecordingSnapshot,
-  LabAction, RecordingMeta, RecordingOutcome, CritterFrame,
-  LabActionType), recorder fields, `startRecording/stopRecording/
-  isRecording/hasRecording/getRecording/clearRecording/
-  downloadRecordingJSON/downloadRecordingMD`, snapshot sampling on
-  `tick`, auto-outcome detection, per-mutation `logAction` calls,
-  `buildRecordingSummaryMD` exported helper.
-- `src/tools/sidebar.ts` — bot dropdown fix (DOM caching), new
-  Recording panel, refresh function wired to the slow interval.
-- `BUILD_LOG.md` — this entry.
-- `NEXT_STEPS.md` — pointer to `DEV_TOOLS.md`.
-
-### Verification
-- Typecheck clean.
-- Build clean (tools chunk ~40–42 kB expected after recorder weight;
-  main game bundle unchanged).
-- Manual checklist: open `/tools.html`, start a match, verify
-  individual bot dropdowns open and changes apply, watch the
-  Recording panel count events/actions/snapshots, let the match end,
-  click `Download JSON` → verify filename + contents, click
-  `Download MD` → verify summary renders.
-
----
-
-## 2026-04-19 — Lab v2.2 + respawn safety fix (client + server)
-
-### Gameplay fix: respawn in collapsed void
-
-**Bug**: after fragmenting the arena into irregular sectors (Pattern A /
-B), `pickRespawnPos` was picking `currentRadius * 0.4` with a fully
-random angle and NO `isOnArena` check. On Pattern B (axis-split) in
-particular, half of the ring is already gone at mid-match — if the
-respawn roll landed there, the critter would reappear in the void and
-fall again on the same frame.
-
-**Fix** applied to both client and server (same logic in both):
-
-- Up to 12 retries. Each retry shrinks the radius toward the immune
-  islet (r=0.5..maxR, decreasing linearly).
-- Every candidate is validated with `arena.isOnArena(x, z)` /
-  `arenaSim.isOnArena(x, z)`.
-- Last-resort fallback: `(0, 0)` — sits on the central islet which
-  never collapses, so ground is guaranteed.
-- Client: `src/game.ts` → `pickRespawnPos`.
-- Server: `server/src/BrawlRoom.ts` → new private `pickRespawnPos`
-  helper, replaces the inline angle × 0.4·r block.
-
-This benefits both offline (bots and player) and online matches.
-
-### Lab fix: recorder didn't close on last_standing
-
-**Bug**: when a match ended because the user survived (last_standing),
-the recording's `outcome.survivor` + `outcome.reason` were set but
-`finaliseRecording` was never called. Downloading the JSON/MD showed
-`Ended: (still recording)` and `Duration: (running)` even for a
-clearly-finished match.
-
-**Fix**: in `DevApi.tickRecording`, when the alive-count drops to 1 we
-now also push a `match_ended` event and call `finaliseRecording(
-'last_standing')` so the session carries correct `endedAt` +
-`durationSec` + locked event history.
-
-### Sidebar reorg: thematic groups + collapsible sections
-
-The v2.1 sidebar had 10 flat panels with only a thin heading separating
-them — the density was high and there was no visual hint about what
-each panel was for. Reorganised into 4 thematic groups with coloured
-separator bars:
-
-- **MATCH SETUP** (blue) — Matchup, Arena
-- **LIVE CONTROL** (red) — Bots, Gameplay, Playback
-- **OBSERVE** (green) — Recording, Performance, Input, Player info
-- **TUNING** (yellow) — Animation
-
-Every section is now collapsible (click header). Defaults chosen for
-the "start a match and observe" flow: Bots / Gameplay / Recording /
-Performance expanded, the rest collapsed. State is per-pageload only
-(no localStorage — deliberate simplicity).
-
-New helper `group(parent, label, kind)` in `src/tools/sidebar.ts`.
-`section(parent, title, { collapsed })` now returns the content element
-so callers keep appending the same way they did before.
-
-### Files changed
-- `src/game.ts` — `pickRespawnPos` rewritten with retry + fallback.
-- `server/src/BrawlRoom.ts` — inline respawn block replaced with new
-  `pickRespawnPos` helper; same retry + fallback strategy.
-- `src/tools/dev-api.ts` — `tickRecording` now pushes `match_ended` and
-  finalises recording on last-standing detection.
-- `src/tools/sidebar.ts` — full rewrite of the panel layout + CSS for
-  thematic groups and collapsible sections.
-- `DEV_TOOLS.md` — groups + defaults + canonical DOM-caching pattern
-  documented.
-- `BUILD_LOG.md` — this entry.
-
-### Verification
-- `npx tsc --noEmit` clean (client + server).
-- Build clean.
-- Respawn fix visually testable via lab Pattern B (axis-split): force a
-  seed that triggers pattern B, push bots to chase = eliminar uno, se
-  respawnea → debe caer en una zona válida (never in void).
-
----
-
-## 2026-04-19 — 4P online + bot-fill + waiting UX + music API stub
-
-### Scope change
-
-Originally this phase (Phase 2 in `NEXT_STEPS.md`) was planned for 25-27
-apr, with sound-integration as Phase 1 first. The user chose to pull
-Phase 2 forward (online carries more technical risk) and defer music
-hooks to the next block; MP3 assets are now in the bundle and the
-playback API is live but nothing calls it automatically yet.
-
-### Server changes
-
-- `maxClients = 4` (was 2). `MAX_PLAYERS = 4`, `WAITING_TIMEOUT = 60`.
-- New `PlayerSchema.isBot: boolean`. Bots are fully normal
-  PlayerSchemas; only the input source differs.
-- New `GameState.waitingTimeLeft: number` — counts down every tick in
-  `waiting` so the client can render the countdown.
-- `onJoin`: rejects joins outside `waiting`; resets timer on first
-  human; arms instant-start when `size === MAX_PLAYERS`.
-- `onLeave`:
-  - In `waiting` / `ended` → simple delete.
-  - In `countdown` / `playing` with ≥ 2 survivors → **bot-takeover**:
-    flip `isBot = true`, reset held input, match continues. Only below
-    2 survivors does the match end with `opponent_left`.
-- New `tickWaiting(dt)`: counts down `waitingTimeLeft`. When it reaches
-  0 with at least one human in the room, fills the empty slots with
-  bots and transitions to countdown. Empty room holds the timer.
-- New `spawnBot()`: generates `bot_N` sessionIds, picks a free spawn
-  position + a critter name not already in use.
-- New `transitionToCountdown()` centralises the waiting → countdown
-  transition and also locks the room so late `joinOrCreate` calls
-  don't land in an already-starting match.
-- New `buildPlayerSchema()` helper — same builder for humans and bots.
-- New `server/src/sim/bot.ts` → `computeBotInput(bot, allPlayers)`:
-  chase nearest, headbutt < 2u, ability1 at mid-range, ability2 when
-  surrounded. Inputs injected into the normal pipeline at the top of
-  `simulatePlaying`, so everything downstream treats bots identically
-  to humans.
-
-### Client changes
-
-- `src/critter.ts` → new `isBot: boolean = false` field.
-- `src/hud.ts` → `showWaitingScreen` / `hideWaitingScreen` /
-  `updateWaitingScreen(data)`. Lives-row renders a 🤖 badge for bots.
-  All functions are null-safe so `/tools.html` (no waiting flow)
-  doesn't break.
-- `src/game.ts`:
-  - `spawnOnlineCritter` propagates `playerState.isBot`.
-  - Per-frame sync loop reads `p.isBot` and rebuilds the lives HUD if
-    it flips mid-match (bot-takeover).
-  - Phase transition in `updateOnline`:
-    - `waiting` → `hideOverlay()` + `showWaitingScreen()` + per-frame
-      `updateWaitingScreen(data)`.
-    - any other phase → `hideWaitingScreen()`.
-    - `ended` → subtitle distinguishes bot vs human winner.
-  - New `buildWaitingScreenData(state)` — builds slot array padded to
-    `ONLINE_MAX_PLAYERS`.
-  - New const `ONLINE_MAX_PLAYERS = 4`.
-- `index.html` → new `#waiting-screen` overlay + CSS for slots,
-  countdown urgency pulse (< 10s), HUD bot badge.
-
-### Music (API only, no auto-hooks)
-
-- MP3s copied to `public/audio/intro.mp3`, `ingame.mp3`, `special.mp3`
-  (~3 MB total).
-- `src/audio.ts`:
-  - New `MusicTrack = 'intro' | 'ingame' | 'special'` type.
-  - Independent `musicGain` bus at 0.22 level, separate from `masterGain`
-    (SFX) at 0.35 level. Each bus has its own mute state.
-  - `playMusic(track)`: lazy fetch + decode, loop, crossfade 1.2s if
-    another track is active. No-op if same track.
-  - `stopMusic()`: fade out 1.2s.
-  - `preloadMusic(track)`: warm cache without playing.
-  - `isMusicPlaying(track?)`.
-  - `setMusicMuted` now actually mutes (was a TODO before).
-- No hooks yet from `game.ts` — integration is 4 calls in phase
-  transitions (documented in `ONLINE.md`). Console playable today:
-  `(await import('/src/audio.ts')).playMusic('intro')`.
-
-### Docs
-
-- New `ONLINE.md` — living doc of the online flow, edge cases, params,
-  bot AI, music plan. Goes in the root next to `DEV_TOOLS.md`.
-- `NEXT_STEPS.md` — Phase 1 reorganised (música API lista, hooks
-  pendientes), Phase 2 marked done.
-- `BUILD_LOG.md` — this entry.
-
-### Files created
-- `server/src/sim/bot.ts`
-- `ONLINE.md`
-- `public/audio/intro.mp3`, `ingame.mp3`, `special.mp3`
-
-### Files changed
-- `server/src/state/PlayerSchema.ts` (+isBot)
-- `server/src/state/GameState.ts` (+waitingTimeLeft)
-- `server/src/BrawlRoom.ts` (major: maxClients, onJoin/onLeave,
-  tickWaiting, spawnBot, transitionToCountdown, bot input injection)
-- `src/critter.ts` (+isBot field)
-- `src/hud.ts` (waiting screen API + lives badge)
-- `src/game.ts` (waiting screen wiring, bot flag sync, end-screen)
-- `src/audio.ts` (music API + musicGain bus)
-- `index.html` (waiting-screen DOM + CSS)
-
-### Verification
-- Typecheck: client + server clean.
-- Build: client 3.07 kB main (unchanged) · input-touch 813.6 kB
-  (+2.1 kB for waiting + music API) · tools 37.57 kB (unchanged).
-- Server `npx tsc` clean.
-- **Manual online testing (2-4 clients over network) pending** — see
-  `ONLINE.md` validation checklist.
-
-### Known limitations (documented, not fixed)
-- No `allowReconnection` (standby).
-- Single global room pool, no region-based matchmaking.
-- No persistence / ranking.
-- Server bot AI simpler than offline bot (deliberate — bots are fill,
-  not main experience).
-- Music integration hooks deferred to the next block — 4 calls in
-  `game.ts` phase transitions. API is ready and testable from console.
-
----
-
-## 2026-04-19 — Music hooks + "(up to 4P)" label fix
-
-Tiny follow-up while the user tests online manually.
-
-### Music hooks wired in `src/game.ts`
-
-Music now auto-switches with every phase transition (previously the API
-was ready but nothing called it). Tracks mapped:
-
-- `enterTitle()` → `playMusic('intro')` + `preloadMusic('ingame')`
-- `enterCountdown()` offline → `playMusic('ingame')`
-- `enterEnded(win)` → `playMusic('special')`; lose/draw → `playMusic('intro')`
-- Online `updateOnline` phase change:
-  - `waiting` → `playMusic('intro')` + `preloadMusic('ingame')`
-  - `countdown` → `playMusic('ingame')`
-  - `ended` win/lose/draw → `special` / `intro` / `intro`
-- `debugStartOfflineMatch` (lab) → `playMusic('ingame')`
-- `debugEndMatchImmediately` (lab) → `playMusic('intro')`
-
-The `/tools.html` lab inherits these automatically because it drives
-matches through the same `debug*` methods. No lab-specific wiring
-needed; the 🎶 HUD button covers the "silence while tuning balance"
-case.
-
-### Label fix
-
-`index.html` + `tools.html`: title mode button text changed from
-`🌐 Online Multiplayer (2P)` to `🌐 Online Multiplayer (up to 4P)` so
-it reflects the new bot-fill flow.
-
-### Files changed
-- `src/game.ts` — 7 call sites added across phase transitions.
-- `index.html` — button label.
-- `tools.html` — button label.
-- `ONLINE.md` — music section updated with the actual hook table.
-- `NEXT_STEPS.md` — music hooks marked done.
-
-### Verification
-- Typecheck + build clean.
-- Bundle delta trivial (input-touch +1.17 kB for the 7 call sites).
-- Autoplay policy: music only starts after first user gesture — the
-  title loop is silent on first load until the user clicks anything.
-  Documented in `ONLINE.md`.
-
----
-
-## 2026-04-19 — Online UX polish round (post-manual-test)
-
-User-reported issues from the 4P online smoke test. Four concrete fixes.
-
-### 1. Waiting-slot visuals: thumbnail + name instead of plain dot
-
-The waiting screen was showing a coloured circle per slot with the
-critter's signature colour, plus the name as small text. The user
-couldn't easily tell which critter each participant had picked at a
-glance. Now each slot renders the character-select 3D thumbnail (via
-the existing `getCritterThumbnail` loader, cached across pages) and
-the critter name in a larger font. The coloured tile stays as an
-instant fallback while the thumbnail async-loads. Occupied slots gently
-breathe (2.6s scale cycle) to feel alive.
-
-### 2. `T` during waiting left the overlay stuck on the title screen
-
-`enterTitle` never hid `#waiting-screen`, so pressing T to leave the
-room left the waiting overlay on top of the title — no clicks went
-through. Fix: `hideWaitingScreen()` (and `hideSpectatorPrompt()`, see
-below) are now called defensively at the top of `enterTitle` on every
-path.
-
-### 3. Spectator prompt when the local player is eliminated online
-
-Previously, if you lost all lives mid-match in an online game, there
-was no way to leave other than pressing T with no visual hint. Added
-a discreet fixed prompt at the bottom center (`#spectator-prompt`)
-that reads:
-
-> 💀 You're out · Press T to leave
-
-Pointer-events disabled (purely a hint). Shown only when
-`serverPhase === 'playing' && player !== null && !player.alive`;
-hidden automatically in any other state, and on `enterTitle` as
-defensive cleanup. Pulse animation 2.2s so it grabs attention without
-being loud.
-
-### 4. Settings buttons (SFX + music) reachable on every screen
-
-The 🔊 and 🎶 toggles were tucked inside `#hud`, which sat behind the
-full-overlays (title / character-select / waiting / end). Result:
-users couldn't mute before entering a match, which matters now that
-music starts as soon as the intro track plays. Fix:
-
-- `#hud { z-index: 20 }` — lifts the whole HUD above full-overlays.
-- `body:not(.match-active) #hud-top-left, #hud-lives { display: none }`
-  — hides the alive-count, timer, and lives rows on non-match screens
-  so only the settings cluster draws over the overlay (rest of the
-  HUD stays invisible until a match is live).
-- Same CSS applied to `tools.html` for consistency.
-
-### Files changed
-- `src/game.ts` — hideWaiting/Spectator in enterTitle, spectator show
-  logic in updateOnline, import of spectator helpers.
-- `src/hud.ts` — waiting-slot avatar + async thumbnail, spectator
-  show/hide helpers, roster import.
-- `index.html` — spectator-prompt DOM + CSS, waiting-slot CSS rework
-  (avatar 74×74, breathe animation, bigger slot), z-index + match-active
-  display rules on HUD.
-- `tools.html` — same z-index/display fix.
-
-### Verification
-- Typecheck + build clean.
-- Main game bundle unchanged at 3.07 kB. input-touch chunk +0.41 kB.
-  index.html +3.2 kB (CSS).
-- **Manual validation pending from the user** (browser testing).
-- No server changes this round — only client UX.
-
----
-
-## 2026-04-19 — Music crossfade shape + STACK.md update (Suno + Tripo)
-
-### Smoother music transitions
-
-The previous crossfade was a flat 1.2s linear ramp in both directions,
-which let both tracks sit loud together during the middle of the
-transition. The user noticed the transitions "feel weird" when going
-from intro → ingame during countdown and from ingame → special on
-victory. Rewritten in two phases:
-
-- **Phase 1 (0 → 200ms, pre-roll)**: outgoing track ducks from 1.0 →
-  0.7 (makes room in the mix); incoming track stays silent with the
-  AudioBufferSource start deferred by 200ms so the beginning of the
-  new file isn't wasted under zero gain.
-- **Phase 2 (200ms → 1200ms, main fade)**: both tracks ride exponential
-  ramps — outgoing 0.7 → MIN_GAIN, incoming MIN_GAIN → 1.0. Exponential
-  curves spend less time in the "both high" overlap zone than linear.
-
-Total crossfade duration stays at 1.2s — no perceptible change in
-pacing, but the audible "double-track" artifact shrinks to a thin
-window instead of the full 1.2s. `stopMusic()` adopts the same
-exponential shape over 1.0s.
-
-### STACK.md update
-
-Added:
-- **Suno** as the music source (3 tracks in `public/audio/`, prompts
-  iterated in Advanced mode).
-- **Tripo AI** as the 3D model source (all 9 critter GLBs in
-  `public/models/critters/`, procedural animation layer on top).
-- Full server stack (Node + Colyseus + schema) — was missing.
-- Lab subsystem files (`src/tools/*`) — was missing.
-- Online waiting-screen + spectator prompt notes in the HUD module.
-- Clarified that AI-generated content is baked into the bundle; the
-  game makes no runtime calls to Suno or Tripo.
-
-### Files changed
-- `src/audio.ts` — `playMusic` and `stopMusic` rewritten with the
-  new shape; new PRE_ROLL_SEC / MAIN_FADE_SEC / MIN_GAIN constants.
-- `STACK.md` — full refresh with AI content generation section and
-  current subsystem list.
-
-### Verification
-- Typecheck + build clean.
-- Bundle delta: input-touch +0.14 kB (crossfade constants + extra
-  setValueAtTime calls). Main game bundle still 3.07 kB.
-- Audible testing: user reported.
-
----
-
-## 2026-04-19 — Gamepad support (parallel work while user generates animations)
-
-User decided to parallelize Phase 3 animations by generating them
-externally in Mixamo/Tripo/Cascadeur. That freed my time up for
-Phase 4 work. First item pulled forward: gamepad.
-
-### Mapping
-
-Standard Xbox/PS layout via the browser's 'standard' gamepad spec.
-
-| Input | Action |
-|---|---|
-| Left stick | Move (radial deadzone 0.2, rescaled so deadzone edge = 0) |
-| A (btn 0) | Headbutt (held) + menu confirm (edge) |
-| B (btn 1) | Menu back (edge) |
-| X (btn 2) | Ability1 / J (held) |
-| Y (btn 3) | Ability2 / K (held) |
-| RB (btn 5) | Ultimate / L (held) — easier than Y mid-combat |
-| Start (btn 9) | Menu restart / R (edge) |
-| D-Pad (btn 12-15) | Menu up/down/left/right (edge) |
-| Left stick direction | Same as D-Pad, with hysteresis (on=0.6, off=0.3) |
-
-A being both headbutt (held) and confirm (edge) follows the keyboard
-convention where SPACE does both — menus route through
-`consumeMenuAction` (edge-clearing) and gameplay reads `isHeld`.
-
-### Architecture
-
-`src/input-gamepad.ts` is a **backend** for the existing input
-abstraction. It only writes via `_setMove` / `_setHeld` /
-`_pushMenuAction`, same as `input-touch.ts`. Game code (player, bot,
-etc.) never has to know a gamepad is in play.
-
-Only one gamepad supported at a time (the first connected). Split
-screen is not in the roadmap; adding a second pad later is a local
-change to this file.
-
-Polling at `requestAnimationFrame` cadence — the Gamepad API doesn't
-offer axis events, so rAF is the standard approach. Zero cost when
-no controller is connected (early-out before calling
-`navigator.getGamepads()`).
-
-Disconnect calls `clearAllHeldInputs()` so no held action stays
-pressed after the cable is yanked or the controller times out.
-
-### Toast UX
-
-`showGamepadToast(message)` in `hud.ts` pops a pill in the bottom-right
-corner (yellow border, 13px, auto-fades after 2.2s). Created lazily
-on first call — no HTML/CSS shipped until a controller actually
-connects.
-
-Triggers:
-- Connection: `🎮 <Controller id (truncated to 30 chars)>`
-- Disconnection: `🎮 Gamepad disconnected`
-
-### Integration points
-
-- `src/main.ts`: `initGamepadInput()` called once, idempotent.
-- `src/tools/main.ts`: same call, so the lab's Input panel reflects
-  real axes/buttons (the panel was already reading
-  `navigator.getGamepads()` — it just gets live data now).
-
-### Files created
-- `src/input-gamepad.ts`
-
-### Files changed
-- `src/hud.ts` — `showGamepadToast` + scoped CSS injection.
-- `src/main.ts` — `initGamepadInput` call (always on).
-- `src/tools/main.ts` — same.
-- `NEXT_STEPS.md` — Phase 4 gamepad marked done (pulled forward).
-- `BUILD_LOG.md` — this entry.
-
-### Verification
-- Typecheck + server + build: clean.
-- Main game bundle unchanged at 3.07 kB. Big shared chunk +3 kB
-  (gamepad module + toast). Chunk renamed `input-gamepad-*.js` by
-  Vite — same contents, Vite just uses the latest-added file's
-  name when naming the shared chunk.
-- Manual validation pending from user with a physical controller.
-
----
-
-## 2026-04-19 — Skeletal animation loader (ready for Mixamo/Tripo GLBs)
-
-Infrastructure to load AnimationClips shipped inside GLB files and
-play them per Critter. Ships disabled in practice until the user
-replaces a critter GLB with an animated version — the current .glb
-files have no clips, so `skeletal === null` on every critter and the
-procedural layer runs 100% like before.
-
-### New file: `src/critter-skeletal.ts`
-
-- `SkeletalAnimator` class wrapping a per-critter `AnimationMixer`.
-- `SkeletalState` type with 13 logical states: `idle`, `walk`, `run`,
-  `headbutt_anticip`, `headbutt_lunge`, `ability_1/2/3`, `victory`,
-  `defeat`, `fall`, `hit`, `respawn`.
-- `STATE_KEYWORDS` map resolves clip names by fuzzy match. Handles
-  Mixamo title-case ("Breathing Idle"), Tripo snake_case, and
-  handcrafted clip names. First keyword substring hit wins.
-- Loop states (idle/walk/run) play continuously; one-shot states use
-  `THREE.LoopOnce` with `clampWhenFinished` so the pose holds at the
-  last frame (useful for victory/defeat on the end screen).
-- `play(state, { fallback, crossfade })` — 0.15s default crossfade;
-  looping states dedupe self-triggers; one-shots auto-play the fallback
-  when they finish via a mixer `finished` listener.
-- `isHeavyClipActive()` — boolean flag used by the procedural layer
-  to suppress conflicting root transforms.
-
-### Changes: `src/model-loader.ts`
-
-- Cache entry now holds both `scene` and `animations`.
-- New public `loadModelWithAnimations(path)` returns both a cloned
-  scene and the shared clip array. `loadModel(path)` keeps its
-  existing signature — callers that don't need clips (slot-thumbnail,
-  preload) work unchanged.
-- Debug log now reports clip count and names when a GLB loads.
-
-### Changes: `src/critter.ts`
-
-- New field `skeletal: SkeletalAnimator | null` (default null).
-- `attachGlbMesh` now receives `animations`. If the array is non-empty,
-  instantiates `SkeletalAnimator` bound to the cloned group and kicks
-  off `idle`.
-- New proxy `playSkeletal(state, opts)` — safe on critters without
-  clips (no-op returns false).
-- New `tickSkeletal(dt)` — fires ability_N clip on the rising edge of
-  each ability's `active` flag, then auto-drives `idle` / `run` from
-  velocity when no heavy clip is playing and no headbutt pose is
-  active. Called before the procedural tick.
-- Event hooks: `startHeadbutt` → headbutt_anticip with fallback
-  lunge. Anticip→lunge transition → headbutt_lunge with idle fallback.
-  `startFalling` → fall. `respawnAt` → respawn → idle. `eliminate` →
-  defeat (pose locks).
-- `dispose()` disposes the mixer's actions (clips themselves are
-  shared cache-owned, do NOT dispose those).
-
-### Changes: `src/critter-animation.ts`
-
-- Reads `critter.skeletal?.isHeavyClipActive()` and skips root writes
-  (`rotation.x`, `rotation.z`, `scale.y`) when true. `scale.z` (charge
-  stretch) and `body.position.y` (bob) still apply — no clip writes
-  those channels.
-
-### Changes: `src/game.ts`
-
-- `enterEnded(result)` offline: surviving critters play `victory`
-  looping. Losers already in `defeat` pose via `eliminate()`.
-- `updateOnline` sync loop: detects `alive` true→false edge (online
-  doesn't route through `Critter.eliminate()`) and fires `defeat`.
-- On online `phase=ended`: surviving online critters play `victory`
-  with looping fallback.
-
-### How to use (for animated GLBs)
-
-1. Generate animations for a critter externally (Mixamo, Tripo Animate,
-   Cascadeur, etc.). Export as GLB with embedded clips.
-2. Rename the relevant states in the exported clip names so the
-   fuzzy resolver finds them. Mixamo's stock names ("Idle",
-   "Running", "Victory", "Dying", "Hit Reaction") already match.
-   Custom clips should contain at least one of the keywords from
-   `STATE_KEYWORDS` in `critter-skeletal.ts`.
-3. Replace `public/models/critters/<name>.glb` with the animated
-   version. No code change required.
-4. Reload. Console: `[Critter] skeletal animator attached: <Name>
-   | clips: Idle, Running, Victory, ...`
-5. The procedural layer remains active for lean/sway/scale on
-   non-heavy states, and automatically steps aside during victory /
-   defeat / ability / headbutt-lunge / fall / hit.
-
-Critters without animated GLBs continue rendering 100% procedurally
-with no behaviour change.
-
-### Files created
-- `src/critter-skeletal.ts`
-
-### Files changed
-- `src/model-loader.ts` — `loadModelWithAnimations` + cache extension.
-- `src/critter.ts` — skeletal field, `playSkeletal`, `tickSkeletal`,
-  hooks on `startHeadbutt` / anticip→lunge / `startFalling` /
-  `respawnAt` / `eliminate`, dispose.
-- `src/critter-animation.ts` — heavy-clip suppression of root writes.
-- `src/game.ts` — victory hooks on end (offline + online) + alive
-  edge → defeat (online).
-
-### Verification
-- Typecheck + build clean.
-- Shared chunk: 818.35 → 836.80 kB (+18.5 kB, gzip +5 kB) for the
-  AnimationMixer + SkeletalAnimator + Three.js animation code path.
-  Main game bundle still 3.08 kB.
-- No runtime changes to non-animated GLBs (tested by checking that
-  every critter still renders identically in offline mode).
-- Real-world validation waiting on the first animated GLB from the
-  user's Mixamo pipeline.
-
----
-
-## 2026-04-19 — Mesh2Motion integrated as `/animations` internal lab
-
-User asked for a self-hosted, in-browser animation pipeline to cover
-the "90% AI-ready" jam rule without forcing a Mixamo + Blender
-round-trip per critter. Found
-[Mesh2Motion](https://github.com/Mesh2Motion/mesh2motion-app) — an
-MIT-licensed, CC0-asset, TypeScript + Vite web app that exactly
-matches our stack. Integrated as a subpackage.
-
-### Arquitectura
-
-- New `mesh2motion/` folder in the repo. Source code is a light fork
-  (three tweaks only — see below); upstream can still be diffed +
-  merged manually.
-- Its own `package.json` and `node_modules` (git-ignored). Its `npm
-  run build` writes **directly to `../public/animations/`** via a
-  tweaked `outDir` and `base: '/animations/'`. The parent project's
-  normal `public/` → `dist/` pass then ships it at `/animations/*`
-  when Vercel serves dist.
-- `mesh2motion/README-INTEGRATION.md` spells out the three upstream
-  deltas + update workflow.
-
-### Upstream tweaks (minimal, localised)
-
-1. **`vite.config.js`** — `outDir: '../../public/animations'`,
-   `base: '/animations/'`, dropped the Cloudflare-specific
-   `PROCESS_ENV` define, dev port 5174 so it runs in parallel with
-   the game at 5173.
-2. **`src/environment.js`** — no-op replacement for the former
-   Cloudflare build globals.
-3. **`src/create.html`, `src/index.html`, `src/retarget/index.html`**
-   — Bichitos Rumble banner (INTERNAL, red, fixed at the top),
-   `<meta name="robots" content="noindex, nofollow">`, title change,
-   "← back to game" link.
-
-No changes to Mesh2MotionEngine.ts or any internal library code.
-
-### Custom additions
-
-- **`src/BichitosRosterPicker.ts`** — injects a grid of our 9 critters
-  above Mesh2Motion's load-model tools on `create.html`. Each card
-  shows the critter's colour + name + suggested rig. Click → adds an
-  `<option>` to `#model-selection`, selects it, dispatches click on
-  `#load-model-button` (reusing Mesh2Motion's existing load path).
-  A rAF-based watcher preselects the suggested rig on
-  `#skeleton-selection` once it populates. Zero monkey-patching of
-  Mesh2Motion internals.
-- **`scripts/copy-game-assets.mjs`** — pre-dev and pre-build hook that
-  mirrors `../public/models/critters/` into
-  `mesh2motion/static/models/critters/`. Makes the roster picker work
-  in both dev (5174) and production. `static/models/critters/` is
-  `.gitignore`d since it's regenerated.
-
-### Suggested rig mapping (per critter)
-
-Determined by shape + skeleton templates Mesh2Motion provides:
-
-| Critter | Rig | Coverage |
-|---|---|---|
-| Sergei | `human` | ⭐ great match |
-| Kurama | `fox` | ⭐ direct match |
-| Cheeto | `fox` | ⭐ quadruped feline |
-| Kowalski | `bird` | 🟡 may need `human` for richer animation set |
-| Trunk | `kaiju` | 🟡 closest heavy quadruped |
-| Sebastian | `spider` | 🟡 multi-leg arthropod |
-| Shelly | `kaiju` | ⚠️ no good match, Tripo Animate recommended |
-| Kermit | `human` | ⚠️ forced, Tripo Animate recommended |
-| Sihans | `human` | ⚠️ forced, Tripo Animate recommended |
-
-The hover tooltip on each card carries the "why this rig" note.
-
-### Discoverability
-
-- `/tools.html` sidebar now carries a footer link to `/animations` so
-  the two internal labs are reachable from each other.
-- `vercel.json` rewrites `/animations` and `/animations/` to
-  `/animations/create.html` (the Use-Your-Model page) since that's
-  the primary working entry. `/animations/index.html` (marketing /
-  explore) and `/animations/retarget/index.html` remain reachable.
-
-### Docs
-
-- `STACK.md` → Mesh2Motion listed under AI-assisted content
-  generation alongside Suno and Tripo. Build section notes the
-  subpackage.
-- `ASSET_PIPELINE.md` → new "Preferred tool: `/animations` (Mesh2Motion
-  integrated)" section with the workflow and rig mapping. Mixamo +
-  Blender kept as fallback.
-- `DEV_TOOLS.md` → cross-reference to the animation lab at the top.
-- `mesh2motion/README-INTEGRATION.md` → new, explains every
-  upstream delta + update workflow.
+- `scripts/import-critter.mjs` (new) — pipeline genérico.
+- `scripts/mappings/cheeto.json` (new) — fixture.
+- `scripts/import-cheeto.mjs` (removed).
+- `scripts/inspect-cheeto-source.mjs` (removed).
+- `scripts/inspect-cheeto-clips.mjs` (removed).
+- `scripts/inspect-sergei-clips.mjs` (removed).
+- `public/models/critters/cheeto.glb` — 2.66 MB / 8 clips.
+- `public/models/critters/sergei.glb.bak` (removed).
+- `public/animations/models/critters/sergei.glb.bak` (removed).
+- `tools/sergei-pose-baseline.json` (removed).
+- `tools/sergei-views/` (removed).
+- `tools/sergei-views-cleared/` (removed).
+- `package.json` — npm scripts `verify:glbs` + `import:critter`.
+- `BUILD_LOG.md` — esta entrada.
+- `SUBMISSION_CHECKLIST.md` — progreso skeletal.
+- `VALIDATION_CHECKLIST.md` — tabla de 9 bichitos.
+- `CHARACTER_DESIGN.md` — columna Anim.
 
 ### Verification
 
-- `cd mesh2motion && npm install` clean (411 packages, 11s).
-- `cd mesh2motion && npm run build` clean. Output lands in
-  `../public/animations/` with the expected 3 entry HTMLs + chunks.
-- Main game `npx tsc --noEmit` clean.
-- Main game `npm run build` clean. Main bundle still 3.08 kB;
-  `tools-*.js` +0.33 kB for the sibling link; the 38 MB of animation
-  rigs + static assets end up under `dist/animations/` and are
-  served statically by Vercel — they never touch the game's JS
-  bundle.
-- **Manual validation pending** from the user at `/animations` on
-  the deployed site.
+- `node scripts/verify-critter-glbs.mjs public/models/critters/cheeto.glb`
+  → `8 clips, 8/13 covered` (los 5 restantes caen a procedural por
+  política, no son fallos de naming).
+- `node scripts/import-critter.mjs cheeto <source> --dry-run` →
+  mapping OK, ratio 0.0048 / target 5000.
+- `npx tsc --noEmit` — clean.
+- Build (`npm run build`) — ok, sin regresión de tamaño.
 
-### Known limitations
+### Estado al cierre
 
-- Upstream updates require a manual diff-and-merge pass since we don't
-  use git subtree/submodule. Upstream changes rarely, and our deltas
-  are small and well-localised.
-- The `static/` assets from upstream (~32 MB of prebuilt rigs and
-  animations) ride along in `dist/animations/` on every deploy.
-  Only served on demand when someone hits `/animations`; no impact
-  on the game's startup.
-- 3 critters (Shelly, Kermit, Sihans) don't have a native Mesh2Motion
-  rig that fits their morphology. They'll need Tripo Animate or a
-  custom skeleton.
+- Roster animado: **2/9** al full (Cheeto 8/8, Kermit 7/8 + 1
+  procedural), resto pendiente.
+- Pipeline de import listo para Meshy / Tripo en cadena: un único
+  `import-critter.mjs` + un JSON de mapping por bichito.
+- Todo lo obsoleto del cleanup de Sergei fuera del repo.
+- **Nada de gameplay tocado** — la capa skeletal sigue opcional y
+  la procedural intacta.
 
----
+## 2026-04-21 (sesión 2) — Kowalski animado (8/8) + title polish + OG tags + BADGES_DESIGN
 
-## 2026-04-19 — Skeletal clips preview panel + VALIDATION_CHECKLIST.md
+Sesión larga pero cómoda. Un bichito nuevo importado por el pipeline
+nuevo, UI del title screen repulida, y documento de diseño para los
+cinturones de logros.
 
-Two small additions while the user validates the Mesh2Motion integration.
+### Kowalski — 8 clips integrados
 
-### Skeletal clips panel in `/tools.html`
+Tripo Animate source (71.1 MB, 1.03 M verts), pipeline genérico
+`scripts/import-critter.mjs`:
 
-Closes the loop on the animation pipeline: after exporting a GLB with
-clips from `/animations` (or Tripo Animate) and dropping it into
-`public/models/critters/`, the user can open the lab, pick that
-critter as the local player, expand the new "Skeletal clips" panel
-under OBSERVE, and:
+| NLA         | Dur (s) | Nombre final          | Estado runtime |
+|-------------|---------|-----------------------|----------------|
+| NlaTrack.007| 0.792   | `Run`                 | run            |
+| NlaTrack.002| 2.250   | `Ability3IceAge`      | ability_3      |
+| NlaTrack.004| 3.667   | `Ability1IceSlide`    | ability_1      |
+| NlaTrack.006| 3.792   | `Ability2Snowball`    | ability_2      |
+| NlaTrack.005| 5.708   | `Fall`                | fall           |
+| NlaTrack.001| 6.000   | `Defeat`              | defeat         |
+| NlaTrack.003| 13.500  | `Victory`             | victory        |
+| NlaTrack    | 15.583  | `Idle`                | idle           |
 
-- See every clip the GLB shipped, sorted alphabetically.
-- See which logical state (idle/run/victory/…) our fuzzy resolver
-  assigned each clip. Unresolved clips show `—` and a dim colour so
-  the user knows to rename them (or extend `STATE_KEYWORDS`).
-- Click the ▶ button next to any clip to preview it in the arena
-  (loop, crossfade-in 0.15s). Useful to visually confirm the
-  skeleton rigged correctly without having to trigger the matching
-  gameplay event.
-- "Stop playback" button to reset. "Refresh" button to re-inspect
-  after a new critter is selected.
+Resultado: **1645 KB / 10 683 verts** — más ligero que Cheeto
+(2665 KB) porque la malla de Kowalski es menos compleja. 8/8 clips
+pasan el runtime-static filter con margen amplio (max_var entre
+0.53 y 1.99).
 
-API additions:
+`STATE_KEYWORDS` ya cubría `ice_age`, así que 0 ajustes en el
+resolver.
 
-- `SkeletalAnimator.listClips()` returns `{ name, state }[]`.
-- `SkeletalAnimator.playClipByName(name, loop)` — bypasses the state
-  resolver; creates/reuses an Action keyed by the exact clip name.
-  Does NOT touch `currentState`, so the normal state machine (idle /
-  run auto) retakes control on the next `play(state)` call.
-- `SkeletalAnimator.stopAll()` — stops every action.
-- `DevApi.getPlayerClips / playPlayerClip / stopPlayerClips` — thin
-  proxies for the sidebar panel.
+### inspect-clips.mjs — utilidad permanente
 
-### `VALIDATION_CHECKLIST.md` — single source of truth for pending manual tests
+Para evitar volver a crear throwaways ad-hoc cada vez que queremos
+confirmar que un GLB sobrevive al filtro runtime, añadido
+`scripts/inspect-clips.mjs` — toma cualquier GLB y reporta per-clip:
+duración, channels, alive tracks, max_var, verdict (KEEP / DROP).
+Reusable, idempotente, sin side-effects.
 
-User is validating features in batch ("I'll test it all together").
-Consolidated every manual-only test I couldn't automate into one
-living checklist grouped by area (gamepad, arena shake, respawn,
-4P online flow, stats end-screen, audio crossfade, bots dropdowns,
-recorder export, skeletal loader, /animations, gameplay regression,
-settings persistence, portals). Order chosen so blocks can be tested
-independently.
+Npm alias: `npm run inspect:clips public/models/critters/<id>.glb`.
 
-Also added a "Cosas que NO están validables todavía" section listing
-features that need content we don't have yet (specific critter clips,
-signature abilities, Lighthouse run, cross-device playtest).
+### Title screen polish
 
-### Docs
+- **Meta OG / Twitter Cards** en el `<head>` siguiendo la receta
+  de @s13k para #vibejam. TODO bien visible para `public/og-image.png`
+  (1200×628) — mientras no exista la imagen, el preview cae a "no
+  image" sin romper nada.
+- **Firma `@RGomezR14`** — rediseñada como pill con blur + borde
+  dorado, handle en dorado sólido, hover eleva + brilla. Antes era
+  casi invisible (opacity 0.45).
+- **`.controls-hint`** — cada binding en un `<kbd>` pill, añadida la
+  `L` (ultimate) que faltaba + línea separada de
+  "🎮 Gamepad auto-detected — A/X/Y/RB". Opacity 0.82 (era 0.45).
+- **Responsive** — tres breakpoints (`max-width 820`, `max-width 520`,
+  `max-height 520`) que stackean character-select vertical en móvil,
+  ajustan tamaños de slots y buttons, aprietan vertical en landscape
+  corto. Sin rediseño, solo cobertura.
 
-- `NEXT_STEPS.md` → Fase 3 updated to reflect skeletal layer + lab
-  integration already shipped, and signature abilities explicitly
-  deferred until the validation batch lands.
-- Mention of `VALIDATION_CHECKLIST.md` and the Mesh2Motion lab added
-  to the "Key architecture notes" block.
+### BADGES_DESIGN.md — plan sin implementación
 
-### Files changed
+Documento de diseño para los cinturones tipo WWE que el usuario
+planteó como sistema de trofeos (en vez de ranking global):
 
-- `src/critter-skeletal.ts` — new `listClips`, `playClipByName`,
-  `stopAll` methods. Stored the raw clips list + lazy action map
-  keyed by name.
-- `src/tools/dev-api.ts` — three proxies (`getPlayerClips`,
-  `playPlayerClip`, `stopPlayerClips`).
-- `src/tools/sidebar.ts` — new Skeletal Clips panel in OBSERVE group
-  (collapsed by default). CSS for the `sk-row` list items + the
-  `▶` play buttons.
-- `VALIDATION_CHECKLIST.md` — new file.
-- `NEXT_STEPS.md` — Phase 3 refresh + pointer to the new docs.
+- **9 Champion belts** (uno por crítter, desbloqueo por N victorias).
+- **7 trofeos globales** (Speedrun, Iron Will, Untouchable,
+  Survivor, Globetrotter, Arena Apex, Pain Tolerance).
+- Storage extension a `br-stats-v2` con migración suave.
+- Prompts base para generación IA (consistencia entre los 16 assets,
+  tabla de habitat/paleta por crítter).
+- Plan por fases post-animaciones / post-signatures. Decisiones
+  abiertas tracked al final del doc.
 
-### Verification
+### `npm run check` preflight
 
-- Typecheck + build clean.
-- Main game bundle still 3.08 kB.
-- `tools-*.js`: 37.92 → 40.65 kB (+2.73 kB for the panel + refresh
-  logic).
-- Shared chunk +0.79 kB for the skeletal API extensions.
-- Works on critters with NO clips (the panel shows
-  "(no skeletal animator)" gracefully).
-- Works on critters with clips (list populated, ▶ buttons functional).
-
----
-
-## 2026-04-19 — `/animations` fixes: make the lab actually usable
-
-User tested `/animations` and found two problems:
-
-1. The URL was serving **mesh2motion's Explore page** (marketing) instead
-   of our working page. The Explore screen has the skeleton-type buttons
-   on the left side but no functional flow — user couldn't load a
-   model or do anything.
-2. Too much upstream UI was still visible: Explore / Use Your Model /
-   Use Your Rigged Model links, upload button, reference-model dropdown,
-   mesh2motion.org + GitHub + donation links — all confusing noise for
-   a tool that's supposed to be "exclusively for Bichitos Rumble".
-
-Fixed in this pass. Now the lab is genuinely wired to a single
-predictable workflow: click a critter, rig, animate, export, save.
-
-### Root cause of the Explore-page bug
-
-Vercel evaluates static files BEFORE applying rewrites. Our
-`vercel.json` had:
-
-```json
-{ "source": "/animations", "destination": "/animations/create.html" }
-```
-
-But `dist/animations/index.html` existed (from mesh2motion's Explore
-entry) so Vercel served that directly and never reached the rewrite.
-
-### Fix
-
-Dropped `main` (Explore) and `retarget` (Retarget) from the build's
-`rollupOptions.input`. Only `create.html` is a build entry now. With
-no `index.html` in `dist/animations/`, Vercel falls through to the
-rewrite and reaches our working page every time.
-
-Upstream source files (`src/index.html`, `src/retarget/`) remain in
-the repo for future upstream-diff comparisons, but they're not built
-or shipped.
-
-### UI cleanup (CSS overrides in `create.html`)
-
-Added an inline `<style>` block at the end of the `<head>` that
-hides every upstream UI element we don't want the user to see:
-
-- **Upstream `<nav>` left cluster** (mesh2motion logo, Explore /
-  Use Your Model / Use Your Rigged Model links) → hidden.
-- **Nav right cluster's** `Learn`, `Contributors`, 💗, GitHub → hidden.
-  Only the Settings dropdown (theme + light intensity) stays because
-  it's actually useful for inspecting the rigged model.
-- **Nav pseudo-heading**: `nav::before` shows `🎬 Animation Lab —
-  exclusive for Bichitos Rumble` in yellow so the page feels ours.
-- **Upload button** (`label[for="model-upload"]` + the hidden input) →
-  hidden. Our roster picker is the only way in.
-- **"Reference model" dropdown** (the upstream Human/Fox/Bird/Dragon/
-  Kaiju selector) → hidden. Our roster picker writes an option into
-  the same `<select>` element programmatically and triggers the load,
-  so the upstream selector is redundant.
-
-The hidden elements stay in the DOM so `BichitosRosterPicker.ts` can
-still reach `#model-selection` and `#load-model-button` to piggy-back
-on the existing load path. Zero mesh2motion internals modified.
-
-### Roster picker UX pass
-
-`src/BichitosRosterPicker.ts` tightened:
-
-- The picker is now framed more prominently (bigger title, clearer
-  subtitle, description of why the upload button is hidden).
-- Active critter card gets a yellow highlight (`is-active` class) so
-  the user knows which one is loaded.
-- Module-scoped `currentCritter` reference used by the export hook.
-- **Export filename override**: the hidden download link
-  (`#download-hidden-link`) gets a click listener that rewrites
-  `this.download` to `${currentCritter.id}.glb` right before the save
-  dialog opens. Upstream exports as `exported_model.glb`; after this
-  hook the browser suggests `sergei.glb`, `kurama.glb`, etc.
-- **Post-export toast**: 600ms after the Export button click, a
-  yellow toast appears at the bottom centre with:
-  - Confirmation: `<Name> exported.`
-  - Exact destination path in `<code>`: `public/models/critters/<id>.glb`.
-  - Auto-hides after 6s.
-- The toast also includes the reminder that reloading the game picks
-  up the clips automatically, so the user doesn't wonder what to do
-  next.
+`tsc --noEmit && verify:glbs && vite build` en un comando. Gate
+obvio antes de merge `dev → main`.
 
 ### Files changed
 
-- `mesh2motion/vite.config.js` — `rollupOptions.input` reduced to
-  just `create`. Dev server opens `/create.html` directly instead of
-  the marketing page.
-- `mesh2motion/src/create.html` — the inline `<style>` overrides.
-- `mesh2motion/src/BichitosRosterPicker.ts` — updated with tracking,
-  export rename, toast, active-card highlight.
-- `mesh2motion/README-INTEGRATION.md` — rewrote with the user flow,
-  architecture, edit list, upstream-update playbook.
-- `DEV_TOOLS.md` — the sibling-tool note at the top now points at
-  the README with the full details.
-- `BUILD_LOG.md` — this entry.
+- `scripts/inspect-clips.mjs` (new) — utility permanente.
+- `scripts/mappings/kowalski.json` (new) — fixture.
+- `public/models/critters/kowalski.glb` — 1.65 MB, 8 clips.
+- `BADGES_DESIGN.md` (new) — diseño de logros tipo cinturón.
+- `index.html` — meta OG/Twitter + signature + controls + responsive.
+- `package.json` — `inspect:clips` + `check` npm scripts.
+- `SUBMISSION_CHECKLIST.md`, `VALIDATION_CHECKLIST.md`,
+  `CHARACTER_DESIGN.md`, `BUILD_LOG.md` — cobertura 3/9.
 
 ### Verification
 
-- `cd mesh2motion && npm run build` clean. Output is just:
-  `create.html`, `assets/create-*.{js,css}`, `animations/`, `rigs/`,
-  `models/`, `images/`, `animpreviews/`, `test-files/`.
-  No `index.html` or `retarget/` in the dist.
-- Main game `npm run build` clean. Game bundle unchanged at 3.08 kB;
-  nothing about the game's own runtime changed in this pass.
-- Manual verification pending from the user at
-  `https://www.bichitosrumble.com/animations` after Vercel redeploys.
+- `node scripts/inspect-clips.mjs public/models/critters/kowalski.glb`
+  → 8/8 clips alive.
+- `node scripts/verify-critter-glbs.mjs public/models/critters/kowalski.glb`
+  → 8 clips, 8/13 covered.
+- `npm run check` — tsc + verify + build todos clean.
+- Bundle: index.html 37 kB → 45 kB (+8 kB por meta tags + CSS nuevo).
 
----
+### Estado al cierre
 
-## 2026-04-19 — Pre-collapse shake + seismic rumble (replaces red blink)
+- Roster animado: **3/9** al full (Cheeto, Kermit, Kowalski) +
+  Sergei idle-only. 5 pendientes: Kurama, Sebastian, Shelly,
+  Sihans, Trunk.
+- UI del title screen visualmente más profesional, firma del autor
+  respira, social cards listas para cuando llegue la imagen hero.
+- Badges congelados en diseño; no implementados aún.
 
-User's request: replace the red blink warning with a small localised
-shake of the fragments about to fall, plus a rumble SFX. "Más visceral
-y comunica mejor que se viene abajo".
+## 2026-04-21 (sesión 3) — Trunk animado + OG image live + cleanup + stats polish
 
-### Visual — shake replaces blink
+Sesión tarde. Cuatro tareas pequeñas y un bichito más.
 
-Old: fragments in a warning batch pulsed between green and red with
-`warningPeakRate = 16 Hz`, covering the material's base colour.
+### Trunk — 8 clips integrados
 
-New: `shakeBatch(indices, progress, t)` writes only to
-`fragmentGroup.position.x/z` and to `material.emissive`. Base colour
-untouched. Movement is the composition of three sine waves (28/13/7 Hz)
-with per-fragment phase offsets so the batch looks like distributed
-ground tremor instead of rigid-body oscillation. Amplitude caps at
-**0.08 world units** (~8 cm) — visible but tiny enough that the player
-still stands and walks normally on top.
+Tripo Animate, pipeline estándar:
 
-Emissive is a warm orange (`0xff7733`, not `0xff1111`) that ramps from
-0 → ~0.65 intensity with the same progress curve. Reads as "this is
-heating up / cracking", not "DANGER alarm".
+| NLA         | Dur (s) | Nombre final            | Estado runtime |
+|-------------|---------|-------------------------|----------------|
+| NlaTrack.005| 1.292   | `Run`                   | run            |
+| NlaTrack.007| 1.958   | `Ability3GroundPound`   | ability_3      |
+| NlaTrack.001| 3.875   | `Ability2TrunkGrip`     | ability_2      |
+| NlaTrack.006| 4.583   | `Ability1TrunkRam`      | ability_1      |
+| NlaTrack.002| 5.542   | `Defeat`                | defeat         |
+| NlaTrack    | 5.583   | `Idle`                  | idle           |
+| NlaTrack.003| 5.708   | `Fall`                  | fall           |
+| NlaTrack.004| 12.792  | `Victory`               | victory        |
 
-**Physics untouched.** `isOnArena(x, z)` and `pointInFragment()` look
-at `ArenaLayout.fragments` (static geometry), not at
-`fragmentGroup.position`. Shaking the mesh doesn't move the collision
-surface. Confirmed by following the call graph.
+Resultado: 1.58 MB, 10 762 verts, 8/8 clips alive (max_var 0.78–2.00).
+`STATE_KEYWORDS` ya resolvía `pound` y `grip`, 0 cambios en el
+resolver.
 
-### Audio — `playArenaWarning(duration)` in `audio.ts`
+**Nota de diseño**: la animación `Ability2TrunkGrip` incluye el giro
+de 180° + lanzamiento, pero NO incluye el estiramiento horizontal de
+la trompa (el "latigazo"). Cuando toquemos el comportamiento de
+Trunk Grip, el stretch irá procedural vía `glbMesh.scale` similar
+al `chargeStretch` existente. Anotado en `CHARACTER_DESIGN.md` para
+no olvidarlo cuando se abra la ability.
 
-New synthesised SFX layered from three elements:
-1. **Sub sine** (45 Hz → 38 Hz slow sweep) — the deep shift.
-2. **Low-pass-filtered white noise** with the cutoff opening from
-   180 → 320 Hz across the duration — crumbling earth texture getting
-   closer to break.
-3. **3 random "crack" chirps** (triangle osc, 160–210 Hz → 55 Hz
-   exponential drop, ~140 ms each) scattered across the window for
-   bite.
+### OG image live
 
-Total volume fades in 0.25 s, sustains, fades out 0.35 s so the
-stop doesn't click. Auto-stops at `now + duration + 0.05s`.
+- `public/og-image.png` — 1200×628 top-anchored desde
+  `Portada/BichitosRumble_Horizontal.png` (1536×1024). 1.92 MB.
+- `scripts/make-og-image.mjs` gana `--position` flag para recrop
+  (default centre; usé top por el título arriba).
+- Meta tags ya apuntan a `/og-image.png`, así que X / Discord /
+  WhatsApp pickear la card en cuanto deploye.
 
-### Edge detection — synced with visual
+### Preview polish (character-select)
 
-- **Offline** (`Arena.update`): when `timer >= batch.delay` flips
-  `warningActive` to true, we capture `warningStartedAt` and call
-  `playArenaWarning(FRAG.warningDuration)`.
-- **Online** (`Arena.syncFromServer`): when `warningBatch` transitions
-  from any value to a new one (including -1 → valid), same capture
-  and SFX fire. When it transitions back to -1, `warningStartedAt`
-  resets to null.
+- `SkeletalAnimator.isLoopingClipActive()` nuevo. Cuando un clip
+  idle/walk/run está activo, el procedural bob/bounce se zeroan
+  para no doblar la animación del clip. Fix visible de "brinco"
+  en Cheeto/Kermit/Kowalski/Trunk en character-select.
+- Preview canvas 320×280 → 380×340, pedestal más alto/ancho con
+  rim dorado + glow suelo, tres puntos de luz en vez de dos,
+  cámara más apretada (FOV 35→32, z 5.5→4.8), halo radial CSS
+  detrás del canvas.
 
-Both flows share `shakeBatch` and use a uniform `progress` =
-`(now - warningStartedAt) / FRAG.warningDuration` so offline and
-online render identical behaviour.
+### End-screen stats polish
 
-### Cleanup paths covered
+- ⚡ Headbutts · ✨ Abilities · 💀 Falls · 🔁 Respawns con iconos.
+- Count-up animado 0 → target en 700 ms easeOutCubic.
+- Panel eleva con slide+fade 350 ms, borde dorado, separadores
+  verticales entre stats, value 22→26 px con glow.
+- Signature `setEndMatchStats(stats)` sin cambios — zero refactor
+  downstream.
 
-- `collapseCurrentBatch` calls `restoreBatch(indices)` BEFORE flipping
-  visibility, so no stuck shake offset or emissive survives a collapse.
-- `restoreBatch` also resets `fragmentGroup.position` to (0,0,0) so if
-  a collapsed fragment comes back (restart, debug) it renders at the
-  original slot.
-- `buildFromSeed` and `reset` null out `warningStartedAt`.
+### Dead-code audit
 
-### Files changed
+Con el gate `noUnusedLocals + noUnusedParameters` ahora on en
+`tsconfig.json`. Removed: `stopMusic`, `isMusicPlaying`, `getStats`
+(re-add cuando BADGES Phase 1), `hasGamepadConnected`,
+`isPortalExpanded`, `GRID_SLOTS`, + 4 unused locals (portalLegendEl,
+RosterEntry/CRITTER_PRESETS imports, lastServerPhase). Privatizados:
+setSfxMuted/setMusicMuted, applyKnockbackTilt/applyHitFlash,
+hasTouchSupport/isNarrowViewport. Bundle net neutral (minifier ya
+tree-shook).
 
-- `src/arena.ts` — `blinkBatch` → `shakeBatch`, `warningStartedAt`
-  field, SFX hook in both driver paths, cleanup in
-  `collapseCurrentBatch` / `buildFromSeed` / `reset`.
-- `src/audio.ts` — new exported `playArenaWarning(duration)`.
+### Title screen polish
 
-### Verification
+- Firma `@RGomezR14` ahora pill con borde dorado + blur, handle en
+  dorado sólido, hover eleva.
+- `.controls-hint` con kbd-pills por binding, añadido L (ultimate)
+  + línea de gamepad auto-detected.
+- Meta OG + Twitter tags completos en `<head>`.
+- Tres breakpoints responsive nuevos (820 / 520 / 520-height).
 
-- Typecheck + build clean.
-- Main game bundle unchanged at 3.08 kB. Shared chunk +1.9 kB (shake
-  trig math + SFX synth code).
-- No server-side changes — this is a pure client visual/audio polish,
-  online matches mirror the behaviour via `syncFromServer` which
-  already received `arenaWarningBatch` from the server.
-- User-validated on next test session (queued behind their Mixamo
-  pipeline work).
+### Tooling nuevo
+
+- `scripts/inspect-clips.mjs` — per-clip variance report reusable
+  (sustituye throwaways ad-hoc).
+- `scripts/make-og-image.mjs` — 1200×628 generator con sharp.
+- `scripts/import-critter.mjs` (sesión 1) — pipeline genérico con
+  `scripts/mappings/<id>.json` convention.
+- `npm run` aliases: `verify:glbs`, `inspect:clips`, `import:critter`,
+  `og`, `check`.
+
+### Cobertura al cierre
+
+**4/9 bichitos full** (Cheeto 8/8, Kermit 7/8 + Hypnosapo procedural,
+Kowalski 8/8, Trunk 8/8). **Sergei** 1/8 (solo Idle). Pendientes
+**5/9**: Kurama, Sebastian, Shelly, Sihans.
+
+Total skeletal: **32 / 72** estados (44%).
+
+### Validation adds
+
+Añadidas al `VALIDATION_CHECKLIST.md`:
+- §15 Title screen polish (firma / controles / responsive)
+- §16 Social card OG (X / Discord / validator)
+- §17 Preview polish (no double bob / model + pedestal prominence)
+- §18 End-screen stats polish (icons / count-up / panel lift)
+- §19 Dev tooling nuevo (npm scripts)

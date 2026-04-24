@@ -7,7 +7,202 @@ partidas reales con varios clientes, archivos reales, etc).
 Orden de los bloques = orden recomendado para hacer el batch. Cada
 bloque se puede probar independientemente.
 
-Última actualización: 2026-04-19 (tras integración Mesh2Motion).
+Última actualización: **2026-04-24 noche** (handoff — sheet HUD v2
+integrada, selector cerrado, Trunk feel pass en espera).
+
+---
+
+## ⭐ TANDA 2026-04-24 — lo más importante ahora mismo
+
+Consolidación de la sesión larga 2026-04-24. La sheet HUD v2
+(`HUD_mejorado.png`) quedó integrada y el selector + HUD in-match +
+calibrate lab se verificaron por screenshot MCP (viewport 1280×800).
+Esta sección lista los tests que el usuario (y no yo) tiene que
+hacer para firmar que nada se rompió entre cliente real y móvil.
+
+**Requisito**: `preview_resize` a desktop antes de cualquier
+verificación MCP. En navegador real no hace falta.
+
+### T1 · Selector con miniaturas 2D (grid + info pane)
+
+- [ ] Los 9 slots muestran la **cabeza chibi 2D** del pack HUD (no
+      snapshot 3D) con nítidez. Trunk elefante, Kurama zorro, Sergei
+      gorila, Shelly tortuga, Kermit rana, Sihans topo con gafas,
+      Kowalski pingüino, Cheeto tigre, Sebastian cangrejo.
+- [ ] Debajo de cada icon NO se ve texto tipo "5. ELEPHANT". Sólo
+      icon + fondo neutro tenue uniforme.
+- [ ] Slot seleccionado tiene marco dorado + tick sutil.
+- [ ] Stats pane a la derecha: `SPEED / WEIGHT / POWER` con 5 pips
+      cada uno, **alineados** en columnas consistentes entre las 3
+      filas (problema anterior de desalineo cerrado).
+- [ ] Abilities J/K/L con chip dorado del keybind + nombre + icon a
+      la izquierda.
+- [ ] Pedestal 3D a la derecha rotando con el crítter seleccionado.
+
+### T2 · Selector — fallback sin sprite sheet
+
+- [ ] Renombrar temporalmente `public/images/hud-icons.png` a `_bak`
+      y recargar la página (o usar DevTools Network → Block request
+      URL para simular 404).
+- [ ] Los slots deben volver al **thumbnail 3D renderizado** como
+      fallback (esto confirma que la lógica `body.has-hud-sprites`
+      sigue funcionando).
+- [ ] Restaurar el PNG.
+
+### T3 · Selector — interacción
+
+- [ ] `←` / `→` navega entre slots y el preview 3D swap correcto
+      (sin pop de tamaño).
+- [ ] Click / tap en un slot distinto lo selecciona sin confirmar.
+- [ ] Click / tap en el slot ya seleccionado confirma → countdown.
+- [ ] Drag en el canvas del preview rota el crítter suavemente.
+- [ ] Refresh del navegador → arranca en title, no se congela nada.
+
+### T4 · `/calibrate.html` (roster calibration lab)
+
+- [ ] Navegar a `https://localhost:5173/calibrate.html` o en prod
+      `https://www.bichitosrumble.com/calibrate.html`.
+- [ ] Se cargan los 9 críttrs en grid 3×3 con sus labels flotantes.
+- [ ] Click en un crítter lo selecciona; la sidebar derecha activa
+      los sliders `SCALE / PIVOTY / ROTATION Y`.
+- [ ] Mover sliders modifica el crítter en vivo.
+- [ ] Slider `IN-GAME TARGET` + botón "RE-FIT ALL TO TARGET"
+      recomputa el auto-fit de los 9 a la nueva altura.
+- [ ] Botón "EXPORT ROSTER.TS SNIPPET" copia al portapapeles un
+      bloque de comentarios tipo `// Sergei (sergei): scale: …`.
+- [ ] Scroll del ratón hace zoom en la cámara; drag la orbita.
+
+### T5 · HUD in-match — consistencia 4 avatares
+
+- [ ] Empezar una partida offline vs bots con 4 críttrs.
+- [ ] Las 4 esquinas muestran el avatar chibi del crítter (NO
+      thumbnail 3D difuminado). Jugador local con borde dorado.
+- [ ] Cada corner: avatar nítido + nombre en mayúsculas + 3
+      corazones rojos + badge 🤖 si es bot.
+- [ ] Ningún corner pisa el Vibe Jam badge (bottom-right) ni el
+      portal legend (top-left).
+- [ ] Cuando un bot muere, su corner se atenúa (opacity 0.35).
+
+### T6 · Tamaño in-game uniforme
+
+- [ ] En una partida con 4 críttrs distintos (p. ej. Trunk, Cheeto,
+      Kermit, Sergei), los 4 se perciben de **tamaño similar**
+      verticalmente. Trunk no debe parecer gigante; Cheeto no debe
+      parecer diminuto.
+- [ ] Ninguno "flota" sobre el suelo del arena; ninguno se "hunde"
+      (feet at ground level).
+- [ ] Si detectas desbalance claro: anotar crítter y valor
+      aproximado en `ERROR_LOG.md` + abrir `/calibrate.html` para
+      exportar un snippet a aplicar en `roster.ts`.
+
+### T7 · Arena packs cosméticos
+
+- [ ] 5 partidas consecutivas offline. Cada una debería salir con
+      un pack distinto (jungle / frozen_tundra / desert_dunes /
+      coral_beach / kitsune_shrine). No siempre todos en 5 runs
+      (random puede repetir) pero al menos 3 biomas distintos en 5
+      partidas.
+- [ ] Cada pack muestra su skybox (sunset desert, aurora tundra,
+      ocean beach, shrine dusk, jungle) SIN plano marrón uniforme.
+- [ ] El **outerRing** bajo los props (anillo decorativo de radius
+      12–18) se ve con la textura del ground del pack.
+- [ ] Los props decorativos están **encima** del outerRing, no
+      flotando ni hundidos.
+- [ ] Cuando el arena colapsa, los props asociados al batch caen
+      con el fragment correspondiente.
+
+### T8 · Partidas online 4P (consistencia entre clientes)
+
+- [ ] 2 clientes (desktop + móvil o 2 tabs) entran al mismo room.
+- [ ] El pack cosmético es el **MISMO** en ambos clientes (random
+      decidido por el server, sincronizado via `arenaPackId`).
+- [ ] Los props están en la **misma posición** en ambos clientes
+      (layout determinístico seed + packId).
+- [ ] El auto-fit de tamaños es consistente.
+
+### T9 · Cross-device smoke test
+
+- [ ] **Desktop** (Chrome / Firefox): selector + partida OK.
+- [ ] **Móvil touch** en landscape: joystick + 3 botones + tap en
+      el selector funcionan. Los avatares del HUD se ven nítidos.
+- [ ] **Gamepad** conectado al desktop: stick navega menús, A
+      confirma, X/Y son abilities.
+
+### T10 · Trunk — firma por playtest (2026-04-25)
+
+Mini playtest dedicado de 3-5 min antes de cerrar Trunk y pasar a
+Kurama. Valores aplicados: `CHARACTER_DESIGN.md §"Trunk — feel pass"`.
+
+**Plan de prueba (ejecución ~3 min)**
+
+1. `npm run dev` → portada → **vs Bots** → seleccionar **Trunk** → SPACE.
+2. **Aislar J**: activa sólo Trunk Ram (`J`) 3 veces seguidas. Ignora
+   bots, enfócate en la sensación.
+3. **Aislar K**: activa sólo Earthquake (`K`) 3 veces. Desde parado
+   (cerca de bots) y en movimiento (esquivando).
+4. **Probar L solo**: activa Stampede (`L`) y deja correr los 3 s
+   completos del buff sin usar J/K. Observa específicamente los
+   primeros ~2 s del buff.
+5. **Combo K→L**: activa K, espera 1 s, activa L. Verifica si se
+   confunden visualmente.
+6. **Contraste Sergei**: volver al title (`T`), seleccionar Sergei,
+   partida nueva, repetir J/K. Comparar sensación mentalmente.
+
+**Sign-off (4 puntos del usuario — tachar mentalmente)**
+
+- [ ] **J pesado pero no ridículo** — Trunk se abalanza con peso;
+      mass ×3.5 se siente al chocar (el bot sale claramente más lejos
+      que con Sergei). NO se ve cómico ni dibujo animado acelerado.
+- [ ] **K se lee como Earthquake/stomp** — anim de pisotón clara, NO
+      la anim de agarre. Shockwave ring notablemente más ancho que el
+      de Sergei (4.5 vs 3.5 u).
+- [ ] **L NO se confunde con K** — el stomp breve al inicio de L puede
+      leerse como "planta patas antes de embestir". Si lo lees como
+      "otra vez K", hay problema.
+- [ ] **Trunk ≠ Sergei** — Trunk se siente más pesado en todos los
+      ejes (dash, knockback, buff). Sergei es ágil balanced; Trunk es
+      bulldozer. Identidad reconocible.
+
+Los 4 ticks = **Trunk DONE**. Actualizar
+`CHARACTER_DESIGN.md §"Trunk — feel pass"` retirando el "pendiente de
+firma" + `NEXT_STEPS.md` moviendo Trunk a "zonas cerradas".
+
+**3 riesgos conocidos — síntoma · causa · ajuste**
+
+Si alguno de los siguientes síntomas aparece, aplicar el ajuste y
+repetir el mini playtest. No son cambios grandes — son 1-2 números.
+
+| Riesgo | Síntoma observable | Causa probable | Ajuste concreto (1 línea) |
+|---|---|---|---|
+| **L stomp previo al buff** | "K y L parecen la misma animación al inicio" / "el pisotón al activar L es confuso, interrumpe el flow del buff" | Clip `Ability3GroundPound` se dispara 1.96 s al activar frenzy (auto-resuelto por prefix porque es el único clip con nombre `Ability3*`). | **Opción A (barata)**: añadir `ability_3: 'Idle'` dentro de `trunk: {}` en `src/animation-overrides.ts`. El idle clip se reproduce clamped y el buff emissive rojo toma over inmediatamente. **Opción B (más correcta)**: modificar `src/critter.ts tickSkeletal` para skip `skeletal.play(slotState)` cuando `state.def.type === 'frenzy'` sin clip específico. Fuera de scope estrecho; evaluar post-jam. |
+| **Ram demasiado cartoon** | "J se ve acelerado como dibujo animado" / "el movimiento de colmillos es cómico" / "el clip se nota atropellado" | `clipPlaybackRate: 5.0×` sobre clip de 4.58 s es agresivo. Visualmente bien a 0.92 s efectivo, pero el eye puede leerlo como speedup artificial. | En `src/abilities.ts CRITTER_ABILITIES.Trunk[0]`: bajar `clipPlaybackRate` de `5.0` a **`3.5`** (clip efectivo 1.31 s). Si se siente que la ability acaba antes del clip, subir también `duration: 0.35 → 0.45` para alinear. |
+| **Earthquake windUp muy largo** | "K se siente lento en arrancar" / "muero antes de que la onda salga" / "en arena pequeña late-game no llego a usarla" | `windUp: 0.60` s es telegraph deliberado (bruiser anticipation). Puede ser excesivo cuando el espacio se reduce o contra assassins. | En `src/abilities.ts CRITTER_ABILITIES.Trunk[1]`: bajar `windUp` de `0.60` a **`0.45`**. Si siguen quejándose, también `cooldown: 7.5 → 6.5`. |
+
+**Si aparece un síntoma que NO está arriba**: documentar en
+`ERROR_LOG.md` y NO tocar nada. Abrir ticket separado.
+
+### T11 · HUD de abilities (pendiente — solo si se ejecuta)
+
+Cuando el usuario pase `ability-icons-v2.png` y se haya integrado:
+
+- [ ] Los 3 slots J/K/L muestran el icon **grande en círculo**
+      (~64 px) en vez de un icon chico con texto al lado.
+- [ ] El keybind (J/K/L) queda legible como chip pegado al círculo.
+- [ ] El nombre de la ability queda debajo / al lado, legible.
+- [ ] **Cooldown radial**: cuando la ability está en CD, un sweep
+      oscuro circular se pinta ENCIMA del icon y se retrae conforme
+      recupera. Al llegar a 0% el icon queda 100% visible.
+- [ ] Al completar el CD hay un flash dorado corto (si se añadió).
+- [ ] Consistencia entre los 9 críttrs (todos con el mismo
+      tratamiento visual del sweep).
+
+### T12 · Screenshots promocionales (deferred — pre-ship)
+
+Tomar screenshots limpios para el jam listing:
+- [ ] Selector con un crítter llamativo seleccionado.
+- [ ] Partida 4P con arena en colapso parcial.
+- [ ] End screen con victoria.
+- [ ] 1–2 en móvil para demostrar cross-device.
 
 ---
 
@@ -17,6 +212,90 @@ bloque se puede probar independientemente.
       [bichitosrumble.com](https://www.bichitosrumble.com)).
 - [ ] `npm install` si toca.
 - [ ] `npm run dev` levanta sin errores en http://localhost:5173.
+
+---
+
+## A · Character-select (post UI pass 2026-04-23)
+
+- [ ] Los 9 bichitos en el preview del podio se ven **a tamaño similar**
+      (no hay unos gigantes que se salen del frame y otros minúsculos).
+- [ ] Ningún bichito sale **tumbado fuera del anillo** o cortado por arriba.
+- [ ] Los Meshy (Kurama, Sergei, Sihans, Sebastian) se ven con **color plano**
+      vibrante, NO oscuros/metálicos.
+- [ ] Botones `🔊` y `🎶` visibles en el title, character-select, waiting
+      y end-screen (reachable en todas las pantallas — antes se ocultaban
+      con el resto del HUD fuera de match).
+- [ ] En el info pane cada bichito muestra **3 abilities** (J/K/L) con
+      chips dorados. Sergei, Kurama, Shelly mantienen su Frenzy original;
+      Trunk→Stampede, Kermit→Hypnosapo, Sihans→Diggy Rush, Kowalski→
+      Blizzard, Cheeto→Tiger Rage, Sebastian→Red Claw.
+- [ ] Cuando `/images/ability-icons.png` carga, cada ability row se ve con
+      su ilustración a la izquierda del chip. Si el asset falta, el row
+      colapsa sin icono (sin hueco vacío).
+
+---
+
+## B · In-match HUD (post UI pass 2026-04-23)
+
+- [ ] Las 4 vidas van en las **4 esquinas** del screen, no en columna
+      central arriba.
+- [ ] El corner del **local player** tiene borde/glow **dorado** (is-local).
+- [ ] Cada corner muestra avatar 70×70, nombre del crítter, corazones
+      16px, y badge 🤖 si es bot.
+- [ ] Timer central arriba es **grande** (~44px) y dorado; Alive count
+      pequeño debajo en mayúsculas.
+- [ ] Ningún corner pisa al **Vibe Jam badge** (bottom-right) ni al
+      **portal legend** (top-left).
+- [ ] Vibe Jam badge se ve más grande que antes (17px font, padding
+      generoso) y al hover salta arriba con fondo dorado.
+- [ ] Cuando un crítter muere su corner pierde opacidad (0.35).
+
+---
+
+## C · Countdown drop desincronizado
+
+- [ ] Al arrancar match, los 4 bichitos NO aterrizan todos a la vez.
+- [ ] El local player cae inmediato; los bots caen escalonados
+      (~0.15–0.35s de diferencia entre ellos).
+- [ ] Durante la caída cada crítter reproduce el clip `fall`
+      (brazos arriba / cuerpo extendido según el clip de su source).
+- [ ] Al tocar suelo: dust puff + thud + crítter pasa a idle animado
+      (NO se queda congelado en la pose final del fall).
+
+---
+
+## D · Pause menu offline (ESC)
+
+- [ ] En `vs Bots` mid-match, **ESC** abre un overlay con card central:
+      ▶ Resume · ↻ Restart match · ⏏ Quit to title.
+- [ ] Resume → cierra el overlay y sigue la partida desde el mismo frame
+      (sin saltos ni pérdida de cooldowns).
+- [ ] Restart match → reinicia limpio.
+- [ ] Quit to title → vuelve al title screen (limpia portal context).
+- [ ] ESC en **online** NO abre pause (intencional: server autoritativo).
+- [ ] ESC en title / select / waiting / end sigue siendo 'back' normal.
+
+---
+
+## E · Portal "Press P" hint
+
+- [ ] Durante una partida ofline (vs bots), al mirar el portal verde
+      (esquina trasera-derecha) ves **"PRESS P"** flotando encima del
+      label "NEXT GAME", con un bob suave.
+- [ ] Al pulsar P el hint desaparece y el portal se expande.
+- [ ] Al volver a pulsar P, el portal se minimiza y el hint reaparece.
+- [ ] En mobile/touch el texto cambia a **"TAP 🌀"**.
+
+---
+
+## F · Sprites + favicon
+
+- [ ] La pestaña del navegador muestra el favicon **BR** (marca cartoon).
+- [ ] Cuando `/images/hud-icons.png` está servido, los emojis 🔊 🎶 🏆 🤖
+      se reemplazan donde esté integrado el sprite (actualmente sólo en
+      ability icons; el resto sigue con emojis por diseño progresivo).
+- [ ] Si borras el archivo y recargas, los emojis siguen funcionando
+      (fallback).
 
 ---
 
@@ -163,25 +442,54 @@ Necesita 2-4 browsers abiertos contra el server (Railway) o local.
 
 ---
 
-## 9 · Skeletal animation loader (cuando llegue el primer GLB animado)
+## 9 · Skeletal animations por crítter (validación progresiva)
 
-**Requisito**: primer GLB animado desde `/animations` (o Mixamo/Tripo)
-reemplazando `public/models/critters/<id>.glb`.
+Estado actual del roster — 8 estados skeletal target por bichito
+(`idle`, `run`, `ability_1`, `ability_2`, `ability_3`, `victory`,
+`defeat`, `fall`). Los demás estados son procedurales por política
+(ver `SUBMISSION_CHECKLIST.md`).
 
-- [ ] Recarga el juego. Consola debería decir:
-      `[Critter] skeletal animator attached: <Name> | clips: Idle, Running, Victory, ...`
-- [ ] Character select: el crítter respira con el clip de idle (no el
-      bob procedural simple).
-- [ ] En partida: mueves y ves el clip de run ciclar. Paras → idle.
-- [ ] Haces headbutt → si hay clip `lunge` / `punch` / `attack` se
-      reproduce.
-- [ ] Ganas → clip `victory` se reproduce y se queda en la pose final.
-- [ ] Pierdes → clip `defeat` / `death` se queda en la pose final.
-- [ ] Falls → clip `fall` si existe.
+| Bichito    | Cobertura | Notas                                         |
+|------------|-----------|-----------------------------------------------|
+| Cheeto     | 8 / 8     | Tripo Animate, full kit                       |
+| Kermit     | 7 / 8     | ab_3 Hypnosapo = flicker procedural (sin clip)|
+| Kowalski   | 8 / 8     | Tripo Animate, full kit (Ice Slide/Snowball/Ice Age) |
+| Trunk      | 8 / 8     | Tripo Animate, full kit (Ram/Grip/Ground Pound) |
+| Shelly     | 6 / 8     | Tripo Animate, idle/run/ULTI MegaShell/vic/def/fall. Ab_1 Shell Charge + Ab_2 Shell Shield procedurales (spin + hide limbs via bones) |
+| Kurama     | 8 / 8     | **Meshy AI** (primer import via-gltfpack), full kit (Fox Dash/Mirror Trick/Copycat ULTI). 14 MB (meshopt-compressed) |
+| Sebastian  | 6 / 8     | **Meshy AI** via-gltfpack. Ab_1 Claw Rush + ULTI Crab Slash procedurales (dash lateral + glbMesh.scale.z stretch). 15 MB |
+| Sihans     | 8 / 8     | **Meshy AI** via plain route (source was 15.8 MB). Full kit (Burrow Rush / Tunnel / Diggy Diggy Hole). 6.5 MB |
+| Sergei     | **8 / 8** | **Meshy AI** regen 2026-04-24 via plain route (source 9 MB, 3642 verts). Full kit (Gorilla Rush / Shockwave / Frenzy). 9.2 MB |
 
-**Si el clip no se reproduce**: revisa el mapping
-`STATE_KEYWORDS` en `src/critter-skeletal.ts`. Posible que el nombre
-del clip no caiga en ningún keyword.
+### 9.1 Por cada bichito animado — checklist común
+
+Para Cheeto y Kermit hoy (y cada bichito nuevo conforme entre):
+
+- [ ] Consola al cargar el juego con ese crítter:
+      `[Critter] skeletal animator attached: <Name> | clips: Idle, Run, ...`
+- [ ] Character select: el crítter respira con su clip de `Idle` (no con
+      el bob procedural genérico).
+- [ ] En partida: al moverte cicla `Run`; al pararte vuelve a `Idle`.
+- [ ] Al ejecutar `J` (ability_1) se reproduce el clip correspondiente.
+- [ ] Al ejecutar `K` (ability_2) se reproduce el clip correspondiente.
+- [ ] Al ejecutar `L` (ability_3 / ULTI) se reproduce su clip — **excepto
+      Kermit**, que usa el efecto emissivo Hypnosapo (procedural).
+- [ ] Al ganar → `Victory` se queda en la pose final.
+- [ ] Al perder → `Defeat` se queda en la pose final.
+- [ ] Al caer al vacío → `Fall` mientras dura la animación de caída.
+- [ ] Headbutt y hit siguen siendo procedurales (squash/stretch + tilt).
+- [ ] Console **NO** muestra `[SkeletalAnimator] dropped N static` para
+      ese crítter (indica clips muertos → hay que reimportar).
+
+### 9.2 Si un clip no se reproduce
+
+1. `node scripts/verify-critter-glbs.mjs public/models/critters/<id>.glb`
+   → mira qué estados quedan sin resolver.
+2. Si es un clip esperado, revisa el mapping en
+   `scripts/mappings/<id>.json` y re-importa con
+   `node scripts/import-critter.mjs <id> <source.glb>`.
+3. Si el nombre del clip es raro, amplía keywords en
+   `STATE_KEYWORDS` (`src/critter-skeletal.ts`) o renombra en el mapping.
 
 ---
 
@@ -275,6 +583,414 @@ Si hay tiempo, revisar que la integración sigue funcionando.
 - [ ] Entrada por `?portal=true&ref=...` → salta title/select, entra
       directo a match, portal naranja (return) disponible.
 - [ ] End-screen con portales: P = next game, B = return to previous.
+
+### 13.1 Warp transition (2026-04-22)
+
+El redirect del portal ya no es un hard-cut — corre un overlay warp
+de ~700 ms con el color del portal antes de navegar.
+
+- [ ] Cruzar el portal verde (exit): pantalla muestra **radial burst
+      verde** desde el centro, zoom + blur, canvas del juego se lava
+      (satura + desatura + blur). A los ~650 ms navega a vibej.am.
+- [ ] Cruzar el portal naranja (return): misma transición pero en
+      **naranja**, redirige al `?ref=` original.
+- [ ] El overlay NO bloquea clicks del HUD antes de dispararse
+      (`pointer-events: none`).
+- [ ] Si se cruza por accidente durante un knockback con portales
+      minimizados (< 0.7 expansion), **no pasa nada** — el trigger
+      solo se arma con `isUsable = true`.
+
+---
+
+## 14 · Blender MCP — Sergei rigged (pendiente validación ingame)
+
+Estado al cierre 2026-04-20: Sergei re-exportado con armature desde
+Blender vía MCP. El GLB pesa 1.06 MB (antes 434 KB). No tiene clips
+todavía — sólo skeleton + weights. Validación manual que falta:
+
+### 14.1 Render en character select
+
+- [ ] `npm run dev` arranca sin errores.
+- [ ] Character select carga, Sergei visible en la tercera card.
+- [ ] Al seleccionar Sergei, el preview rota sin deformarse. **Crítico**:
+      el mesh debe seguir a la rotación del carrusel (bug previo: la
+      malla se quedaba estática en el origen mientras el group rotaba).
+- [ ] Silueta de Sergei en el podio es comparable en tamaño a los
+      demás críters (el bump `scale 2.0 → 2.3` + `pivotY 1.0` debería
+      igualar las sombras al suelo).
+- [ ] Los pies no flotan ni se clipean bajo el podio.
+
+### 14.2 Render en partida
+
+- [ ] "vs Bots" → Sergei → arena carga.
+- [ ] Sergei idle: respira con el bob procedural (`critter-animation.ts`).
+      No debería haber clip skeletal (aún no hay).
+- [ ] Sergei corre: movimiento, lean, sway — procedural layer intacto.
+- [ ] Headbutt: anticipación + lunge procedural.
+- [ ] Abilities J/K/L (Gorilla Rush / Shockwave / Frenzy): ejecutan
+      sin deformaciones extrañas.
+- [ ] Caída al vacío + respawn OK.
+
+### 14.3 Consola
+
+- [ ] **NO** debe aparecer
+      `[Critter] skeletal animator attached: Sergei | clips: ...` —
+      no hemos metido clips todavía. Si aparece, el GLB incluyó
+      animaciones por accidente o el loader detectó basura.
+- [ ] **Sí** puede aparecer el log normal de `GLTFLoader` de Three
+      indicando que cargó animaciones = 0.
+- [ ] **Cero** errores rojos relacionados con `SkinnedMesh`,
+      `SkeletonUtils`, `bones`, `weights`.
+
+### 14.4 Verifier audit
+
+- [ ] `node tools/verify-critter-glbs.mjs` (o `npm run verify:glbs`
+      si existe) termina sin errores críticos sobre `sergei.glb`.
+- [ ] Reporte muestra skinned mesh presente + bone count > 0.
+
+### 14.5 Regresión de otros críters
+
+Los 8 críters restantes (Kurama, Trunk, Shelly, Kermit, Sihans,
+Kowalski, Cheeto, Sebastian) siguen sin rig. El fix de
+`SkeletonUtils` en `model-loader.ts` no debería afectarles porque
+el `source.traverse` detecta ausencia de `SkinnedMesh` y usa el
+clone plain. Verificar:
+
+- [ ] Seleccionar cada uno de los 8 restantes en character select →
+      rota correctamente (igual que antes del cambio).
+- [ ] Al menos 2 críters no-Sergei jugados ingame: todo normal.
+
+### 14.6 Próximo paso si 14.1–14.5 pasa
+
+Añadir primer clip (idle) al GLB de Sergei. Opciones:
+1. Bajar idle humanoide de Mixamo → importar en Blender → retarget
+   al armature actual → export.
+2. Claude + bpy genera keyframes idle sintéticos.
+
+Tras añadir clip, repetir esta sección — esta vez SÍ debe salir
+el log `skeletal animator attached: Sergei | clips: idle` y el
+panel Skeletal clips del lab debe listarlo.
+
+### 14.7 Pose state limpio (importante post-cleanup 2026-04-20)
+
+Sergei.glb ya pasó por la limpieza de pose state. Verificar que sigue
+limpio:
+
+- [ ] Cargar `public/models/critters/sergei.glb` en Blender:
+      `File > Import > glTF 2.0` (o open the .blend si lo tienes).
+- [ ] Modo Object, frame 0, sin action activa: el mesh debe verse
+      en T-pose limpio (cuerpo vertical, brazos horizontales).
+      NO debe verse acuclillado / hunched.
+- [ ] Edit Mode → Pose Mode: ambos deben coincidir
+      (rest pose == pose state).
+- [ ] Si se ve torcido, correr `tools/blender-mcp/critter-cleanup.py`
+      con `CRITTER_ID = "sergei"`.
+
+### 14.8 Filtro runtime defensivo
+
+Aunque el GLB esté limpio, el filtro de `SkeletalAnimator` debe seguir
+operativo para futuros crítters. Verificar:
+
+- [ ] Console del navegador en partida con cualquier crítter:
+      NO debe haber log `[SkeletalAnimator] dropped N static`
+      (ni para Sergei ni para los demás).
+- [ ] Si en algún crítter futuro aparece, indica que su GLB tiene
+      placeholders y hay que correr `critter-cleanup.py` para
+      limpiar el source.
+
+---
+
+## 15 · Title screen polish (2026-04-21)
+
+Tres cambios visibles al cargar la web:
+
+### 15.1 Firma `@RGomezR14`
+- [ ] Visible en la esquina inferior-izquierda de la pantalla de
+      título. Debe verse como un pill con fondo semi-transparente y
+      borde dorado sutil (no como texto plano casi-invisible).
+- [ ] El handle `@RGomezR14` aparece destacado en **dorado sólido**.
+- [ ] Hover: eleva 2px, borde dorado brillante, handle pasa a blanco.
+- [ ] Click abre `x.com/RGomezR14` en pestaña nueva.
+
+### 15.2 Controles en la pantalla de título
+- [ ] Bajo los botones de modo se ve una fila de bindings con
+      `<kbd>` pills (WASD move · SPACE headbutt · J K abilities ·
+      L ultimate · R restart). Cada tecla en su propia pill dorada.
+- [ ] Debajo de esa fila, en tipo más chico, aparece una línea
+      `🎮 Gamepad auto-detected — left stick · A headbutt · X/Y
+      abilities · RB ultimate`.
+- [ ] En touch mode (móvil): solo ves "Joystick to move · on-screen
+      buttons for headbutt, abilities and ultimate".
+
+### 15.3 Responsive breakpoints nuevos
+Probar que el title + character-select no rompen en:
+- [ ] Desktop 1080p (baseline): layout horizontal intacto.
+- [ ] Tablet landscape ~900×600: stacks funcionan, controles legibles.
+- [ ] Phone landscape ~820×390: character-select stackea vertical,
+      controles-hint no se sale, título + botones caben.
+- [ ] Phone landscape ~520×360: versión comprimida, nada overflow.
+
+---
+
+## 16 · Social card OG (2026-04-21)
+
+Pegado: `public/og-image.png` — 1200×628, top-anchored. Validar
+cuando la URL deploye en Vercel (dev preview o prod).
+
+- [ ] Pegar la URL del juego (`bichitosrumble.com` o el preview de
+      Vercel) en [cards-dev.twitter.com/validator](https://cards-dev.twitter.com/validator).
+      Debe renderizar la card con el título "Bichitos Rumble", la
+      descripción y la imagen hero. Cover amarillo legible.
+- [ ] Pegar la misma URL en un chat de Discord — el embed debe
+      mostrar la imagen + título + descripción.
+- [ ] Si el crop no convence, regenerar con
+      `npm run og -- <source> --position centre` (o `bottom`/`left`/etc.)
+      y redeploy. X cachea la card hasta 7 días: para forzar refresh,
+      bumpear el query param en `index.html` (`og-image.png?v=2`).
+
+---
+
+## 17 · Character-select preview polish (2026-04-21)
+
+Dos issues reportados + arreglados. Validar:
+
+### 17.1 No double bob en críttrs con Idle skeletal
+- [ ] Seleccionar **Cheeto**: el critter respira con el clip Idle.
+      NO se ve como si saltara en el sitio (antes: procedural bob
+      + clip bob se doblaban).
+- [ ] Lo mismo con **Kermit**, **Kowalski**, **Trunk**, **Sergei**.
+- [ ] Críttrs sin skeletal (Kurama, Sebastian, Shelly, Sihans):
+      mantienen su bob procedural normal, no parecen congelados.
+
+### 17.2 Modelo + pedestal más prominente
+- [ ] Canvas del preview visiblemente más grande (antes 320×280,
+      ahora 380×340).
+- [ ] Pedestal más alto + más ancho, con **rim dorado** en el borde
+      superior, glow suave en el suelo detrás.
+- [ ] Tres puntos de luz (key cálida + rim fría + fill desde abajo) —
+      el chin del bichito no queda en sombra total.
+- [ ] Halo radial dorado suave detrás del canvas (CSS ::before), el
+      modelo no flota en un campo oscuro.
+- [ ] Drag-to-rotate sigue funcionando (hover cursor grab, pointer
+      capture al arrastrar).
+
+---
+
+## 18 · End-screen stats polish (2026-04-21)
+
+Bloque de contadores de partida reestilizado.
+
+- [ ] Jugar una partida completa offline. En el end-screen ver 4 stats
+      en fila: **⚡ Headbutts · ✨ Abilities · 💀 Falls · 🔁 Respawns**.
+- [ ] Cada stat tiene ICONO ARRIBA + VALOR grande dorado + LABEL
+      pequeño en mayúsculas debajo.
+- [ ] Al aparecer el end-screen los números **cuentan desde 0**
+      hasta su valor final en ~700 ms (easeOutCubic). No saltan al
+      valor directo.
+- [ ] El panel entero **se desliza hacia arriba + fade** durante la
+      aparición (350 ms).
+- [ ] Separadores verticales sutiles entre stats, borde dorado tenue
+      en el panel, glow dorado en los valores.
+- [ ] Funciona igual en partidas online (BrawlRoom end callback).
+
+---
+
+## 19 · Dev tooling nuevo (2026-04-21)
+
+Solo para tu verificación cuando toque. No gameplay:
+
+- [ ] `npm run verify:glbs` — lista los 9 GLBs con clips resolved
+      contra los **8 estados target** (política post-2026-04-22).
+      Pasa `--all-states` para el scan legacy de 13 estados.
+- [ ] `npm run inspect:clips public/models/critters/<id>.glb` —
+      reporta per-clip (duración, channels, alive, max_var, verdict).
+- [ ] `npm run import:critter <id> <source.glb>` — import via
+      `scripts/mappings/<id>.json` si existe, o `--map` inline.
+- [ ] `npm run og -- <source>` — genera `public/og-image.png`
+      1200×628 (flags `--position` y `--fit` disponibles).
+- [ ] `npm run compress:audio` — re-encoda MP3s de `public/audio/`
+      con ffmpeg-static. Por defecto VBR 4 (~128 kbps); `--quality 5..7`
+      para ahorrar más si la pérdida audible no molesta. `--dry-run`
+      muestra plan.
+- [ ] `npm run test:smoke` — Playwright chromium headless, recorre
+      title → vs Bots → match starts en ~15 s. Primera vez:
+      `npx playwright install chromium` (~120 MB, one-off).
+- [ ] `npm run check` — `tsc + verify:glbs + build` todo seguido.
+      Gate obvio antes de merge `dev → main`.
+
+---
+
+## 21 · Badges — WWE-belt achievement system (Phase 3+4)
+
+Scaffolding completo sin Phase 5 (arte real). Los iconos son emojis
+placeholder hasta que lleguen las PNGs finales.
+
+### 21.1 End-screen toast (Phase 3)
+- [ ] Juega una partida offline hasta ganar. Al llegar al end-screen,
+      si desbloqueaste badges, aparece un toast arriba-centro con:
+      icono placeholder + "NEW BELT UNLOCKED" + nombre + descripción.
+- [ ] El toast tiene entrada animada (slide + scale pulse), shine
+      sweep dorado y se auto-dismisea tras 6 s.
+- [ ] Click sobre el toast lo cierra antes del auto-dismiss.
+- [ ] Tras cerrarse, `localStorage.getItem('br-stats-v2')` ya NO tiene
+      `recentlyUnlocked` (debería ser `null`).
+- [ ] Si sigues ganando partidas y NO hay nuevos unlocks, el toast
+      NO aparece (silencio correcto).
+
+### 21.2 Hall of Belts (Phase 4 light)
+- [ ] En character-select, arriba-derecha hay un botón pill **🏆 Belts**.
+      Click (o tecla **B**) abre el modal.
+- [ ] El modal muestra los 16 belts en grid (desktop: 4 columnas; tablet:
+      3 columnas; móvil: 2 columnas).
+- [ ] Belts **desbloqueados** en amarillo/dorado con icono a color.
+      Belts **bloqueados** en gris con candado 🔒.
+- [ ] Hover sobre cada slot muestra tooltip nativo (desktop) con
+      nombre + descripción. En touch, la descripción ya está debajo
+      del nombre siempre visible.
+- [ ] Arriba del grid: contador `X / 16 UNLOCKED`.
+- [ ] Cerrar con: **Esc**, **B**, click en el ✕, o click en el
+      backdrop semi-transparente.
+- [ ] Al reabrir tras ganar una partida nueva, los counters y
+      unlocks reflejan el cambio (no queda cacheado).
+
+### 21.3 Test de condiciones (manual, localStorage editor)
+Ruta rápida sin jugar 20 partidas:
+
+1. DevTools → Application → localStorage → key `br-stats-v2`.
+2. Edit el JSON — p.ej. set `totalWins: 20` y cualquier bichito con
+   `wins: 5`.
+3. Recarga y juega 1 partida completa ganando: los badges que
+   cumplan condición quedarán en `unlockedBadges` + toast el último.
+
+### 21.4 Migración v1 → v2
+- [ ] Si tienes un `br-stats-v1` en localStorage (usuario pre-2026-04-22),
+      al cargar el juego los contadores v1 migran a v2 sin pérdida.
+      Verificable limpiando v2 primero: `localStorage.removeItem(
+      'br-stats-v2')` y recargando — los picks/wins viejos siguen
+      visibles en la UI de stats del end-screen.
+
+### 21.5 Badges en modo online
+- [ ] Ganar una partida en Online Multiplayer (puede ser contra bots
+      de bot-fill tras el waiting timer). Consola debe mostrar
+      `[Badges] unlocked (online): <ids>` si cumpliste condiciones.
+- [ ] El toast aparece en el end-screen online, igual que offline.
+- [ ] Los contadores que requieren timing (Speedrun Belt) usan la
+      ventana `serverPhase transitioned to 'playing'` → `'ended'`
+      — no cuentan el tiempo de waiting ni de countdown.
+
+### 21.6 Lab panel — trigger + reset
+- [ ] `/tools.html` → Tuning → **Badges** (colapsado por defecto).
+      Aparece la lista de 16 badges con columna `Lock/Unlock` en
+      cada fila + contador `X / 16 unlocked` arriba.
+- [ ] Botón `Trigger toast demo` dispara el toast con el primer
+      badge locked. Usa el mismo code path que producción.
+- [ ] `Unlock all` → los 16 se marcan unlocked en la lista. Hall of
+      Belts al abrirlo muestra los 16 desbloqueados.
+- [ ] `Lock all (reload)` → recarga la página, los 16 quedan locked.
+- [ ] `Clear ALL stats (reload)` → confirm() dialog, y al aceptar
+      recarga con localStorage de stats limpio (picks + wins + badges
+      a 0).
+
+### 21.7 Pain Tolerance — verificación del fix
+Regresión cubierta tras el fix 2026-04-23:
+- [ ] Jugar varias partidas **ganando cada una** mientras acumulas
+      headbutts recibidos. A los 10+ totales la consola debe mostrar
+      `[Badges] unlocked: pain-tolerance`.
+- [ ] Verificable en DevTools:
+      `JSON.parse(localStorage['br-stats-v2']).byCritter.<name>.hitsReceived`
+      crece tras cada win. Antes del fix se quedaba en 0 para siempre.
+
+---
+
+## 22 · Parts inspector (2026-04-22)
+
+- [ ] `npm run inspect:parts` lista mesh + node names de los 9 GLBs.
+      El reporte debe mostrar:
+  - Cheeto / Kowalski / Trunk con meshes segmentados
+    (`Mesh_0.001`..`Mesh_N.001`) — la segmentación sobrevivió al
+    export de Tripo Animate.
+  - Kurama / Sebastian / Shelly / Sihans / Sergei / Kermit con mesh
+    único mergeado (`<id>_Mesh_Data`).
+  - Bones con nombres semánticos (`Head`, `L_Hand`, etc.) en todos.
+  - Sebastian con bones crab-específicos (`L_Claw`, `R_Leg1..4`, …).
+- [ ] `PROCEDURAL_PARTS.md` documenta qué se puede manipular por
+      crítter cuando toque abrir signature abilities.
+- [ ] `/tools.html` → Tuning → **Critter parts** (colapsado).
+      Seleccionar un crítter (start match first) → aparece la lista
+      de bones con slider (0.01..1.5). Arrastrar `Head` a 0.01 de
+      Shelly → la cabeza "desaparece" dentro del caparazón. `Reset
+      bones` → vuelve al estado original.
+
+---
+
+## 23 · Visual polish pass (2026-04-23)
+
+Los cambios cosméticos / presentación de la sesión 2026-04-23.
+Pruebas rápidas de una pasada al final del QA.
+
+### 23.1 Favicon
+- [ ] La pestaña del navegador muestra el SVG (chibi en chip navy
+      con gradient gold→red, speed lines). NO el default blanco de
+      Vite.
+- [ ] En Safari < 18 (fallback): la pestaña se ve sin favicon pero
+      la página carga sin errores de consola (`favicon.svg` devuelve
+      200 OK).
+
+### 23.2 Countdown 3-2-1 con gradiente
+- [ ] Arrancar una partida offline. El overlay `3` aparece con
+      gradiente rojo pop → `2` ámbar → `1` amarillo → `GO!` verde
+      con radial burst tras el 1.
+- [ ] Los dígitos se dimensionan con `clamp(140px, 22vw, 260px)`.
+      Visibles en desktop + tablet landscape sin overflow.
+- [ ] La animación `pop` (scale-down + slight overshoot) se dispara
+      cada vez que cambia el dígito, no cuando el DOM se setea al
+      mismo valor.
+
+### 23.3 Drop-from-sky + dust puff
+- [ ] Al pasar `Get Ready!` → `3`, los críters empiezan elevados
+      a 12-15 unidades del suelo y caen con gravedad.
+- [ ] Cada crítter al tocar suelo (y=0) dispara un **dust puff**
+      (ring dorado expansivo) + un thud (SFX `headbuttHit`). Los
+      tiempos de landing están staggered (~1 s tras el countdown).
+- [ ] Al llegar a `GO!`, todos ya están en suelo. Ninguno queda
+      flotando (safety snap a y=0 en la transición).
+
+### 23.4 Skydome + sensación de plataforma flotando
+- [ ] El fondo ingame es una gradiente vertical (cielo alto cyan →
+      medio más claro → horizonte cálido → dusk-blue abajo). NO el
+      flat dark blue anterior.
+- [ ] Las nubes distantes (disco plano) se ven debajo de la arena al
+      cámara normal. Contribuyen al efecto "altura".
+- [ ] Iluminación: hemisphere + key cálido + rim azul. Los críters
+      tienen tono cyan arriba y tono cálido abajo (no un single
+      directional flat).
+
+### 23.5 Fragmentos caen al vacío
+- [ ] Cuando un batch colapsa (offline + online) los fragmentos caen
+      con gravedad + rotación. Desaparecen al pasar y=-25.
+- [ ] Mientras caen, el player puede caminar por encima de fragmentos
+      vivos (los que no están en caída) sin colisión fantasma.
+- [ ] Nada queda flotando tras un reset de seed. `buildFromSeed`
+      limpia el pool de `fallingFragments`.
+
+### 23.6 Resource preloads
+- [ ] Network tab: al primer load aparecen las 9 entries de
+      `/models/critters/<id>.glb` como `prefetch` (low priority) y
+      `/audio/intro.mp3` como `preload` (high priority).
+- [ ] La música `intro` arranca sin gap perceptible al primer clic
+      en "vs Bots" (vs 200-400ms de gap antes del preload).
+- [ ] El primer match arranca sin el "loading critter X…" porque
+      los GLBs ya están en caché (network tab muestra `from prefetch
+      cache`).
+
+### 23.7 Lab P/W/S read-only
+- [ ] `/tools.html` → Tuning → **P/W/S stats**. Tabla de 9 filas
+      + header. Cada fila muestra nombre, (P, W, S) con colores
+      (verde +, rojo -, gris 0), y las columnas `spd / mass / hb`
+      derivadas.
+- [ ] Sergei en (0, 0, 0) → 13.0 / 1.00 / 14.
+- [ ] Sebastian en (2, -2, 1) → 15.5 / 0.60 / 18.
+- [ ] Shelly en (0, 2, -2) → 8.0 / 1.40 / 14.
 
 ---
 

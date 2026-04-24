@@ -11,7 +11,9 @@ const _matrixWorldInv = /*@__PURE__*/ new Matrix4()
 
 class CustomSkeletonHelper extends LineSegments {
   private readonly joint_points: Points
-  private readonly jointTexture = new TextureLoader().load('/images/skeleton-joint-point.png')
+  // [BICHITOS-FORK] relative URL so it resolves to /animations/images/... in
+  // both dev and prod. Absolute `/images/...` hits 404 when base is /animations/.
+  private readonly jointTexture = new TextureLoader().load('images/skeleton-joint-point.png')
   private hide_right_side_joints: boolean = false
 
   constructor (object: any, options = {}) {
@@ -71,6 +73,20 @@ class CustomSkeletonHelper extends LineSegments {
     pointsGeometry.setAttribute('position', pointPositions)
 
     this.joint_points = new Points(pointsGeometry, pointsMaterial)
+
+    // [BICHITOS-FORK] Disable frustum culling. When `hide_right_side_joints`
+    // is on (mirror mode), `updateMatrixWorld` writes NaN into the positions
+    // of right-side joints. three.js computes bounding sphere lazily for
+    // culling and gets radius=NaN from those NaN positions, then treats the
+    // whole Points mesh as out-of-frustum and never renders it — the
+    // symptom is "the draggable joint dots never appear in Position Joints /
+    // Edit Skeleton even though the bones work fine". Turning culling off
+    // lets WebGL handle the NaN points per-vertex (they're just not drawn)
+    // while keeping the valid joints visible. Same for the parent
+    // LineSegments which shares the NaN-on-mirror path.
+    this.joint_points.frustumCulled = false
+    this.frustumCulled = false
+
     this.add(this.joint_points)
   }
 

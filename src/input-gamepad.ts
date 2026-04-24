@@ -124,10 +124,6 @@ export function initGamepadInput(): void {
   requestAnimationFrame(poll);
 }
 
-export function hasGamepadConnected(): boolean {
-  return pad.connected;
-}
-
 // ---------------------------------------------------------------------------
 // Per-frame tick
 // ---------------------------------------------------------------------------

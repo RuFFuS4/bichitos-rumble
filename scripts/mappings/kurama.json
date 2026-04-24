@@ -1,0 +1,10 @@
+[
+  { "dur": 0.633, "name": "Defeat" },
+  { "dur": 0.933, "name": "Victory" },
+  { "dur": 1.033, "name": "Ability1FoxDash" },
+  { "dur": 1.167, "name": "Ability3Copycat" },
+  { "dur": 2.333, "name": "Idle" },
+  { "dur": 2.667, "name": "Ability2MirrorTrick" },
+  { "dur": 3.067, "name": "Run" },
+  { "dur": 4.000, "name": "Fall" }
+]

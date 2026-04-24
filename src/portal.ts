@@ -15,8 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { getDisplayRoster, type RosterEntry } from './roster';
-import { CRITTER_PRESETS } from './critter';
+import { getDisplayRoster } from './roster';
 
 // ---------------------------------------------------------------------------
 // URL params (read once at module load)
@@ -142,11 +141,6 @@ export function resolvePortalCharacter(): number {
 export function togglePortalExpanded(): void {
   expanded = !expanded;
   console.debug('[Portal] expanded =', expanded);
-}
-
-/** Current expansion target (not the smoothed value). */
-export function isPortalExpanded(): boolean {
-  return expanded;
 }
 
 /** Whether a start portal exists in this match (for HUD legend). */
@@ -324,6 +318,18 @@ function createPortalMesh(color: number, label: string): THREE.Group {
   const particles = createPortalParticles(color);
   group.add(particles);
 
+  // "Press P" hint floating even higher, visible ONLY when portal is
+  // minimized — tells the user how to open it. Inverts opacity vs the
+  // main label (which only appears when expanded). On touch we show
+  // "TAP 🌀" instead since mobiles have no keyboard.
+  const isTouch = typeof document !== 'undefined'
+    && document.body?.classList.contains('touch-mode');
+  const hintText = isTouch ? 'TAP 🌀' : 'PRESS P';
+  const hintSprite = createLabelSprite(hintText, 0xffdc5c);
+  hintSprite.scale.set(1.4, 0.38, 1);
+  hintSprite.position.y = PORTAL_RADIUS * 2 + 1.25;
+  group.add(hintSprite);
+
   return group;
 }
 
@@ -387,12 +393,13 @@ function animatePortal(portal: THREE.Group, _dt: number): void {
   const s = 0.5 + T * 0.5;
   portal.scale.setScalar(s);
 
-  // (children: [torus, disc, glow, label, particles])
+  // (children: [torus, disc, glow, label, particles, hint])
   const torus = portal.children[0] as THREE.Mesh;
   const disc = portal.children[1] as THREE.Mesh;
   const glow = portal.children[2] as THREE.Mesh;
   const label = portal.children[3] as THREE.Sprite;
   const particles = portal.children[4] as THREE.Points;
+  const hint = portal.children[5] as THREE.Sprite | undefined;
 
   // Slow rotation on the torus
   torus.rotation.z = t * 0.4;
@@ -415,6 +422,24 @@ function animatePortal(portal: THREE.Group, _dt: number): void {
   // Label: fade in with expansion
   const labelMat = label.material as THREE.SpriteMaterial;
   labelMat.opacity = 0.35 + T * 0.65;
+
+  // Press-P hint: inverse of the main label — most visible when the
+  // portal is minimized (tells the user HOW to open it), fades away
+  // once it's already expanded. Gentle bob so the eye catches it.
+  if (hint) {
+    const hintMat = hint.material as THREE.SpriteMaterial;
+    const visibility = 1 - T; // 1 when minimized, 0 when expanded
+    hintMat.opacity = 0.25 + visibility * 0.75 + Math.sin(t * 2.4) * 0.08 * visibility;
+    // Counter the group's uniform scale so the hint always reads at
+    // ~the same screen size even though the portal itself scales with
+    // expansion. The sprite sits outside the bright torus so it's
+    // legible even when everything else is dim.
+    const groupScale = portal.scale.x || 1;
+    const baseX = 1.4, baseY = 0.38;
+    hint.scale.set(baseX / groupScale, baseY / groupScale, 1);
+    // Float it slightly up/down for life
+    hint.position.y = PORTAL_RADIUS * 2 + 1.25 + Math.sin(t * 1.8) * 0.08;
+  }
 
   // Particles: fade + orbit around the vertical ring (plane XY)
   const pointsMat = particles.material as THREE.PointsMaterial;
@@ -466,7 +491,7 @@ function buildParams(): string {
 function redirectToPortalHub(): void {
   const url = `https://vibej.am/portal/2026?${buildParams()}`;
   console.debug('[Portal] redirecting to:', url);
-  window.location.href = url;
+  triggerWarpAndRedirect(EXIT_COLOR, url);
 }
 
 function redirectToRef(): void {
@@ -475,7 +500,33 @@ function redirectToRef(): void {
   const separator = refUrl.includes('?') ? '&' : '?';
   const url = `${refUrl}${separator}${buildParams()}&portal=true`;
   console.debug('[Portal] redirecting to ref:', url);
-  window.location.href = url;
+  triggerWarpAndRedirect(START_COLOR, url);
+}
+
+/**
+ * Play the warp overlay animation in the portal's colour, then navigate.
+ *
+ * The animation duration (650 ms) matches the CSS keyframe in index.html
+ * (`@keyframes portal-warp`). We schedule the redirect 50 ms past the
+ * animation end so the browser has time to commit the final frame before
+ * the page navigates away — otherwise some engines blank the canvas
+ * mid-transition and the user sees a flash of empty dark.
+ *
+ * The overlay is fire-and-forget: once this runs, `redirected = true` is
+ * already set by updatePortals(), so further frames won't retrigger.
+ * If the user closes the tab during the animation, nothing leaks — the
+ * class just stays on the body until the next page load.
+ */
+function triggerWarpAndRedirect(color: number, url: string): void {
+  const hex = '#' + color.toString(16).padStart(6, '0');
+  document.documentElement.style.setProperty('--warp-color', hex);
+  document.body.classList.add('portal-warp-active');
+  // 650 ms animation + 50 ms safety buffer = 700 ms total. Fast enough
+  // that the user doesn't feel they're waiting; long enough to feel like
+  // a transition, not a glitch.
+  setTimeout(() => {
+    window.location.href = url;
+  }, 700);
 }
 
 // ---------------------------------------------------------------------------

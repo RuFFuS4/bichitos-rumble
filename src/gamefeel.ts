@@ -259,7 +259,7 @@ function bounceEase(t: number, overshoot: number): number {
 
 const activeTilts = new WeakMap<Critter, { elapsed: number }>();
 
-export function applyKnockbackTilt(critter: Critter): void {
+function applyKnockbackTilt(critter: Critter): void {
   activeTilts.set(critter, { elapsed: 0 });
 }
 
@@ -364,7 +364,7 @@ export function updateCameraShake(
 
 const hitFlashTimers = new WeakMap<Critter, number>();
 
-export function applyHitFlash(critter: Critter): void {
+function applyHitFlash(critter: Critter): void {
   hitFlashTimers.set(critter, FEEL.hitFlash.duration);
 }
 

@@ -55,10 +55,12 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Trunk',
     glbPath: './models/critters/trunk.glb',
     baseColor: 0x8c8c8c,
-    // Same transform defaults as Sergei initially — tune with __tune() in dev
-    // once we see it rendered. Tripo3D exports tend to share orientation.
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Bruiser — largest silhouette (mass 1.4). Tripo Animate meshes have
+    // their origin at the feet (minY=0 in GLB space), so pivotY=0 lands
+    // feet on floor regardless of scale — different from Sergei whose
+    // mesh is centered (pivotY=1.335).
+    scale: 3.3, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
@@ -68,8 +70,16 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Kurama',
     glbPath: './models/critters/kurama.glb',
     baseColor: 0xff6633,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Trickster — Meshy AI mesh, imported 2026-04-24. Source bounds
+    // Y [0, 2.95], height 2.95u, feet-at-origin (Mixamo convention).
+    // scale 0.54 matches the ~1.6u chibi target the roster aims for;
+    // Tripo models were already ~1u tall so they used scale 2-3.
+    // rotation 0: Meshy/Mixamo character faces -Z (standard "forward"
+    // in three.js), so no rotation needed to line up with game forward.
+    // If playtest shows Kurama facing away from the camera in
+    // character-select, flip to Math.PI.
+    scale: 0.54, rotation: 0, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Trickster',
     tagline: 'Fast, sly, unpredictable.',
@@ -84,11 +94,15 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Sergei',
     glbPath: './models/critters/sergei.glb',
     baseColor: 0xb5651d,
-    // Model bounds: Y [-0.49, 0.49], center at origin, front faces ±X
-    // pivotY = |minY| × scale to place feet at ground level
-    // rotation = -π/2 to turn from X-facing to Z-facing (game forward)
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Meshy AI regen landed 2026-04-24, full 8-clip kit (Gorilla Rush /
+    // Shockwave / Frenzy / Idle / Run / Victory / Defeat / Fall).
+    // Source bounds Y [0, 2.414], feet-at-origin (Mixamo convention).
+    // scale 0.66 targets the in-game ~1.6u chibi baseline; pivotY back
+    // to 0 (previous 1.335 was for the old Tripo centered mesh).
+    // rotation 0: Mixamo characters face -Z, same as every other
+    // Meshy import in the roster.
+    scale: 0.66, rotation: 0, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Balanced',
     tagline: 'Strong and agile. No weakness.',
@@ -98,11 +112,11 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Shelly',
     glbPath: './models/critters/shelly.glb',
     baseColor: 0x2d8659,
-    // Shelly's GLB was authored with her forward slightly off-axis from
-    // the other Tripo3D models. rotation=0 leaves her facing ~15° right;
-    // a small negative offset aligns her torso with the camera.
-    scale: 2.0, rotation: -0.4, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Tank turtle (mass 1.5) — second largest silhouette after Trunk.
+    // New Tripo Animate rig aligns her forward axis with the others.
+    // Tripo mesh origin at feet, pivotY=0.
+    scale: 3.1, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Tank',
     tagline: 'Heavy and wise.',
@@ -116,9 +130,10 @@ const ROSTER: RosterEntry[] = [
     id: 'kermit',
     displayName: 'Kermit',
     glbPath: './models/critters/kermit.glb',
-    baseColor: 0x44cc44,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    baseColor: 0x9c3cee,
+    // Controller frog (mass 1.0) — medium size. Tripo mesh origin at feet.
+    scale: 2.6, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Controller',
     tagline: 'Venomous area denial.',
@@ -133,8 +148,12 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Sihans',
     glbPath: './models/critters/sihans.glb',
     baseColor: 0x8b6914,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Trapper mole (mass 1.15). Meshy AI mesh imported 2026-04-24.
+    // Source bounds Y [0, 1.044], feet-at-origin (Mixamo convention).
+    // scale 1.53 matches the in-game ~1.6u chibi target (was 2.7 for
+    // the Tripo mesh at ~0.6u tall). rotation 0 (Mixamo faces -Z).
+    scale: 1.53, rotation: 0, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Trapper',
     tagline: 'Digs in. Controls ground.',
@@ -149,8 +168,9 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Kowalski',
     glbPath: './models/critters/kowalski.glb',
     baseColor: 0x1a1a3e,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Mage penguin (mass 0.9) — compact. Tripo mesh origin at feet.
+    scale: 2.5, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Mage',
     tagline: 'Calculated ranged threat.',
@@ -165,8 +185,9 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Cheeto',
     glbPath: './models/critters/cheeto.glb',
     baseColor: 0xffaa22,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Assassin tiger (mass 0.7) — smallest + sleek. Tripo mesh origin at feet.
+    scale: 2.3, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Assassin',
     tagline: 'Swift and lethal.',
@@ -181,8 +202,15 @@ const ROSTER: RosterEntry[] = [
     displayName: 'Sebastian',
     glbPath: './models/critters/sebastian.glb',
     baseColor: 0xcc3333,
-    scale: 2.0, rotation: -Math.PI / 2, offset: [0, 0, 0],
-    physicsRadius: R, pivotY: 0.98,
+    // Glass Cannon crab (mass 0.75). Meshy AI mesh imported 2026-04-24.
+    // Source bounds Y [0, 1.147] height 1.147u, feet-at-origin (Mixamo
+    // convention — the crab is now a biped humanoid rig; the 8-legs
+    // morphology is collapsed to 2 generic legs, see PROCEDURAL_PARTS).
+    // scale 1.40 matches the in-game ~1.6u chibi target (was 2.3 for
+    // the Tripo mesh which was ~0.7u tall).
+    // rotation 0: Meshy/Mixamo character faces -Z, same as Kurama.
+    scale: 1.40, rotation: 0, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Glass Cannon',
     tagline: 'One giant claw. All in.',

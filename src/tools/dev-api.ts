@@ -28,6 +28,10 @@ import {
   getHeldKeyCodes,
   getMoveVector,
 } from '../input';
+import { BADGE_CATALOG, type BadgeDef } from '../badges';
+import { getStats, addUnlockedBadges, clearRecentlyUnlocked } from '../stats';
+import { maybeShowBadgeToast } from '../badge-toast';
+import { CRITTER_PWS } from '../pws-stats';
 
 export type { BotBehaviourTag } from '../critter';
 
@@ -217,7 +221,6 @@ export class DevApi {
   private lastAbilityActive = new WeakMap<Critter, boolean[]>();
   private lastCollapseLevel = -1;
   private lastWarningBatch = -2;
-  private lastServerPhase = '';
 
   // Perf sampling
   private fpsSamples: number[] = [];
@@ -243,7 +246,7 @@ export class DevApi {
   // Bot overrides reset on a new match so each run starts clean.
   // -------------------------------------------------------------------------
 
-  startMatch(player: string, bots: string[], opts: { seed?: number } = {}): void {
+  startMatch(player: string, bots: string[], opts: { seed?: number; packId?: string } = {}): void {
     this.game.debugStartOfflineMatch(player, bots, opts);
     this.botOverrides.clear();
     this.resetEventMemory();
@@ -813,6 +816,153 @@ export class DevApi {
       held,
       gamepads,
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Badges — lab-only mutations for testing the BADGES system (Phase 6).
+  // Touches localStorage directly; the game picks up the new state on
+  // the next read (getStats(), Hall of Belts re-open).
+  // -------------------------------------------------------------------------
+
+  /** Snapshot of every badge + its unlocked flag, for the lab panel. */
+  getBadgesSnapshot(): Array<BadgeDef & { unlocked: boolean }> {
+    const unlocked = new Set(getStats().unlockedBadges);
+    return BADGE_CATALOG.map((b) => ({ ...b, unlocked: unlocked.has(b.id) }));
+  }
+
+  /** Flip a badge to unlocked. Idempotent — no-op if already unlocked. */
+  unlockBadge(id: string): void {
+    addUnlockedBadges([id]);
+  }
+
+  /** Unlock the whole catalog in one go. Useful for Hall-of-Belts QA. */
+  unlockAllBadges(): void {
+    addUnlockedBadges(BADGE_CATALOG.map((b) => b.id));
+  }
+
+  /**
+   * Remove a badge from the unlocked list. Rewrites localStorage directly
+   * because stats.ts only has an "add" path — lab resets are the only
+   * reason to lock again, and we don't want that in the game API.
+   */
+  lockBadge(id: string): void {
+    const stats = getStats();
+    const next = stats.unlockedBadges.filter((x) => x !== id);
+    if (next.length === stats.unlockedBadges.length) return;
+    this.writeStatsDirect({ ...stats, unlockedBadges: next, recentlyUnlocked: null });
+  }
+
+  /** Wipe every unlocked badge. Does NOT touch match counters. */
+  lockAllBadges(): void {
+    const stats = getStats();
+    if (stats.unlockedBadges.length === 0) return;
+    this.writeStatsDirect({ ...stats, unlockedBadges: [], recentlyUnlocked: null });
+  }
+
+  /** Clear the recently-unlocked slot (dismisses the post-match toast). */
+  dismissBadgeToast(): void {
+    clearRecentlyUnlocked();
+  }
+
+  /**
+   * Fire the toast UI with the first still-locked badge so we can
+   * eyeball the animation / colours without grinding a win condition.
+   * Reuses the same code path production takes (addUnlockedBadges →
+   * maybeShowBadgeToast) — if the visual breaks here, it's broken in
+   * gameplay too.
+   */
+  triggerBadgeToastDemo(): string | null {
+    const stats = getStats();
+    const locked = BADGE_CATALOG.find((b) => !stats.unlockedBadges.includes(b.id));
+    if (!locked) return null; // everything already unlocked — user can `Lock all` first
+    addUnlockedBadges([locked.id]);
+    maybeShowBadgeToast();
+    return locked.id;
+  }
+
+  /**
+   * Snapshot of every critter's P/W/S tuple + the numbers it derives.
+   * Used by the lab's read-only PWS panel. Order matches CRITTER_PWS
+   * declaration order (Sergei first, then by roster tiers).
+   */
+  getPWSSnapshot(): Array<{ name: string; p: number; w: number; s: number; speed: number; mass: number; force: number }> {
+    const out: ReturnType<DevApi['getPWSSnapshot']> = [];
+    for (const [name, pws] of Object.entries(CRITTER_PWS)) {
+      // Derived stats come from the critter's actual config post-attach.
+      // Safer to read them live so it reflects any future per-kit
+      // override we might layer on top of the pure PWS mapping.
+      const preset = this.game.critters.find((c) => c.config.name === name)?.config;
+      const speed = preset?.speed ?? 13 + pws.s * 2.5;
+      const mass  = preset?.mass  ?? 1 + pws.w * 0.2;
+      const force = preset?.headbuttForce ?? 14 + pws.p * 2;
+      out.push({ name, p: pws.p, w: pws.w, s: pws.s, speed, mass, force });
+    }
+    return out;
+  }
+
+  /** Nuke the whole stats blob — picks, wins, fastest times, badges,
+   *  the lot. Full reset. Callers should confirm with the user. */
+  clearAllStats(): void {
+    try {
+      localStorage.removeItem('br-stats-v2');
+      localStorage.removeItem('br-stats-v1');
+    } catch { /* storage disabled — no-op */ }
+    // Force the in-memory snapshot to re-sync on the next read.
+    // loadStats() is module-private; a fresh page load is the canonical
+    // reset. For the lab we reload so the Hall of Belts reopens empty.
+    location.reload();
+  }
+
+  private writeStatsDirect(nextStats: ReturnType<typeof getStats>): void {
+    // stats.ts exposes no "replace everything" helper by design, to
+    // discourage gameplay code from bypassing the recorder functions.
+    // The lab is a deliberate exception.
+    try {
+      localStorage.setItem('br-stats-v2', JSON.stringify(nextStats));
+      // Reload so in-memory state matches the on-disk blob.
+      location.reload();
+    } catch { /* storage disabled — no-op */ }
+  }
+
+  // -------------------------------------------------------------------------
+  // Critter parts — inspect + scale bones live for ability prototyping.
+  // Reads the `.parts` handle attached to each Critter after the GLB
+  // loads (see src/critter-parts.ts).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Return bone names + primitive count for the given critter. Empty
+   * when the critter has no GLB attached yet or it's procedural-only.
+   */
+  getCritterPartsSnapshot(critterName: string): {
+    bones: string[];
+    primitiveCount: number;
+  } {
+    const c = this.game.critters.find((x) => x.config.name === critterName);
+    if (!c || !c.parts) return { bones: [], primitiveCount: 0 };
+    return {
+      bones: Array.from(c.parts.bones.keys()),
+      primitiveCount: c.parts.primitives.length,
+    };
+  }
+
+  /** Scale one bone uniformly. 0.01 = hidden. Survives until resetCritterBone
+   *  or until the match rebuilds (dispose drops the parts handle). */
+  scaleCritterBone(critterName: string, boneName: string, factor: number): void {
+    const c = this.game.critters.find((x) => x.config.name === critterName);
+    c?.parts?.scaleBone(boneName, factor);
+  }
+
+  /** Restore one bone to its original scale. */
+  resetCritterBone(critterName: string, boneName: string): void {
+    const c = this.game.critters.find((x) => x.config.name === critterName);
+    c?.parts?.resetBone(boneName);
+  }
+
+  /** Restore every bone we've modified on this critter. */
+  resetCritterBones(critterName: string): void {
+    const c = this.game.critters.find((x) => x.config.name === critterName);
+    c?.parts?.resetAllBones();
   }
 }
 

@@ -47,6 +47,15 @@ export interface AbilityDef {
   tags: AbilityTag[];
   /** Short one-line description shown in character select info pane. */
   description: string;
+  /**
+   * Optional skeletal clip playback speed multiplier when this ability fires.
+   * Used to align a clip's natural length to the ability's active window.
+   * Example: Sergei's Gorilla Rush clip is 1.03s but the ability should
+   * feel snappy (~0.3s); `clipPlaybackRate: 2.3` accelerates the clip to
+   * ~0.45s so the punchy pose lands in time with the dash.
+   * Undefined / 1.0 = clip plays at authored speed.
+   */
+  clipPlaybackRate?: number;
 }
 
 export interface AbilityState {
@@ -199,47 +208,99 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
 
   // Sergei — Balanced (first real roster character, gorilla)
   // Validates 3-ability pipeline: charge_rush + ground_pound + frenzy (ultimate).
+  //
+  // Feel pass 2026-04-24 — values aligned with the 8-clip GLB kit:
+  //   · Gorilla Rush clip is 1.03s; ability runs 0.32s active. We
+  //     accelerate the clip to 2.3× so the gorilla palm strike lands
+  //     in ~0.45s total (windUp 0.04 + active 0.28 + tail). Feels
+  //     snappy, matches "strong AND agile" identity.
+  //   · Shockwave clip is 0.80s; ability runs 0.30s windUp + 0.05s
+  //     effect = 0.35s. Clip tail covers recovery naturally, no
+  //     playback rate tweak needed. Radius/force nudged up so it
+  //     reads as signature AoE without nerfing bruisers.
+  //   · Frenzy clip is 2.43s; original buff ran 4.0s (clip ended mid
+  //     buff, looked flat). Buff now matches clip length (2.5s) and
+  //     multipliers bumped (speed 1.3→1.45, mass 1.35→1.5) to keep
+  //     the burst-intensity × shorter-window roughly equivalent.
+  //     Entry frame now spawns a frenzy burst ring + camera shake.
   Sergei: [
     makeChargeRush({
       name: 'Gorilla Rush',
       description: 'Heavy palm strike charge',
-      impulse: 18,
-      duration: 0.32,
-      cooldown: 4.5,
-      speedMultiplier: 2.4,
+      impulse: 20,
+      duration: 0.28,
+      cooldown: 4.0,
+      windUp: 0.04,
+      speedMultiplier: 2.6,
       massMultiplier: 2.2,
+      clipPlaybackRate: 2.3,
     }),
     makeGroundPound({
       name: 'Shockwave',
       description: 'Slams ground with both fists',
-      radius: 3.2,
-      force: 30,
-      windUp: 0.35,
-      cooldown: 6.5,
+      radius: 3.5,
+      force: 34,
+      windUp: 0.30,
+      cooldown: 6.0,
     }),
-    makeFrenzy({ description: 'Enters berserk mode: +speed, +power' }),
+    makeFrenzy({
+      description: 'Enters berserk mode: +speed, +power',
+      duration: 2.5,
+      cooldown: 15.0,
+      windUp: 0.35,
+      speedMultiplier: 1.45,
+      massMultiplier: 1.5,
+    }),
   ],
 
   // Trunk — elephant Bruiser: slow, heavy, devastating
-  // Kit built from base factories with heavy tuning. No ultimate in Bloque B;
-  // adding one later is a pure data change.
+  //
+  // Feel pass 2026-04-25 (follows Sergei's template in CHARACTER_DESIGN.md
+  // §"Feel pass log"). Clips measured via `scripts/inspect-clips.mjs`:
+  //   · Ability1TrunkRam 4.58 s (LONG — clipPlaybackRate 5.0 → ~0.92 s).
+  //   · Ability3GroundPound 1.96 s (mapped to ab_2 via override — see
+  //     animation-overrides.ts; clipPlaybackRate 2.8 → ~0.70 s).
+  //   · Idle 5.58 s, Run 1.29 s (untouched).
+  //
+  // Identity delta vs Sergei (Balanced): Trunk is HEAVIER in every axis.
+  // Shorter dash but much higher mass multiplier (bulldozer, not agile
+  // striker). Wider Earthquake radius + harder knockback than Sergei's
+  // Shockwave. Longer buff window on Stampede but smaller speed uplift
+  // (elephant doesn't sprint — it charges through).
+  //
+  // VFX reuses the existing spawnShockwaveRing + camera shake; the wider
+  // `radius` + higher `force` make the ring bigger + the shake stronger
+  // than Sergei's, which matches the bruiser identity without adding new
+  // VFX code (kept out of scope for this pass).
   Trunk: [
     makeChargeRush({
       name: 'Trunk Ram',
       description: 'Unstoppable forward dash with tusks',
-      impulse: 14,
-      duration: 0.40,
-      cooldown: 5.0,
-      speedMultiplier: 2.0,
-      massMultiplier: 3.0,
+      impulse: 16,
+      duration: 0.35,
+      cooldown: 4.5,
+      windUp: 0.08,
+      speedMultiplier: 2.1,
+      massMultiplier: 3.5,
+      clipPlaybackRate: 5.0,
     }),
     makeGroundPound({
       name: 'Earthquake',
       description: 'Foot stomp that shakes the arena',
-      radius: 4.2,
-      force: 34,
-      windUp: 0.5,
-      cooldown: 8.5,
+      radius: 4.5,
+      force: 40,
+      windUp: 0.60,
+      cooldown: 7.5,
+      clipPlaybackRate: 2.8,
+    }),
+    makeFrenzy({
+      name: 'Stampede',
+      description: 'Enraged charge: +speed, +mass',
+      duration: 3.0,
+      cooldown: 18.0,
+      windUp: 0.45,
+      speedMultiplier: 1.25,
+      massMultiplier: 1.80,
     }),
   ],
 
@@ -283,6 +344,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Poison Cloud', description: 'Wide toxic burst, area control',
       radius: 4.6, force: 24, windUp: 0.35, cooldown: 7.0,
     }),
+    makeFrenzy({ name: 'Hypnosapo', description: 'Venom rush: +speed, +power' }),
   ],
 
   Sihans: [
@@ -295,6 +357,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Tremor', description: 'Long windup, devastating stomp',
       radius: 3.5, force: 38, windUp: 0.6, cooldown: 7.5,
     }),
+    makeFrenzy({ name: 'Diggy Rush', description: 'Tunnel frenzy: +speed, +power' }),
   ],
 
   Kowalski: [
@@ -307,6 +370,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Arctic Burst', description: 'Massive area blast, low force',
       radius: 5.0, force: 20, windUp: 0.4, cooldown: 7.0,
     }),
+    makeFrenzy({ name: 'Blizzard', description: 'Arctic fury: +speed, +power' }),
   ],
 
   Cheeto: [
@@ -319,6 +383,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Paw Stomp', description: 'Tight dense impact',
       radius: 2.5, force: 30, windUp: 0.22, cooldown: 6.0,
     }),
+    makeFrenzy({ name: 'Tiger Rage', description: 'Predator instinct: +speed, +power' }),
   ],
 
   Sebastian: [
@@ -331,6 +396,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Big Claw Slam', description: 'Small radius, brutal force',
       radius: 2.8, force: 40, windUp: 0.3, cooldown: 6.5,
     }),
+    makeFrenzy({ name: 'Red Claw', description: 'Glass-cannon rage: +speed, +power' }),
   ],
 };
 
@@ -422,10 +488,17 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   playSound('groundPound');
 }
 
-function fireFrenzy(_def: AbilityDef, _critter: Critter): void {
-  // Frenzy is a pure buff — no positional effect. The speed/mass multipliers
-  // are applied automatically by getSpeedMultiplier/getMassMultiplier while
-  // the ability state is active. The visual glow is handled in critter.ts.
+function fireFrenzy(_def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
+  // Frenzy is a pure buff — no positional effect on other critters. The
+  // speed/mass multipliers are applied automatically by
+  // getSpeedMultiplier/getMassMultiplier while the ability state is
+  // active; the pulsing emissive glow is handled in critter.ts.
+  //
+  // What we DO add here: a one-shot "entry" burst so the activation
+  // moment reads clearly. Without it the buff starts silently and the
+  // player only realises after observing themselves move faster.
+  spawnFrenzyBurst(scene, critter.x, critter.z);
+  triggerCameraShake(FEEL.shake.groundPound * 0.55);
   playSound('abilityFire');
 }
 
@@ -503,6 +576,76 @@ export function getMassMultiplier(states: AbilityState[]): number {
     }
   }
   return m;
+}
+
+// ---------------------------------------------------------------------------
+// VFX: frenzy activation burst
+// ---------------------------------------------------------------------------
+
+/**
+ * One-shot "battle cry" ring spawned at the moment Frenzy activates.
+ * Smaller and more contained than a Shockwave ring — it's a self-centred
+ * buff indicator, not an AoE hit. Single golden-red torus that expands
+ * ~2.5m over 600ms and fades. Runs in addition to the pulsing emissive
+ * glow already handled in critter.ts visual pass.
+ */
+export function spawnFrenzyBurst(scene: THREE.Scene, x: number, z: number): void {
+  const duration = 600; // ms
+  const startTime = performance.now();
+  const maxRadius = 2.5;
+
+  // Outer ring: warm gold, the "battle cry"
+  const ringGeo = new THREE.TorusGeometry(0.2, 0.18, 10, 32);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0xffaa22,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(x, 0.6, z);
+  scene.add(ring);
+
+  // Inner flash: quick red pop at the origin
+  const flashGeo = new THREE.TorusGeometry(0.2, 0.12, 10, 32);
+  const flashMat = new THREE.MeshBasicMaterial({
+    color: 0xff2200,
+    transparent: true,
+    opacity: 1.0,
+  });
+  const flash = new THREE.Mesh(flashGeo, flashMat);
+  flash.rotation.x = Math.PI / 2;
+  flash.position.set(x, 0.75, z);
+  scene.add(flash);
+
+  function animate() {
+    const elapsed = performance.now() - startTime;
+    const t = Math.min(elapsed / duration, 1);
+
+    // Outer: cubic ease-out to maxRadius
+    const outerEase = 1 - Math.pow(1 - t, 3);
+    const outerScale = 0.2 + outerEase * (maxRadius / 0.2);
+    ring.scale.set(outerScale, outerScale, 1);
+    ringMat.opacity = 0.9 * (1 - t);
+
+    // Inner: peaks fast, fades in ~40% of total duration
+    const innerT = Math.min(t * 2.5, 1);
+    const innerScale = 0.2 + innerT * (maxRadius * 0.55 / 0.2);
+    flash.scale.set(innerScale, innerScale, 1);
+    flashMat.opacity = 1.0 * (1 - innerT);
+
+    if (t < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      scene.remove(ring);
+      scene.remove(flash);
+      ringGeo.dispose();
+      ringMat.dispose();
+      flashGeo.dispose();
+      flashMat.dispose();
+    }
+  }
+  requestAnimationFrame(animate);
 }
 
 // ---------------------------------------------------------------------------

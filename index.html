@@ -3,7 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bichitos Rumble</title>
+  <title>Bichitos Rumble — Headbutt Your Rivals Into The Void</title>
+  <meta name="description" content="Lightweight web arena brawler for Vibe Jam 2026. 4-player online, 9 critters, signature abilities, no signup. Free to play in your browser." />
+  <meta name="theme-color" content="#0a0a18" />
+  <!-- Favicon — AI-generated PNG (BR mark, cartoon). The SVG below it is
+       kept as a fallback for anyone who loads the PNG-less older asset;
+       modern browsers pick the first one that resolves. -->
+  <link rel="icon" type="image/png" sizes="any" href="/favicon-br.png" />
+  <link rel="apple-touch-icon" href="/favicon-br.png" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+  <!-- Open Graph (Discord, Facebook, Slack, WhatsApp) -->
+  <meta property="og:type"        content="website" />
+  <meta property="og:site_name"   content="Bichitos Rumble" />
+  <meta property="og:url"         content="https://www.bichitosrumble.com/" />
+  <meta property="og:title"       content="Bichitos Rumble" />
+  <meta property="og:description" content="Headbutt your rivals into the void. 4-player web arena brawler — 9 critters, free, no signup." />
+  <!-- TODO(og-image): generate public/og-image.png (1200×628, <5 MB, PNG).
+       Prompt candidate: hero screenshot of 4 critters mid-brawl on the
+       collapsing arena, warm arcade tones, "BICHITOS RUMBLE" text overlay.
+       Until the asset ships this URL 404s and the preview falls back to
+       no-image — not broken, just bland. Replace both og:image and
+       twitter:image once generated. -->
+  <meta property="og:image"        content="https://www.bichitosrumble.com/og-image.png" />
+  <meta property="og:image:width"  content="1200" />
+  <meta property="og:image:height" content="628" />
+  <meta property="og:image:alt"    content="Bichitos Rumble — cartoon arena brawler" />
+
+  <!-- Twitter / X (summary_large_image) -->
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:site"        content="@RGomezR14" />
+  <meta name="twitter:creator"     content="@RGomezR14" />
+  <meta name="twitter:title"       content="Bichitos Rumble" />
+  <meta name="twitter:description" content="Headbutt your rivals into the void. 4-player web arena brawler for Vibe Jam 2026." />
+  <meta name="twitter:image"       content="https://www.bichitosrumble.com/og-image.png" />
+  <meta name="twitter:image:alt"   content="Bichitos Rumble — cartoon arena brawler" />
+
+  <!-- Resource hints — first-paint optimization.
+       preload: title-loop music so it plays the instant the user
+         clicks through the title (not after a 200ms fetch gap).
+       prefetch: the 9 critter GLBs so the first match doesn't stall
+         at the "Loading Sergei…" step. Browsers lazily fetch these
+         at low priority while the title + menu are idle. Crossorigin
+         matches the `fetch()` call model-loader uses. -->
+  <link rel="preload"  as="audio" href="/audio/intro.mp3" />
+  <link rel="prefetch" as="fetch" href="/models/critters/sergei.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/trunk.glb"     crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/kurama.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/shelly.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/kermit.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/sihans.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/kowalski.glb"  crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/cheeto.glb"    crossorigin="anonymous" />
+  <link rel="prefetch" as="fetch" href="/models/critters/sebastian.glb" crossorigin="anonymous" />
+
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a18; }
@@ -22,29 +75,53 @@
          cluster actually draws over overlays. */
       z-index: 20;
     }
-    /* Alive count + match timer + lives only make sense during a match. */
-    body:not(.match-active) #hud-top-left,
-    body:not(.match-active) #hud-lives {
+    /* Match-only HUD children — hidden outside active matches so the
+       settings cluster can still show through on title / select / end.
+       #hud-settings stays visible on every screen. */
+    body:not(.match-active) #hud-top-center,
+    body:not(.match-active) .player-life-corner,
+    body:not(.match-active) #ability-bar-container,
+    body:not(.match-active) #overlay {
       display: none;
     }
     #hud-top {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       padding: 12px 20px;
       font-size: 18px;
       text-shadow: 0 2px 4px rgba(0,0,0,0.7);
       gap: 16px;
     }
-    /* Left cluster: alive count + match timer */
-    #hud-top-left {
+    /* Top-center cluster: timer (hero, huge) + alive count underneath.
+       Given more visual weight so it reads from across the arena. */
+    #hud-top-center {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 14px;
+      gap: 2px;
+      pointer-events: none;
     }
     #hud-timer {
       font-variant-numeric: tabular-nums;
-      opacity: 0.9;
+      font-size: 44px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      line-height: 1;
+      color: #ffdc5c;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.85), 0 0 14px rgba(255, 220, 92, 0.25);
+    }
+    #hud-alive {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0.8;
+      color: #fff;
     }
     /* Right cluster: settings buttons (SFX + music). Lives panel in the center. */
     #hud-settings {
@@ -71,29 +148,102 @@
     }
     .settings-btn:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.4); }
     .settings-btn.muted { opacity: 0.45; }
+    /* Countdown overlay — giant digits with gradient fill + per-number
+       colour (3 red → 2 amber → 1 yellow → GO! green) so the urgency
+       ramps visibly. Digits land with a scale-down pop; GO! adds a
+       shockwave ring pulse. Non-digit overlays ("Get Ready!") keep a
+       calmer, neutral style via the .overlay-text variant. */
     #overlay {
       position: absolute;
       top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       text-align: center;
       font-size: 36px;
-      font-weight: bold;
+      font-weight: 900;
       text-shadow: 0 3px 8px rgba(0,0,0,0.8);
       pointer-events: auto;
+      letter-spacing: 2px;
     }
     #overlay .sub {
       font-size: 18px;
       margin-top: 8px;
       opacity: 0.8;
+      font-weight: 600;
+      letter-spacing: 1.5px;
     }
-    /* Countdown pop: apply class on content change, keyframe scales in quickly */
+    /* Giant digit mode — triggered when the overlay content is a single
+       char from 0-9 (plus GO!). hud/runtime.ts showOverlay toggles the
+       .overlay-digit + .overlay-d-N classes. */
+    #overlay.overlay-digit {
+      font-size: clamp(140px, 22vw, 260px);
+      font-weight: 900;
+      letter-spacing: -4px;
+      line-height: 0.9;
+      filter: drop-shadow(0 6px 20px rgba(0, 0, 0, 0.7));
+    }
+    /* Gradient fills per countdown step — picked to telegraph urgency. */
+    #overlay.overlay-d-3 {
+      background: linear-gradient(180deg, #ff6666 0%, #c92525 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    #overlay.overlay-d-2 {
+      background: linear-gradient(180deg, #ffcc55 0%, #e67e22 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    #overlay.overlay-d-1 {
+      background: linear-gradient(180deg, #ffee77 0%, #f1c40f 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    #overlay.overlay-d-go {
+      background: linear-gradient(180deg, #a7ff55 0%, #1fb256 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    /* Countdown pop: scale IN from big to normal, then a subtle breathe. */
     #overlay.pop {
-      animation: overlay-pop 0.25s ease-out;
+      animation: overlay-pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
     }
     @keyframes overlay-pop {
-      0%   { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
-      60%  { transform: translate(-50%, -50%) scale(0.95); opacity: 1; }
-      100% { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+      0%   { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+      55%  { transform: translate(-50%, -50%) scale(0.92); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1);    opacity: 1; }
+    }
+    /* GO! additional burst — adds a radial glow ring behind the text. */
+    #overlay.overlay-d-go::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1px;
+      height: 1px;
+      transform: translate(-50%, -50%);
+      box-shadow:
+        0 0 0 0 rgba(167, 255, 85, 0.85),
+        0 0 0 0 rgba(31, 178, 86, 0.55);
+      animation: overlay-go-burst 0.55s ease-out forwards;
+    }
+    @keyframes overlay-go-burst {
+      0%   {
+        box-shadow:
+          0 0 0 0    rgba(167, 255, 85, 0.85),
+          0 0 0 0    rgba(31, 178, 86, 0.55);
+      }
+      100% {
+        box-shadow:
+          0 0 0 180px rgba(167, 255, 85, 0.00),
+          0 0 0 260px rgba(31, 178, 86, 0.00);
+      }
     }
     /* Ability cooldown bars */
     #ability-bar-container {
@@ -109,6 +259,36 @@
       width: 90px;
       text-align: center;
       text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    /* Per-ability AI icon (only visible when body.has-ability-sprites).
+       Same circular-medallion treatment as the character-select info
+       pane — keeps the visual language consistent between menu and HUD. */
+    .ability-slot-icon {
+      --icon-size: 48px;
+      margin-bottom: 5px;
+      border-radius: 50%;
+      background-color: rgba(22, 18, 8, 0.65);
+      border: 2px solid rgba(255, 220, 92, 0.8);
+      box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.55),
+        0 0 10px rgba(255, 220, 92, 0.3),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+    }
+    .ability-slot.active .ability-slot-icon {
+      border-color: #ff8800;
+      box-shadow:
+        0 0 14px #ff8800,
+        inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+    }
+    .ability-slot.on-cooldown .ability-slot-icon {
+      opacity: 0.55;
+      filter: saturate(0.6);
+    }
+    .ability-slot.unavailable .ability-slot-icon {
+      filter: grayscale(1) brightness(0.6);
     }
     .ability-key {
       font-size: 14px;
@@ -163,31 +343,92 @@
       color: #ffcc00;
       text-transform: uppercase;
     }
-    /* Lives panel */
-    #hud-lives {
+    /* Four per-player life corners — big avatars + hearts below, one
+       per screen corner. Much more readable than the central column
+       the HUD had before: each player's state has its own real-estate. */
+    .player-life-corner {
+      position: absolute;
       display: flex;
       flex-direction: column;
-      gap: 3px;
       align-items: center;
+      gap: 6px;
+      padding: 10px 12px 12px;
+      background: rgba(10, 10, 24, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(4px);
+      transition: opacity 0.35s;
+      pointer-events: none;
+      z-index: 22;
     }
-    .lives-row {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 14px;
-      transition: opacity 0.3s;
+    /* Offsets chosen to dodge the other HUD elements:
+       - TL: below the portal legend (sits at top:58px left:20px when match)
+       - TR: below the settings cluster (SFX/music buttons ~top:12px)
+       - BR: above the Vibe Jam 2026 widget badge (bottom-right pill, ~44px tall)
+       - BL: above the touch joystick / legend baseline */
+    .player-life-corner.corner-tl { top: 118px; left: 18px; }
+    .player-life-corner.corner-tr { top: 72px;  right: 18px; }
+    .player-life-corner.corner-bl { bottom: 24px; left: 18px; }
+    .player-life-corner.corner-br { bottom: 62px; right: 18px; }
+    /* Highlight the LOCAL player's corner so the user finds their own
+       lives at a glance. JS adds .is-local to the right corner. */
+    .player-life-corner.is-local {
+      border-color: rgba(255, 220, 92, 0.7);
+      box-shadow: 0 0 18px rgba(255, 220, 92, 0.35), 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
+    .player-life-corner.is-dead {
+      opacity: 0.35;
     }
     .lives-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
+      width: 70px;
+      height: 70px;
+      border-radius: 14px;
       display: inline-block;
-      border: 1px solid rgba(255,255,255,0.3);
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      background-size: cover;
+      background-position: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+      position: relative;
+      overflow: hidden;
+    }
+    /* HUD sprite overlay inside .lives-dot — paints when
+       body.has-hud-sprites is set (see the SPRITE ICON SYSTEMS section
+       down below). The 3D thumbnail (if any) is the background-image;
+       the sprite sits on top, so the sprite wins when the sheet loads.
+       Compound selector (.sprite-hud.lives-avatar-sprite) bumps the
+       specificity to 0,0,2 so it wins over the generic .sprite-hud
+       rule's `width: var(--icon-size, 24px)` — without this the sprite
+       renders 24x24 in the corner of the 70x70 dot. */
+    .sprite-hud.lives-avatar-sprite {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .player-life-corner.is-local .lives-dot {
+      border-color: rgba(255, 220, 92, 0.85);
+      box-shadow: 0 0 14px rgba(255, 220, 92, 0.55), 0 2px 8px rgba(0, 0, 0, 0.65);
+    }
+    .lives-name {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      opacity: 0.85;
+      line-height: 1;
     }
     .lives-hearts {
       color: #e74c3c;
-      font-size: 13px;
-      letter-spacing: 1px;
+      font-size: 16px;
+      letter-spacing: 2px;
+      line-height: 1;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+    }
+    .lives-bot-badge {
+      font-size: 12px;
+      opacity: 0.8;
     }
 
     /* ---------- Portal legend (HUD, top-left under timer) ---------- */
@@ -267,6 +508,153 @@
     }
     .full-overlay.hidden { display: none; }
 
+    /* Nickname modal — single gate before the player enters online
+       multiplayer. Sits on its own z-index so it always reads above
+       title/select even during weird transitions. */
+    #nickname-modal { z-index: 50; }
+    #nickname-modal .nickname-card {
+      background: rgba(10, 10, 24, 0.85);
+      border: 1px solid rgba(255, 220, 92, 0.4);
+      border-radius: 18px;
+      padding: 34px 40px 28px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      min-width: 360px;
+      max-width: 480px;
+      width: 90%;
+    }
+    #nickname-modal .nickname-title {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 2.5px;
+      color: #ffdc5c;
+      margin: 0;
+      text-align: center;
+    }
+    #nickname-modal .nickname-sub {
+      font-size: 13px;
+      line-height: 1.4;
+      opacity: 0.75;
+      text-align: center;
+      margin: 0;
+      max-width: 380px;
+    }
+    #nickname-modal .nickname-input {
+      width: 100%;
+      padding: 12px 14px;
+      font: 600 18px/1 'Segoe UI', Arial, sans-serif;
+      letter-spacing: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 10px;
+      color: #fff;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    #nickname-modal .nickname-input:focus {
+      border-color: rgba(255, 220, 92, 0.65);
+      background: rgba(255, 255, 255, 0.12);
+    }
+    #nickname-modal .nickname-error {
+      font-size: 13px;
+      color: #ff8866;
+      min-height: 18px;
+      text-align: center;
+      font-weight: 600;
+    }
+    #nickname-modal .nickname-buttons {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+    }
+    #nickname-modal .nickname-btn {
+      flex: 1;
+      font: 700 15px/1 'Segoe UI', Arial, sans-serif;
+      letter-spacing: 0.5px;
+      padding: 11px 18px;
+      border-radius: 10px;
+      background: rgba(255, 220, 92, 0.22);
+      border: 1px solid rgba(255, 220, 92, 0.55);
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.15s, border-color 0.15s;
+    }
+    #nickname-modal .nickname-btn:hover:not(:disabled) {
+      background: rgba(255, 220, 92, 0.38);
+      border-color: rgba(255, 220, 92, 0.95);
+      transform: translateY(-1px);
+    }
+    #nickname-modal .nickname-btn:disabled {
+      opacity: 0.45;
+      cursor: wait;
+    }
+    #nickname-modal .nickname-btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    #nickname-modal .nickname-btn-secondary:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255, 255, 255, 0.55);
+    }
+
+    /* Pause menu — offline only. Card-style panel centred on a slightly
+       dimmer overlay so the game scene is still visible in the background. */
+    #pause-menu { z-index: 40; }
+    #pause-menu .pause-card {
+      background: rgba(10, 10, 24, 0.72);
+      border: 1px solid rgba(255, 220, 92, 0.35);
+      border-radius: 18px;
+      padding: 34px 44px 28px;
+      box-shadow: 0 10px 36px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      min-width: 320px;
+    }
+    #pause-menu .pause-title {
+      font-size: 36px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: #ffdc5c;
+      margin: 0;
+    }
+    #pause-menu .pause-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+    #pause-menu .pause-btn {
+      font: 700 16px/1 'Segoe UI', Arial, sans-serif;
+      letter-spacing: 0.5px;
+      padding: 12px 18px;
+      border-radius: 10px;
+      background: rgba(255, 220, 92, 0.18);
+      border: 1px solid rgba(255, 220, 92, 0.5);
+      color: #fff;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s, transform 0.15s, border-color 0.15s;
+    }
+    #pause-menu .pause-btn:hover {
+      background: rgba(255, 220, 92, 0.32);
+      border-color: rgba(255, 220, 92, 0.9);
+      transform: translateY(-1px);
+    }
+    #pause-menu .pause-btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    #pause-menu .pause-btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255, 255, 255, 0.55);
+    }
+
     .prompt {
       font-size: 18px;
       opacity: 0.85;
@@ -287,32 +675,109 @@
       0%, 100% { opacity: 0.9; }
       50% { opacity: 0.4; }
     }
+    /* Vibe Jam widget badge — injected by widget.js with inline styles.
+       Override with !important to give it more presence: bigger font,
+       bigger padding, gold gradient accent on hover. Still bottom-right
+       but hard to miss. */
+    body > a[href*="vibej.am"] {
+      font-size: 17px !important;
+      padding: 11px 20px !important;
+      letter-spacing: 0.4px !important;
+      box-shadow: 0 -2px 18px rgba(0, 0, 0, 0.35) !important;
+      transition: transform 0.18s ease, background 0.18s !important;
+    }
+    body > a[href*="vibej.am"]:hover {
+      background: #ffdc5c !important;
+      transform: translateY(-2px) !important;
+    }
+
     /* Author signature on the title screen. Bottom-LEFT so it doesn't
-       overlap the Vibe Jam 2026 widget badge that sits bottom-right. */
+       overlap the Vibe Jam 2026 widget badge that sits bottom-right.
+       Pill-shaped with a subtle gold border so it reads as a proper
+       credit without fighting the title for attention. */
     .title-signature {
       position: absolute;
-      bottom: 14px;
-      left: 18px;
-      font-size: 12px;
-      letter-spacing: 1px;
-      color: rgba(255, 255, 255, 0.45);
+      bottom: 18px;
+      left: 20px;
+      font-size: 13px;
+      letter-spacing: 1.2px;
+      color: rgba(255, 255, 255, 0.82);
       text-decoration: none;
       pointer-events: auto;
-      transition: color 0.18s;
+      padding: 7px 14px 7px 12px;
+      background: rgba(10, 10, 24, 0.55);
+      border: 1px solid rgba(255, 220, 92, 0.30);
+      border-radius: 22px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      transition: color 0.18s, border-color 0.18s, background 0.18s,
+                  transform 0.15s, box-shadow 0.18s;
+      z-index: 5; /* above the overlay gradient, below widget (z>=100) */
     }
     .title-signature:hover {
-      color: rgba(255, 220, 92, 0.95);
+      color: #ffffff;
+      border-color: rgba(255, 220, 92, 0.85);
+      background: rgba(255, 220, 92, 0.14);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 220, 92, 0.22);
     }
     .title-signature .handle {
-      font-weight: 700;
-      color: inherit;
+      font-weight: 800;
+      color: #ffdc5c;
+      letter-spacing: 0.8px;
     }
+    .title-signature:hover .handle {
+      color: #ffffff;
+    }
+    /* Line of control hints at the bottom-center of the title screen.
+       Two stacked tiers: primary (WASD/SPACE/J/K/L/R) in the main row,
+       gamepad auto-detection hint below in smaller type. Both rendered
+       as kbd-pills so the mapping reads at a glance. */
     .controls-hint {
       position: absolute;
-      bottom: 24px;
-      font-size: 12px;
-      opacity: 0.45;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      justify-content: center;
+      align-items: center;
+      font-size: 12.5px;
+      opacity: 0.82;
       letter-spacing: 0.5px;
+      color: rgba(255, 255, 255, 0.92);
+      max-width: 90vw;
+      text-align: center;
+    }
+    .controls-hint kbd {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.14);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'Consolas', 'Menlo', monospace;
+      font-size: 11px;
+      border: 1px solid rgba(255, 255, 255, 0.32);
+      color: #ffdc5c;
+      margin-right: 2px;
+      letter-spacing: 0.3px;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+    }
+    .controls-hint .sep {
+      opacity: 0.4;
+    }
+    .controls-hint-gamepad {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10.5px;
+      opacity: 0.5;
+      letter-spacing: 0.7px;
+      color: rgba(255, 255, 255, 0.85);
+      white-space: nowrap;
+      pointer-events: none;
     }
 
     /* ---------- Title Screen ---------- */
@@ -387,9 +852,9 @@
     }
     #character-select .select-body {
       display: flex;
-      gap: 40px;
+      gap: 52px;
       align-items: center;
-      max-width: 1000px;
+      max-width: 1180px;
       padding: 0 30px;
     }
     /* Left: 3x3 grid of slots */
@@ -462,6 +927,31 @@
       box-shadow: 0 3px 10px rgba(0,0,0,0.5);
       transition: background-image 0.18s ease-out, transform 0.18s;
       position: relative; /* stay above the ::before glow */
+      overflow: hidden;   /* keep the sprite overlay inside the rounded corners */
+    }
+    /* 2D sprite painted on top of the slot-avatar (same pattern as the
+       HUD lives-dot). Compound selector bumps specificity above the
+       generic .sprite-hud width rule — otherwise the sprite paints at
+       the default 24x24 in the slot corner instead of filling it. */
+    .sprite-hud.slot-avatar-sprite {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    /* When the HUD sprite sheet is live, the sprite fills the slot and
+       its lower strip is transparent (the PNG has the debug label area
+       erased to alpha=0). We want that strip to read as "empty slot"
+       (dark glass of the pane), NOT as the critter's baseColor — a
+       colourful rectangle under each chibi head was distracting and
+       looked like a broken banner. `!important` is required because
+       buildSlotAvatar writes the baseColor to `element.style.background`
+       inline. When the sheet 404s, the fallback path (no
+       has-hud-sprites) keeps the coloured placeholder. */
+    body.has-hud-sprites .critter-slot .slot-avatar {
+      background: rgba(255, 255, 255, 0.06) !important;
     }
     .critter-slot:hover .slot-avatar {
       transform: scale(1.04);
@@ -512,112 +1002,201 @@
       opacity: 0.7;
     }
 
-    /* Right: 3D preview + info */
+    /* Right: 3D preview + info. Canvas is now the hero of the screen
+       (was 380×340, now 500×440). Uniform scale is applied per-critter
+       in preview.ts so every roster entry reads at ~1.9u max dimension
+       regardless of source pipeline. Soft radial glow backdrop so
+       the bright gold rim of the pedestal doesn't fight the dark blue
+       scene background. */
     #preview-pane {
       display: flex;
       flex-direction: column;
       align-items: center;
-      width: 360px;
+      width: 520px;
+      position: relative;
     }
     #preview-canvas {
-      width: 320px;
-      height: 280px;
+      width: 500px;
+      height: 440px;
       display: block;
       cursor: grab;
       touch-action: none;
+      position: relative;
+      z-index: 1;
+      filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.6));
+    }
+    /* Radial halo behind the preview — a little punchier to give the
+       model + pedestal real presence. Painted via ::before on the
+       pane so drag events still land on the canvas. */
+    #preview-pane::before {
+      content: '';
+      position: absolute;
+      top: 2%;
+      left: 50%;
+      width: 98%;
+      height: 82%;
+      transform: translateX(-50%);
+      background: radial-gradient(
+        ellipse at 50% 52%,
+        rgba(255, 220, 92, 0.15) 0%,
+        rgba(255, 220, 92, 0.06) 40%,
+        transparent 72%
+      );
+      pointer-events: none;
+      z-index: 0;
     }
     #preview-canvas:active {
       cursor: grabbing;
     }
+    /* Info pane — sits under the 3D preview. Panel treatment (soft dark
+       card with blur) so it reads as a coherent piece with the life
+       corners and title buttons instead of floating text on the void. */
     #critter-info {
       text-align: center;
-      margin-top: 4px;
+      margin-top: 14px;
       width: 100%;
+      padding: 16px 18px 18px;
+      background: rgba(10, 10, 24, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
     }
     #critter-info-name {
-      font-size: 26px;
+      font-size: 28px;
       font-weight: 900;
-      letter-spacing: 1px;
+      letter-spacing: 1.5px;
+      line-height: 1;
     }
     #critter-info-role {
       font-size: 11px;
-      opacity: 0.65;
+      opacity: 0.7;
       text-transform: uppercase;
-      letter-spacing: 2px;
-      margin-top: 2px;
+      letter-spacing: 3px;
+      margin-top: 4px;
+      color: #ffdc5c;
     }
     #critter-info-tagline {
       font-size: 13px;
-      opacity: 0.7;
+      opacity: 0.75;
       margin-top: 10px;
       min-height: 18px;
+      font-style: italic;
     }
     #critter-info-stats {
+      margin-top: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      /* Compact centred block so the three rows stack as a unit under the
+         name/role/tagline, rather than stretching across the pane width.
+         Width chosen so 5 pips + gaps + the 70px label sit naturally in
+         the middle without drifting. */
+      width: fit-content;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    /* Grid with fixed columns so every row lines up identically — labels
+       right-aligned in column A, pips left-aligned in column B with a
+       constant gutter. No more "SPEED" floating 3px further right than
+       "WEIGHT" because the flex was free to stretch. */
+    .stat-row {
+      display: grid;
+      grid-template-columns: 70px auto;
+      align-items: center;
+      column-gap: 14px;
+      font-size: 11px;
+      letter-spacing: 1.4px;
+    }
+    .stat-label {
+      text-align: right;
+      text-transform: uppercase;
+      opacity: 0.75;
+      font-weight: 700;
+      color: #ffdc5c;
+    }
+    /* Stat pips — five circles per row, filled up to the critter's level
+       (1..5 on the P/W/S -2..+2 scale shifted to 1..5). Replaces the old
+       gradient bar for a more arcade/cartoon feel that matches the HUD.
+       Grid cell is auto-sized to the pip row — no flex stretching so
+       every row has the same pip run width. */
+    .stat-pips {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      justify-content: flex-start;
+    }
+    .stat-pip {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.18);
+      transition: background 0.25s ease-out, box-shadow 0.25s ease-out,
+                  border-color 0.25s ease-out, transform 0.25s ease-out;
+    }
+    .stat-pip.on {
+      background: radial-gradient(circle at 35% 30%, #fff3b0 0%, #ffdc5c 55%, #d9a840 100%);
+      border-color: rgba(255, 220, 92, 0.9);
+      box-shadow: 0 0 8px rgba(255, 220, 92, 0.55);
+      transform: scale(1.05);
+    }
+    #critter-info-abilities {
       margin-top: 16px;
       display: flex;
       flex-direction: column;
       gap: 8px;
-      width: 80%;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .stat-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 10px;
-      letter-spacing: 1px;
-      opacity: 0.85;
-    }
-    .stat-label {
-      width: 54px;
-      text-align: right;
-      text-transform: uppercase;
-      opacity: 0.7;
-    }
-    .stat-bar-bg {
-      flex: 1;
-      height: 8px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 4px;
-      overflow: hidden;
-    }
-    .stat-bar {
-      height: 100%;
-      background: linear-gradient(90deg, #4ade80, #ffdc5c);
-      border-radius: 4px;
-      transition: width 0.35s ease-out;
-    }
-    #critter-info-abilities {
-      margin-top: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      width: 80%;
+      width: 92%;
       margin-left: auto;
       margin-right: auto;
     }
     .ability-info-row {
       display: flex;
-      align-items: baseline;
-      gap: 6px;
-      font-size: 10px;
-      opacity: 0.85;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      line-height: 1.2;
+      text-align: left;
     }
+    /* Per-ability AI icon — circular medallion with gold rim. The sprite
+       sheet paints on top of a dark backing colour inside the circle, so
+       even icons whose AI generation kept a slight background fringe
+       still read as neat coin-sized stamps. */
+    .ability-info-icon {
+      --icon-size: 40px;
+      border-radius: 50%;
+      background-color: rgba(22, 18, 8, 0.6);
+      border: 2px solid rgba(255, 220, 92, 0.75);
+      box-shadow:
+        0 0 10px rgba(255, 220, 92, 0.35),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+    }
+    /* Keybind chip — matches the kbd styling used on prompts across the
+       title/select screens. Gives [J] [K] [L] actual visual weight. */
     .ability-info-key {
-      font-weight: bold;
-      font-family: monospace;
-      font-size: 9px;
-      color: #4ade80;
-      min-width: 18px;
+      font-weight: 800;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-size: 11px;
+      color: #ffdc5c;
+      min-width: 26px;
+      padding: 3px 7px;
+      background: rgba(255, 220, 92, 0.12);
+      border: 1px solid rgba(255, 220, 92, 0.4);
+      border-radius: 5px;
+      text-align: center;
+      flex-shrink: 0;
+      letter-spacing: 0.5px;
     }
     .ability-info-name {
-      font-weight: bold;
+      font-weight: 700;
       white-space: nowrap;
+      color: #fff;
     }
     .ability-info-desc {
-      opacity: 0.6;
-      font-size: 9px;
+      opacity: 0.65;
+      font-size: 11px;
+      font-style: italic;
     }
     .ability-info-planned {
       font-size: 8px;
@@ -654,38 +1233,76 @@
     /* Portal prompt on end screen — separated from match prompt */
     /* Per-match stats block under the subtitle — counters for the local
        player's match. Empty (display:none) if no match data available
-       (e.g. match ended on the very first frame, edge case). */
+       (e.g. match ended on the very first frame, edge case). Entry is
+       animated via .stats-enter — panel slides up + fades in, numbers
+       get an easeOutCubic count-up via hud.ts setEndMatchStats(). */
     #end-stats.end-stats {
       display: flex;
-      gap: 18px;
+      gap: 22px;
       justify-content: center;
-      margin: 6px 0 18px;
-      padding: 10px 20px;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.10);
-      border-radius: 10px;
+      align-items: stretch;
+      margin: 10px 0 22px;
+      padding: 14px 26px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 220, 92, 0.18);
+      border-radius: 14px;
       font-size: 13px;
-      max-width: 480px;
+      max-width: 520px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+      /* Entry state — overridden once .stats-enter lands. */
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.35s ease-out, transform 0.35s ease-out;
+    }
+    #end-stats.end-stats.stats-enter {
+      opacity: 1;
+      transform: translateY(0);
     }
     #end-stats .stat {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 2px;
-      min-width: 60px;
+      gap: 4px;
+      min-width: 68px;
+      padding: 0 4px;
+      position: relative;
+    }
+    /* Subtle vertical separator between stats (except after the last). */
+    #end-stats .stat:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      top: 14%;
+      right: -11px;
+      width: 1px;
+      height: 72%;
+      background: linear-gradient(
+        180deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.14) 40%,
+        rgba(255, 255, 255, 0.14) 60%,
+        transparent 100%
+      );
+    }
+    #end-stats .stat-icon {
+      font-size: 18px;
+      line-height: 1;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+      margin-bottom: 2px;
     }
     #end-stats .stat-value {
-      font-size: 22px;
-      font-weight: 800;
+      font-size: 26px;
+      font-weight: 900;
       font-variant-numeric: tabular-nums;
       color: #ffdc5c;
       line-height: 1;
+      text-shadow: 0 0 14px rgba(255, 220, 92, 0.25);
     }
     #end-stats .stat-label {
       font-size: 9px;
       letter-spacing: 1.5px;
       text-transform: uppercase;
-      opacity: 0.7;
+      opacity: 0.72;
+      margin-top: 1px;
     }
 
     #end-portal-prompt {
@@ -994,6 +1611,564 @@
       body.touch-mode #rotate-prompt { display: flex; }
     }
 
+    /* ---------- Hall of Belts button (opens the modal from character-select) ---------- */
+    .belts-trigger {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px 8px 12px;
+      background: rgba(10, 10, 24, 0.55);
+      border: 1px solid rgba(255, 220, 92, 0.35);
+      border-radius: 22px;
+      color: rgba(255, 255, 255, 0.88);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: background 0.18s, border-color 0.18s, transform 0.12s;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    .belts-trigger:hover {
+      background: rgba(255, 220, 92, 0.14);
+      border-color: rgba(255, 220, 92, 0.8);
+      transform: translateY(-1px);
+    }
+    .belts-trigger-icon { font-size: 16px; line-height: 1; }
+
+    /* ---------- Hall of Belts modal (BADGES_DESIGN Phase 4 light) ----------
+       Full-screen overlay listing every belt in the catalog. Unlocked
+       belts render in colour; locked ones show the criterion so the
+       player knows what to chase. Placeholder emoji icons until Phase 5. */
+    .belts-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      pointer-events: auto;
+    }
+    .belts-modal.hidden { display: none; }
+    .belts-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(5, 5, 14, 0.78);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      cursor: pointer;
+    }
+    .belts-panel {
+      position: relative;
+      width: min(780px, 100%);
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(
+        145deg,
+        rgba(26, 22, 12, 0.96) 0%,
+        rgba(14, 12, 6, 0.96) 100%
+      );
+      border: 1px solid rgba(255, 220, 92, 0.45);
+      border-radius: 18px;
+      color: #fff;
+      box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.65),
+        0 0 60px rgba(255, 220, 92, 0.18);
+      animation: belts-panel-enter 0.28s ease-out forwards;
+    }
+    @keyframes belts-panel-enter {
+      from { opacity: 0; transform: scale(0.96) translateY(10px); }
+      to   { opacity: 1; transform: scale(1)    translateY(0);   }
+    }
+    .belts-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 22px 14px;
+      border-bottom: 1px solid rgba(255, 220, 92, 0.18);
+    }
+    .belts-title {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: #ffdc5c;
+      flex-shrink: 0;
+    }
+    .belts-progress {
+      flex: 1;
+      text-align: right;
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.62);
+      font-weight: 600;
+    }
+    .belts-close {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+    .belts-close:hover {
+      background: rgba(255, 220, 92, 0.2);
+      color: #fff;
+      border-color: rgba(255, 220, 92, 0.6);
+    }
+    /* Tabs — switch between Offline (16 local badges) and Online (5 live
+       leaderboard belts). Pill style, gold accent on the active one. */
+    .belts-tabs {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .belts-tab {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: rgba(255, 255, 255, 0.75);
+      padding: 7px 14px;
+      border-radius: 999px;
+      font: 600 12px/1 'Segoe UI', Arial, sans-serif;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .belts-tab:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+    .belts-tab.active {
+      background: rgba(255, 220, 92, 0.22);
+      border-color: rgba(255, 220, 92, 0.7);
+      color: #ffdc5c;
+    }
+    .belts-tab-icon { font-size: 14px; line-height: 1; }
+
+    .belts-body { overflow: hidden; flex: 1; min-height: 0; display: flex; }
+    .belts-grid {
+      gap: 12px;
+      padding: 18px 22px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .belts-grid-offline {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+    }
+    /* Online tab: one column per belt, each with its own top-10 list. */
+    .belts-grid-online {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .belt-online-col {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 220, 92, 0.2);
+      border-radius: 10px;
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .belt-online-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .belt-online-icon {
+      font-size: 28px;
+      line-height: 1;
+      filter: drop-shadow(0 0 6px rgba(255, 220, 92, 0.5));
+    }
+    .belt-online-name-big {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #ffdc5c;
+      line-height: 1.2;
+    }
+    .belt-online-criterion {
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      opacity: 0.65;
+      margin-top: 2px;
+    }
+    .belt-online-holder {
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      background: rgba(255, 220, 92, 0.08);
+      border-left: 2px solid rgba(255, 220, 92, 0.65);
+      padding: 6px 8px;
+      border-radius: 0 6px 6px 0;
+      opacity: 0.9;
+    }
+    .belt-online-holder strong { color: #ffdc5c; font-weight: 700; }
+    .belt-online-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .belt-online-row {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      padding: 4px 6px;
+      border-radius: 4px;
+      color: rgba(255, 255, 255, 0.82);
+    }
+    .belt-online-row.holder { color: #ffdc5c; font-weight: 700; }
+    .belt-online-row.is-me {
+      background: rgba(126, 207, 255, 0.14);
+      border: 1px solid rgba(126, 207, 255, 0.4);
+      color: #cfe8ff;
+    }
+    .belt-online-rank {
+      font-variant-numeric: tabular-nums;
+      opacity: 0.55;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .belt-online-row.holder .belt-online-rank,
+    .belt-online-row.is-me .belt-online-rank { opacity: 0.95; }
+    .belt-online-value {
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .belt-online-empty {
+      color: rgba(255, 255, 255, 0.45);
+      font-style: italic;
+      font-size: 12px;
+      text-align: center;
+      padding: 8px 0;
+    }
+    .belts-online-loading,
+    .belts-online-error {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 40px 20px;
+      color: rgba(255, 255, 255, 0.6);
+      font-style: italic;
+    }
+    .belts-online-error { color: #ff8866; }
+    .belts-footer {
+      padding: 12px 22px 16px;
+      border-top: 1px solid rgba(255, 220, 92, 0.12);
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .belts-footer kbd {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.12);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-family: 'Consolas', 'Menlo', monospace;
+      font-size: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #ffdc5c;
+      margin: 0 2px;
+    }
+    /* ---------- Single belt slot ---------- */
+    .belt-slot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 12px 8px 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      text-align: center;
+      transition: transform 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .belt-slot.unlocked {
+      background: linear-gradient(
+        180deg,
+        rgba(255, 220, 92, 0.12) 0%,
+        rgba(255, 220, 92, 0.04) 100%
+      );
+      border-color: rgba(255, 220, 92, 0.55);
+    }
+    .belt-slot.unlocked:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255, 220, 92, 0.85);
+      background: linear-gradient(
+        180deg,
+        rgba(255, 220, 92, 0.2) 0%,
+        rgba(255, 220, 92, 0.08) 100%
+      );
+    }
+    .belt-slot.locked {
+      opacity: 0.68;
+    }
+    .belt-slot.locked:hover {
+      opacity: 0.9;
+    }
+    .belt-icon {
+      width: 64px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      border-radius: 50%;
+      background: radial-gradient(
+        circle at 50% 45%,
+        rgba(255, 220, 92, 0.18) 0%,
+        transparent 70%
+      );
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+    }
+    /* AI-generated PNG inside .belt-icon. Fills the circle slot; the
+       emoji fallback (plain text) shares the same parent and uses
+       font-size 28px from .belt-icon when the <img> errors out. */
+    .belt-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    /* Online-tab variant — bigger medallion for that column header. */
+    .belt-img-online {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    .belt-online-icon {
+      width: 54px;
+      height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .belt-slot.locked .belt-icon {
+      background: radial-gradient(
+        circle at 50% 45%,
+        rgba(255, 255, 255, 0.05) 0%,
+        transparent 70%
+      );
+      filter: grayscale(1) brightness(0.65);
+    }
+    .belt-slot.unlocked .belt-icon {
+      box-shadow: 0 0 14px rgba(255, 220, 92, 0.4);
+      border: 1.5px solid rgba(255, 220, 92, 0.6);
+    }
+    .belt-name {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      color: #fff;
+      line-height: 1.25;
+    }
+    .belt-slot.locked .belt-name {
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .belt-desc {
+      font-size: 10px;
+      line-height: 1.25;
+      opacity: 0.6;
+      color: #f3e7c4;
+    }
+
+    /* Responsive — compact grid on narrow screens */
+    @media (max-width: 720px) {
+      .belts-panel { width: 100%; }
+      .belts-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 14px; }
+      .belts-title { font-size: 18px; }
+      .belt-icon { width: 40px; height: 40px; font-size: 22px; }
+      .belt-name { font-size: 10px; }
+      .belt-desc { font-size: 9px; }
+    }
+    @media (max-width: 460px) {
+      .belts-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* ---------- Badge unlock toast (BADGES_DESIGN Phase 3) ----------
+       Floating card at the top of the screen surfaced by badge-toast.ts
+       when stats.recentlyUnlocked holds a new belt id. Click or auto-
+       dismiss after 6 s. Placeholder emoji icons until the Phase 5 PNG
+       assets land; the CSS won't need touching then — just swap the
+       inner element of .badge-toast-icon to <img>. */
+    .badge-toast {
+      position: fixed;
+      top: 30px;
+      left: 50%;
+      transform: translate(-50%, -24px);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 300px;
+      max-width: 460px;
+      padding: 14px 22px 14px 16px;
+      background: linear-gradient(
+        135deg,
+        rgba(40, 32, 10, 0.92) 0%,
+        rgba(20, 16, 5, 0.94) 100%
+      );
+      border: 1px solid rgba(255, 220, 92, 0.6);
+      border-radius: 14px;
+      color: #fff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      box-shadow:
+        0 10px 32px rgba(0, 0, 0, 0.55),
+        0 0 32px rgba(255, 220, 92, 0.22);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      cursor: pointer;
+      pointer-events: auto;
+      z-index: 2000;  /* above end-screen overlay (full-overlay z=auto) */
+      opacity: 0;
+      overflow: hidden;
+    }
+    .badge-toast.hidden {
+      display: none;
+    }
+    .badge-toast.badge-toast-enter {
+      animation: badge-toast-enter 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.1) forwards;
+    }
+    @keyframes badge-toast-enter {
+      0%   { opacity: 0; transform: translate(-50%, -24px) scale(0.92); }
+      60%  { opacity: 1; transform: translate(-50%, 6px)   scale(1.04); }
+      100% { opacity: 1; transform: translate(-50%, 0px)   scale(1);    }
+    }
+    /* Shine sweep across the panel when it appears — "newly earned" feel. */
+    .badge-toast-shine {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(
+        110deg,
+        transparent 30%,
+        rgba(255, 220, 92, 0.28) 50%,
+        transparent 70%
+      );
+      transform: translateX(-100%);
+    }
+    .badge-toast.badge-toast-enter .badge-toast-shine {
+      animation: badge-toast-shine 1.3s ease-out 0.15s forwards;
+    }
+    @keyframes badge-toast-shine {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .badge-toast-icon {
+      width: 56px;
+      height: 56px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      line-height: 1;
+      background: radial-gradient(
+        circle at 50% 45%,
+        rgba(255, 220, 92, 0.35) 0%,
+        rgba(255, 220, 92, 0.08) 60%,
+        transparent 100%
+      );
+      border: 2px solid rgba(255, 220, 92, 0.75);
+      border-radius: 50%;
+      box-shadow: 0 0 18px rgba(255, 220, 92, 0.35);
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+    }
+    .badge-toast-body {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+    .badge-toast-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      color: #ffdc5c;
+      text-transform: uppercase;
+      text-shadow: 0 0 6px rgba(255, 220, 92, 0.5);
+    }
+    .badge-toast-name {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .badge-toast-desc {
+      font-size: 12px;
+      line-height: 1.3;
+      opacity: 0.78;
+      color: #f3e7c4;
+    }
+
+    /* ---------- Portal warp transition (jam portal in/out) ----------
+       Fullscreen overlay that pulses out from the centre with the portal's
+       colour when the player walks through. Runs for 650ms before the
+       actual page redirect fires (see portal.ts triggerWarpAndRedirect).
+       The game canvas + HUD fade white/blue-out in parallel for the
+       "absorbed into the portal" feel. */
+    #portal-warp-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0;
+      background: radial-gradient(
+        circle at 50% 50%,
+        var(--warp-color, #44ff88) 0%,
+        var(--warp-color, #44ff88) 18%,
+        transparent 70%
+      );
+      transform: scale(0.3);
+      filter: blur(0);
+      mix-blend-mode: screen;
+      will-change: opacity, transform, filter;
+    }
+    body.portal-warp-active #portal-warp-overlay {
+      animation: portal-warp 0.65s ease-in forwards;
+    }
+    @keyframes portal-warp {
+      0%   { opacity: 0;   transform: scale(0.3); filter: blur(0px);  }
+      25%  { opacity: 0.55; transform: scale(0.9); filter: blur(2px);  }
+      70%  { opacity: 1;    transform: scale(2.4); filter: blur(6px);  }
+      100% { opacity: 1;    transform: scale(3.8); filter: blur(14px); }
+    }
+    /* While warping, wash out the game canvas + HUD so the colour takes
+       over. Keeps the settings bar + overlays readable until the last
+       20% of the transition, then crunches to pure colour. */
+    body.portal-warp-active canvas,
+    body.portal-warp-active #hud,
+    body.portal-warp-active .full-overlay:not(.hidden) {
+      animation: portal-warp-fade 0.65s ease-in forwards;
+    }
+    @keyframes portal-warp-fade {
+      0%   { filter: saturate(1)   brightness(1)   blur(0);    opacity: 1; }
+      55%  { filter: saturate(1.5) brightness(1.25) blur(1px);  opacity: 0.85; }
+      100% { filter: saturate(0.4) brightness(1.6)  blur(6px);  opacity: 0.15; }
+    }
+
     /* ---------- Mobile touch controls ---------- */
     #touch-controls {
       position: fixed;
@@ -1099,22 +2274,256 @@
       top: 0;
       left: 0;
     }
+
+    /* ---------- Responsive: narrow viewports (phones in landscape,
+         small tablets). Stacks character-select vertically so the 3D
+         preview still fits. Doesn't touch the in-match HUD — the touch
+         branch already handles that separately. ---------- */
+    @media (max-width: 820px) {
+      #character-select .select-body {
+        flex-direction: column;
+        gap: 18px;
+        padding: 0 16px;
+        max-width: 100%;
+      }
+      #critter-grid {
+        width: 320px;
+        gap: 10px;
+      }
+      .critter-slot {
+        width: 96px;
+        height: 96px;
+      }
+      .critter-slot .slot-avatar {
+        width: 64px;
+        height: 64px;
+      }
+      #preview-pane {
+        width: 360px;
+      }
+      #preview-canvas {
+        width: 340px;
+        height: 300px;
+      }
+      #critter-info-name { font-size: 22px; }
+      #title-screen .title-mode-btn {
+        min-width: 260px;
+        font-size: 15px;
+        padding: 11px 22px;
+      }
+      .controls-hint {
+        font-size: 11px;
+        gap: 4px 10px;
+        bottom: 32px;
+      }
+      .controls-hint-gamepad {
+        font-size: 10px;
+      }
+    }
+
+    /* ---------- Responsive: short viewports (phones in landscape
+         often peak at ~390px height). Tightens vertical rhythm so
+         the title + buttons + controls stay on-screen. ---------- */
+    @media (max-height: 520px) {
+      #title-screen .game-title {
+        font-size: clamp(36px, 7vw, 72px);
+        margin-bottom: 8px;
+      }
+      #title-screen .tagline {
+        font-size: 13px;
+        margin-bottom: 18px;
+      }
+      #title-screen .title-mode-buttons {
+        gap: 8px;
+        margin-top: 10px;
+      }
+      #title-screen .title-mode-btn {
+        padding: 9px 22px;
+        font-size: 14px;
+      }
+      .title-signature {
+        bottom: 10px;
+        left: 12px;
+        font-size: 11.5px;
+        padding: 5px 11px;
+      }
+      .controls-hint {
+        bottom: 22px;
+        font-size: 11px;
+      }
+      .controls-hint-gamepad {
+        bottom: 4px;
+      }
+      #character-select h2 {
+        font-size: 20px;
+        margin-bottom: 14px;
+      }
+    }
+
+    /* ---------- Responsive: very narrow (portrait phones that somehow
+         bypass the rotate prompt, or foldables). Keeps content legible
+         rather than overflowing. ---------- */
+    @media (max-width: 520px) {
+      #hud-top { padding: 8px 12px; font-size: 15px; gap: 10px; }
+      .settings-btn { width: 32px; height: 32px; font-size: 14px; }
+      #title-screen .title-mode-btn {
+        min-width: 220px;
+        font-size: 14px;
+      }
+      .title-signature {
+        font-size: 12px;
+        padding: 5px 10px;
+        bottom: 12px;
+        left: 12px;
+      }
+      #critter-grid { width: 280px; }
+      .critter-slot { width: 84px; height: 84px; }
+      .critter-slot .slot-avatar { width: 56px; height: 56px; }
+    }
+
+    /* -----------------------------------------------------------------
+       SPRITE ICON SYSTEMS
+       -----------------------------------------------------------------
+       Two AI-generated sprite sheets power the HUD + ability icons:
+         - /images/hud-icons.png     (4 cols × 6 rows, 256 × 256 per cell)
+         - /images/ability-icons.png (3 cols × 9 rows, ~256 px per cell)
+
+       The HUD sheet is authored in HUD_mejorado.png (project root) with
+       a 4×6 grid of clean icons + 20 px margin + 20 px gutter. The
+       script `scripts/rebuild-hud-sheet.mjs` recomposes it into the
+       runtime sheet: uniform 256×256 cells, zero padding, so the CSS
+       keeps using simple percentage math.
+
+       Visibility is gated by classes on <body>:
+         body.has-hud-sprites     → HUD sprites on, emoji fallbacks hidden
+         body.has-ability-sprites → ability sprites on, emojis hidden
+
+       main.ts runs a tiny preload that sets the flag only if the image
+       actually loads (onload). If the asset isn't shipped yet or 404s,
+       the classes stay off and the emoji fallbacks remain. That lets the
+       game ship the UI polish progressively without breaking anything.
+       ----------------------------------------------------------------- */
+
+    /* Shared base — consumers set --icon-size and pick a position class. */
+    .sprite-hud,
+    .sprite-ability {
+      display: inline-block;
+      flex-shrink: 0;
+      background-repeat: no-repeat;
+      background-size: 100% 100%; /* overridden per sheet below */
+      width: var(--icon-size, 24px);
+      height: var(--icon-size, 24px);
+    }
+
+    .sprite-hud {
+      background-image: url('./images/hud-icons.png');
+      /* Grid: 4 cols × 6 rows. Each cell is 1/4 wide and 1/6 tall of
+         the image, so scaling the image to 400% × 600% of the element
+         makes one cell exactly fill the element. */
+      background-size: 400% 600%;
+    }
+    .sprite-ability {
+      background-image: url('./images/ability-icons.png');
+      background-size: 300% 900%;
+    }
+
+    /* Hidden by default; the preload in main.ts flips them on once the
+       sheet is confirmed to load. */
+    .sprite-hud, .sprite-ability { display: none; }
+    body.has-hud-sprites     .sprite-hud     { display: inline-block; }
+    body.has-ability-sprites .sprite-ability { display: inline-block; }
+
+    /* Emoji fallback: visible by default, hidden once sprites are live. */
+    body.has-hud-sprites     .sprite-fallback-hud     { display: none; }
+    body.has-ability-sprites .sprite-fallback-ability { display: none; }
+
+    /* ---- HUD sprite positions (col, row → percentage of grid) ----
+       With 4×6 layout: col→0/33.3/66.6/100%, row→0/20/40/60/80/100%. */
+    /* Row 0: Hearts + immunity */
+    .sprite-hud-heart-full    { background-position:   0%   0%; }
+    .sprite-hud-heart-half    { background-position:  33.333%   0%; }
+    .sprite-hud-heart-empty   { background-position:  66.666%   0%; }
+    .sprite-hud-immunity-star { background-position: 100%   0%; }
+    /* Row 1: Critter heads A */
+    .sprite-hud-trunk         { background-position:   0%  20%; }
+    .sprite-hud-kurama        { background-position:  33.333%  20%; }
+    .sprite-hud-sergei        { background-position:  66.666%  20%; }
+    .sprite-hud-shelly        { background-position: 100%  20%; }
+    /* Row 2: Critter heads B */
+    .sprite-hud-kermit        { background-position:   0%  40%; }
+    .sprite-hud-sihans        { background-position:  33.333%  40%; }
+    .sprite-hud-kowalski      { background-position:  66.666%  40%; }
+    .sprite-hud-cheeto        { background-position: 100%  40%; }
+    /* Row 3: Crab + meta */
+    .sprite-hud-sebastian     { background-position:   0%  60%; }
+    .sprite-hud-bot-mask      { background-position:  33.333%  60%; }
+    .sprite-hud-timer         { background-position:  66.666%  60%; }
+    .sprite-hud-skull         { background-position: 100%  60%; }
+    /* Row 4: Trophy + crown + sfx */
+    .sprite-hud-trophy        { background-position:   0%  80%; }
+    .sprite-hud-crown         { background-position:  33.333%  80%; }
+    .sprite-hud-sfx-on        { background-position:  66.666%  80%; }
+    .sprite-hud-sfx-off       { background-position: 100%  80%; }
+    /* Row 5: Music + belts (belts-trophy occupies col 2; col 3 is blank) */
+    .sprite-hud-music-on      { background-position:   0% 100%; }
+    .sprite-hud-music-off     { background-position:  33.333% 100%; }
+    .sprite-hud-belts-trophy  { background-position:  66.666% 100%; }
+    /* Removed in the v2 sheet: life-pill / countdown / scoreboard — all
+       three were CSS declarations without a single consumer in TS/JS,
+       so dropping them breaks nothing. Restore from git if an usage is
+       added later. */
+
+    /* ---- Ability sprite positions (3 cols × 9 rows) ----
+       Columns (J / K / L) → 0%, 50%, 100%
+       Rows (9 critters)   → 0%, 12.5%, 25%, 37.5%, 50%, 62.5%, 75%, 87.5%, 100% */
+    .sprite-ability-trunk-j     { background-position:   0%   0%; }
+    .sprite-ability-trunk-k     { background-position:  50%   0%; }
+    .sprite-ability-trunk-l     { background-position: 100%   0%; }
+    .sprite-ability-kurama-j    { background-position:   0%  12.5%; }
+    .sprite-ability-kurama-k    { background-position:  50%  12.5%; }
+    .sprite-ability-kurama-l    { background-position: 100%  12.5%; }
+    .sprite-ability-sergei-j    { background-position:   0%  25%; }
+    .sprite-ability-sergei-k    { background-position:  50%  25%; }
+    .sprite-ability-sergei-l    { background-position: 100%  25%; }
+    .sprite-ability-shelly-j    { background-position:   0%  37.5%; }
+    .sprite-ability-shelly-k    { background-position:  50%  37.5%; }
+    .sprite-ability-shelly-l    { background-position: 100%  37.5%; }
+    .sprite-ability-kermit-j    { background-position:   0%  50%; }
+    .sprite-ability-kermit-k    { background-position:  50%  50%; }
+    .sprite-ability-kermit-l    { background-position: 100%  50%; }
+    .sprite-ability-sihans-j    { background-position:   0%  62.5%; }
+    .sprite-ability-sihans-k    { background-position:  50%  62.5%; }
+    .sprite-ability-sihans-l    { background-position: 100%  62.5%; }
+    .sprite-ability-kowalski-j  { background-position:   0%  75%; }
+    .sprite-ability-kowalski-k  { background-position:  50%  75%; }
+    .sprite-ability-kowalski-l  { background-position: 100%  75%; }
+    .sprite-ability-cheeto-j    { background-position:   0%  87.5%; }
+    .sprite-ability-cheeto-k    { background-position:  50%  87.5%; }
+    .sprite-ability-cheeto-l    { background-position: 100%  87.5%; }
+    .sprite-ability-sebastian-j { background-position:   0% 100%; }
+    .sprite-ability-sebastian-k { background-position:  50% 100%; }
+    .sprite-ability-sebastian-l { background-position: 100% 100%; }
   </style>
 </head>
 <body>
   <div id="hud">
     <div id="hud-top">
-      <div id="hud-top-left">
-        <span id="hud-alive">Alive: 4</span>
+      <div id="hud-top-center">
         <span id="hud-timer">2:00</span>
+        <span id="hud-alive">Alive: 4</span>
       </div>
-      <div id="hud-lives"></div>
       <div id="hud-settings">
         <button id="btn-portal-toggle" class="settings-btn touch-only" title="Toggle portals" aria-label="Toggle portals">🌀</button>
         <button id="btn-sfx" class="settings-btn" title="Disable sound effects" aria-pressed="false">🔊</button>
         <button id="btn-music" class="settings-btn" title="Disable music" aria-pressed="false">🎶</button>
       </div>
     </div>
+    <!-- Four per-player life corners. hud/runtime.ts#initAllLivesHUD
+         populates them by critter index. Empty until match start. -->
+    <div id="player-life-0" class="player-life-corner corner-tl"></div>
+    <div id="player-life-1" class="player-life-corner corner-tr"></div>
+    <div id="player-life-2" class="player-life-corner corner-bl"></div>
+    <div id="player-life-3" class="player-life-corner corner-br"></div>
     <div id="overlay" style="display:none;"></div>
     <div id="ability-bar-container"></div>
     <div id="portal-legend">
@@ -1139,8 +2548,23 @@
     </div>
     <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> switch · <kbd>ENTER</kbd> confirm</div>
     <div class="prompt touch-only">Tap a mode to play</div>
-    <div class="controls-hint desktop-only">WASD move · SPACE headbutt · J/K abilities · R restart</div>
-    <div class="controls-hint touch-only">Joystick to move · buttons for headbutt and abilities</div>
+    <div class="controls-hint desktop-only">
+      <span><kbd>WASD</kbd> move</span>
+      <span class="sep">·</span>
+      <span><kbd>SPACE</kbd> headbutt</span>
+      <span class="sep">·</span>
+      <span><kbd>J</kbd> <kbd>K</kbd> abilities</span>
+      <span class="sep">·</span>
+      <span><kbd>L</kbd> ultimate</span>
+      <span class="sep">·</span>
+      <span><kbd>R</kbd> restart</span>
+    </div>
+    <div class="controls-hint touch-only">
+      Joystick to move · on-screen buttons for headbutt, abilities and ultimate
+    </div>
+    <div class="controls-hint-gamepad desktop-only">
+      🎮 Gamepad auto-detected — left stick · A headbutt · X/Y abilities · RB ultimate
+    </div>
     <a class="title-signature"
        href="https://x.com/RGomezR14"
        target="_blank"
@@ -1150,7 +2574,7 @@
   </div>
 
   <div id="character-select" class="full-overlay hidden">
-    <h2>CHOOSE YOUR CRITTER</h2>
+    <h2>CHOOSE YOUR BICHITO</h2>
     <div class="select-body">
       <div id="critter-grid"></div>
       <div id="preview-pane">
@@ -1164,8 +2588,13 @@
         </div>
       </div>
     </div>
-    <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate</div>
+    <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate · <kbd>B</kbd> belts</div>
     <div class="prompt touch-only">Tap a slot to select · tap again to confirm · drag preview to rotate</div>
+    <button id="btn-open-belts" class="belts-trigger" type="button"
+            aria-label="Open Hall of Belts">
+      <span class="belts-trigger-icon">🏆</span>
+      <span class="belts-trigger-label">Belts</span>
+    </button>
   </div>
 
   <!-- Online waiting room — shown while the server is in phase 'waiting'.
@@ -1197,6 +2626,50 @@
     </span>
   </div>
 
+  <!-- Online nickname modal. Opens once the player taps "Online
+       Multiplayer" if no cached identity exists (localStorage). The
+       nickname + device token pair is sent to the server, which
+       either registers a new row or reclaims an existing one that
+       matches the token. See src/online-identity.ts. -->
+  <div id="nickname-modal" class="full-overlay hidden">
+    <div class="nickname-card">
+      <h2 class="nickname-title">PICK YOUR NICKNAME</h2>
+      <p class="nickname-sub">
+        Needed to compete for Online Belts (Throne, Flash, Ironclad,
+        Slayer, Hot Streak). Stored per device — no login, no password.
+      </p>
+      <input
+        id="nickname-input"
+        class="nickname-input"
+        type="text"
+        maxlength="16"
+        placeholder="3–16 chars · letters/digits/-/_"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div id="nickname-error" class="nickname-error" aria-live="polite"></div>
+      <div class="nickname-buttons">
+        <button id="btn-nickname-confirm" class="nickname-btn" type="button">▶ Play online</button>
+        <button id="btn-nickname-cancel" class="nickname-btn nickname-btn-secondary" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause menu (offline vs-bots only). Opens on ESC; backing card lets
+       the game keep rendering behind for context, while input + bot AI
+       freeze via this.paused. -->
+  <div id="pause-menu" class="full-overlay hidden">
+    <div class="pause-card">
+      <h2 class="pause-title">PAUSED</h2>
+      <div class="pause-buttons">
+        <button id="btn-pause-resume" class="pause-btn" type="button">▶ Resume</button>
+        <button id="btn-pause-restart" class="pause-btn" type="button">↻ Restart match</button>
+        <button id="btn-pause-quit" class="pause-btn pause-btn-secondary" type="button">⏏ Quit to title</button>
+      </div>
+      <div class="prompt desktop-only"><kbd>ESC</kbd> resume</div>
+    </div>
+  </div>
+
   <div id="end-screen" class="full-overlay hidden">
     <div class="end-result" id="end-result">Result</div>
     <div class="end-subtitle" id="end-subtitle"></div>
@@ -1225,6 +2698,11 @@
       <button class="touch-button touch-btn-k" data-action="ability2">K</button>
     </div>
   </div>
+
+  <!-- Portal warp overlay (Vibe Jam portal in/out transition). Hidden by
+       default; portal.ts triggerWarpAndRedirect() toggles body.portal-warp-active
+       to run the radial-burst animation before the redirect fires. -->
+  <div id="portal-warp-overlay" aria-hidden="true"></div>
 
   <script type="module" src="/src/main.ts"></script>
   <!-- Vibe Coding Game Jam 2026 widget (required for submission) -->

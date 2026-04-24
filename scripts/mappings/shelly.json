@@ -1,0 +1,8 @@
+[
+  { "dur": 1.292,  "name": "Run" },
+  { "dur": 3.042,  "name": "Defeat" },
+  { "dur": 4.000,  "name": "Idle" },
+  { "dur": 4.458,  "name": "Ability3MegaShell" },
+  { "dur": 5.708,  "name": "Fall" },
+  { "dur": 23.167, "name": "Victory" }
+]

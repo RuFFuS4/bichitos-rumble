@@ -1,5 +1,58 @@
 # Error Log — Bichitos Rumble
 
+### [2026-04-23] Meshy models render as dark matte metal
+- **Where**: `src/critter.ts` → `attachGlbMesh` material pass.
+- **Symptom**: Kurama, Sergei, Sihans, Sebastian looked grey/metallic
+  in the character-select preview, completely off from the flat cartoon
+  colours the Meshy visor showed.
+- **Cause**: Meshy exports GLBs with `metalness: 1` (`MeshPhysicalMaterial`)
+  and **no environment map** in our scene. A fully metallic material
+  without an envMap samples a black "environment" and comes out as
+  dark grey regardless of the diffuse map. Tripo exports with low
+  metalness and didn't show the bug.
+- **Fix**: in `attachGlbMesh`, iterate every `MeshStandardMaterial` on
+  the imported group and, when `metalness > 0.5`, force
+  `metalness = 0` + `roughness = 0.7`. Diffuse map now drives the look
+  and the flat-colour cartoon appearance is restored. Tripo materials
+  stay untouched (their metalness is already low).
+
+### [2026-04-23] SFX / Música buttons invisible outside match
+- **Where**: `src/hud/dom-shared.ts` → `setMatchHudVisible`.
+- **Symptom**: 🔊 / 🎶 buttons missing in title, character-select,
+  waiting, end-screens. User explicitly said "we agreed these should be
+  reachable from every screen".
+- **Cause**: `setMatchHudVisible(false)` set
+  `hudRoot.style.display = 'none'`, which hid `#hud-settings` (where
+  the toggles live) along with everything else inside `#hud`. The CSS
+  had already been written to gate only the match-only children via
+  `body:not(.match-active)` selectors, but the JS display: none was
+  overriding it.
+- **Fix**: rewrote `setMatchHudVisible` so it only toggles the
+  `body.match-active` class and forces `hudRoot.style.display =
+  'block'`. Added `#ability-bar-container` and `#overlay` to the
+  `body:not(.match-active) { display:none }` selector so they stay
+  hidden out of matches. Settings cluster now visible on every screen.
+
+### [2026-04-23] Character preview sizes wildly uneven
+- **Where**: `src/preview.ts` + per-critter scales calibrated for
+  gameplay, not for the podium.
+- **Symptom**: Some critters in the character-select podium looked
+  gigantic and overflowed the frame (Trunk Tripo 1.93u), others looked
+  tiny and hugged the ring (Sebastian Meshy 0.56u in idle). User:
+  "el selector de bichitos es un despropósito falla por todos lados".
+- **Cause**: roster `scale` was tuned to gameplay hitbox feel (elephant
+  bigger than crab on purpose). The preview camera couldn't work
+  simultaneously for both extremes. Compounded by Meshy idle poses
+  being humanoid clips applied to non-humanoid rigs (Sebastian's
+  "Shrugging Shoulders" crouches the crab).
+- **Fix**: added a `fitWrapper` group nested inside `holder` in
+  `preview.ts`. A short polling pass (`setInterval` 60ms, 900ms
+  window) samples `max(h, w, d)` from the live bone bounding box
+  across the idle loop and applies `scale = TARGET (1.9u) / maxDim`
+  to the wrapper. Gameplay scale unchanged; only the preview
+  normalises. All 9 critters now read at ~1.9u max dimension while
+  keeping their own proportions.
+
 ### [2026-04-09] Canvas renders at 0x0 — blue screen
 - **Where**: `src/main.ts` → `renderer.setSize()`
 - **Symptom**: Page loads, HUD visible, but only blue background — no 3D scene
@@ -61,6 +114,33 @@
   add a compass debug helper from day one. The bug was invisible in unit
   tests because they only checked angles 0 and π (which are fixed points
   of the Z-mirror).
+
+### [2026-04-20] Cloned SkinnedMesh — physics moves, vertices stay at origin
+- **Where**: `src/model-loader.ts` → `deepCloneWithMaterials()`
+- **Symptom**: After Sergei was re-exported with a rigged armature
+  (first critter to ship with a real skeleton), the character-select
+  thumbnail rendered as if the mesh were pinned to world origin while
+  the carousel rotated the container around it. In-game the critter
+  followed physics as an invisible ghost; visible geometry stayed
+  stuck at origin.
+- **Cause**: `source.clone(true)` on a `THREE.Group` containing a
+  `SkinnedMesh` clones the mesh and the armature nodes but leaves
+  `SkinnedMesh.skeleton.bones` pointing at the ORIGINAL armature's
+  bones — the ones cached inside the loader. Translating/rotating
+  the clone moves the empty parent, but vertices are still bound to
+  the cached skeleton at world origin.
+- **Fix**: Use `SkeletonUtils.clone()` from
+  `three/examples/jsm/utils/SkeletonUtils.js` for any source that
+  contains at least one `SkinnedMesh` — SkeletonUtils rebuilds the
+  skeleton and reconnects bone references to the clone subtree.
+  Detection: single `source.traverse` checking `node.isSkinnedMesh`.
+  Plain `source.clone(true)` kept as fallback for non-skinned models
+  (cheaper, still the majority today). Comment in the file documents
+  the symptom so the next refactor doesn't revert it.
+- **Lesson**: the moment any critter gets a real armature, SkeletonUtils
+  cloning is mandatory. This bug only surfaces once a skinned model is
+  added; all the critters shipped so far were static meshes, so the
+  cheap clone path worked.
 
 ## Format
 ```

@@ -49,6 +49,14 @@ export class StepAnimationsListing extends EventTarget {
     this.animations_file_path = path
   }
 
+  // [BICHITOS-FORK] Toggle Tripo retargeting on the underlying loader.
+  // The engine flips this on right before entering AnimationsListing in
+  // pre-rigged mode so the human-template clips load with their tracks
+  // renamed to drive the Tripo skeleton bones.
+  public set_tripo_retarget_mode (enabled: boolean): void {
+    this.animation_loader.set_tripo_retarget_mode(enabled)
+  }
+
   /**
    * The amount to raise the arms.
    */

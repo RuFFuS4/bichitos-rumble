@@ -24,7 +24,12 @@ import {
 import { applyHitStop, FEEL } from './gamefeel';
 import { showPreview, swapPreviewCritter, hidePreview } from './preview';
 import { play as playSound, playMusic, preloadMusic } from './audio';
-import { recordPick, recordOutcome, recordFall } from './stats';
+import {
+  recordPick, recordOutcome, recordFall, recordWin,
+  addUnlockedBadges, getStats,
+} from './stats';
+import { checkBadgeUnlocks } from './badges';
+import { maybeShowBadgeToast } from './badge-toast';
 import { getDisplayRoster, getRosterEntry, getPlayableNames, type RosterEntry } from './roster';
 import { preloadModels } from './model-loader';
 import {
@@ -35,11 +40,16 @@ import {
 } from './portal';
 import type { Room } from 'colyseus.js';
 import { getStateCallbacks } from 'colyseus.js';
-import { sendInput, onAbilityFired, type AbilityFiredEvent } from './network';
+import { sendInput, onAbilityFired, onBeltChanged, type AbilityFiredEvent } from './network';
+import { showOnlineBeltToast } from './online-belt-toast';
+import { ensureOnlineIdentity } from './hud/nickname-modal';
+import { type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
 import { spawnShockwaveRing } from './abilities';
+import { spawnDustPuff, clearDustPuffs } from './dust-puff';
+import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended' | 'online';
 
@@ -123,6 +133,21 @@ export class Game {
   private phase: Phase = 'title';
   private phaseTimer = 0;
   private matchTimer = FEEL.match.duration;
+  /** performance.now() of the frame where phase transitioned to 'playing'.
+   *  Used to measure match duration for the Speedrun Belt badge. 0 while
+   *  in menus. */
+  private matchStartMs = 0;
+
+  /** Per-critter drop-from-sky state during the 3-2-1 countdown. When a
+   *  critter's y crosses 0, we play a thud + spawn a dust puff and drop
+   *  it from the map so subsequent frames don't re-fire. Cleared at the
+   *  start of every countdown. */
+  /** Per-critter drop state during the countdown entrance. `delay` staggers
+   *  the fall so the roster doesn't land in sync; `fallStarted` gates the
+   *  skeletal 'fall' clip so we only trigger it once when gravity kicks in. */
+  private countdownDrops = new Map<Critter, {
+    y: number; vy: number; delay: number; fallStarted: boolean;
+  }>();
   private displayRoster: RosterEntry[] = getDisplayRoster();
 
   // --- Online mode state (null when offline) ---
@@ -142,6 +167,14 @@ export class Game {
   private connectInProgress: boolean = false;
   /** Currently highlighted mode on the title screen (keyboard navigation). */
   private titleMode: 'bots' | 'online' = 'bots';
+  /** Offline-only pause flag. When true, the 'playing' branch of update()
+   *  short-circuits (no input, no bot AI, no physics) and the DOM pause
+   *  menu overlay is shown. Toggled by ESC and the pause buttons. */
+  private paused: boolean = false;
+  /** Set after the nickname modal resolves (or from localStorage cache)
+   *  when the player enters online mode. Sent with match-result writes so
+   *  the server can credit stats to the right player row. Null offline. */
+  private onlineIdentity: OnlineIdentity | null = null;
 
 
   constructor(scene: THREE.Scene) {
@@ -211,6 +244,10 @@ export class Game {
     // Mobile portal toggle button → same toggle as desktop P key
     setPortalToggleHandler(() => togglePortalExpanded());
 
+    // Pause menu wiring — ESC toggles pause in offline vs-bots while
+    // in 'playing'. The menu's three buttons resume / restart / quit.
+    this.initPauseMenu();
+
     // Portal entry: skip title + character select, go straight to match
     if (isFromPortal()) {
       this.selectedIdx = resolvePortalCharacter();
@@ -219,6 +256,83 @@ export class Game {
     } else {
       this.enterTitle();
     }
+
+    // Warm the model cache in browser idle time so character-select
+    // swaps are instant and `enterCountdown`'s preload is a cache hit.
+    // Only the 9 playable critters (internal Rojo/Azul/Verde/Morado
+    // don't ship GLBs). Scheduled AFTER enterTitle() so the title
+    // paints first — the user never sees this blocking.
+    this.scheduleIdlePreload();
+  }
+
+  /**
+   * Kick off a background fetch of every playable critter's GLB during
+   * browser idle time. Uses `requestIdleCallback` where available,
+   * falls back to `setTimeout`. Failures are swallowed by
+   * `preloadModels` (Promise.allSettled). Cache hits on subsequent
+   * loads eliminate the character-select → countdown fetch spike.
+   */
+  private scheduleIdlePreload(): void {
+    const paths = getPlayableNames()
+      .map((n) => getRosterEntry(n)?.glbPath)
+      .filter((p): p is string => typeof p === 'string' && p.length > 0);
+    if (paths.length === 0) return;
+    const ric = (window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+    }).requestIdleCallback;
+    const fire = () => {
+      void preloadModels(paths);
+    };
+    if (ric) ric(fire, { timeout: 5000 });
+    else setTimeout(fire, 1200);
+  }
+
+  // -------------------------------------------------------------------------
+  // Pause menu (offline vs-bots only)
+  // -------------------------------------------------------------------------
+
+  private pauseMenuEl: HTMLElement | null = null;
+
+  private initPauseMenu(): void {
+    this.pauseMenuEl = document.getElementById('pause-menu');
+    if (!this.pauseMenuEl) {
+      console.warn('[Game] #pause-menu not found — pause unavailable');
+      return;
+    }
+
+    // ESC toggle during offline gameplay. We capture the event at the
+    // window level with `capture: true` so the menu opens even if some
+    // other handler later calls preventDefault.
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'Escape' || e.repeat) return;
+      // Only offline. Online has no pause (authoritative server).
+      if (this.phase !== 'playing' || this.room) return;
+      this.setPaused(!this.paused);
+      e.preventDefault();
+    });
+
+    document.getElementById('btn-pause-resume')
+      ?.addEventListener('click', () => this.setPaused(false));
+    document.getElementById('btn-pause-restart')
+      ?.addEventListener('click', () => {
+        this.setPaused(false);
+        if (!this.restartInProgress) this.restartMatch();
+      });
+    document.getElementById('btn-pause-quit')
+      ?.addEventListener('click', () => {
+        this.setPaused(false);
+        this.enterTitle();
+      });
+  }
+
+  private setPaused(v: boolean): void {
+    this.paused = v;
+    if (this.pauseMenuEl) {
+      this.pauseMenuEl.classList.toggle('hidden', !v);
+    }
+    // ESC also pushes a 'back' menu action via input.ts. Drop it so the
+    // title phase doesn't see a stale back-press on the next transition.
+    clearMenuActions();
   }
 
   // -------------------------------------------------------------------------
@@ -229,6 +343,9 @@ export class Game {
     clearMenuActions();
     this.phase = 'title';
     this.selectForOnline = false;
+    // A quit-to-title from the pause menu leaves this.paused still true;
+    // clear here so the next match doesn't start frozen.
+    this.setPaused(false);
     document.body.classList.remove('match-active');
     document.body.classList.remove('online-mode');
     disposePortals();
@@ -249,6 +366,10 @@ export class Game {
     this.arena.reset();
     this.onlineCritters.forEach(c => c.dispose());
     this.onlineCritters.clear();
+    // Purge any drop-state or dust-puff leftovers — same anti-flicker
+    // reason as the arena reset above.
+    this.countdownDrops.clear();
+    clearDustPuffs();
     // Rebuild the idle background critters the title expects. enterOnline
     // disposes them, so we must restore them when returning to title.
     if (this.critters.length === 0) {
@@ -309,9 +430,13 @@ export class Game {
     const playerConfig = CRITTER_PRESETS.find(p => p.name === entry?.displayName)
       ?? CRITTER_PRESETS[0]; // safety fallback
 
-    // Rebuild the arena with a fresh random seed (offline)
+    // Rebuild the arena with a fresh random seed (offline). The pack
+    // (jungle / frozen_tundra / desert_dunes / coral_beach / kitsune_shrine)
+    // is also rolled randomly — skybox, fog, ground texture and decorative
+    // props are swapped per match to keep the look varied across
+    // consecutive runs without any menu knob.
     this.arena.reset();
-    this.arena.buildFromSeed((Math.random() * 0xFFFFFFFF) | 0);
+    this.arena.buildFromSeed((Math.random() * 0xFFFFFFFF) | 0, getRandomPackId());
     const roster = buildMatchRoster(
       playerConfig,
       MAX_CRITTERS_PER_MATCH - 1,
@@ -335,9 +460,18 @@ export class Game {
     );
     setPortalLegend(hasStartPortal());
 
-    initAbilityHUD(this.player.abilityStates);
-    initAllLivesHUD(this.critters);
+    initAbilityHUD(
+      this.player.abilityStates,
+      getRosterEntry(this.player.config.name)?.id ?? null,
+    );
+    initAllLivesHUD(this.critters, this.playerIndex);
     showOverlay('Get Ready!');
+
+    // Drop-from-sky entrance: before the "3" shows, hoist every critter
+    // to a random altitude between 12 and 15 units with a small initial
+    // downward nudge. The countdown tick (updateCountdownDrops) integrates
+    // gravity, spawns a dust puff + plays a thud when each one lands.
+    this.initCountdownDrops();
 
     // Stats: the player just committed to a critter for this match.
     recordPick(this.player.config.name);
@@ -376,6 +510,69 @@ export class Game {
     this.player = this.critters[0];
   }
 
+  /**
+   * Start the drop-from-sky animation for every critter in the match.
+   * Called once at countdown entry. Critters are lifted 10..16 units
+   * above the arena and EACH is staggered by a small per-index delay
+   * so the roster lands asynchronously (feels like actual falling from
+   * the sky instead of a synchronized rain). Each critter plays its
+   * skeletal 'fall' clip the instant its delay expires and gravity
+   * takes over; they snap to 'idle' the moment they touch the floor.
+   */
+  private initCountdownDrops(): void {
+    this.countdownDrops.clear();
+    const n = this.critters.length;
+    for (let i = 0; i < n; i++) {
+      const c = this.critters[i];
+      const h = 10 + Math.random() * 6;                  // 10..16
+      // Staggered delay: every critter starts 0.15..0.35s after the
+      // previous one (plus jitter). Player (index 0) always starts
+      // immediately so the local experience doesn't feel sluggish.
+      const baseDelay = i === 0 ? 0 : 0.15 + Math.random() * 0.2;
+      const delay = i === 0 ? 0 : (baseDelay * i);
+      c.mesh.position.y = h;
+      this.countdownDrops.set(c, { y: h, vy: 0, delay, fallStarted: false });
+    }
+  }
+
+  /**
+   * Integrate gravity on every live drop. Each critter waits for its
+   * own `delay` to run out before gravity kicks in and the 'fall' clip
+   * plays. On landing: snap to ground, spawn a dust puff, play impact
+   * SFX, and swap the skeletal state back to 'idle'.
+   */
+  private updateCountdownDrops(dt: number): void {
+    if (this.countdownDrops.size === 0) return;
+    const G = 22; // gravity, world units / s²
+    for (const [c, state] of this.countdownDrops) {
+      if (state.delay > 0) {
+        state.delay -= dt;
+        // Hold altitude + keep feet-tucked pose (use idle clip so the
+        // critter is not frozen in bind pose while it waits).
+        continue;
+      }
+      if (!state.fallStarted) {
+        c.playSkeletal('fall', { fallback: 'idle' });
+        state.fallStarted = true;
+      }
+      state.vy -= G * dt;
+      state.y += state.vy * dt;
+      if (state.y <= 0) {
+        state.y = 0;
+        c.mesh.position.y = 0;
+        spawnDustPuff(this.scene, c.x, 0, c.z);
+        playSoundEffect('headbuttHit');
+        // Force the idle clip to take over — fall has clampWhenFinished
+        // so without an explicit swap the critter would freeze in its
+        // last fall-pose frame forever.
+        c.playSkeletal('idle', { force: true });
+        this.countdownDrops.delete(c);
+      } else {
+        c.mesh.position.y = state.y;
+      }
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Online mode
   // -------------------------------------------------------------------------
@@ -383,8 +580,19 @@ export class Game {
   /**
    * Enter character select in "online" mode. Reuses the offline select UI.
    * Confirming a playable character connects to the server with that name.
+   *
+   * Gated by the nickname modal: if no local identity is cached, we
+   * prompt for a nickname + register it before showing the select. On
+   * cancel, we stay on the title screen.
    */
-  public enterOnlineCharacterSelect(): void {
+  public async enterOnlineCharacterSelect(): Promise<void> {
+    try {
+      const identity = await ensureOnlineIdentity();
+      this.onlineIdentity = identity;
+    } catch (_err) {
+      // User cancelled the nickname modal → stay on title screen.
+      return;
+    }
     this.selectForOnline = true;
     this.enterCharacterSelect();
   }
@@ -459,7 +667,18 @@ export class Game {
       showOverlay('Connecting...');
 
       const { connectToBrawl, getDefaultServerUrl } = await import('./network');
-      const room = await connectToBrawl(getDefaultServerUrl(), { critterName });
+      // Pass playerId+token if we have an online identity — the server
+      // uses this to credit match stats to the right row for the Online
+      // Belts (Fase 3 wires the room handler; for now we just attach it
+      // to the join options so the handshake carries it).
+      const joinOpts: Record<string, unknown> = { critterName };
+      if (this.onlineIdentity) {
+        const { getDeviceToken } = await import('./online-identity');
+        joinOpts.playerId = this.onlineIdentity.playerId;
+        joinOpts.playerToken = getDeviceToken();
+        joinOpts.nickname = this.onlineIdentity.nickname;
+      }
+      const room = await connectToBrawl(getDefaultServerUrl(), joinOpts);
       this.enterOnline(room);
     } catch (err) {
       console.error('[Game] online connect failed:', err);
@@ -532,6 +751,11 @@ export class Game {
     // Ability fire events → trigger client-side VFX + audio
     onAbilityFired(room, (ev: AbilityFiredEvent) => this.handleAbilityFired(ev));
 
+    // Online Belts: if the server detects a belt changed hands after this
+    // match, it broadcasts `beltChanged` to the whole room. Toast it so
+    // everyone sees who just took what.
+    onBeltChanged(room, (ev) => showOnlineBeltToast(ev));
+
     // Attach leave handler — if the server drops us unexpectedly we
     // surface it. Intentional leaves (restartMatch, back-to-title)
     // set this.restartInProgress / this.room=null first, so those
@@ -565,7 +789,10 @@ export class Game {
       this.player = critter;
       this.critters = [critter];
       // Bloque B: all 3 abilities are live (charge_rush + ground_pound + frenzy)
-      initAbilityHUD(this.player.abilityStates);
+      initAbilityHUD(
+        this.player.abilityStates,
+        getRosterEntry(this.player.config.name)?.id ?? null,
+      );
       // Portal redirect params — name/color/speed come from the resolved config
       setPortalPlayerInfo(config.name, config.color, config.speed);
     }
@@ -574,7 +801,20 @@ export class Game {
     // Local may spawn before remote or vice-versa; rebuilding ensures both
     // rows exist once both players are in. Without this, only 1 row is
     // created and the second player's lives never appear in the HUD.
-    initAllLivesHUD([...this.onlineCritters.values()]);
+    initAllLivesHUD([...this.onlineCritters.values()], this.onlineLocalIndex());
+  }
+
+  /** Index of the local player inside the onlineCritters Map's insertion order.
+   *  Used to highlight the correct life-corner. Returns -1 if unknown. */
+  private onlineLocalIndex(): number {
+    const localSid = this.room?.sessionId;
+    if (!localSid) return -1;
+    let i = 0;
+    for (const sid of this.onlineCritters.keys()) {
+      if (sid === localSid) return i;
+      i++;
+    }
+    return -1;
   }
 
   /**
@@ -634,11 +874,21 @@ export class Game {
     // visibility and warning blink from server collapse level.
     const seed = state.arenaSeed;
     if (typeof seed === 'number' && seed !== 0) {
+      // arenaPackId ships as a string; verify before passing so a
+      // mismatched server (older build missing the field) just falls back
+      // to the procedural default instead of breaking the sync path.
+      const rawPack = state.arenaPackId;
+      const packId: ArenaPackId | undefined = isArenaPackId(rawPack) ? rawPack : undefined;
       this.arena.syncFromServer(
         seed,
         state.arenaCollapseLevel ?? 0,
         state.arenaWarningBatch ?? -1,
+        packId,
       );
+      // Tick the falling-fragment tumble animation every frame. We use
+      // tickVisuals (not update) because `update` also drives the offline
+      // collapse timeline — the server is authoritative in online mode.
+      this.arena.tickVisuals(dt);
     }
 
     const allPlayers: Array<{ sessionId: string; alive: boolean }> = [];
@@ -682,7 +932,7 @@ export class Game {
       c.isBot = !!p.isBot;
       if (wasBot !== c.isBot) {
         // Lives HUD shows a 🤖 badge per bot — rebuild so it appears.
-        initAllLivesHUD([...this.onlineCritters.values()]);
+        initAllLivesHUD([...this.onlineCritters.values()], this.onlineLocalIndex());
       }
       // Update ability states from server (for HUD) — guard ArraySchema access
       if (p.abilities && typeof p.abilities.length === 'number') {
@@ -712,6 +962,9 @@ export class Game {
 
       if (serverPhase === 'playing') {
         hideOverlay();
+        // Stamp match start for badge duration tracking (Speedrun Belt).
+        // Mirrors the offline countdown→playing transition.
+        this.matchStartMs = performance.now();
       } else if (serverPhase === 'countdown') {
         // Online countdown: switch to the in-game loop so by the time the
         // "GO!" pops the music is already at full volume.
@@ -781,6 +1034,32 @@ export class Game {
             respawns: this.player.matchStats.respawns,
           });
         }
+
+        // Badge aggregation — mirrors the offline win path. recordOutcome
+        // first (feeds byCritter.wins / totalWins), then recordWin for
+        // the Speedrun/IronWill/Untouchable/ArenaApex signals, then check
+        // unlocks and show the toast. Only fires for wins + losses — the
+        // 'draw' branch skips both.
+        if (this.player && (result === 'win' || result === 'lose')) {
+          recordOutcome(this.player.config.name, result);
+        }
+        if (this.player && result === 'win' && this.matchStartMs > 0) {
+          const durationSecs = (performance.now() - this.matchStartMs) / 1000;
+          recordWin(
+            this.player.config.name,
+            durationSecs,
+            this.player.lives,
+            this.player.matchStats.hitsReceived,
+          );
+          const newly = checkBadgeUnlocks(getStats());
+          if (newly.length > 0) {
+            addUnlockedBadges(newly);
+            console.debug('[Badges] unlocked (online):', newly.join(', '));
+          }
+          maybeShowBadgeToast();
+        }
+        // Reset so the next 'playing' transition re-stamps cleanly.
+        this.matchStartMs = 0;
       }
     }
 
@@ -920,6 +1199,31 @@ export class Game {
     if (result === 'win' || result === 'lose') {
       recordOutcome(this.player.config.name, result);
     }
+
+    // Badge aggregation — wins only. `recordWin` captures the duration +
+    // lives-left + hits-received needed by Speedrun / Iron Will / Arena
+    // Apex / Untouchable / Pain Tolerance conditions. Then we diff against
+    // already-unlocked badges to log new unlocks. UI surfacing (end-screen
+    // toast) will wire into `stats.recentlyUnlocked` in BADGES Phase 3.
+    if (result === 'win' && this.matchStartMs > 0) {
+      const durationSecs = (performance.now() - this.matchStartMs) / 1000;
+      recordWin(
+        this.player.config.name,
+        durationSecs,
+        this.player.lives,
+        this.player.matchStats.hitsReceived,
+      );
+      const newly = checkBadgeUnlocks(getStats());
+      if (newly.length > 0) {
+        addUnlockedBadges(newly);
+        console.debug('[Badges] unlocked:', newly.join(', '));
+      }
+      // Show the end-screen toast for the most recent unlock (if any).
+      // No-op when `stats.recentlyUnlocked === null`.
+      maybeShowBadgeToast();
+    }
+    // Reset start timestamp so a stray post-match tick can't re-fire.
+    this.matchStartMs = 0;
   }
 
   // -------------------------------------------------------------------------
@@ -1067,17 +1371,38 @@ export class Game {
 
       case 'countdown': {
         this.phaseTimer -= dt;
+        // Drop-from-sky animation runs alongside the number overlay.
+        this.updateCountdownDrops(dt);
         const sec = Math.ceil(this.phaseTimer);
         if (sec > 0) {
           showOverlay(`${sec}`);
         } else {
-          hideOverlay();
+          // Flash "GO!" for ~0.45 s before hiding — the green variant in
+          // CSS plays a radial burst, which sells the transition better
+          // than snapping straight to gameplay.
+          showOverlay('GO!');
+          window.setTimeout(() => hideOverlay(), 450);
           this.phase = 'playing';
+          // Stamp the moment the match really starts. Used by recordWin
+          // to compute duration for the Speedrun Belt badge.
+          this.matchStartMs = performance.now();
+          // Safety net: any critter still mid-air when countdown ends
+          // snaps to ground (no thud — we'd rather avoid a late SFX).
+          for (const [c] of this.countdownDrops) c.mesh.position.y = 0;
+          this.countdownDrops.clear();
         }
         break;
       }
 
       case 'playing': {
+        // Offline pause: freeze input, bots, physics and cooldowns while
+        // the pause menu is up. Leave visuals (drag rotation etc.) alone.
+        // The DOM overlay is managed by setPaused().
+        if (this.paused) {
+          // Still update the HUD once so cooldown bars don't snap on resume.
+          updateAbilityHUD(this.player.abilityStates);
+          break;
+        }
         const effectiveDt = applyHitStop(dt);
         if (effectiveDt === 0) {
           updateAbilityHUD(this.player.abilityStates);
@@ -1256,7 +1581,7 @@ export class Game {
   public debugStartOfflineMatch(
     playerName: string,
     botNames: string[],
-    options: { seed?: number } = {},
+    options: { seed?: number; packId?: string } = {},
   ): void {
     const playerConfig = CRITTER_PRESETS.find(c => c.name === playerName);
     if (!playerConfig) { console.warn('[Lab] unknown player:', playerName); return; }
@@ -1285,7 +1610,11 @@ export class Game {
 
     const seed = options.seed ?? ((Math.random() * 0xFFFFFFFF) | 0);
     this.arena.reset();
-    this.arena.buildFromSeed(seed);
+    // Lab doesn't expose a pack picker yet — roll randomly too so the
+    // /tools.html path matches normal play. If a specific pack is needed
+    // for testing, `options.packId` is forwarded when provided.
+    const labPack = isArenaPackId(options.packId) ? options.packId : getRandomPackId();
+    this.arena.buildFromSeed(seed, labPack);
 
     this.rebuildCritters(roster);
 
@@ -1295,15 +1624,20 @@ export class Game {
       .filter((p): p is string => typeof p === 'string');
     if (glbPaths.length > 0) preloadModels(glbPaths);
 
-    initAllLivesHUD(this.critters);
-    initAbilityHUD(this.player.abilityStates);
+    initAllLivesHUD(this.critters, this.playerIndex);
+    initAbilityHUD(
+      this.player.abilityStates,
+      getRosterEntry(this.player.config.name)?.id ?? null,
+    );
     hideOverlay();
   }
 
-  /** Lab-only: rebuild the arena with a specific seed, keeping the current match. */
+  /** Lab-only: rebuild the arena with a specific seed, keeping the current
+   *  match (and the same pack cosmetics the match is already using). */
   public debugForceArenaSeed(seed: number): void {
+    const currentPack = this.arena.getCurrentPackId() ?? undefined;
     this.arena.reset();
-    this.arena.buildFromSeed(seed);
+    this.arena.buildFromSeed(seed, currentPack);
   }
 
   /** Lab-only: read-only snapshot of arena state for display panels. */

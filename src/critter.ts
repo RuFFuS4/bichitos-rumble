@@ -6,7 +6,9 @@ import { play as playSound } from './audio';
 import { getRosterEntry, type RosterEntry } from './roster';
 import { loadModelWithAnimations } from './model-loader';
 import { SkeletalAnimator, type SkeletalState } from './critter-skeletal';
+import { createCritterParts } from './critter-parts';
 import { deriveAnimationPersonality, tickProceduralAnimation, type AnimationPersonality } from './critter-animation';
+import { deriveCritterStats } from './pws-stats';
 
 /**
  * Behaviour tag used ONLY by the /tools.html dev lab to isolate bot
@@ -61,70 +63,60 @@ export const CRITTER_PRESETS: CritterConfig[] = [
     role: 'Glass Cannon',
     tagline: 'High risk, high reward.',
   },
-  // --- First real roster character ---
-  // NOTE: all 9 playable speeds were scaled ×1.3 in one pass to lift the
-  // overall pace without re-tuning ability multipliers. Ratios preserved.
+  // --- 9 playable critters (2026-04-23) -----------------------------------
+  // speed / mass / headbuttForce now derive from CRITTER_PWS (P/W/S levels)
+  // — edit src/pws-stats.ts to rebalance without touching this file.
   {
+    ...deriveCritterStats('Sergei'),
     name: 'Sergei', color: 0xb5651d,
-    speed: 13, mass: 1.1, headbuttForce: 15,
     role: 'Balanced',
     tagline: 'Strong and agile. No weakness.',
   },
-  // --- Second real roster character: elephant Bruiser ---
-  // Stats modelled after Verde (Crusher) — slow, heavy, devastating —
-  // but with real identity + GLB + roster visibility.
   {
+    ...deriveCritterStats('Trunk'),
     name: 'Trunk', color: 0x8c8c8c,
-    speed: 9.1, mass: 1.4, headbuttForce: 17,
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
   },
-
-  // --- Bloque C: 7 remaining playables ---
-  // All share base ability factories (charge_rush / ground_pound / frenzy)
-  // but each kit is tuned per-critter. Server-side CRITTER_ABILITY_KITS
-  // carries the identical impulse/radius/force/multipliers so online play
-  // feels identical to offline.
-
   { // Trickster — fast, light, evasive. Uses Frenzy as ult.
+    ...deriveCritterStats('Kurama'),
     name: 'Kurama', color: 0xff6633,
-    speed: 15.6, mass: 0.8, headbuttForce: 12,
     role: 'Trickster',
     tagline: 'Fast, sly, unpredictable.',
   },
   { // Tank — slow, heavy, crushing. Uses Frenzy as ult (berserk).
+    ...deriveCritterStats('Shelly'),
     name: 'Shelly', color: 0x2d8659,
-    speed: 8.45, mass: 1.5, headbuttForce: 16,
     role: 'Tank',
     tagline: 'Heavy and wise.',
   },
   { // Controller — standard stats, biggest AoE radius.
-    name: 'Kermit', color: 0x44cc44,
-    speed: 11.7, mass: 1.0, headbuttForce: 13,
+    ...deriveCritterStats('Kermit'),
+    name: 'Kermit', color: 0x9c3cee,
     role: 'Controller',
     tagline: 'Venomous area denial.',
   },
   { // Trapper — grounded presence, highest windUp + force on AoE.
+    ...deriveCritterStats('Sihans'),
     name: 'Sihans', color: 0x8b6914,
-    speed: 10.4, mass: 1.15, headbuttForce: 14,
     role: 'Trapper',
     tagline: 'Digs in. Controls ground.',
   },
   { // Mage — widest AoE radius, lowest force (area denial, not burst).
+    ...deriveCritterStats('Kowalski'),
     name: 'Kowalski', color: 0x1a1a3e,
-    speed: 13, mass: 0.9, headbuttForce: 11,
     role: 'Mage',
     tagline: 'Calculated ranged threat.',
   },
   { // Assassin — fastest dash, mini AoE, fragile.
+    ...deriveCritterStats('Cheeto'),
     name: 'Cheeto', color: 0xffaa22,
-    speed: 16.9, mass: 0.7, headbuttForce: 11,
     role: 'Assassin',
     tagline: 'Swift and lethal.',
   },
   { // Glass Cannon — tiny AoE with massive force, high headbutt.
+    ...deriveCritterStats('Sebastian'),
     name: 'Sebastian', color: 0xcc3333,
-    speed: 13.65, mass: 0.75, headbuttForce: 18,
     role: 'Glass Cannon',
     tagline: 'One giant claw. All in.',
   },
@@ -132,6 +124,19 @@ export const CRITTER_PRESETS: CritterConfig[] = [
 
 const BODY_RADIUS = 0.5;
 const HEAD_RADIUS = 0.55;
+
+/**
+ * Target silhouette height (world units) for the GLB mesh inside a Critter.
+ * Applied after the per-roster `scale` so all 9 critters read the same size
+ * in the arena, regardless of source mesh conventions (Tripo ~0.6u, Meshy
+ * ~2.4u, etc.). Picked to split the difference between the shortest (Cheeto
+ * at ~1.4u pre-fit) and tallest (Trunk ~2.0u pre-fit). Tweakable if the
+ * arena starts feeling too crowded or too tiny.
+ *
+ * Physics-agnostic: this scales the visible mesh only. Hitboxes come from
+ * `physicsRadius` on the roster entry and aren't affected.
+ */
+const IN_GAME_TARGET_HEIGHT = 1.7;
 
 export class Critter {
   mesh: THREE.Group;
@@ -168,6 +173,23 @@ export class Critter {
   skipPhysics = false;
   /** Loaded GLB scene graph (null while loading or if procedural-only). */
   glbMesh: THREE.Group | null = null;  // public for debug tuning (make private after)
+  /**
+   * Per-instance live override of roster visual params. Read by
+   * `tickProceduralAnimation` so tooling (the /calibrate.html lab) can
+   * mutate `scale` / `pivotY` on the live critter and see the change
+   * hot — otherwise procedural re-writes `glbMesh.scale.{x,y,z}` and
+   * `glbMesh.position.y` back to the static roster values every frame,
+   * making the sliders look dead.
+   *
+   * `rotation` is carried for symmetry but is currently NOT read by
+   * procedural (it writes `rotation.x` / `rotation.z` only, never `.y`,
+   * which is what the rotation slider touches directly on `glbMesh`).
+   *
+   * Undefined in the game path — the match never sets this, so
+   * procedural falls back to `rosterEntry.*` exactly as before. Zero
+   * gameplay change by design.
+   */
+  rosterOverride?: Partial<Pick<RosterEntry, 'scale' | 'pivotY' | 'rotation'>>;
   /** Pre-collected MeshStandardMaterials from the GLB for fast visual updates. */
   private glbMaterials: THREE.MeshStandardMaterial[] = [];
   /**
@@ -204,6 +226,10 @@ export class Critter {
     abilitiesUsed: 0,
     falls: 0,
     respawns: 0,
+    /** Headbutts received from enemies this match. Bumped from physics.ts
+     *  in the headbutt-impact branch. Feeds the Untouchable / Pain
+     *  Tolerance badge evaluation via recordWin(). */
+    hitsReceived: 0,
   };
 
   /** Edge-detection memory for matchStats counting. */
@@ -220,6 +246,22 @@ export class Critter {
    * just like before — zero breakage for unanimated models.
    */
   skeletal: SkeletalAnimator | null = null;
+
+  /**
+   * Part manipulation handle — resolved when the GLB attaches. Lets
+   * ability code hide bones (Shelly's head/limbs inside the shell),
+   * target specific primitives (Trunk's nose mesh), or clone a tinted
+   * decoy (Kurama Mirror Trick). Null for procedural-only critters.
+   * See `PROCEDURAL_PARTS.md` + `src/critter-parts.ts`.
+   */
+  parts: ReturnType<typeof import('./critter-parts').createCritterParts> | null = null;
+
+  /** Height of the GLB in BIND POSE world space, measured once at
+   *  attach. Used by the character-select preview to apply a uniform
+   *  scale synchronously (no pop), independent of idle-clip wiggle.
+   *  Null until the async GLB load completes; 0 for procedural-only
+   *  critters that have no GLB. */
+  bindPoseHeight: number | null = null;
 
   constructor(config: CritterConfig, scene: THREE.Scene) {
     this.config = config;
@@ -474,7 +516,21 @@ export class Critter {
           glowColor = 0xffff00;
           glowIntensity = 0.5;
           bodyScaleY = 0.85;
+        } else if (this.config.name === 'Kermit') {
+          // Hypnosapo — Kermit's ulti runs a fast hypnotic flicker
+          // between two pinks / purples instead of the default frenzy
+          // red pulse. No skeletal clip ships for this state, so the
+          // effect lives entirely in the emissive channel per the
+          // gameplay-procedural separation rule.
+          const t = Date.now() * 0.025;
+          const flicker = Math.sin(t);
+          const swing = Math.abs(Math.sin(t * 0.5));
+          glowColor = flicker > 0 ? 0xaa00ff : 0xff44cc;
+          glowIntensity = 0.9 + swing * 0.4;
+          // Slight body scale pulse for "charging hypnosis"
+          bodyScaleY = 1.0 + swing * 0.08;
         } else {
+          // Default frenzy — red pulse (Sergei, Shelly, …).
           const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.008);
           glowColor = 0xff1100;
           glowIntensity = 0.6 + pulse * 0.4;
@@ -548,14 +604,30 @@ export class Critter {
     group.position.set(...entry.offset);
     group.position.y += entry.pivotY;
 
-    // Ensure all GLB materials support transparency (needed for immunity blink)
+    // Normalise GLB materials for our shading pipeline:
+    //   - transparent: true → needed for the immunity blink pass
+    //   - metalness/roughness neutralised when the source exported a
+    //     full-PBR rig (Meshy does `metalness: 1`), which reads as dark
+    //     matte without an envMap and kills the saturated colours the
+    //     base map actually contains. Forcing metalness=0 + roughness=0.7
+    //     lets the diffuse map drive the look, matching the flat cartoon
+    //     look from the source visor. Tripo exports already low-metal,
+    //     so we only touch materials that came in with > 0.5.
     group.traverse((node) => {
       const m = node as THREE.Mesh;
       if (!m.isMesh) return;
-      const mat = m.material as THREE.MeshStandardMaterial;
-      if (mat.isMeshStandardMaterial) {
-        mat.transparent = true;
-        mat.opacity = 1.0;
+      const raw = m.material;
+      const mats = Array.isArray(raw) ? raw : [raw];
+      for (const mat of mats) {
+        const std = mat as THREE.MeshStandardMaterial;
+        if (!std.isMeshStandardMaterial) continue;
+        std.transparent = true;
+        std.opacity = 1.0;
+        if (std.metalness > 0.5) {
+          std.metalness = 0;
+          std.roughness = 0.7;
+          std.needsUpdate = true;
+        }
       }
     });
 
@@ -583,23 +655,93 @@ export class Critter {
     this.mesh.add(group);
     this.glbMesh = group;
 
+    // Measure bind-pose silhouette FIRST, before the mixer touches the
+    // skeleton. Used as the baseline for the sync auto-fit in the
+    // preview (so swaps are pop-free — we don't wait for the idle clip
+    // to tick before we know how big the critter is).
+    let measuredHeight = 0;
+    {
+      group.updateMatrixWorld(true);
+      const bbox = new THREE.Box3().setFromObject(group);
+      if (!bbox.isEmpty()) measuredHeight = bbox.max.y - bbox.min.y;
+    }
+    this.bindPoseHeight = measuredHeight > 0.1 ? measuredHeight : null;
+
     // Skeletal animation setup — only if the GLB shipped clips. The mixer
-    // binds to the cloned group so each Critter has its own animation state.
-    // Clips themselves are shared across clones (immutable data — safe).
+    // binds to the cloned group so each Critter has its own animation
+    // state. Clips themselves are shared across clones (immutable data).
+    // Passing the roster id lets the animator consult
+    // `ANIMATION_OVERRIDES[entry.id]` as Tier 0 before the 3-tier
+    // auto-resolver — necessary for the rare critter that ships
+    // ambiguous clip names the heuristic can't disambiguate.
     if (animations.length > 0) {
-      this.skeletal = new SkeletalAnimator(group, animations);
-      // Kick off an idle loop so the critter breathes while we wait for
-      // gameplay signals. Safe no-op if there's no idle clip resolved.
+      this.skeletal = new SkeletalAnimator(group, animations, entry.id);
       this.skeletal.play('idle');
+
+      // Re-measure the bbox once the idle clip has had a moment to pose
+      // the skeleton. Bind pose is often the T-pose or a neutral export
+      // frame that doesn't match the silhouette players actually see —
+      // Mixamo idles commonly shift the spine by 5-10cm, Tripo idles can
+      // compress a mesh by 15% on the first keyframe. Using the idle-
+      // pose height for the in-game fit means all critters land at the
+      // same APPARENT height in both the selector and the arena, not the
+      // same "bind" height (which can be wildly off).
+      this.skeletal.update(0.033); // ~1 frame at 30fps
+      group.updateMatrixWorld(true);
+      const idleBbox = new THREE.Box3().setFromObject(group);
+      if (!idleBbox.isEmpty()) {
+        const idleHeight = idleBbox.max.y - idleBbox.min.y;
+        if (idleHeight > 0.1) measuredHeight = idleHeight;
+      }
+      this.bindPoseHeight = measuredHeight > 0.1 ? measuredHeight : null;
+    }
+
+    // In-game auto-fit: unify silhouette height across the roster so
+    // Sergei (Meshy scale 0.66) doesn't read "giant" next to Kowalski
+    // (Tripo scale 2.5 on a shorter mesh) and vice-versa. Mirrors the
+    // character-select preview's fitWrapper pattern so the selector and
+    // the arena read the same size.
+    //
+    // VISUAL ONLY — physics (`physicsRadius`, mesh position, headbutt
+    // cone) lives on `this.mesh`, not the inner `group`, so scaling the
+    // group doesn't affect hitboxes, knockback, or collision resolution.
+    // Feel stays tied to mass/speed; silhouette is normalised independent.
+    if (measuredHeight > 0.1) {
+      const k = IN_GAME_TARGET_HEIGHT / measuredHeight;
+      group.scale.multiplyScalar(k);
+      this.bindPoseHeight = IN_GAME_TARGET_HEIGHT;
+    }
+
+    if (animations.length > 0) {
       console.debug(
         '[Critter] skeletal animator attached:',
         this.config.name,
         '| clips:',
-        this.skeletal.availableClipNames.join(', '),
+        this.skeletal?.availableClipNames.join(', '),
+        '| idle-pose height (pre-fit):',
+        measuredHeight.toFixed(3),
       );
     }
 
-    console.debug('[Critter] GLB attached:', this.config.name, '| materials:', this.glbMaterials.length);
+    // Parts handle — locates bones + primitives once so ability code can
+    // manipulate them without repeatedly traversing the scene graph.
+    // Finds the first SkinnedMesh skeleton under the clone (may be null
+    // for non-rigged GLBs — the API degrades gracefully).
+    let skeleton: THREE.Skeleton | null = null;
+    group.traverse((child) => {
+      if (!skeleton && (child as THREE.SkinnedMesh).isSkinnedMesh) {
+        skeleton = (child as THREE.SkinnedMesh).skeleton;
+      }
+    });
+    this.parts = createCritterParts(group, skeleton);
+
+    console.debug(
+      '[Critter] GLB attached:',
+      this.config.name,
+      '| materials:', this.glbMaterials.length,
+      '| bones:',     this.parts.bones.size,
+      '| primitives:', this.parts.primitives.length,
+    );
   }
 
   /**
@@ -667,12 +809,19 @@ export class Critter {
     if (!this.skeletal) return;
 
     // Ability cast edges — play the corresponding clip exactly once.
+    // If the AbilityDef provides a `clipPlaybackRate`, pass it to the
+    // animator so the clip speeds up / slows down to match the intended
+    // ability feel (e.g. Sergei's Gorilla Rush 1.03s clip at 2.3× so the
+    // strike pose lands within the 0.28s active window).
     for (let i = 0; i < this.abilityStates.length && i < 3; i++) {
-      const active = this.abilityStates[i].active;
+      const state = this.abilityStates[i];
+      const active = state.active;
       const prev = this.lastAbilityActive[i];
       if (active && !prev) {
         const slotState: SkeletalState = (['ability_1', 'ability_2', 'ability_3'] as const)[i];
-        this.skeletal.play(slotState);
+        this.skeletal.play(slotState, {
+          timeScale: state.def.clipPlaybackRate ?? 1,
+        });
       }
       this.lastAbilityActive[i] = active;
     }
@@ -789,6 +938,10 @@ export class Critter {
     // not be disposed here — the model-loader cache owns them.
     this.skeletal?.dispose();
     this.skeletal = null;
+    // Parts handle doesn't own GPU resources — it just holds references
+    // into the already-disposed mesh tree. Null the handle so consumers
+    // don't accidentally read stale bones.
+    this.parts = null;
     // Dispose all GPU resources: procedural + GLB
     this.mesh.traverse((child) => {
       const m = child as THREE.Mesh;
@@ -828,7 +981,7 @@ export class Critter {
     this.body.scale.y = 1.0;
     this.abilityStates = createAbilityStates(this.config.name);
     // Fresh match → reset per-match counters and edge-detection memory.
-    this.matchStats = { headbutts: 0, abilitiesUsed: 0, falls: 0, respawns: 0 };
+    this.matchStats = { headbutts: 0, abilitiesUsed: 0, falls: 0, respawns: 0, hitsReceived: 0 };
     this.lastStatsHeadbutting = false;
     this.lastStatsFalling = false;
     this.lastStatsAbilityActive = [false, false, false];

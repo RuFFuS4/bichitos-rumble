@@ -6,14 +6,27 @@ el lab se vuelve ilegible para quien entre después.
 
 ---
 
-> **Sibling tool**: [`/animations`](../mesh2motion/README-INTEGRATION.md)
-> — animation lab adapted from Mesh2Motion. Internal, same `noindex`
-> posture. Loads only our 9 critters (roster picker), rewrites the
-> export filename to `<id>.glb`, and pops a toast telling the user
-> where to save the exported GLB in the game repo. The upstream
-> Explore/Retarget flows are NOT built; only `create.html` ships.
-> Full integration notes: [`mesh2motion/README-INTEGRATION.md`](../mesh2motion/README-INTEGRATION.md).
-> Linked from the bottom of this sidebar.
+> **Sibling tools** — all internal (`noindex`), accessible by URL only,
+> linked from the bottom of this sidebar:
+>
+> 1. [`/animations`](../mesh2motion/README-INTEGRATION.md) —
+>    mesh2motion-based lab for **CREATING** animation clips and
+>    exporting GLBs. Upstream flows (Explore/Retarget) stripped;
+>    only `create.html` ships.
+> 2. `/anim-lab.html` — **animation VALIDATION + RUNTIME OVERRIDE**
+>    lab (added 2026-04-24). Loads the game's real `SkeletalAnimator`
+>    for any roster critter, lists every clip + resolved state + the
+>    tier that won (override / exact / prefix / contains / missing),
+>    lets the user play clips manually, override the mapping via
+>    dropdowns, and export a pasteable snippet for
+>    `src/animation-overrides.ts`. Fills the gap between "generate
+>    clips in /animations" and "run clips in the game".
+> 3. `/calibrate.html` — per-critter scale / pivotY / rotation lab
+>    (added 2026-04-24). Not related to animation; silhouette sizing.
+>
+> Full anim-lab design in BUILD_LOG.md §"2026-04-25 Animation
+> Validation Lab". Full mesh2motion integration notes:
+> [`mesh2motion/README-INTEGRATION.md`](../mesh2motion/README-INTEGRATION.md).
 
 ## Propósito
 

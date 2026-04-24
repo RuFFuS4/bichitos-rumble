@@ -5,6 +5,8 @@
 // DUPLICATED from client's src/gamefeel.ts — only the numeric values that
 // affect simulation. Visual values (hit stop, camera shake, scale feedback)
 // stay client-only.
+
+import { deriveCritterStats } from './pws-stats.js';
 //
 // If these drift from the client, physics feel will desync. Keep in sync
 // manually during Bloque A. If this becomes painful, extract to a shared
@@ -91,20 +93,25 @@ export interface CritterConfigServer {
   radius: number;
 }
 
-export const CRITTER_CONFIGS: Record<string, CritterConfigServer> = {
-  // All 9 base speeds scaled ×1.3 from their original tier tuning to lift
-  // overall pace. Ratios preserved so roles keep their relative feel.
-  Sergei:    { name: 'Sergei',    speed: 13,    mass: 1.1,  headbuttForce: 15, radius: 0.55 },
-  Trunk:     { name: 'Trunk',     speed: 9.1,   mass: 1.4,  headbuttForce: 17, radius: 0.55 },
+// Per-critter configs derived from P/W/S tuples. To rebalance a critter,
+// edit pws-stats.ts (both client + server copies) — this table just
+// composes the derived speed/mass/headbuttForce with the per-critter
+// collision radius.
+function serverConfig(name: string): CritterConfigServer {
+  const d = deriveCritterStats(name);
+  return { name, speed: d.speed, mass: d.mass, headbuttForce: d.headbuttForce, radius: 0.55 };
+}
 
-  // --- Bloque C: 7 remaining playables ---
-  Kurama:    { name: 'Kurama',    speed: 15.6,  mass: 0.8,  headbuttForce: 12, radius: 0.55 }, // Trickster
-  Shelly:    { name: 'Shelly',    speed: 8.45,  mass: 1.5,  headbuttForce: 16, radius: 0.55 }, // Tank
-  Kermit:    { name: 'Kermit',    speed: 11.7,  mass: 1.0,  headbuttForce: 13, radius: 0.55 }, // Controller
-  Sihans:    { name: 'Sihans',    speed: 10.4,  mass: 1.15, headbuttForce: 14, radius: 0.55 }, // Trapper
-  Kowalski:  { name: 'Kowalski',  speed: 13,    mass: 0.9,  headbuttForce: 11, radius: 0.55 }, // Mage
-  Cheeto:    { name: 'Cheeto',    speed: 16.9,  mass: 0.7,  headbuttForce: 11, radius: 0.55 }, // Assassin
-  Sebastian: { name: 'Sebastian', speed: 13.65, mass: 0.75, headbuttForce: 18, radius: 0.55 }, // Glass Cannon
+export const CRITTER_CONFIGS: Record<string, CritterConfigServer> = {
+  Sergei:    serverConfig('Sergei'),
+  Trunk:     serverConfig('Trunk'),
+  Kurama:    serverConfig('Kurama'),     // Trickster
+  Shelly:    serverConfig('Shelly'),     // Tank
+  Kermit:    serverConfig('Kermit'),     // Controller
+  Sihans:    serverConfig('Sihans'),     // Trapper
+  Kowalski:  serverConfig('Kowalski'),   // Mage
+  Cheeto:    serverConfig('Cheeto'),     // Assassin
+  Sebastian: serverConfig('Sebastian'),  // Glass Cannon
 };
 
 export const DEFAULT_CRITTER = 'Sergei';

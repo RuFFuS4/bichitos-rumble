@@ -1,0 +1,10 @@
+[
+  { "dur": 0.800, "name": "Victory" },
+  { "dur": 0.800, "name": "Ability2Shockwave" },
+  { "dur": 1.033, "name": "Ability1GorillaRush" },
+  { "dur": 1.200, "name": "Fall" },
+  { "dur": 2.433, "name": "Ability3Frenzy" },
+  { "dur": 3.300, "name": "Idle" },
+  { "dur": 3.967, "name": "Run" },
+  { "dur": 5.500, "name": "Defeat" }
+]

@@ -139,6 +139,20 @@ export class StepWeightSkin extends EventTarget {
     return this.weight_painted_mesh_preview
   }
 
+  // [BICHITOS-FORK] -----------------------------------------------------
+  /**
+   * Hand a pre-existing rigged setup to this step so the lab can skip
+   * the SkinningAlgorithm entirely. Used when the loaded GLB shipped its
+   * own skin weights + skeleton (Tripo Animate exports). After this call
+   * `final_skinned_meshes()` and `skeleton()` return the supplied data
+   * unchanged, ready for AnimationsListing to play clips on top.
+   */
+  public set_pre_rigged_data (meshes: SkinnedMesh[], skeleton: Skeleton): void {
+    this.skinned_meshes = meshes
+    this.binding_skeleton = skeleton
+  }
+  // [BICHITOS-FORK] end -------------------------------------------------
+
   /**
    * Configure head weight correction settings for the solver
    * @param enabled Whether head weight correction is enabled

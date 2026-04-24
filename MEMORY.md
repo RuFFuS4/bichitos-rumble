@@ -1,6 +1,223 @@
 # Memory — Bichitos Rumble
 
-## Key Decisions
+## Fuentes de verdad (canónico — 2026-04-24 handoff)
+
+Si algo de esta lista entra en conflicto con cualquier otra sección
+del proyecto, ESTA gana. Actualizar aquí cuando cambie la verdad
+subyacente, no en duplicado por varios docs.
+
+### Escala visual de los críttrs
+
+- **SoT real**: el auto-fit en `Critter.attachGlbMesh` con constante
+  `IN_GAME_TARGET_HEIGHT = 1.7` en `src/critter.ts`. Se aplica TANTO
+  al preview del selector COMO al gameplay (misma clase).
+- `roster.ts` entry.scale **YA NO es el tamaño final visible**. Es el
+  "scale de entrada al auto-fit": el GLB se escala primero por
+  `entry.scale`, después el auto-fit recomputa para llevar la altura
+  idle-pose a 1.7u. Todos los 9 críttrs terminan a 1.700u.
+- Herramienta de calibración manual: `/calibrate.html` (tercer entry
+  de Vite). Los sliders mutan la mesh en vivo; el botón "Export"
+  dumpa un snippet para pegar en `roster.ts`. **El lab es auxiliar
+  — no edita `roster.ts` automáticamente.** Cualquier ajuste fino
+  pasa por exportar manualmente.
+
+### Sheet HUD canónica
+
+- **Source authored**: `HUD_mejorado.png` en root del proyecto
+  (4×6 grid, 20px margen + 20px gutter, 1024×1536).
+- **Runtime**: `public/images/hud-icons.png` (4×6 grid, 256×256 cells
+  sin padding, mismas dimensiones 1024×1536).
+- **Regeneración**: `node scripts/rebuild-hud-sheet.mjs`. Idempotente:
+  siempre lee del source authored. **Ejecutar cada vez que el authored
+  cambie.** NO editar a mano el PNG runtime.
+- **Backups**:
+  - `public/images/hud-icons.original.png` — backup de la v1 con
+    labels ("5. ELEPHANT", etc.) antes de que el usuario pasara el
+    authored v2.
+- **CSS**: `background-size: 400% 600%`, positions `0/33/66/100% × 0/20/40/60/80/100%`.
+  Definido en `index.html` sección "SPRITE ICON SYSTEMS".
+
+### Sprites del HUD — specificity (lección aprendida)
+
+- Las clases `.sprite-hud-{id}` definen `background-position` pero
+  la regla genérica `.sprite-hud { width: var(--icon-size, 24px) }`
+  gana sobre cualquier override que tenga la misma specificity y vaya
+  antes en el CSS. Para sitios donde el sprite debe llenar un slot
+  (avatar 70×70, slot 74×74, etc.), usar **compound selectors** tipo
+  `.sprite-hud.slot-avatar-sprite` o `.sprite-hud.lives-avatar-sprite`
+  para subir specificity a (0,0,2).
+- Esto se descubrió con MCP screenshots reales; la QA por DOM decía
+  "sprite visible, bgImage correcto" pero el sprite renderizaba 24×24
+  en la esquina.
+
+### Clip resolver de animaciones skeletal
+
+**4 tiers** en `src/critter-skeletal.ts`:
+
+0. **Override explícito por crítter** (Tier 0, añadido 2026-04-24
+   noche): `ANIMATION_OVERRIDES[critterId]?.[state]` en
+   `src/animation-overrides.ts`. Si existe + el clip con ese nombre
+   existe en el GLB, gana. Si el clip no existe en el GLB, fallback al
+   resolver automático.
+1. **Exact** (`name.replace(/[_\s-]/g, '') === state`). `Run` gana
+   sobre `Running` para `state='run'`.
+2. **Prefix** (`normalised.startsWith(keyword)`).
+3. **Contains** (`name.includes(keyword)`).
+
+- `isClipEffectivelyStatic` eps 1e-3 (antes 1e-4). Así los idle con
+  breath micro-motion (~0.5 mm) no caen en la criba de "dead clip".
+- `SkeletalAnimator.getResolveReport()` expone `{state, clipName,
+  source}` para cada logical state. `source` ∈ `override | exact |
+  prefix | contains | missing`. Consumer directo: `/anim-lab.html`.
+
+### Animation overrides — fuente de verdad del mapping
+
+- **SoT**: `src/animation-overrides.ts` (nuevo 2026-04-24). Record sparse
+  `{ critterId: { state: clipName } }`. Vacío por default → 100%
+  automático via resolver 3-tier. Cada entrada overridea SOLO los
+  states problemáticos de ese crítter. Ejemplo:
+  ```ts
+  // Si un día Sergei ambiguase entre Run y Running y el resolver no
+  // lo resolviera bien, añadiríamos:
+  sergei: { run: 'Run' }
+  ```
+  Hoy el record está VACÍO porque el resolver Tier 1 (exact) ya maneja
+  `Run` vs `Running` correctamente — documentado como caso-estudio
+  en el comment del file.
+- **Validación + edición** visual: `/anim-lab.html` (cuarto entry
+  Vite, añadido 2026-04-24). Ver sección dedicada abajo.
+- **Contrato**: si el override apunta a un clip name que no existe
+  en el GLB, es un no-op (console.debug aviso) y el resolver
+  automático corre normal. Los overrides son best-effort, no hard
+  contract.
+
+### `/anim-lab.html` — validación + override runtime de clips
+
+Cuarto entry de Vite, dedicado a animaciones. Estructura paralela a
+`/calibrate.html`:
+
+- Panel izquierdo: roster picker (9 críttrs).
+- Viewport central: Three.js con orbit + zoom, critter seleccionado.
+- Panel derecho:
+  - Playback (Play / Pause / Restart / Stop / Loop / Speed).
+  - Clips in GLB (todos los clips + duración + state resuelto + Play
+    individual).
+  - Resolved mapping (los 13 logical states con dropdown por cada uno
+    + badge de `source` tier).
+  - Export overrides → clipboard con snippet pasteable en
+    `src/animation-overrides.ts`.
+
+**Flujo de uso**:
+1. Abrir `/anim-lab.html`.
+2. Click en crítter → carga GLB + skeletal animator.
+3. Inspeccionar clips y el mapping resuelto. Ver el badge `source`
+   (override / exact / prefix / contains / missing) para saber POR
+   QUÉ el resolver eligió ese clip.
+4. Para forzar un cambio: dropdown de la tabla de mapping. Cambiar
+   → click **"Apply & reload critter"** → el critter se rebuildeará
+   con el override en efecto.
+5. Si el override se confirma bueno: click **"Export snippet"** →
+   pegar en `src/animation-overrides.ts`.
+
+**Debug hook**: `window.__animLab()` desde la consola devuelve
+`{ currentId, critter, sessionOverrides, effectiveOverrides }`.
+
+### Arena packs cosméticos
+
+- 5 packs: `jungle / frozen_tundra / desert_dunes / coral_beach /
+  kitsune_shrine`. Seleccionado aleatoriamente cada partida.
+- **Sync online**: `GameState.arenaPackId` (string, default 'jungle').
+  Rolado en `BrawlRoom.transitionToCountdown`. Layout de props
+  determinístico desde `(seed, packId)` via `mulberry32` en
+  `arena-decorations.ts`.
+- Assets en `public/models/arenas/<pack>/*.glb` + skyboxes en
+  `public/images/skyboxes/<pack>.png` + ground tiles en
+  `public/images/arena-ground/<pack>.png`.
+- Loader completo en `src/arena-decorations.ts`. `Arena.buildFromSeed`
+  acepta `packId` opcional.
+
+### MCP Claude Preview — screenshots
+
+- Default viewport es **portrait** (~452×1600). El juego bloquea
+  portrait → screenshot vacío. **Obligatorio** llamar
+  `preview_resize({ width: 1280, height: 800 })` antes de capturar.
+- Presets `desktop` / `tablet` no redimensionan (reset a native).
+  Siempre dimensiones explícitas.
+- rAF está pausado sin foco en el tab MCP. El game loop no corre.
+  Workaround: `preview_eval` con `window.__game.update(0.016)`
+  manualmente en bucle.
+- Tras soft reload el browser cachea assets estáticos. Para forzar
+  fresh fetch: `location.href = '/?_t=' + Date.now()`.
+
+### Scripts activos vs obsoletos (2026-04-24)
+
+**Activos** (seguir usando):
+- `rebuild-hud-sheet.mjs` (regenera hud-icons desde authored)
+- `optimize-arena-props.mjs` · `aggressive-simplify.mjs` ·
+  `compress-arena-textures.mjs` (pipeline arena)
+- `inspect-clips.mjs` (medir duraciones de clips de un GLB — sigue
+  útil para `scripts/inspect-clips.mjs <path>` en terminal, aunque
+  `/anim-lab.html` ahora expone lo mismo en UI).
+- `import-belts.mjs` · `import-critter.mjs`
+- `verify-critter-glbs.mjs`
+- `doctor.mjs` · `compress-audio.mjs` · `make-og-image.mjs`
+
+**Entries HTML de Vite** (cuatro):
+- `index.html` → juego (prod).
+- `tools.html` → dev lab (partida con debug panel).
+- `calibrate.html` → roster calibration (tamaños scale/pivot).
+- `anim-lab.html` → **animation validation + override** (nuevo
+  2026-04-24 noche).
+
+**Obsoletos** (marcados, candidatos a limpieza post-jam):
+- `scripts/trim-hud-sheet.mjs` — servía para limpiar labels de debug
+  del sheet v1. La sheet v2 (`HUD_mejorado.png`) ya viene sin labels,
+  así que este script es redundante. No borrar por si vuelve a
+  aparecer un sheet con labels; marcado como histórico.
+
+## Key Decisions (latest at top)
+
+### 2026-04-23 — Character-select auto-fit + HUD rework + sprites
+
+- **`preview.ts` has a `fitWrapper` inside `holder`** that applies a
+  per-critter uniform scale. The scale is computed during a 900ms sample
+  window of the idle loop, taking `max(h, w, d)` of the bone bounding
+  box and normalising to `TARGET_SILHOUETTE_MAX = 1.9u`. Preserves
+  proportions per critter (Trunk tall/slim, Sebastian wide/short).
+- **Meshy matte material fix**: `Critter.attachGlbMesh` forces
+  `metalness=0 + roughness=0.7` whenever the source PBR came in with
+  `metalness > 0.5`. Meshy exports at `metalness=1` without an envMap,
+  which rendered as dark grey. Tripo materials are untouched.
+- **Settings HUD always visible**: `setMatchHudVisible` used to
+  `display:none` the entire `#hud`, killing `#hud-settings` (SFX+music).
+  Fixed — now the function only toggles `body.match-active` and CSS
+  gates individual children. Root stays visible so 🔊/🎶 are reachable
+  on every screen.
+- **Lives in 4 corners** (TL/TR/BL/BR) instead of centered top column.
+  70×70 avatars, critter name, hearts, local-player highlighted in gold.
+- **6 ULTIs added** (placeholder `frenzy`) so every critter shows 3
+  slots: Trunk Stampede / Kermit Hypnosapo / Sihans Diggy Rush /
+  Kowalski Blizzard / Cheeto Tiger Rage / Sebastian Red Claw. Client +
+  server mirrored.
+- **Countdown drop is staggered**: player (index 0) falls immediately;
+  bots cascade with `i × (0.15..0.35)s` + jitter. Each critter plays
+  its `fall` clip on gravity onset and snaps to `idle` on landing.
+- **Offline pause menu (ESC → Resume/Restart/Quit)** in vs-bots only.
+  Online doesn't pause (authoritative server).
+- **Portal "Press P" hint** — 3D sprite above each portal, inverse
+  opacity to the main label. Switches to "TAP 🌀" on touch.
+- **Sprite sheet system** `.sprite-hud-*` + `.sprite-ability-*`, activated
+  by `body.has-hud-sprites` / `body.has-ability-sprites` classes only
+  when the backing PNG loads. Emoji fallbacks stay otherwise. Sheets
+  live at `public/images/hud-icons.png` (4×7, 26 icons) and
+  `public/images/ability-icons.png` (3×9, 27 icons). First integration:
+  ability icons in character-select info pane + in-match cooldown HUD.
+- **Favicon**: `/favicon-br.png` (AI-generated BR mark) primary, SVG
+  kept as secondary.
+- **Submitted to Vibe Jam Google Form on 2026-04-23** (well before
+  the May 1 deadline). Repo is now polish-only.
+
+## Key Decisions (historical)
 - **Online multiplayer delivered** (Colyseus authoritative, Railway hosted,
   up to 4 players per room with 60s auto bot-fill, bot-takeover on
   disconnect). Architecture: NO Vercel Functions for realtime, NO

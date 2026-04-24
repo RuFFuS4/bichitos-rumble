@@ -104,9 +104,21 @@ export class StepLoadSkeleton extends EventTarget {
   }
 
   private skeleton_file_path (): SkeletonType {
+    // [BICHITOS-FORK] In pre-rigged mode the skeleton dropdown UI is
+    // never reached (the lab skips Fit/Edit) so its DOM element may be
+    // missing or detached. Bail out gracefully so callers fall back to
+    // manual_set_skeleton_type. Without this guard skeleton_type() in
+    // upstream throws "Cannot read properties of undefined (reading
+    // 'value')" on every animation-listing entry.
+    const dropdown = this.ui.dom_skeleton_drop_type
+    if (dropdown === null || dropdown === undefined || !dropdown.options) {
+      return SkeletonType.None
+    }
+    const sel = dropdown.options[dropdown.selectedIndex]
+    if (!sel) return SkeletonType.None
+
     // get currently selected option out of the model-selection drop-down
-    const skeleton_selection = this.ui.dom_skeleton_drop_type.options
-    const skeleton_file: string = skeleton_selection[skeleton_selection.selectedIndex].value
+    const skeleton_file: string = sel.value
 
     if (skeleton_file === 'select-skeleton') return SkeletonType.None
 

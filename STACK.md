@@ -37,27 +37,75 @@
   Prompts iterated in Suno Advanced (Lyrics + Styles + Title). Mute
   toggles (SFX 🔊, Music 🎶) persist across sessions via
   `localStorage`.
-- **Tripo AI** — 3D character models. All 9 playable critters
+- **Tripo AI** — 3D character model generation. All 9 playable critters
   (`public/models/critters/*.glb`) were generated and iterated there.
   Models imported as GLB + scaled in-engine via `src/model-loader.ts`.
+- **Tripo Animate** (Tripo's rigging + animation product) —
+  auto-rigs the generated model and provides a small animation
+  library per critter. Used for Kermit's 7-clip set (idle, run,
+  ability_1 leap, ability_2 poison cloud, victory, defeat, fall).
+  **Gotcha**: Tripo exports the clips inside NLA tracks → clip names
+  come out as `NlaTrack.XXX` (semantic names lost). The re-name flow
+  lives in `BLENDER_MCP.md` → "Animaciones via Tripo Animate".
+- **Meshy AI** (external, used for Kurama + future imports where
+  Tripo Animate falls short on non-humanoids) — stock-animation
+  library much larger than Tripo Animate and clip names are preserved
+  semantically (no `NlaTrack.XXX` → duration-matching needed). The
+  catch is size: Meshy exports come in at ~150 MB with 2-3 M skinned
+  verts. gltf-transform's `simplify` is NOT skin-aware, so we route
+  Meshy sources through **`gltfpack`** (added as devDep 2026-04-24)
+  which handles skin-aware simplify + meshopt quantization compression.
+  Output typically 12-16 MB — larger than a Tripo 2-3 MB file but
+  runnable over any decent connection.
+
+  Runtime side: `GLTFLoader` is configured with `MeshoptDecoder`
+  (`src/model-loader.ts`) so the compressed GLBs decode on load.
+  Adds ~20 KB gzipped to the shared chunk; transparent to game code.
+
+  The import script auto-detects Meshy-sized sources (> 80 MB) and
+  routes through gltfpack; below that threshold the plain
+  `dedup + weld + simplify` route shipped for the Tripo GLBs still
+  runs. Both routes live in `scripts/import-critter.mjs`. Override
+  manually with `--via-gltfpack` / `--no-gltfpack` flags.
+
+### On standby (kept in the stack, not in active use)
+
 - **Mesh2Motion** (integrated as `/animations` internal lab, subpackage
   `mesh2motion/`) — open-source (MIT code + CC0 assets) web tool for
-  rigging models and exporting animated GLBs. Adapted with a roster
-  picker that preloads our 9 critters + suggests an appropriate rig
-  per critter. The exported GLB drops into `public/models/critters/`
-  and the game's `SkeletalAnimator` picks up the clips automatically.
-- **Tripo Animate** (external, optional) — used for critters whose
-  morphology doesn't map cleanly to Mesh2Motion's rig templates
-  (Shelly turtle, Kermit frog, Sihans mole).
+  rigging models and exporting animated GLBs. Ships a 124-clip human
+  library that we can retarget onto Tripo rigs via the custom
+  `BichitosTripoRetargeter` (bone-name mapping) and an opt-in
+  "Use existing rig" button injected into the Edit Skeleton step.
+  **Standby reason**: Meshy + Tripo Animate together cover animation
+  needs without requiring browser-side retargeting; the lab stays
+  functional for ad-hoc experiments but isn't on the critical path.
+  Full integration details in `mesh2motion/README-INTEGRATION.md`.
+- **Blender MCP** ([`ahujasid/blender-mcp`](https://github.com/ahujasid/blender-mcp)) —
+  local-only MCP server that exposes a running Blender 3.0+ session
+  to Claude Code. Claude writes/executes `bpy` Python scripts directly
+  (rigging, weight paint, animation retarget, GLB export) while Blender
+  is the visual engine. Used heavily during the Tripo / Meshy import
+  pipeline (rename actions, join mesh parts, decimate, pose cleanup,
+  re-export). **Standby reason**: user keeps the MCP connected for
+  ad-hoc debugging and the rare case we need custom bpy tooling, but
+  routine animation import work goes straight from Meshy → gltf-
+  transform when possible (skips the Blender roundtrip). Setup +
+  workflow in `BLENDER_MCP.md`.
 
 Base animation layer is **procedural** (`src/critter-animation.ts`):
 idle bob, run bounce, lean, sway, squash/stretch derived from each
-critter's mass+speed. Skeletal clips from Mesh2Motion / Tripo Animate
-layer on top via `src/critter-skeletal.ts`.
+critter's mass+speed. Skeletal clips from Tripo Animate / Meshy layer
+on top via `src/critter-skeletal.ts` when a critter ships clips.
+Critters without clips (or missing specific states like
+`headbutt_anticip`, `hit`, `respawn`) fall back to procedural
+transparently thanks to the `isClipEffectivelyStatic` safety filter.
+Special per-critter effects that don't need keyframes (e.g. Kermit
+Hypnosapo = purple flicker for `ability_3`) live in
+`critter.ts` → `updateVisuals()` keyed by `config.name`.
 
 Everything AI-generated is exported as static assets that ship with
-the bundle. No runtime calls to Suno, Tripo or any other AI service
-from the shipped build.
+the bundle. No runtime calls to Suno, Tripo, Meshy or any other AI
+service from the shipped build.
 
 ## Architecture — client
 Game code lives in `src/`:
@@ -134,5 +182,5 @@ Server:
 - `@colyseus/schema`
 - `@colyseus/ws-transport`
 
-All AI-generated content (Suno audio, Tripo models) is baked into
-`public/` — no external API calls from the shipped build.
+All AI-generated content (Suno audio, Tripo/Meshy models + anims) is
+baked into `public/` — no external API calls from the shipped build.

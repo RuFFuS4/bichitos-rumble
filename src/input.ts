@@ -144,12 +144,12 @@ export function _pushMenuAction(action: MenuAction): void {
 // ---------------------------------------------------------------------------
 
 /** Capability probe: does this browser report touch input support? */
-export function hasTouchSupport(): boolean {
+function hasTouchSupport(): boolean {
   return 'ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0;
 }
 
 /** Capability probe: is the viewport narrow enough to suggest a mobile device? */
-export function isNarrowViewport(): boolean {
+function isNarrowViewport(): boolean {
   return window.innerWidth < 900;
 }
 

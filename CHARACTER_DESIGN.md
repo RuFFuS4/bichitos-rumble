@@ -1,6 +1,6 @@
 # Character Design
 
-## Gap entre kits temporales y habilidades definitivas (2026-04-17)
+## Gap entre kits temporales y habilidades definitivas (actualizado 2026-04-23)
 
 IMPORTANTE — lo que hay en el juego ahora **no** es todavía el set final de
 habilidades diseñadas más abajo. Para cerrar el roster completo sin pararnos
@@ -12,7 +12,10 @@ en rediseño por personaje, todos los bichitos comparten 3 factories base:
 
 Cada personaje recibe un **kit temporal** reutilizando esas factories con
 tuning distinto (impulse/radius/force/cooldown/multipliers) y un nombre
-descriptivo. Solo Sergei coincide realmente con su diseño final.
+descriptivo. **Los 9 bichitos tienen ahora sus 3 slots ocupados (J/K/L)**
+tras la tanda del 2026-04-23 que añadió placeholder Frenzy a los 6 que
+aún no tenían ULTI. Solo Sergei coincide con su diseño final; los demás
+siguen siendo cascarón funcional con nombre temático.
 
 El siguiente bloque de habilidades no debe hacerse a ciegas: esta tabla
 marca exactamente qué sigue siendo placeholder.
@@ -22,14 +25,159 @@ marca exactamente qué sigue siendo placeholder.
 | Personaje  | Rol temporal | Kit temporal actual (tipos `+ nombre`) | Hab 1 definitiva diseño | Hab 2 definitiva diseño | ULTI definitiva diseño | Gap real |
 |------------|--------------|-----------------------------------------|-------------------------|--------------------------|--------------------------|----------|
 | **Sergei** | Balanced     | CR `Gorilla Rush` + GP `Shockwave` + F `Frenzy` | Charge Rush (dash) | Shockwave (onda área, no stun) | Frenzy (buff velocidad + daño) | **Alineado**. Sergei es el único personaje donde el kit temporal coincide en tipo y sensación con el diseño. |
-| **Trunk**  | Bruiser      | CR `Trunk Ram` + GP `Earthquake`        | Charge Rush (dash frontal) | **Trunk Grip** (agarra + lanza en dirección — targeted grab) | **Ground Pound** (pisotón con STUN de área) | H2 totalmente placeholder (grab/throw no existe). ULTI reusa GP pero sin stun — sólo knockback radial. Sin Frenzy. |
+| **Trunk**  | Bruiser      | CR `Trunk Ram` + GP `Earthquake` + F `Stampede` | Charge Rush (dash frontal) | **Trunk Grip** (agarra + lanza en dirección — targeted grab) | **Ground Pound** (pisotón con STUN de área) | H2 totalmente placeholder (grab/throw no existe). ULTI real pide STUN — hoy la L es un Frenzy placeholder ("Stampede"). |
 | **Kurama** | Trickster    | CR `Fox Dash` + GP `Mirror Burst` + F `Frenzy` | Charge Rush | **Mirror Trick** (deja copia 2s que absorbe daño) | **Copycat** (copia la ULTI del último enemigo golpeado) | H2 y ULTI totalmente placeholder. No hay sistema de ilusiones ni de copia de abilities; Frenzy se usa como relleno de ULTI. |
 | **Shelly** | Tank         | CR `Shell Charge` + GP `Shell Slam` + F `Frenzy` | Charge Rush (caparazón rodando) | **Shell Shield** (invulnerable + inmóvil + refleja daño) | **Mega Shell** (roda gigante empujando todo) | H2 requiere sistema de invulnerabilidad + reflect. ULTI pide movimiento rodante continuo. Ambos placeholder. Frenzy rellena ULTI. |
-| **Kermit** | Controller   | CR `Leap Forward` + GP `Poison Cloud`   | Charge Rush (salto con patas) | **Poison Cloud** (nube que oculta visión de los que están dentro) | **Hypnosapo** (invierte controles de enemigos tocados) | H2 comparte nombre pero el efecto real (zona bloqueadora de visión) no está — es solo knockback radial. ULTI totalmente placeholder (invertir inputs de otros). Sin Frenzy. |
-| **Sihans** | Trapper      | CR `Burrow Rush` + GP `Tremor`          | Charge Rush (bajo tierra + emerge) | **Tunnel** (teleport con zonas lentas en entrada/salida) | **Diggy Diggy Hole** (crea hoyo permanente en el mapa) | H2 requiere teleport + efecto de terreno persistente. ULTI requiere modificar la mesh del arena en runtime. Ambos totalmente placeholder. Sin Frenzy. |
-| **Kowalski** | Mage       | CR `Ice Slide` + GP `Arctic Burst`      | Charge Rush (deslizar panza) | **Snowball** (proyectil a distancia con slow 50%) | **Ice Age** (congela suelo área grande, enemigos resbalan) | Sin sistema de proyectiles (H2 es placeholder). Sin sistema de slipping surface (ULTI placeholder). Sin Frenzy. |
-| **Cheeto** | Assassin     | CR `Pounce` + GP `Paw Stomp`            | Charge Rush (salto felino) | **Shadow Step** (teleport detrás del enemigo más cercano + golpe) | **Tiger Roar** (empuje cónico, no radial) | H2 requiere target-selection + teleport. ULTI pide cono direccional, ahora es radial. Ambos placeholder. Sin Frenzy. |
-| **Sebastian** | Glass Cannon | CR `Claw Rush` + GP `Big Claw Slam`  | Charge Rush (desplazamiento lateral + pinza) | **Claw Sweep** (barrido en abanico frontal) | **Crab Slash** (carga lateral que mata o se cae del mapa) | H1 casi pero no es lateral. H2 pide cono direccional, ahora es radial. ULTI requiere detección "o mato o muero". Todo placeholder funcional. Sin Frenzy. |
+| **Kermit** | Controller   | CR `Leap Forward` + GP `Poison Cloud` + F `Hypnosapo` | Charge Rush (salto con patas) | **Poison Cloud** (nube que oculta visión de los que están dentro) | **Hypnosapo** (invierte controles de enemigos tocados) | H2 comparte nombre pero el efecto real (zona bloqueadora de visión) no está — es sólo knockback radial. ULTI real pide input-inversion — hoy es Frenzy placeholder con el nombre correcto ("Hypnosapo"). |
+| **Sihans** | Trapper      | CR `Burrow Rush` + GP `Tremor` + F `Diggy Rush` | Charge Rush (bajo tierra + emerge) | **Tunnel** (teleport con zonas lentas en entrada/salida) | **Diggy Diggy Hole** (crea hoyo permanente en el mapa) | H2 requiere teleport + efecto de terreno persistente. ULTI pide modificar la mesh del arena en runtime — hoy es Frenzy placeholder ("Diggy Rush"). |
+| **Kowalski** | Mage       | CR `Ice Slide` + GP `Arctic Burst` + F `Blizzard` | Charge Rush (deslizar panza) | **Snowball** (proyectil a distancia con slow 50%) | **Ice Age** (congela suelo área grande, enemigos resbalan) | Sin sistema de proyectiles (H2 placeholder). Sin superficies resbaladizas (ULTI real); hoy L es Frenzy placeholder ("Blizzard"). |
+| **Cheeto** | Assassin     | CR `Pounce` + GP `Paw Stomp` + F `Tiger Rage` | Charge Rush (salto felino) | **Shadow Step** (teleport detrás del enemigo más cercano + golpe) | **Tiger Roar** (empuje cónico, no radial) | H2 requiere target-selection + teleport. ULTI pide cono direccional — hoy L es Frenzy placeholder ("Tiger Rage"). |
+| **Sebastian** | Glass Cannon | CR `Claw Rush` + GP `Big Claw Slam` + F `Red Claw` | Charge Rush (desplazamiento lateral + pinza) | **Claw Sweep** (barrido en abanico frontal) | **Crab Slash** (carga lateral que mata o se cae del mapa) | H1 casi pero no es lateral. H2 pide cono direccional, ahora es radial. ULTI real pide detección "o mato o muero" — hoy L es Frenzy placeholder ("Red Claw"). |
+
+### Cobertura skeletal (2026-04-21)
+
+Estados esqueléticos target por bichito: 8 fijos — `idle`, `run`,
+`ability_1`, `ability_2`, `ability_3` (ULTI), `victory`, `defeat`,
+`fall`. El resto (`headbutt_*`, `hit`, `walk`, `respawn`) son
+procedurales por política (ver `SUBMISSION_CHECKLIST.md`).
+
+| Personaje  | Anim     | Fuente         | Notas                                          |
+|------------|----------|----------------|------------------------------------------------|
+| Cheeto     | **8 / 8**| Tripo Animate  | full kit (Pounce, ShadowStep, TigerRoar, …)    |
+| Kermit     | **7 / 8**| Tripo Animate  | ab_3 Hypnosapo = flicker procedural (sin clip) |
+| Kowalski   | **8 / 8**| Tripo Animate  | full kit (Ice Slide, Snowball, Ice Age)        |
+| Trunk      | **8 / 8**| Tripo Animate  | full kit (Ram, Grip, Ground Pound). Nota: la animación de ab_2 incluye el giro+lanzamiento pero **no el estiramiento horizontal de la trompa** — cuando toquemos la ability, el estiramiento irá procedural (mesh stretch). |
+| Shelly     | **6 / 8**| Tripo Animate  | idle / run / victory / defeat / fall + ab_3 Mega Shell. **Ab_1 Shell Charge** y **Ab_2 Shell Shield** van procedurales por diseño (spin rápido del mesh entero + hide head/hands/feet via bone scale, per `PROCEDURAL_PARTS.md`). |
+| Kurama     | **8 / 8**| Meshy AI       | full kit (Fox Dash = Run_and_Jump, Mirror Trick = Back_Jump, Copycat ULTI = Charged_Spell_Cast). Primer crítter via pipeline Meshy → gltfpack + meshopt compression. 14 MB (vs 70→2 MB de Tripo). |
+| Sebastian  | **6 / 8**| Meshy AI       | idle / run / victory / defeat / fall + ab_2 Claw Sweep (Charged_Slash). **Ab_1 Claw Rush** y **ULTI Crab Slash** van procedurales (dash lateral con `glbMesh.position.x` easing + `glbMesh.scale.z` stretch en dirección de carga). Mixamo rig: sin bones crab-específicos — las 6 patas colapsan a 2 piernas humanoides; pinza grande/pequeña = `RightHand`/`LeftHand`. 15 MB. |
+| Sihans     | **8 / 8**| Meshy AI       | full kit (Burrow Rush = Crawl_and_Look_Back, Tunnel = Charged_Ground_Slam, Diggy Diggy Hole = Dive_Down_and_Land_2). Source era 15.8 MB → plain route (no gltfpack). 6.5 MB. |
+| Sergei     | **8 / 8**| Meshy AI       | regen 2026-04-24, full kit (Gorilla Rush = Parkour_Vault_1, Shockwave = Slow_Orc_Walk, Frenzy = Charged_Spell_Cast). Idle curioso: "Boxing_Guard_Prep" lee como la postura territorial de Donkey Kong. 9.2 MB. |
+
+Total: **68 / 72** estados (94%). Los 4 restantes son abilities
+procedurales por diseño (Kermit Hypnosapo, Shelly Shell Charge +
+Shell Shield, Sebastian Claw Rush + Crab Slash — suman 4, no 5).
+La capa procedural de `critter-animation.ts` cubre automáticamente
+lo que falta.
+
+### Feel pass log (timing + VFX alineados con clips esqueléticos)
+
+Valores finales post-feel-pass. El orden planificado es
+Sergei → Trunk → Cheeto → Kurama → Shelly → Kermit → Sihans →
+Kowalski → Sebastian. Cada entrada registra: duración real del
+clip, valores de la ability, y VFX/SFX añadidos.
+
+#### Sergei — feel pass DONE (2026-04-24)
+
+Clip durations (de `scripts/inspect-clips.mjs`):
+- `Ability1GorillaRush` 1.03 s · `Ability2Shockwave` 0.80 s · `Ability3Frenzy` 2.43 s
+
+| Ability | Param | Antes | Después | Notas |
+|---|---|---|---|---|
+| **Gorilla Rush** | duration | 0.32 | **0.28** | Más corta + reactiva |
+| | impulse | 18 | **20** | Pega más fuerte |
+| | speedMultiplier | 2.4 | **2.6** | Burst notable |
+| | massMultiplier | 2.2 | 2.2 | OK |
+| | windUp | 0.06 | **0.04** | Casi sin anticipación |
+| | cooldown | 4.5 | **4.0** | Más accesible |
+| | **clipPlaybackRate** | — | **2.3×** | **NUEVO**: clip 1.03s → 0.45s efectivo, alineado con active window |
+| **Shockwave** | radius | 3.2 | **3.5** | AoE signature más amplio |
+| | force | 30 | **34** | Knockback notable |
+| | windUp | 0.35 | **0.30** | Más reactivo |
+| | cooldown | 6.5 | **6.0** | Matching FEEL base |
+| **Frenzy** | duration | 4.0 | **2.5** | Match clip 2.43s (buff no dura tras la anim) |
+| | speedMultiplier | 1.3 | **1.45** | Compensa la ventana más corta |
+| | massMultiplier | 1.35 | **1.5** | Peso + mass hit |
+| | windUp | 0.4 | **0.35** | Se acorta ligero |
+| | cooldown | 18.0 | **15.0** | Más frecuente dado que dura menos |
+
+VFX añadido:
+- **`spawnFrenzyBurst()`** en `abilities.ts` — battle-cry ring dorado
+  + flash rojo central, 600ms, radio 2.5u. Se dispara al activar
+  Frenzy. Acompaña al pulse emissive rojo que ya existía.
+- Camera shake ligera (0.55× de la de Ground Pound) en el frame de
+  activación de Frenzy.
+
+Infra añadida (reutilizable por el resto del roster):
+- `AbilityDef.clipPlaybackRate?: number` — permite acelerar/frenar
+  un clip específico cuando la ability dispara. `skeletal.play()`
+  acepta `opts.timeScale` que se propaga desde el def.
+
+SFX: pendiente. Por ahora comparte `'abilityFire'` sintético
+genérico. Plan post-jam: signature con Suno.
+
+#### Trunk — feel pass DONE (2026-04-25)
+
+Clip durations (de `scripts/inspect-clips.mjs`):
+- `Ability1TrunkRam` 4.58 s · `Ability2TrunkGrip` 3.88 s (no usado, ver
+  abajo) · `Ability3GroundPound` 1.96 s
+
+Mapping nota crítica — anim-lab smoke test reveló que los 3 clips del
+GLB están nombrados según el diseño final (Ram / Grip / GroundPound),
+pero el kit placeholder del código era `[charge_rush, ground_pound,
+frenzy]` → slot K (Earthquake) caía sobre Ability2TrunkGrip (un agarre,
+no un pisotón) y slot L (Stampede) caía sobre Ability3GroundPound (un
+pisotón, no un berserk). **Fix via override** en
+`src/animation-overrides.ts`:
+```ts
+trunk: { ability_2: 'Ability3GroundPound' }
+```
+Slot L (Stampede = frenzy) queda procedural intencional (no hay clip de
+frenzy en el GLB; el buff se vende con el emissive pulse rojo existente
+en `critter.ts`). Esta entrada del override se retira cuando llegue el
+tipo de ability `grab`/`Trunk Grip` real.
+
+Identidad vs Sergei (Balanced): **más pesado en cada eje**.
+
+| Ability | Param | Antes | Después | Notas |
+|---|---|---|---|---|
+| **Trunk Ram (J)** | impulse | 14 | **16** | Empuje superior, es bulldozer |
+| | duration | 0.40 | **0.35** | Ligeramente más corta |
+| | windUp | (FEEL) | **0.08** | Más que Sergei 0.04 — telegraph de elefante |
+| | speedMultiplier | 2.0 | **2.1** | Menos que Sergei 2.6 (Trunk pesado) |
+| | massMultiplier | 3.0 | **3.5** | Máximo del roster — arrolla |
+| | cooldown | 5.0 | **4.5** | Más accesible |
+| | **clipPlaybackRate** | — | **5.0×** | **NUEVO**: clip 4.58s → 0.92s efectivo |
+| **Earthquake (K)** | radius | 4.2 | **4.5** | Mayor que Sergei 3.5 |
+| | force | 34 | **40** | Knockback bruiser |
+| | windUp | 0.5 | **0.60** | Telegraph visible |
+| | cooldown | 8.5 | **7.5** | Más uso |
+| | **clipPlaybackRate** | — | **2.8×** | **NUEVO**: clip 1.96s → 0.70s efectivo |
+| **Stampede (L)** | duration | (FEEL 4.0) | **3.0** | Procedural — más larga que Sergei 2.5 |
+| | speedMultiplier | 1.3 | **1.25** | Menos que Sergei 1.45 (Trunk ya lento) |
+| | massMultiplier | 1.35 | **1.80** | Mucho más que Sergei 1.5 — bulldozer ×2 |
+| | cooldown | 18.0 | 18.0 | Default |
+| | windUp | 0.4 | **0.45** | Leve +0.05 |
+
+VFX: ninguno nuevo. Reutiliza `spawnShockwaveRing` ya existente — el
+radio 4.5 (vs 3.5 de Sergei) y la camera shake default generan un
+resultado visualmente más "pesado" sin añadir código. Si tras playtest
+se pide dust stomp particular, abrir ticket separado.
+
+SFX: comparte `'groundPound'` y `'abilityFire'` sintéticos con Sergei.
+Plan post-jam: signature SFX per critter via Suno.
+
+Override retirable: `trunk.ability_2` deja de ser necesario el día que
+el kit temporal se alinee con el diseño final (slot 1 = tipo grab, slot
+2 = ground_pound).
+
+**Observación menor sobre ab_3 (Stampede)**: auto-resuelve a
+`Ability3GroundPound` (prefix). Como Stampede es `frenzy`-type (pure
+buff sin clip específico), al activar L se reproduce brevemente el
+clip de pisotón (1.96s) antes de que el idle tome el relevo durante
+el resto del buff (3.0s total). Visualmente lee como "plantar patas
+antes de embestir" — aceptable. Si tras playtest el usuario considera
+que molesta, las opciones son (a) override a `Idle` como no-op visual,
+o (b) tocar `critter.ts tickSkeletal` para saltarse el dispatch de
+clip cuando el ability type es `frenzy` y no hay clip explícito.
+Ninguna se aplicó en esta pasada — fuera de scope estrecho.
+
+#### Cheeto — TODO
+#### Kurama — TODO
+#### Shelly — TODO
+#### Kermit — TODO
+#### Sihans — TODO
+#### Kowalski — TODO
+#### Sebastian — TODO
 
 ### Qué está realmente implementado hoy
 

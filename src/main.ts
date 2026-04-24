@@ -11,6 +11,30 @@ import {
   toggleSfxMuted, isSfxMuted,
   toggleMusicMuted, isMusicMuted,
 } from './audio';
+import { initBadgeToast } from './badge-toast';
+import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
+import { initOnlineBeltToast } from './online-belt-toast';
+import { updateDustPuffs } from './dust-puff';
+
+// ---------------------------------------------------------------------------
+// Sprite sheet preload — enables `.sprite-hud-*` / `.sprite-ability-*` CSS
+// classes only if their backing images actually load. If either sheet 404s
+// (asset not shipped yet), the body class never gets added and the emoji
+// fallbacks stay visible. See the SPRITE ICON SYSTEMS section of index.html.
+// ---------------------------------------------------------------------------
+function enableSpriteClassOnLoad(src: string, bodyClass: string): void {
+  const img = new Image();
+  img.onload = () => document.body.classList.add(bodyClass);
+  img.onerror = () => {
+    // Silent: the body class stays off, emoji fallbacks take over. Log
+    // once in debug so we know when polish isn't visible because the
+    // image hasn't been committed yet.
+    console.debug('[sprites] sheet not available, using emoji fallback:', src);
+  };
+  img.src = src;
+}
+enableSpriteClassOnLoad('./images/hud-icons.png', 'has-hud-sprites');
+enableSpriteClassOnLoad('./images/ability-icons.png', 'has-ability-sprites');
 
 // ---------------------------------------------------------------------------
 // WebGL diagnostic + renderer creation
@@ -43,18 +67,155 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 console.log('[bichitos] Renderer created OK');
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.setClearColor(0x0a0a18);
+renderer.setClearColor(0x87b0d8); // sky blue — fallback before skydome paints
 document.body.prepend(renderer.domElement);
 
 // Scene
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0a0a18, 0.018); // exponential fog for depth falloff
+// Fog keyed to the horizon colour so the skydome blends smoothly with
+// distant geometry instead of clipping to a hard edge. Lower density so
+// the sky stays visible past the combat radius.
+scene.fog = new THREE.FogExp2(0xb6d1e8, 0.012);
 
-// Lighting — stronger contrast for depth readability
-const ambient = new THREE.AmbientLight(0xffffff, 0.35);
-scene.add(ambient);
+// Skydome — vertical gradient sphere painted from the inside. Sits
+// behind every game object, creating the "floating platform in the sky"
+// look the game design is after. Pure shader, no texture assets.
+const SKY_COLORS = {
+  top:     new THREE.Color(0x5c9fd9), // brighter blue high up
+  middle:  new THREE.Color(0x8ac1e8), // mid sky (matches clear color)
+  horizon: new THREE.Color(0xf5c792), // warm horizon band
+  bottom:  new THREE.Color(0x2a3b52), // deeper blue toward the void
+};
+const skyUniforms = {
+  topColor:     { value: SKY_COLORS.top },
+  middleColor:  { value: SKY_COLORS.middle },
+  horizonColor: { value: SKY_COLORS.horizon },
+  bottomColor:  { value: SKY_COLORS.bottom },
+};
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: skyUniforms,
+  side: THREE.BackSide,
+  depthWrite: false,
+  fog: false,
+  vertexShader: `
+    varying vec3 vWorldPos;
+    void main() {
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldPos = worldPos.xyz;
+      gl_Position = projectionMatrix * viewMatrix * worldPos;
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 topColor;
+    uniform vec3 middleColor;
+    uniform vec3 horizonColor;
+    uniform vec3 bottomColor;
+    varying vec3 vWorldPos;
+    void main() {
+      // h in [-1..+1] over the skydome's vertical extent (radius 200).
+      float h = clamp(vWorldPos.y / 200.0, -1.0, 1.0);
+      vec3 color;
+      if (h > 0.2) {
+        // Upper sky: middle → top
+        color = mix(middleColor, topColor, (h - 0.2) / 0.8);
+      } else if (h > -0.05) {
+        // Horizon band: warm transition
+        color = mix(horizonColor, middleColor, (h + 0.05) / 0.25);
+      } else {
+        // Below horizon: horizon → bottom (void reference)
+        color = mix(bottomColor, horizonColor, (h + 1.0) / 0.95);
+      }
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `,
+});
+// Explicit generic so later reassignments to MeshBasicMaterial (pack
+// skybox swap) don't fight TS's narrow ShaderMaterial inference.
+const skyDome: THREE.Mesh<THREE.SphereGeometry, THREE.Material> =
+  new THREE.Mesh(new THREE.SphereGeometry(200, 24, 18), skyMat);
+skyDome.renderOrder = -1;
+scene.add(skyDome);
 
-const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+// --- Pack-aware skybox / fog setters ------------------------------------
+//
+// Exported so arena-decorations.ts can swap the shader sky for a textured
+// equirect sky when an arena pack is active, and revert when leaving the
+// match (back to menu). Fog colour follows the same path — scene.fog is
+// FogExp2, so we just retune its .color in-place.
+
+const DEFAULT_FOG_COLOR = 0xb6d1e8;
+const DEFAULT_CLEAR_COLOR = 0x87b0d8;
+
+/**
+ * Swap the sky dome to a textured equirect sphere for an arena pack, or
+ * pass `null` to restore the procedural shader gradient used in menus.
+ * Safe to call repeatedly — the skydome mesh is reused, only its material
+ * and clear-color change.
+ */
+export function setSceneSkyboxTexture(tex: THREE.Texture | null): void {
+  if (tex) {
+    // MeshBasicMaterial inside-out renders the equirect as a skybox.
+    // The mapping flag set in loadPackSkyboxTexture makes this "just work".
+    const texMat = new THREE.MeshBasicMaterial({
+      map: tex,
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+    });
+    const prev = skyDome.material;
+    skyDome.material = texMat;
+    // The shader material is authored and reused between packs — don't
+    // dispose it, just dispose prior textured materials to avoid a leak
+    // on repeated swaps.
+    if (prev !== skyMat && prev instanceof THREE.Material) prev.dispose();
+  } else {
+    const prev = skyDome.material;
+    skyDome.material = skyMat;
+    if (prev !== skyMat && prev instanceof THREE.Material) prev.dispose();
+  }
+}
+
+/**
+ * Retune the global fog colour. FogExp2 uses a Color, so we mutate it in
+ * place (no Scene re-assignment needed). Pass `null` to restore the
+ * default menu-time horizon colour.
+ */
+export function setSceneFogColor(color: number | null): void {
+  const target = color ?? DEFAULT_FOG_COLOR;
+  if (scene.fog && 'color' in scene.fog) {
+    (scene.fog as THREE.FogExp2).color.setHex(target);
+  }
+  // Also tint the clear colour so the 1-frame gap before the skydome
+  // paints isn't jarring (the old default was a fixed sky blue).
+  renderer.setClearColor(color ?? DEFAULT_CLEAR_COLOR);
+}
+
+// Distant cloud band — a flat disc at altitude + below the arena, hinting
+// that the platform is floating very high above terrain. Single plane,
+// tinted additive for that "soft painted fog" look.
+const cloudsGeo = new THREE.PlaneGeometry(140, 140);
+const cloudsMat = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  transparent: true,
+  opacity: 0.35,
+  depthWrite: false,
+});
+const cloudsBelow = new THREE.Mesh(cloudsGeo, cloudsMat);
+cloudsBelow.rotation.x = -Math.PI / 2;
+cloudsBelow.position.y = -18;
+cloudsBelow.renderOrder = -1;
+scene.add(cloudsBelow);
+
+// Lighting — three-point rig + hemisphere ambient.
+// Sky/ground hemisphere replaces the flat AmbientLight: the top of every
+// critter picks up the cyan sky; the underside catches the warm ground
+// glow — cheap way to sell "outdoors on a floating platform".
+const hemi = new THREE.HemisphereLight(0x9cc7ea, 0x4a3a26, 0.55);
+scene.add(hemi);
+
+// Key: warm sun-angle light. Intensity bumped 1.2 → 1.35 and tinted
+// slightly warmer for the "high-altitude golden hour" reading.
+const dirLight = new THREE.DirectionalLight(0xfff1d4, 1.35);
 dirLight.position.set(8, 25, 12);
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.set(1024, 1024);
@@ -66,6 +227,12 @@ dirLight.shadow.camera.top = 18;
 dirLight.shadow.camera.bottom = -18;
 dirLight.shadow.bias = -0.002;
 scene.add(dirLight);
+
+// Rim from behind — cool blue backlight so silhouettes separate from the
+// warm sky. No shadow casting (cost we don't need here).
+const rimLight = new THREE.DirectionalLight(0x9fb4e8, 0.55);
+rimLight.position.set(-10, 14, -14);
+scene.add(rimLight);
 
 // Camera — syncSize sets the correct canvas dimensions and aspect ratio
 const camera = createCamera();
@@ -88,6 +255,25 @@ if (previewCanvas) {
 if (isLikelyMobile()) {
   initTouchInput();
 }
+
+// Badge toast — creates the DOM node so the first match-end is ready to
+// surface an unlock. Cheap (one div), idempotent, no runtime cost until
+// Game calls maybeShowBadgeToast().
+initBadgeToast();
+
+// Online Belt toast — same pre-create pattern. Fired when the BrawlRoom
+// broadcasts a `beltChanged` message (online match ended with a change
+// of holder). Listener is wired per-room inside Game.enterOnline.
+initOnlineBeltToast();
+
+// Hall of Belts modal — also pre-created so the first B-press / button
+// click from character-select opens instantly. The grid is rebuilt each
+// open against the current stats blob.
+initHallOfBelts();
+// Wire the on-screen "🏆 Belts" button (character-select overlay).
+document.getElementById('btn-open-belts')?.addEventListener('click', () => {
+  openHallOfBelts();
+});
 
 // Gamepad — always on. initGamepadInput is idempotent and cheap: it only
 // attaches the `gamepadconnected`/`gamepaddisconnected` listeners and
@@ -186,6 +372,9 @@ function loop(now: number) {
   }
 
   game.update(dt);
+  // Dust puff pool tick — no-op when empty. Lives outside game.update so
+  // puffs keep animating even through edge phase transitions.
+  updateDustPuffs(dt);
   // Apply camera shake on top of the base position (no accumulation drift)
   updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
   renderer.render(scene, camera);
