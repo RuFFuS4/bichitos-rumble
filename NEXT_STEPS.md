@@ -14,7 +14,31 @@
 
 Lo que puedes retomar sin esperar a nadie ni nada. En orden.
 
-### 0. [CERRADO 2026-04-24 noche] Animation Validation Lab
+### 0. [CERRADO 2026-04-25] In-arena decor system + editor v2
+
+`/decor-editor.html` operativo con drag, undo/redo, localStorage por
+pack y preview GLB opcional. Sistema de decoración runtime parentea
+props a fragments (caen con el fragment). `jungle` ya tiene 11 props
+authored; los otros 4 packs (`frozen_tundra`, `desert_dunes`,
+`coral_beach`, `kitsune_shrine`) están **vacíos a la espera de diseño
+visual desde el editor**.
+
+**Flujo de trabajo para poblar un pack**:
+1. `npm run dev` → abrir `/decor-editor.html`.
+2. Seleccionar pack en dropdown.
+3. Click en zona vacía del arena = nuevo prop con tipo seleccionado.
+4. Click en prop = seleccionar; sliders para fine-tune; drag para mover.
+5. Ctrl+Z / Ctrl+Y para deshacer / rehacer.
+6. Auto-save por sesión en localStorage (recargas no pierden trabajo).
+7. Cuando quede bonito → "Copy TS snippet" → pegar dentro de
+   `DECOR_LAYOUTS[pack]` en `src/arena-decor-layouts.ts`.
+8. Recargar → ver props en partida.
+
+Detalles técnicos completos en BUILD_LOG.md §"2026-04-25 In-arena
+decor". Catálogo de props disponibles en `src/arena-decor-layouts.ts`
+(`DECOR_TYPES`).
+
+### 0.bis. [CERRADO 2026-04-24 noche] Animation Validation Lab
 
 `/anim-lab.html` operativo. 9 críttrs × 13 logical states inspeccionables
 visualmente. Resolver ampliado a **4 tiers** (override > exact > prefix

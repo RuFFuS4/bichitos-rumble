@@ -23,9 +23,22 @@ el lab se vuelve ilegible para quien entre después.
 >    clips in /animations" and "run clips in the game".
 > 3. `/calibrate.html` — per-critter scale / pivotY / rotation lab
 >    (added 2026-04-24). Not related to animation; silhouette sizing.
+> 4. `/decor-editor.html` — per-pack in-arena decoration placement
+>    lab (added 2026-04-25, UX iteration 2026-04-25). Top-down ortho
+>    view of the arena with band-radius wireframes. Click-to-place,
+>    drag-to-move with offset + ring clamp, multi-select via list,
+>    sliders, type swap, delete. Ctrl+Z / Ctrl+Y for undo/redo (50
+>    snapshots). Per-pack auto-save in `localStorage`
+>    (`decor-editor:<packId>`) with a "Reset local" button to wipe
+>    the working copy and reload the code layout. Optional checkbox
+>    to render real GLBs instead of placeholders (lazy + cached;
+>    falls back to placeholders during a drag for snappy feedback).
+>    Export emits a paste-ready TS snippet for
+>    `src/arena-decor-layouts.ts`.
 >
 > Full anim-lab design in BUILD_LOG.md §"2026-04-25 Animation
-> Validation Lab". Full mesh2motion integration notes:
+> Validation Lab". Decor system design in BUILD_LOG.md §"2026-04-25
+> In-arena decor". Full mesh2motion integration notes:
 > [`mesh2motion/README-INTEGRATION.md`](../mesh2motion/README-INTEGRATION.md).
 
 ## Propósito

@@ -9,6 +9,112 @@
 
 ---
 
+## 2026-04-25 — In-arena decor system + decor-editor + skybox fix
+
+Three interlocking moves to stabilise the arena visual layer.
+
+### 1. Skybox no longer clipped
+
+`skyDome` had radius 200 and `camera.far` was also 200 — the dome's
+far hemisphere reached ~370 u from the camera's offset position
+(0, 23, 25), so a chunk of any pack-textured equirect got clipped by
+the projection. Reduced `SKYDOME_RADIUS` to 150 (+ shader normalisation
+constant updated to match) so the dome stays safely inside the
+frustum. Validated in all 5 packs — full sky horizons render, no
+black gaps.
+
+### 2. In-arena decor system
+
+Replaces the legacy outer-ring of large props with **small props
+INSIDE the playable arena**, parented to the fragment that contains
+each prop so the prop falls together when that sector collapses. No
+new falling-state machine — Three.js parent transforms do it for free
+once the mesh is reparented via `Object3D.attach`.
+
+- New SoT: `src/arena-decor-layouts.ts`
+  - `DECOR_TYPES` catalog: 20 entries (4 per pack), all reusing GLBs
+    already shipped under `public/models/arenas/<pack>/` — no new
+    assets. Tree_jungle_broadleaf.glb (54 MB) intentionally OMITTED
+    from the catalog and the legacy outer ring is now empty for every
+    pack, so that GLB no longer loads at runtime.
+  - `DECOR_LAYOUTS[packId]`: array literal per pack. `jungle` ships
+    an authored 11-prop seed; the other 4 packs start empty.
+- Runtime path:
+  - `loadInArenaDecorations(placements)` in `arena-decorations.ts` —
+    async loader, auto-grounds via bbox.min.y (Meshy/Tripo origin
+    inconsistencies fixed at load).
+  - `Arena.findFragmentAt(x, z)` — uses `pointInFragment` to resolve
+    a prop to its host fragment. -1 = skip (out of arena).
+  - `Arena.applyPack()` reparents each prop via `host.attach(mesh)`
+    after the pack's outer-ring + skybox + ground texture finish.
+- Skirt outer radius reduced 14 → 12.5 (FRAG.maxRadius + 0.5). The
+  skirt is now just a 0.5 u anti-gap with the skybox lower hemisphere
+  — no longer reads as extended-but-non-walkable terrain.
+
+Validated: 11 jungle props reparent correctly (`decorReparented: 11`
+in scene-graph crawl). Reparenting math verified by moving a host
+fragment to (0, -5, 0) with rotation X = π/6 — children inherit the
+transform. The collapse cascade therefore drags decor along for free.
+
+### 3. /decor-editor.html visual placement tool — v2 (UX iteration)
+
+MVP shipped 2026-04-25 morning (top-down ortho, click-to-place,
+sliders, export). Same-day iteration adds production-ready UX:
+
+- **Drag & drop** — pointerdown / pointermove / pointerup with offset
+  capture (no snap to cursor) and clamp to the playable ring so a
+  drag never produces an invalid export.
+- **Undo / Redo** — Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z. Snapshot history
+  (deep clone) with 50-entry cap. Pushes on place / delete / drag-end
+  / slider-release / type-change. Slider `input` doesn't push so a
+  slow drag-as-you-tune doesn't spam the stack — only `change` (on
+  release) does.
+- **localStorage per-pack** — `decor-editor:<packId>` JSON. Auto-save
+  on every push / undo / redo. Auto-load on boot + on pack switch.
+  "Reset local" button (with confirm dialog) wipes the working copy
+  and reloads from `arena-decor-layouts.ts`. Indicator shows whether
+  the current state matches code, diverges, or has no local entry.
+- **Optional GLB preview toggle** — checkbox in the View section.
+  Off = fast coloured discs (default); On = real arena GLBs lazy-
+  loaded via the existing `model-loader` cache. Drag falls back to
+  placeholders for snappy movement, then rebuilds the preview on
+  pointerup. Async rebuild guarded by a token so rapid edits don't
+  stack stale GLBs.
+
+Export still emits a paste-ready TS snippet — that's the canonical
+SoT in `arena-decor-layouts.ts`. localStorage is the working copy
+between exports.
+
+Helper fix during validation: `debugForceArenaSeed(seed)` now also
+accepts an optional `packId` arg for manual QA from the console
+(`window.__game.debugForceArenaSeed(42, 'jungle')`). Was rebuilding
+with the previous pack only; now any pack from the lab.
+
+Files touched (totals across the morning + UX iteration commits):
+- new: `src/arena-decor-layouts.ts` (SoT data layer)
+- new: `decor-editor.html` (page entry)
+- new: `src/decoreditor/main.ts` (editor logic)
+- modified: `src/arena.ts`, `src/arena-decorations.ts`, `src/main.ts`,
+  `src/game.ts`, `src/tools/sidebar.ts`, `vite.config.ts`,
+  `DEV_TOOLS.md`, `MEMORY.md`, `NEXT_STEPS.md`
+
+Preflight all passed (typecheck client + server, verify-glbs 8/8,
+vite build green). Validated visually in dev — drag, undo/redo,
+local persistence, reset, GLB preview toggle, jungle in-game render
+with 11 props, 4 empty packs load clean, all 5 skyboxes render full.
+
+Limitations (deliberate, documented):
+- Editor is per-pack — switching packs without "Export" or "Reset
+  local" leaves the old pack's working copy in localStorage. That's
+  by design (you can come back to it next session).
+- Real-GLB preview during drag falls back to discs (movement was
+  choppy with full meshes). Acceptable trade-off.
+- The localStorage shape is intentionally narrow so we can lift it
+  into a tiny shared module later for /calibrate and /anim-lab.
+  Not done yet — scope kept tight.
+
+---
+
 ## 2026-04-24 — Server ability kit sync for Sergei + Trunk
 
 Codex pass para desbloquear playtest online/offline coherente.

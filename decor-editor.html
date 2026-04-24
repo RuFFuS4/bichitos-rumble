@@ -130,7 +130,29 @@
         <label>Pack</label>
         <select id="ctl-pack"></select>
       </div>
-      <div class="hint-text">Switch packs to load that layout into the editor. Unsaved edits to the previous pack are kept in memory until you reload the page.</div>
+      <div class="hint-text">Switch packs to load that layout. Local edits auto-save per pack.</div>
+      <div class="row" style="margin-top: 6px">
+        <span id="local-indicator" class="hint-text" style="flex:1">—</span>
+        <button id="btn-reset-local" title="Wipe localStorage entry for this pack + reload code layout">Reset local</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>History</h2>
+      <div class="row">
+        <button id="btn-undo" title="Ctrl+Z">↶ Undo</button>
+        <button id="btn-redo" title="Ctrl+Y / Ctrl+Shift+Z">↷ Redo</button>
+        <span class="v" id="history-label">— / —</span>
+      </div>
+      <div class="hint-text">Snapshots are taken on place / delete / drag end / slider release / type change. Up to 50 entries.</div>
+    </section>
+
+    <section>
+      <h2>View</h2>
+      <div class="row">
+        <label><input type="checkbox" id="ctl-preview-glb" /> Preview real GLBs</label>
+      </div>
+      <div class="hint-text">Off = fast coloured discs. On = lazy-load real arena GLBs (cached after first warm-up). Drag falls back to discs for snappy feedback.</div>
     </section>
 
     <section>

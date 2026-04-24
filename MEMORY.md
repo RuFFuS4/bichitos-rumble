@@ -2,6 +2,45 @@
 
 ## Fuentes de verdad (canónico — 2026-04-24 handoff)
 
+### Decoración in-arena (añadido 2026-04-25)
+
+- **SoT real**: `src/arena-decor-layouts.ts` — `DECOR_TYPES` (catálogo
+  de prop types con GLB path + scaleBase) y `DECOR_LAYOUTS[packId]`
+  (array literal por pack). Sólo `jungle` poblado con seed authored
+  (11 props); otros 4 packs vacíos a la espera de diseño manual via
+  editor.
+- **Runtime**: `Arena.applyPack()` carga los placements via
+  `loadInArenaDecorations()` y reparenta cada mesh al fragment que
+  lo contiene (`Arena.findFragmentAt(x,z)` + `host.attach(mesh)`).
+  Cuando el fragment cae, su prop cae con él automáticamente.
+- **Sin colisión por diseño**: los críttrs atraviesan los props
+  (sólo afectan visual). `pointInFragment` / `isPointOnArena` usan
+  geometría de fragments, intactas.
+- **Outer ring legacy**: vacío para todos los packs (`PACKS[id].props
+  = []`). Side effect: `tree_jungle_broadleaf.glb` (54 MB) ya no se
+  carga.
+- **Skirt outer**: `OUTER_RING_OUTER_R = FRAG.maxRadius + 0.5` (12.5
+  total). Ya no parece terreno extendido, sólo anti-gap con skybox.
+- **Editor**: `/decor-editor.html` — top-down ortho, click+drag con
+  clamp al anillo jugable, undo/redo Ctrl+Z/Y (50 snapshots),
+  auto-save por pack en `localStorage:decor-editor:<packId>`, toggle
+  para preview GLB real. Export emite TS pegable. **Editor NO escribe
+  archivos** — pegar manualmente en `arena-decor-layouts.ts` es la
+  única vía de persistir a código.
+
+### Skybox (añadido 2026-04-25)
+
+- **SoT**: `SKYDOME_RADIUS = 150` en `src/main.ts`. **Mantener < 200
+  (camera.far) con margen ≥ 25 u** o el dome se clippea por el far
+  plane y los pack equirects se ven cortados.
+- Si se cambia el radio aquí, **actualizar también** la constante
+  `vWorldPos.y / 150.0` en el shader del `skyMat` (tiene comentario
+  recordándolo).
+- Equirect 2:1 en `public/images/skyboxes/<pack>.png` (1774×887).
+  Mapping `THREE.UVMapping`, BackSide. Validado en los 5 packs.
+
+
+
 Si algo de esta lista entra en conflicto con cualquier otra sección
 del proyecto, ESTA gana. Actualizar aquí cuando cambie la verdad
 subyacente, no en duplicado por varios docs.
