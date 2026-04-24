@@ -143,15 +143,33 @@ const PACKS: Record<ArenaPackId, PackDef> = {
 
 // --- Placement -----------------------------------------------------------
 //
-// Props live in a ring OUTSIDE the playable arena (FRAG.maxRadius = 12 u)
-// so nothing collides with gameplay. Given the seed, we distribute props
-// equidistantly around the ring and jitter each slot a tiny bit so the
-// result doesn't look like a clock face.
+// Props live in a ring JUST OUTSIDE the playable arena (FRAG.maxRadius
+// = 12 u) so nothing collides with gameplay. An earlier pass placed
+// them at 14.5–18.5 u which combined with the 12→18 skirt read as
+// "extended terrain, most of which isn't walkable." We now hug the
+// playable edge tightly so the props feel like they frame the arena,
+// not push it out.
+//
+// Distribution: N angular slots equally spaced around the ring, each
+// slot perturbed by a bigger wobble than the old clock-face pass, and
+// a post-layout rejection-sampling pass nudges any pair of props that
+// ended up uncomfortably close.
 
 /** Inner ring radius (just outside the arena edge). */
-const PROP_RING_INNER = 14.5;
-/** Outer ring radius (visible but not clipping the skybox). */
-const PROP_RING_OUTER = 18.5;
+const PROP_RING_INNER = 12.5;
+/** Outer ring radius (keeps props inside the decorative skirt, which
+ *  now caps at FRAG.maxRadius + 2 = 14). */
+const PROP_RING_OUTER = 14.0;
+/** Minimum world-space distance between any two prop centres. Enforced
+ *  by a rejection pass after initial layout. Kept well below one arena
+ *  band (3 u) so we still cover the ring densely enough when a pack
+ *  has many props. */
+const PROP_MIN_DIST = 2.4;
+/** How aggressively each slot jitters around its clock position,
+ *  as a fraction of the full slot width (2π / N). 0 = perfect clock,
+ *  1 = can swap neighbour positions. 0.85 breaks the pattern without
+ *  risking overlaps that the rejection pass can't recover from. */
+const PROP_WOBBLE_FRACTION = 0.85;
 
 export interface PropPlacement {
   /** Relative filename in public/models/arenas/<packId>/. */
@@ -195,10 +213,13 @@ export function layoutPackProps(packId: ArenaPackId, seed: number): PropPlacemen
   const placements: PropPlacement[] = [];
   for (let i = 0; i < N; i++) {
     const glbName = pack.props[i]!;
-    // Evenly spaced around the ring, with a small random wobble so the
-    // composition feels natural rather than clock-like.
-    const baseAngle = (i / N) * Math.PI * 2;
-    const wobble = (rng() - 0.5) * (Math.PI / N) * 0.6;
+    // Evenly spaced around the ring, with a random wobble up to
+    // ±PROP_WOBBLE_FRACTION × half-slot so the composition feels natural
+    // rather than clock-like. At 0.85 the wobble is almost as wide as
+    // the slot itself but the rejection pass below prevents overlaps.
+    const slotWidth = (Math.PI * 2) / N;
+    const baseAngle = i * slotWidth;
+    const wobble = (rng() - 0.5) * slotWidth * PROP_WOBBLE_FRACTION;
     const angle = baseAngle + wobble;
     const radius = PROP_RING_INNER + rng() * (PROP_RING_OUTER - PROP_RING_INNER);
     const rotY = rng() * Math.PI * 2;
@@ -215,6 +236,38 @@ export function layoutPackProps(packId: ArenaPackId, seed: number): PropPlacemen
       rotY,
       scale: baseScale * jitter,
     });
+  }
+  // Rejection pass — if any two props landed within PROP_MIN_DIST of
+  // each other, shift the later one along its own angular slot (small
+  // step, bounded retries) to find a clean spot. Deterministic: the
+  // same seed still produces the same final layout because we keep
+  // using the already-seeded rng. Runs in O(N²) which is fine for
+  // N ≤ 10 (every pack has 5–8 props today).
+  const SHIFT_STEP = 0.08;     // ~4.6° per attempt
+  const MAX_SHIFTS = 8;        // ±32° total swing worst case
+  for (let i = 1; i < placements.length; i++) {
+    for (let attempt = 0; attempt < MAX_SHIFTS; attempt++) {
+      let tooClose = false;
+      const p = placements[i]!;
+      const px = Math.cos(p.angle) * p.radius;
+      const pz = Math.sin(p.angle) * p.radius;
+      for (let j = 0; j < i; j++) {
+        const q = placements[j]!;
+        const qx = Math.cos(q.angle) * q.radius;
+        const qz = Math.sin(q.angle) * q.radius;
+        const dx = px - qx;
+        const dz = pz - qz;
+        if (dx * dx + dz * dz < PROP_MIN_DIST * PROP_MIN_DIST) {
+          tooClose = true;
+          break;
+        }
+      }
+      if (!tooClose) break;
+      // Nudge in a deterministic direction (sign chosen from rng once
+      // per retry chain so the whole sequence stays reproducible).
+      const dir = rng() < 0.5 ? -1 : 1;
+      p.angle += dir * SHIFT_STEP;
+    }
   }
   return placements;
 }

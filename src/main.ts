@@ -374,9 +374,14 @@ function loop(now: number) {
   game.update(dt);
   // Dust puff pool tick — no-op when empty. Lives outside game.update so
   // puffs keep animating even through edge phase transitions.
-  updateDustPuffs(dt);
-  // Apply camera shake on top of the base position (no accumulation drift)
-  updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
+  // EXCEPT when the offline pause menu is up: if we keep advancing
+  // puff lifetimes, an in-flight ring would keep expanding behind the
+  // menu and look like gameplay never actually froze.
+  if (!game.isPaused()) updateDustPuffs(dt);
+  // Apply camera shake on top of the base position (no accumulation drift).
+  // Also silenced during offline pause so a lingering shake doesn't
+  // tremble the frozen frame after ESC.
+  if (!game.isPaused()) updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
   renderer.render(scene, camera);
   // Preview renders only when visible; cheap no-op otherwise
   tickPreview(dt);

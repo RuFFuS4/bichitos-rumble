@@ -40,12 +40,14 @@ const CENTER_SEGMENTS = 32;    // circle segments for the immune center
 
 // Outer ring radii for the decorative "skirt" around the playable arena.
 // Props sit on this ring. Inner matches the arena outer edge so the
-// textures blend; outer is ~18 u so the decorations comfortably fit
-// within the skybox dome (radius 200) and the camera framing.
+// textures blend; outer is kept tight (FRAG.maxRadius + 2 u) so the
+// skirt reads as a decorative seam — NOT as extended terrain. An
+// earlier pass had the skirt reach 18 u which visually "expanded" the
+// arena ~50% past the playable edge and confused what was walkable.
 // Inner intentionally starts INSIDE FRAG.maxRadius by a hair so there's
 // no visible z-fight seam between the arena edge and the ring top.
-const OUTER_RING_INNER_R = FRAG.maxRadius - 0.1;
-const OUTER_RING_OUTER_R = 18;
+const OUTER_RING_INNER_R = FRAG.maxRadius - 0.1;        //  11.9
+const OUTER_RING_OUTER_R = FRAG.maxRadius + 2.0;        //  14.0  (was 18)
 const OUTER_RING_SEGMENTS = 48;
 
 // Per-band base colors. Distinct enough that the user can SEE where one

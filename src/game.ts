@@ -335,6 +335,22 @@ export class Game {
     clearMenuActions();
   }
 
+  /**
+   * Public read-only pause probe. Used by the outer game loop in main.ts
+   * to skip per-frame ambient visual tickers (dust puffs, camera shake)
+   * while the offline pause menu is up — otherwise an in-flight puff
+   * animation would keep expanding behind the menu, and a lingering
+   * camera shake would tremble the frozen frame.
+   *
+   * Only the offline pause branch sets `this.paused = true`; online
+   * matches stay on false because the server is authoritative and no
+   * pause concept exists. So callers can treat this as "freeze offline
+   * ambient visuals" safely.
+   */
+  public isPaused(): boolean {
+    return this.paused;
+  }
+
   // -------------------------------------------------------------------------
   // Phase transitions
   // -------------------------------------------------------------------------
