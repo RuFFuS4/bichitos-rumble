@@ -21,7 +21,9 @@ import {
   loadPackSkyboxTexture,
   loadPackPropMeshes,
   getPackFogColor,
+  loadInArenaDecorations,
 } from './arena-decorations';
+import { getDecorLayout } from './arena-decor-layouts';
 import { setSceneSkyboxTexture, setSceneFogColor } from './main';
 
 // Visual parameters for the pre-collapse shake effect. Applied to
@@ -38,16 +40,17 @@ const WARNING_EMISSIVE_COLOR = 0xff7733;   // warm orange, NOT red flash
 const ARC_SEGMENTS = 16;       // arc resolution per fragment shape edge
 const CENTER_SEGMENTS = 32;    // circle segments for the immune center
 
-// Outer ring radii for the decorative "skirt" around the playable arena.
-// Props sit on this ring. Inner matches the arena outer edge so the
-// textures blend; outer is kept tight (FRAG.maxRadius + 2 u) so the
-// skirt reads as a decorative seam — NOT as extended terrain. An
-// earlier pass had the skirt reach 18 u which visually "expanded" the
-// arena ~50% past the playable edge and confused what was walkable.
-// Inner intentionally starts INSIDE FRAG.maxRadius by a hair so there's
-// no visible z-fight seam between the arena edge and the ring top.
+// Outer ring "skirt" — kept as a tiny anti-gap with the skybox lower
+// hemisphere. Decoration now lives INSIDE the arena (see
+// arena-decor-layouts.ts) so the skirt has no other purpose; we keep
+// it only as a 0.5 u trim so there's no visible seam between the
+// fragment edge and the void / sky horizon.
+//
+// History:
+//   18 → 14   (first tighten pass — felt like extended-but-not-walkable terrain)
+//   14 → 12.5 (now — decoration moved inside the arena)
 const OUTER_RING_INNER_R = FRAG.maxRadius - 0.1;        //  11.9
-const OUTER_RING_OUTER_R = FRAG.maxRadius + 2.0;        //  14.0  (was 18)
+const OUTER_RING_OUTER_R = FRAG.maxRadius + 0.5;        //  12.5  (was 14)
 const OUTER_RING_SEGMENTS = 48;
 
 // Per-band base colors. Distinct enough that the user can SEE where one
@@ -390,7 +393,11 @@ export class Arena {
         console.debug('[Arena] skybox load failed:', packId, err);
       });
 
-    // Props — layout deterministically, then load each GLB in parallel.
+    // Outer ring props — historically a ring of large GLBs at radius
+    // 14.5–18.5 outside the arena. Now empty by design (every PACKS[id]
+    // .props is []), so this loop is a no-op for every pack. Kept
+    // structurally in case we re-introduce outer ornaments in the
+    // future; today it does nothing visually.
     const placements = layoutPackProps(packId, seed);
     try {
       const meshes = await loadPackPropMeshes(packId, placements);
@@ -400,20 +407,72 @@ export class Arena {
         for (const m of meshes) disposeGroupMeshes(m);
         return;
       }
-      const deco = new THREE.Group();
-      deco.name = `arena-decorations-${packId}`;
-      for (const m of meshes) deco.add(m);
-      this.decorationsGroup = deco;
-      this.sceneRef.add(deco);
-      // Associate each prop to a batch so it falls with the right
-      // collapse stage. We map by the prop's angle → closest batch (by
-      // average fragment angle) so the visual cascade reads naturally
-      // (the "quarter" of the ring closest to the collapsing fragments
-      // falls first).
-      this.propBatchIndex = this.computePropBatchIndex(placements);
+      if (meshes.length > 0) {
+        const deco = new THREE.Group();
+        deco.name = `arena-decorations-${packId}`;
+        for (const m of meshes) deco.add(m);
+        this.decorationsGroup = deco;
+        this.sceneRef.add(deco);
+        this.propBatchIndex = this.computePropBatchIndex(placements);
+      }
     } catch (err) {
       console.debug('[Arena] pack props load failed:', packId, err);
     }
+
+    // In-arena decor — small props that live INSIDE the playable arena,
+    // each parented to the fragment that contains it so it falls when
+    // that fragment collapses. Layouts are static per pack (data-only,
+    // see arena-decor-layouts.ts) so every client sees the same layout
+    // without seed sync.
+    try {
+      const inArena = await loadInArenaDecorations(getDecorLayout(packId));
+      if (myToken !== this.packApplyToken) {
+        for (const d of inArena) disposeGroupMeshes(d.mesh);
+        return;
+      }
+      for (const { mesh, placement } of inArena) {
+        const wx = Math.cos(placement.angle) * placement.r;
+        const wz = Math.sin(placement.angle) * placement.r;
+        const hostIdx = this.findFragmentAt(wx, wz);
+        if (hostIdx < 0) {
+          // Outside any fragment (e.g. between sectors due to jitter).
+          // Drop the mesh so we don't leak; cosmetic only.
+          disposeGroupMeshes(mesh);
+          continue;
+        }
+        // Reparent to the host fragment group. Three.js' Object3D.attach
+        // preserves the world transform across the parent change, which
+        // is what we want — the mesh keeps its world (x,z) but later
+        // when the fragment falls (group rotates + drops), the mesh
+        // inherits the motion gratis.
+        const host = this.fragmentGroups[hostIdx];
+        if (!host) {
+          disposeGroupMeshes(mesh);
+          continue;
+        }
+        host.attach(mesh);
+      }
+    } catch (err) {
+      console.debug('[Arena] in-arena decor load failed:', packId, err);
+    }
+  }
+
+  /**
+   * Find the fragment index that contains the given world (x, z) point.
+   * Returns -1 if no fragment hits — caller should treat that as "the
+   * point is outside the arena" and skip whatever it was about to do.
+   *
+   * Used by in-arena decor placement to decide which fragment a prop
+   * should be reparented to (so it falls together when that fragment
+   * collapses).
+   */
+  private findFragmentAt(x: number, z: number): number {
+    if (!this.layout) return -1;
+    for (let i = 0; i < this.layout.fragments.length; i++) {
+      const f = this.layout.fragments[i];
+      if (f && pointInFragment(x, z, f)) return i;
+    }
+    return -1;
   }
 
   /**

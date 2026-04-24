@@ -25,6 +25,7 @@
 
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
+import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
 
 // --- Public API ----------------------------------------------------------
 
@@ -75,68 +76,38 @@ interface PackDef {
   propScale?: Partial<Record<string, number>>;
 }
 
+// 2026-04-25: outer-ring props are intentionally EMPTY for every pack.
+// The previous outer-ring system placed large props at radius 14.5–18.5
+// (later tightened to 12.5–14) to "frame" the arena, but this read as
+// "the playable terrain extends past where you can actually walk." All
+// decoration now lives INSIDE the playable arena via DECOR_LAYOUTS in
+// arena-decor-layouts.ts. The PackDef shape is kept (and `props` is
+// retained) for two reasons:
+//   1. Backward compat with code paths that still reference PACKS[id].props
+//      (placement loops, tests). With an empty array those loops no-op.
+//   2. We can still ship pack-only fogColor + propScale here without any
+//      structural refactor.
+// Side effect (intentional): tree_jungle_broadleaf.glb (54 MB) no longer
+// loads — it was only referenced from this exterior ring.
 const PACKS: Record<ArenaPackId, PackDef> = {
   jungle: {
-    props: [
-      'tree_palm_tall.glb',
-      'tree_palm_mid.glb',
-      'tree_jungle_broadleaf.glb',
-      'totem_tiki.glb',
-      'stone_ruin_block.glb',
-    ],
+    props: [],
     fogColor: 0xa6c68a, // warm green horizon
-    propScale: {
-      // broadleaf is the beast of the pack (54 MB, 1M+ tris). Shrink so
-      // it doesn't loom unnaturally over the arena.
-      'tree_jungle_broadleaf.glb': 0.7,
-    },
   },
   frozen_tundra: {
-    props: [
-      'iceberg_tall.glb',
-      'iceberg_mid.glb',
-      'iceberg_low.glb',
-      'ice_shard.glb',
-      'pine_snow.glb',
-      'signpost_wood.glb',
-    ],
+    props: [],
     fogColor: 0xbcc8e0, // pale lavender ice horizon
   },
   desert_dunes: {
-    props: [
-      'sandstone_spire_tall.glb',
-      'sandstone_spire_short.glb',
-      'cactus_saguaro.glb',
-      'palm_desert.glb',
-      'minecart_rusted.glb',
-      'bones_skull_scatter.glb',
-      'cloth_flag_tattered.glb',
-    ],
+    props: [],
     fogColor: 0xeab88a, // dusty golden sunset horizon
   },
   coral_beach: {
-    props: [
-      'coral_stack_red.glb',
-      'coral_stack_pink.glb',
-      'coral_brain.glb',
-      'palm_beach_tilted.glb',
-      'shipwreck_hull_piece.glb',
-      'boulder_wet.glb',
-      'seashell_scatter.glb',
-      'starfish_decor.glb',
-    ],
+    props: [],
     fogColor: 0x9fd9e0, // cream-turquoise sea horizon
   },
   kitsune_shrine: {
-    props: [
-      'torii_gate_large.glb',
-      'torii_gate_small.glb',
-      'stone_lantern.glb',
-      'stone_lantern_small.glb',
-      'bamboo_cluster.glb',
-      'sakura_tree.glb',
-      'kitsune_statue_white.glb',
-    ],
+    props: [],
     fogColor: 0xd4a8c0, // dusty pink mist
   },
 };
@@ -389,4 +360,64 @@ export async function loadPackPropMeshes(
 /** Fog colour for the pack, used to tint scene.fog when the pack loads. */
 export function getPackFogColor(packId: ArenaPackId): number {
   return PACKS[packId]?.fogColor ?? 0xb6d1e8;
+}
+
+// ---------------------------------------------------------------------------
+// In-arena decorations — small props authored in arena-decor-layouts.ts
+// and parented to the fragment that contains them so they fall together.
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of loading one in-arena decor placement: the loaded mesh +
+ * its source placement (the caller needs the placement to compute the
+ * host fragment via pointInFragment).
+ */
+export interface InArenaDecor {
+  mesh: THREE.Group;
+  placement: DecorPlacement;
+}
+
+/**
+ * Resolve every placement in the layout to a positioned + scaled mesh.
+ * Failures (missing GLB, unknown type) silently drop that entry — a
+ * match never breaks because of cosmetics.
+ *
+ * The mesh is pre-positioned in WORLD space (caller will reparent it to
+ * the host fragment via THREE attach to preserve the world transform,
+ * so the decor follows the fragment when it falls).
+ */
+export async function loadInArenaDecorations(
+  placements: DecorPlacement[],
+): Promise<InArenaDecor[]> {
+  if (placements.length === 0) return [];
+  const out: InArenaDecor[] = [];
+  for (const p of placements) {
+    const type = DECOR_TYPES[p.type];
+    if (!type) {
+      console.debug('[arena-decorations] unknown decor type, skipping:', p.type);
+      continue;
+    }
+    try {
+      const mesh = await loadModel(type.glbPath);
+      mesh.scale.setScalar(type.scaleBase * p.scale);
+      mesh.rotation.y = p.rotY;
+      mesh.position.set(
+        Math.cos(p.angle) * p.r,
+        0,
+        Math.sin(p.angle) * p.r,
+      );
+      // Lift so the model's bbox min.y lands on Y=0 (arena top surface).
+      // Some IA-generated GLBs centre on bbox instead of base; without
+      // this lift the prop sinks halfway into the floor.
+      mesh.updateMatrixWorld(true);
+      const bbox = new THREE.Box3().setFromObject(mesh);
+      if (Number.isFinite(bbox.min.y)) {
+        mesh.position.y = -bbox.min.y;
+      }
+      out.push({ mesh, placement: p });
+    } catch (err) {
+      console.debug('[arena-decorations] in-arena decor failed to load:', p.type, err);
+    }
+  }
+  return out;
 }

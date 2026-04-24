@@ -112,8 +112,11 @@ const skyMat = new THREE.ShaderMaterial({
     uniform vec3 bottomColor;
     varying vec3 vWorldPos;
     void main() {
-      // h in [-1..+1] over the skydome's vertical extent (radius 200).
-      float h = clamp(vWorldPos.y / 200.0, -1.0, 1.0);
+      // h in [-1..+1] over the skydome's vertical extent. Hardcoded to
+      // match SKYDOME_RADIUS (150) — keep these in sync if the radius
+      // ever changes again. We don't pass a uniform for this because
+      // the value is set once at boot and never animates.
+      float h = clamp(vWorldPos.y / 150.0, -1.0, 1.0);
       vec3 color;
       if (h > 0.2) {
         // Upper sky: middle → top
@@ -131,8 +134,19 @@ const skyMat = new THREE.ShaderMaterial({
 });
 // Explicit generic so later reassignments to MeshBasicMaterial (pack
 // skybox swap) don't fight TS's narrow ShaderMaterial inference.
+//
+// Radius 150: keeps the skydome safely INSIDE the perspective camera
+// frustum (camera.far = 200, camera position around (0, 23, 25)). With
+// a 200 u radius the dome's far hemisphere ended ~370 u from the camera
+// and got partially clipped by the far plane, which is why textured
+// pack skyboxes were partly invisible / cut off depending on view
+// angle. Radius 150 gives ~25 u of margin to the far plane in the
+// worst-case look direction. All gameplay objects (arena 12 u, props
+// ≤ 12.5 u, void at y −30) stay well inside the dome so the BackSide
+// equirect still reads as a continuous sky everywhere it matters.
+const SKYDOME_RADIUS = 150;
 const skyDome: THREE.Mesh<THREE.SphereGeometry, THREE.Material> =
-  new THREE.Mesh(new THREE.SphereGeometry(200, 24, 18), skyMat);
+  new THREE.Mesh(new THREE.SphereGeometry(SKYDOME_RADIUS, 24, 18), skyMat);
 skyDome.renderOrder = -1;
 scene.add(skyDome);
 

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="googlebot" content="noindex, nofollow" />
+  <meta name="description" content="In-arena decoration placement editor for Bichitos Rumble." />
+  <link rel="icon" type="image/x-icon" sizes="any" href="/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="any" href="/favicon-br.png" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <title>Bichitos Rumble — Decor Editor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #12131a; }
+    canvas { display: block; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #e0e4ee;
+      font-size: 13px;
+    }
+
+    /* Top banner */
+    .banner {
+      position: fixed; top: 0; left: 0; right: 0; height: 40px;
+      background: rgba(10, 12, 22, 0.92);
+      border-bottom: 1px solid #2a2f3d;
+      display: flex; align-items: center;
+      padding: 0 16px;
+      z-index: 10;
+      backdrop-filter: blur(4px);
+    }
+    .banner h1 {
+      font-size: 14px; font-weight: 700;
+      color: #ffdc5c; letter-spacing: 0.05em;
+      margin-right: 16px;
+    }
+    .banner .hint {
+      color: #8b94aa; font-size: 11px;
+    }
+    .banner .hint code {
+      background: #1a1f2e; padding: 1px 5px; border-radius: 3px;
+      color: #b8c4dc; font-family: 'Consolas', monospace; font-size: 11px;
+    }
+
+    /* Sidebar (right) */
+    .sidebar {
+      position: fixed; top: 40px; right: 0; bottom: 0;
+      width: 340px;
+      background: rgba(10, 12, 22, 0.92);
+      border-left: 1px solid #2a2f3d;
+      padding: 14px;
+      overflow-y: auto;
+      z-index: 5;
+    }
+    .sidebar section {
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #1f2433;
+    }
+    .sidebar section:last-child { border-bottom: none; }
+    .sidebar h2 {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #ffdc5c; margin-bottom: 8px;
+    }
+    .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .row label { flex: 0 0 70px; color: #b8c4dc; font-size: 11px; }
+    .row select, .row input[type='range'] { flex: 1; }
+    .row .v {
+      font-family: 'Consolas', monospace; font-size: 11px;
+      color: #ffdc5c; min-width: 50px; text-align: right;
+    }
+    select, input[type='text'], input[type='number'] {
+      background: #1a1f2e; color: #e0e4ee;
+      border: 1px solid #2a3145; border-radius: 3px;
+      padding: 4px 6px; font-size: 12px;
+    }
+    button {
+      background: #2a3145; color: #e0e4ee;
+      border: 1px solid #3a4358; border-radius: 3px;
+      padding: 6px 12px; font-size: 12px; cursor: pointer;
+      font-family: inherit;
+    }
+    button:hover { background: #3a4358; }
+    button.danger { background: #5a2a2a; border-color: #7a3a3a; }
+    button.danger:hover { background: #7a3a3a; }
+    button.primary { background: #ffdc5c; color: #0a0a18; border-color: #ffdc5c; }
+    button.primary:hover { background: #ffe680; }
+
+    .placements-list {
+      max-height: 180px; overflow-y: auto;
+      background: #1a1f2e; border: 1px solid #2a3145; border-radius: 3px;
+      padding: 4px;
+    }
+    .placement-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 3px 6px; border-radius: 2px; cursor: pointer;
+      font-family: 'Consolas', monospace; font-size: 11px;
+    }
+    .placement-row:hover { background: #2a3145; }
+    .placement-row.selected { background: #ffdc5c; color: #0a0a18; }
+    .placement-row .idx { color: #8b94aa; margin-right: 8px; }
+    .placement-row.selected .idx { color: #5a4a00; }
+
+    .export-box {
+      max-height: 200px; overflow: auto;
+      background: #0a0c14; color: #b8c4dc;
+      border: 1px solid #2a3145; border-radius: 3px;
+      padding: 8px; font-family: 'Consolas', monospace; font-size: 11px;
+      white-space: pre; word-break: normal;
+    }
+
+    .hint-text {
+      color: #8b94aa; font-size: 10.5px; line-height: 1.4;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <header class="banner">
+    <h1>🎨 DECOR EDITOR</h1>
+    <span class="hint">click empty arena = place · click prop = select · <code>Del</code> = delete · sliders adjust selected</span>
+  </header>
+
+  <aside class="sidebar">
+    <section>
+      <h2>Pack</h2>
+      <div class="row">
+        <label>Pack</label>
+        <select id="ctl-pack"></select>
+      </div>
+      <div class="hint-text">Switch packs to load that layout into the editor. Unsaved edits to the previous pack are kept in memory until you reload the page.</div>
+    </section>
+
+    <section>
+      <h2>Place new prop</h2>
+      <div class="row">
+        <label>Type</label>
+        <select id="ctl-type"></select>
+      </div>
+      <div class="hint-text">Click anywhere inside the arena to place a prop of the selected type. Default scale 1.0, rotation 0.</div>
+    </section>
+
+    <section>
+      <h2>Selected prop</h2>
+      <div id="selected-info" class="hint-text">(none — click on a prop to select)</div>
+      <div class="row" style="margin-top: 6px">
+        <label>Type</label>
+        <select id="ctl-sel-type"></select>
+      </div>
+      <div class="row">
+        <label>r (radius)</label>
+        <input type="range" id="ctl-sel-r" min="2.5" max="11.8" step="0.05" />
+        <span class="v" id="val-sel-r">—</span>
+      </div>
+      <div class="row">
+        <label>angle (rad)</label>
+        <input type="range" id="ctl-sel-angle" min="-3.14159" max="3.14159" step="0.02" />
+        <span class="v" id="val-sel-angle">—</span>
+      </div>
+      <div class="row">
+        <label>rotY</label>
+        <input type="range" id="ctl-sel-rotY" min="-3.14159" max="3.14159" step="0.05" />
+        <span class="v" id="val-sel-rotY">—</span>
+      </div>
+      <div class="row">
+        <label>scale</label>
+        <input type="range" id="ctl-sel-scale" min="0.4" max="2.0" step="0.05" />
+        <span class="v" id="val-sel-scale">—</span>
+      </div>
+      <div class="row" style="margin-top: 8px">
+        <button class="danger" id="btn-delete">Delete (Del)</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Layout (<span id="placement-count">0</span> props)</h2>
+      <div class="placements-list" id="placements-list"></div>
+    </section>
+
+    <section>
+      <h2>Export</h2>
+      <button class="primary" id="btn-export">Copy TS snippet to clipboard</button>
+      <div class="hint-text" style="margin-top: 6px">Paste inside <code>DECOR_LAYOUTS</code> in <code>src/arena-decor-layouts.ts</code>.</div>
+      <pre class="export-box" id="export-out" style="margin-top: 8px">(no export yet)</pre>
+    </section>
+  </aside>
+
+  <script type="module" src="/src/decoreditor/main.ts"></script>
+</body>
+</html>
