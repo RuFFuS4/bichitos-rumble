@@ -130,7 +130,7 @@ const ROSTER: RosterEntry[] = [
     id: 'kermit',
     displayName: 'Kermit',
     glbPath: './models/critters/kermit.glb',
-    baseColor: 0x44cc44,
+    baseColor: 0x9c3cee,
     // Controller frog (mass 1.0) — medium size. Tripo mesh origin at feet.
     scale: 2.6, rotation: -Math.PI / 2, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,

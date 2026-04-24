@@ -92,7 +92,7 @@ export const CRITTER_PRESETS: CritterConfig[] = [
   },
   { // Controller — standard stats, biggest AoE radius.
     ...deriveCritterStats('Kermit'),
-    name: 'Kermit', color: 0x44cc44,
+    name: 'Kermit', color: 0x9c3cee,
     role: 'Controller',
     tagline: 'Venomous area denial.',
   },
