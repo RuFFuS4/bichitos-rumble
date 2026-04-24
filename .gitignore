@@ -35,6 +35,12 @@ public/models/arenas/_raw/
 public/models/_raw/
 public/images/_raw/
 
+# Ad-hoc scratch folder for asset optimization backups, one-off dumps,
+# and other local-only workspace detritus. Tools like
+# scripts/optimize-textures.mjs write pre-change copies here before
+# mutating public/ assets.
+.tmp/
+
 # OS / editor junk
 Thumbs.db
 .DS_Store
