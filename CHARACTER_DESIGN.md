@@ -105,7 +105,72 @@ Infra añadida (reutilizable por el resto del roster):
 SFX: pendiente. Por ahora comparte `'abilityFire'` sintético
 genérico. Plan post-jam: signature con Suno.
 
-#### Trunk — TODO
+#### Trunk — feel pass DONE (2026-04-25)
+
+Clip durations (de `scripts/inspect-clips.mjs`):
+- `Ability1TrunkRam` 4.58 s · `Ability2TrunkGrip` 3.88 s (no usado, ver
+  abajo) · `Ability3GroundPound` 1.96 s
+
+Mapping nota crítica — anim-lab smoke test reveló que los 3 clips del
+GLB están nombrados según el diseño final (Ram / Grip / GroundPound),
+pero el kit placeholder del código era `[charge_rush, ground_pound,
+frenzy]` → slot K (Earthquake) caía sobre Ability2TrunkGrip (un agarre,
+no un pisotón) y slot L (Stampede) caía sobre Ability3GroundPound (un
+pisotón, no un berserk). **Fix via override** en
+`src/animation-overrides.ts`:
+```ts
+trunk: { ability_2: 'Ability3GroundPound' }
+```
+Slot L (Stampede = frenzy) queda procedural intencional (no hay clip de
+frenzy en el GLB; el buff se vende con el emissive pulse rojo existente
+en `critter.ts`). Esta entrada del override se retira cuando llegue el
+tipo de ability `grab`/`Trunk Grip` real.
+
+Identidad vs Sergei (Balanced): **más pesado en cada eje**.
+
+| Ability | Param | Antes | Después | Notas |
+|---|---|---|---|---|
+| **Trunk Ram (J)** | impulse | 14 | **16** | Empuje superior, es bulldozer |
+| | duration | 0.40 | **0.35** | Ligeramente más corta |
+| | windUp | (FEEL) | **0.08** | Más que Sergei 0.04 — telegraph de elefante |
+| | speedMultiplier | 2.0 | **2.1** | Menos que Sergei 2.6 (Trunk pesado) |
+| | massMultiplier | 3.0 | **3.5** | Máximo del roster — arrolla |
+| | cooldown | 5.0 | **4.5** | Más accesible |
+| | **clipPlaybackRate** | — | **5.0×** | **NUEVO**: clip 4.58s → 0.92s efectivo |
+| **Earthquake (K)** | radius | 4.2 | **4.5** | Mayor que Sergei 3.5 |
+| | force | 34 | **40** | Knockback bruiser |
+| | windUp | 0.5 | **0.60** | Telegraph visible |
+| | cooldown | 8.5 | **7.5** | Más uso |
+| | **clipPlaybackRate** | — | **2.8×** | **NUEVO**: clip 1.96s → 0.70s efectivo |
+| **Stampede (L)** | duration | (FEEL 4.0) | **3.0** | Procedural — más larga que Sergei 2.5 |
+| | speedMultiplier | 1.3 | **1.25** | Menos que Sergei 1.45 (Trunk ya lento) |
+| | massMultiplier | 1.35 | **1.80** | Mucho más que Sergei 1.5 — bulldozer ×2 |
+| | cooldown | 18.0 | 18.0 | Default |
+| | windUp | 0.4 | **0.45** | Leve +0.05 |
+
+VFX: ninguno nuevo. Reutiliza `spawnShockwaveRing` ya existente — el
+radio 4.5 (vs 3.5 de Sergei) y la camera shake default generan un
+resultado visualmente más "pesado" sin añadir código. Si tras playtest
+se pide dust stomp particular, abrir ticket separado.
+
+SFX: comparte `'groundPound'` y `'abilityFire'` sintéticos con Sergei.
+Plan post-jam: signature SFX per critter via Suno.
+
+Override retirable: `trunk.ability_2` deja de ser necesario el día que
+el kit temporal se alinee con el diseño final (slot 1 = tipo grab, slot
+2 = ground_pound).
+
+**Observación menor sobre ab_3 (Stampede)**: auto-resuelve a
+`Ability3GroundPound` (prefix). Como Stampede es `frenzy`-type (pure
+buff sin clip específico), al activar L se reproduce brevemente el
+clip de pisotón (1.96s) antes de que el idle tome el relevo durante
+el resto del buff (3.0s total). Visualmente lee como "plantar patas
+antes de embestir" — aceptable. Si tras playtest el usuario considera
+que molesta, las opciones son (a) override a `Idle` como no-op visual,
+o (b) tocar `critter.ts tickSkeletal` para saltarse el dispatch de
+clip cuando el ability type es `frenzy` y no hay clip explícito.
+Ninguna se aplicó en esta pasada — fuera de scope estrecho.
+
 #### Cheeto — TODO
 #### Kurama — TODO
 #### Shelly — TODO

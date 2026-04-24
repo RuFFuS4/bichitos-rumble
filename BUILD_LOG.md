@@ -9,6 +9,86 @@
 
 ---
 
+## 2026-04-25 — Smoke test anim-lab + Feel pass Trunk (first override use)
+
+Primera sesión productiva usando `/anim-lab.html` para validar el estado
+del mapping de clips antes de un feel pass.
+
+### Smoke test (Fase 1)
+
+Recorrido por Sergei / Trunk / Shelly en el lab:
+
+- **Sergei** (10 clips Meshy): idle/run/abilities todos exact o prefix,
+  sin ambigüedad. El caso frágil `Run` vs `Running` lo gana `Run` por
+  Tier 1 — confirmado.
+- **Trunk** (8 clips Tripo): mapping problemático detectado — el GLB
+  lleva clip names del diseño FINAL (Ram/Grip/GroundPound) pero el
+  kit placeholder del código es `[charge_rush, ground_pound, frenzy]`,
+  así que slot K reproduce el clip de Grip (agarre) y slot L el clip
+  de GroundPound (pisotón). Visualmente equivocado.
+- **Shelly** (6 clips Tripo): ab_1 y ab_2 `missing` — pero por DISEÑO
+  (procedural Shell Charge + Shell Shield). Documentado en
+  `PROCEDURAL_PARTS.md` + `CHARACTER_DESIGN.md §"Cobertura skeletal"`.
+
+### Override productivo (Fase 2)
+
+Entra la primera entrada real al `ANIMATION_OVERRIDES` record:
+
+```ts
+trunk: { ability_2: 'Ability3GroundPound' }
+```
+
+El slot K (Earthquake = ground_pound) ahora reproduce el clip de
+pisotón correcto. Slot L (Stampede = frenzy) queda en su auto
+(Ability3GroundPound via prefix) — observación menor documentada:
+el elefante hace un pisotón breve antes del buff, visualmente lee
+como "planta patas antes de embestir". Si tras playtest molesta,
+opciones discutidas en `CHARACTER_DESIGN.md §"Trunk — feel pass"`.
+
+### Policy de overrides documentada
+
+`src/animation-overrides.ts` cabecera ampliada con:
+- Cuándo añadir override (dos criterios explícitos).
+- Cuándo NO añadir (lista de estados procedurales-by-design:
+  Shelly ab_1/ab_2, Sebastian ab_1/ab_3, Kermit ab_3).
+- Qué estados son `missing` en todos los críttrs por default
+  (headbutt_*, hit, respawn) y no necesitan override.
+
+### Bug fix del anim-lab
+
+El lab mutaba `ANIMATION_OVERRIDES[entryId]` en cada `loadCritter()`,
+lo que **destruía** entradas authored al cargar un crítter sin
+session override. Fix: snapshot `AUTHORED_BASELINE` al boot + merge
+de session sobre baseline en cada load. Descubierto al primer QA
+real (el override de Trunk no se aplicaba porque el lab lo nuke-aba
+al clickar la card).
+
+### Feel pass Trunk (Fase 3)
+
+Siguiendo la plantilla de Sergei:
+
+- **Trunk Ram (J, charge_rush)**: impulse 14→16, duration 0.40→0.35,
+  cooldown 5.0→4.5, windUp 0.08 explícito, speedMult 2.0→2.1,
+  massMult 3.0→3.5 (máximo del roster — bulldozer), `clipPlaybackRate
+  5.0×` para que el clip de 4.58s se vea en ~0.92s.
+- **Earthquake (K, ground_pound)**: radius 4.2→4.5 (más ancho que
+  Sergei 3.5), force 34→40, windUp 0.5→0.60 (telegraph), cooldown
+  8.5→7.5, `clipPlaybackRate 2.8×` para clip de 1.96s (override
+  activo).
+- **Stampede (L, frenzy)**: duration 4.0→3.0 (frente a Sergei 2.5 —
+  Trunk bruiser aguanta más), speedMult 1.3→1.25 (menos que Sergei
+  1.45 — ya era lento), massMult 1.35→1.80 (bulldozer ×2),
+  cooldown 18.0, windUp 0.40→0.45.
+
+VFX: ninguno nuevo. `spawnShockwaveRing` reutilizado — el `radius:
+4.5` y `force: 40` generan un ring más grande + shake más fuerte que
+Sergei sin tocar código.
+
+Typecheck + build limpios. Feel pass log actualizado en
+`CHARACTER_DESIGN.md`.
+
+---
+
 ## 2026-04-25 — Animation Validation Lab + overrides system
 
 Sesión de control: antes de meterme en feel pass de Trunk (siguiente

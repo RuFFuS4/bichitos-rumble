@@ -29,30 +29,39 @@ visualmente. Resolver ampliado a **4 tiers** (override > exact > prefix
   resolviendo bien. Si algún clip clave sale "missing" o "contains"
   (último recurso), resolver con override antes de pasar al feel.
 
-### 1. Feel pass Trunk (Bruiser)
+### 1. [CERRADO 2026-04-25] Feel pass Trunk (Bruiser)
 
-Siguiente en el orden acordado tras cerrar Sergei el 2026-04-24 mediodía.
-Plantilla aplicada sobre Sergei disponible en
-`CHARACTER_DESIGN.md §"Feel pass log"`. Receta resumida:
+Hecho en esta sesión tras smoke test del anim-lab. Detalles completos en
+`CHARACTER_DESIGN.md §"Trunk — feel pass DONE (2026-04-25)"`. Resumen:
 
-1. Medir clips reales con `scripts/inspect-clips.mjs` →
-   `public/models/critters/trunk.glb`.
-2. Alinear `duration` / `windUp` / `cooldown` del kit Trunk
-   (`src/abilities.ts CRITTER_ABILITIES.Trunk`) con las duraciones de
-   clip. Añadir `clipPlaybackRate` si el gap clip↔ability es grande
-   (Gorilla Rush usó 2.3× como referencia).
-3. Identificar el "frame de impacto" del clip (el momento que el mesh
-   golpea). Ahí disparar VFX: shockwave ring / dust burst /
-   squash-stretch. Sergei reusó `spawnShockwaveRing` y estrenó
-   `spawnFrenzyBurst` — Trunk probablemente amplía el radius del
-   shockwave (es un elefante) y añade stomp dust.
-4. Documentar en `CHARACTER_DESIGN.md §"Feel pass log"` una tabla
-   idéntica a la de Sergei con el delta de valores.
-5. QA offline + online: partida con Trunk como player + bot,
-   verificar que las 3 abilities se sienten punchy y el clip lee bien.
+- **Anim-lab detectó mismatch** entre kit placeholder y clip names del
+  GLB: slot K (Earthquake ground_pound) caía sobre `Ability2TrunkGrip`
+  (un agarre) y slot L (Stampede frenzy) sobre `Ability3GroundPound`
+  (un pisotón). Fix vía override sparse en
+  `src/animation-overrides.ts`: `trunk.ability_2 → Ability3GroundPound`.
+  Primer uso productivo del sistema de overrides.
+- Timings ajustados: Ram más pesado (impulse 14→16, mass 3.0→3.5,
+  clipPlaybackRate 5.0× para clip de 4.58s), Earthquake más ancho
+  (radius 4.2→4.5, force 34→40), Stampede más largo + buff de mass
+  mayor (1.35→1.80, duration 4.0→3.0).
+- VFX: ninguno nuevo — reusa `spawnShockwaveRing` con radio aumentado
+  para leer "bigger than Sergei" sin código extra.
+- Override retirable: cuando llegue el tipo de ability `grab` real
+  para Trunk y el kit se alinee con el diseño final.
 
-**Scope estrecho**: sólo Trunk. No reabrir selector / HUD / escala
-base. No refactors. No features nuevas.
+### 2. Feel pass Cheeto (Assassin)
+
+Siguiente en el orden. Receta replicable del patrón Sergei / Trunk:
+
+1. Smoke test en `/anim-lab.html` — inspeccionar clips + resolver + si
+   hay mismatch añadir override correspondiente.
+2. Medir clips con `scripts/inspect-clips.mjs public/models/critters/cheeto.glb`.
+3. Alinear `duration` / `windUp` / `cooldown` + `clipPlaybackRate` si
+   hay gap grande. Identidad: Assassin = rápido, ligero, alpha-strike.
+4. VFX mínimos dentro de lo existente (shockwave más fino + tiro).
+5. Documentar en `CHARACTER_DESIGN.md §"Feel pass log"`.
+
+**Scope estrecho**: sólo Cheeto. No reabrir lo cerrado.
 
 ### 2. Polish del info pane (si queda tiempo tras Trunk)
 

@@ -254,27 +254,54 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   ],
 
   // Trunk — elephant Bruiser: slow, heavy, devastating
-  // Kit built from base factories with heavy tuning. ULTI is a
-  // Frenzy placeholder (+speed +mass) until the final design lands.
+  //
+  // Feel pass 2026-04-25 (follows Sergei's template in CHARACTER_DESIGN.md
+  // §"Feel pass log"). Clips measured via `scripts/inspect-clips.mjs`:
+  //   · Ability1TrunkRam 4.58 s (LONG — clipPlaybackRate 5.0 → ~0.92 s).
+  //   · Ability3GroundPound 1.96 s (mapped to ab_2 via override — see
+  //     animation-overrides.ts; clipPlaybackRate 2.8 → ~0.70 s).
+  //   · Idle 5.58 s, Run 1.29 s (untouched).
+  //
+  // Identity delta vs Sergei (Balanced): Trunk is HEAVIER in every axis.
+  // Shorter dash but much higher mass multiplier (bulldozer, not agile
+  // striker). Wider Earthquake radius + harder knockback than Sergei's
+  // Shockwave. Longer buff window on Stampede but smaller speed uplift
+  // (elephant doesn't sprint — it charges through).
+  //
+  // VFX reuses the existing spawnShockwaveRing + camera shake; the wider
+  // `radius` + higher `force` make the ring bigger + the shake stronger
+  // than Sergei's, which matches the bruiser identity without adding new
+  // VFX code (kept out of scope for this pass).
   Trunk: [
     makeChargeRush({
       name: 'Trunk Ram',
       description: 'Unstoppable forward dash with tusks',
-      impulse: 14,
-      duration: 0.40,
-      cooldown: 5.0,
-      speedMultiplier: 2.0,
-      massMultiplier: 3.0,
+      impulse: 16,
+      duration: 0.35,
+      cooldown: 4.5,
+      windUp: 0.08,
+      speedMultiplier: 2.1,
+      massMultiplier: 3.5,
+      clipPlaybackRate: 5.0,
     }),
     makeGroundPound({
       name: 'Earthquake',
       description: 'Foot stomp that shakes the arena',
-      radius: 4.2,
-      force: 34,
-      windUp: 0.5,
-      cooldown: 8.5,
+      radius: 4.5,
+      force: 40,
+      windUp: 0.60,
+      cooldown: 7.5,
+      clipPlaybackRate: 2.8,
     }),
-    makeFrenzy({ name: 'Stampede', description: 'Enraged charge: +speed, +mass' }),
+    makeFrenzy({
+      name: 'Stampede',
+      description: 'Enraged charge: +speed, +mass',
+      duration: 3.0,
+      cooldown: 18.0,
+      windUp: 0.45,
+      speedMultiplier: 1.25,
+      massMultiplier: 1.80,
+    }),
   ],
 
   // --- Bloque C: 7 remaining playables ---

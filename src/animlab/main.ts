@@ -42,7 +42,21 @@ import * as THREE from 'three';
 import { getDisplayRoster, type RosterEntry } from '../roster';
 import { Critter, CRITTER_PRESETS } from '../critter';
 import type { SkeletalState } from '../critter-skeletal';
-import { ANIMATION_OVERRIDES } from '../animation-overrides';
+import { ANIMATION_OVERRIDES, type ClipOverrideMap } from '../animation-overrides';
+
+/**
+ * Snapshot of the authored ANIMATION_OVERRIDES at page load. We mutate
+ * the live record when the user tweaks things in the lab so newly-
+ * constructed SkeletalAnimators see the change — but that mutation has
+ * to preserve the authored baseline. Without this snapshot, loading
+ * e.g. Trunk with no session override would `delete ANIMATION_OVERRIDES.trunk`
+ * and wipe the authored mapping, which is exactly the bug I hit on
+ * first QA (Trunk ab_2 ignored the authored override because the lab
+ * had already nuked it). Deep clone so session edits don't leak back.
+ */
+const AUTHORED_BASELINE: Record<string, ClipOverrideMap> = JSON.parse(
+  JSON.stringify(ANIMATION_OVERRIDES),
+);
 
 // ---------------------------------------------------------------------------
 // Scene
@@ -122,16 +136,16 @@ function loadCritter(entry: RosterEntry): void {
     critter = null;
   }
 
-  // Apply session override into the live map so SkeletalAnimator
-  // constructor sees it. We merge into ANIMATION_OVERRIDES (mutating the
-  // shared record) because that's what getClipOverride() consults. Since
-  // this is a dev page with a single global instance, the mutation is
-  // harmless — the only thing that reads ANIMATION_OVERRIDES is the
-  // anim lab itself + newly-constructed critters.
+  // Apply session overrides into the live map so the new
+  // SkeletalAnimator reads them via getClipOverride(). Merge on top of
+  // the authored baseline — we never want to lose authored entries
+  // just because the user hasn't touched this critter in the session.
   const entryId = entry.id;
-  const overrides = sessionOverrides[entryId];
-  if (overrides) {
-    ANIMATION_OVERRIDES[entryId] = { ...overrides };
+  const authored = AUTHORED_BASELINE[entryId] ?? {};
+  const session = sessionOverrides[entryId] ?? {};
+  const merged: ClipOverrideMap = { ...authored, ...session };
+  if (Object.keys(merged).length > 0) {
+    ANIMATION_OVERRIDES[entryId] = merged;
   } else {
     delete ANIMATION_OVERRIDES[entryId];
   }

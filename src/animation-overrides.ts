@@ -47,15 +47,77 @@ export type ClipOverrideMap = Partial<Record<SkeletalState, string>>;
  *
  * Authored by hand or exported by `/anim-lab.html`. Edits here take
  * effect on next page reload — no codegen, no build step.
+ *
+ * WHEN to add an override
+ * -----------------------
+ * Only when the 3-tier auto-resolver (exact → prefix → contains) picks
+ * a wrong clip for a critter and the wrong clip is visually distracting
+ * in-game. Concretely:
+ *
+ *   ✓ Two clips both match a keyword and the resolver picks the wrong
+ *     one. Example kept as reference (currently NOT needed — Sergei
+ *     ships both `Run` and `Running`, and the exact-match Tier 1
+ *     already picks `Run` correctly for state `run`).
+ *   ✓ A state resolves via Tier 3 (contains) to a clip that doesn't
+ *     actually match the semantic (e.g. "ability_2" lands on a clip
+ *     whose name accidentally contains "grip" but isn't a grab anim).
+ *     See anim-lab source badge — anything showing `contains` is a
+ *     candidate to inspect.
+ *
+ * WHEN NOT to add an override
+ * ---------------------------
+ * Some states are `missing` BY DESIGN — the engine renders them via
+ * the procedural animation layer (`critter-animation.ts`), not a
+ * skeletal clip. Forcing a clip override in these slots is actively
+ * harmful: activating the ability would play the wrong clip and
+ * suppress the intended procedural motion.
+ *
+ * Known procedural-by-design states (do NOT override):
+ *
+ *   ✗ Shelly `ability_1` (Shell Charge)    — mesh spin + hide parts
+ *   ✗ Shelly `ability_2` (Shell Shield)    — mesh scale + hide parts
+ *   ✗ Sebastian `ability_1` (Claw Rush)    — lateral dash + scale.z
+ *   ✗ Sebastian `ability_3` (Crab Slash)   — lateral dash with tell
+ *   ✗ Kermit `ability_3` (Hypnosapo)       — emissive flicker loop
+ *
+ * If a state appears `missing` in `/anim-lab.html` for one of these
+ * critters, that's the correct state. Leave it empty here. See
+ * `PROCEDURAL_PARTS.md` and `CHARACTER_DESIGN.md §"Cobertura skeletal"`
+ * for the authoritative list.
+ *
+ * States that SHOULD always be resolved by the auto-resolver (don't
+ * expect overrides here): `idle`, `run`, `walk`, `victory`, `defeat`,
+ * `fall`, `ability_1/2/3` except the procedural cases above.
+ *
+ * States typically `missing` for EVERY critter (no clips shipped):
+ *   `headbutt_anticip`, `headbutt_lunge` — handled by procedural
+ *   anticipation pose + lunge squash in `critter-animation.ts`.
+ *   `hit`, `respawn` — no dedicated clip authored; visual fallback via
+ *   emissive blink + scale punch.
  */
 export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
-  // Example (commented — not currently needed because the resolver
-  // already picks `Run` over `Running` via exact-match Tier 1):
+  // Trunk — placeholder kit vs final-design clip names mismatch.
   //
-  // sergei: {
-  //   run: 'Run',
-  //   idle: 'Idle',
-  // },
+  // The GLB ships 3 ability clips named after the FINAL design (Ram /
+  // Grip / GroundPound). The current temporary kit in `abilities.ts`
+  // is [charge_rush, ground_pound, frenzy] — so:
+  //   · Slot 0 (J, Trunk Ram, charge_rush)  → ab_1 → Ability1TrunkRam ✓
+  //   · Slot 1 (K, Earthquake, ground_pound) → ab_2 → WOULD PICK
+  //     Ability2TrunkGrip (a grab animation — wrong for a stomp).
+  //   · Slot 2 (L, Stampede, frenzy)        → ab_3 → WOULD PICK
+  //     Ability3GroundPound (a stomp — wrong for a buff).
+  //
+  // Until Trunk's final kit lands (`CHARACTER_DESIGN.md` has
+  // `Trunk Grip` as the real Hab 2 and `Ground Pound with STUN` as
+  // ULTI), override ab_2 to point at the stomp clip. The Stampede
+  // slot stays procedural (frenzy is a pure-buff effect — no clip
+  // needed, the existing emissive pulse in critter.ts does the job).
+  //
+  // Remove this override once the final Trunk Grip ability type
+  // lands and the kit indexing matches the clip numbering.
+  trunk: {
+    ability_2: 'Ability3GroundPound',
+  },
 };
 
 /**
