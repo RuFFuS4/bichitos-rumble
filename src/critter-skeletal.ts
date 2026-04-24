@@ -133,6 +133,25 @@ export class SkeletalAnimator {
   private readonly clips: THREE.AnimationClip[];
   /** Lazy-created Actions keyed by exact clip name — for playClipByName. */
   private readonly clipActionsByName = new Map<string, THREE.AnimationAction>();
+  /** True while /anim-lab.html is previewing a clip via playClipByName.
+   *  Flips `isHeavyClipActive()` on so the procedural layer suppresses
+   *  its `glbMesh.{position,rotation,scale}` writes — without this, the
+   *  clip's bone pose mixes with idle bob + lean + squash stacked on the
+   *  root, which is exactly the "movimientos raros" users see when
+   *  previewing clips in the lab. Cleared by stopAll() and by the next
+   *  play(state) call so the state machine regains full ownership. */
+  private manualClipActive = false;
+  /** Original loop / clampWhenFinished per AnimationAction touched by
+   *  playClipByName. `mixer.clipAction(clip)` returns the SAME action
+   *  instance the constructor cached in `this.actions[state]`, so mutating
+   *  `loop` / `clampWhenFinished` in a preview silently re-configures the
+   *  resolver's action. This map lets stopAll() / play() restore the
+   *  shape the action had at construction, so the next `play('victory')`
+   *  after a loop=true preview doesn't loop Victory forever. */
+  private preservedActionConfig = new Map<
+    THREE.AnimationAction,
+    { loop: THREE.AnimationActionLoopStyles; clamp: boolean }
+  >();
   /** Critter id (e.g. 'sergei', 'trunk') used to look up
    *  per-critter overrides in `animation-overrides.ts`. null when the
    *  animator is instantiated outside a roster context (tests, lab). */
@@ -282,6 +301,13 @@ export class SkeletalAnimator {
     state: SkeletalState,
     opts: { fallback?: SkeletalState; crossfade?: number; force?: boolean; timeScale?: number } = {},
   ): boolean {
+    // Taking a state-machine step means we're no longer previewing in
+    // the lab. Release the manual mode + restore any loop/clamp edits a
+    // preview had made so the resolver sees clean actions.
+    if (this.manualClipActive) {
+      this.manualClipActive = false;
+      this.restorePreservedActionConfigs();
+    }
     const action = this.actions[state];
     if (!action) {
       // Requested state has no clip on this critter. If a fallback was
@@ -422,6 +448,19 @@ export class SkeletalAnimator {
       this.clipActionsByName.set(clipName, action);
     }
 
+    // Snapshot loop / clampWhenFinished BEFORE we mutate them so the
+    // resolver's copy of this action (which lives in `this.actions[state]`
+    // for state-mapped clips) can be restored by stopAll() / next
+    // play(state). Only capture on first touch; leave the snapshot
+    // untouched on repeated previews of the same clip so we never lose
+    // the original shape.
+    if (!this.preservedActionConfig.has(action)) {
+      this.preservedActionConfig.set(action, {
+        loop: action.loop,
+        clamp: action.clampWhenFinished,
+      });
+    }
+
     // Fade out every other currently-playing action so the chosen clip
     // reads clean. The mixer handles the cleanup; we just drop weights.
     for (const a of [...Object.values(this.actions), ...this.clipActionsByName.values()]) {
@@ -439,10 +478,26 @@ export class SkeletalAnimator {
     action.play();
 
     // Mark state as "unknown" — the normal state machine will pick up
-    // again on the next play() call.
+    // again on the next play() call. `manualClipActive` tells the
+    // procedural layer (via isHeavyClipActive) to stop writing to
+    // glbMesh.{position,rotation,scale} for the duration of the preview,
+    // so the clip's pose reads clean without the idle bob / lean /
+    // squash mixed on top.
     this.currentState = null;
     this.fallbackAfterOneShot = null;
+    this.manualClipActive = true;
     return true;
+  }
+
+  /** Restore every AnimationAction this preview session mutated back to
+   *  its authored (constructor-time) loop + clampWhenFinished. Called
+   *  when manual mode releases (stopAll / next play(state)). */
+  private restorePreservedActionConfigs(): void {
+    for (const [act, cfg] of this.preservedActionConfig) {
+      act.setLoop(cfg.loop, Infinity);
+      act.clampWhenFinished = cfg.clamp;
+    }
+    this.preservedActionConfig.clear();
   }
 
   /** Stop everything. Used by the lab's "Stop clip" button. */
@@ -450,6 +505,8 @@ export class SkeletalAnimator {
     this.mixer.stopAllAction();
     this.currentState = null;
     this.fallbackAfterOneShot = null;
+    this.manualClipActive = false;
+    this.restorePreservedActionConfigs();
   }
 
   hasClip(state: SkeletalState): boolean {
@@ -460,8 +517,16 @@ export class SkeletalAnimator {
    * True when the current state is a "heavy" one (victory, defeat, ability,
    * headbutt_lunge, fall, hit). The procedural layer reads this to suppress
    * root-level writes that would clash with the clip's pose.
+   *
+   * Also true while a /anim-lab.html preview is running (manualClipActive):
+   * during a manual preview we don't know what the clip is authored to do,
+   * so the safe assumption is "treat it as heavy, let the clip own the
+   * root pose, keep procedural quiet". Without this, previewing a clip
+   * in the lab stacks idle bob / lean / scale squash on top of the bone
+   * animation — the exact rareness users saw.
    */
   isHeavyClipActive(): boolean {
+    if (this.manualClipActive) return true;
     if (!this.currentState) return false;
     return HEAVY_STATES.has(this.currentState);
   }

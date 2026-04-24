@@ -193,7 +193,13 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
 
   if (!critter.glbMesh) return;
 
-  const pivotY = critter.rosterEntry?.pivotY ?? 0;
+  // Prefer live tooling override (set by /calibrate.html sliders) over
+  // the static roster value. Keeps the game path identical — override is
+  // always undefined in-match.
+  const pivotY =
+    critter.rosterOverride?.pivotY ??
+    critter.rosterEntry?.pivotY ??
+    0;
   critter.glbMesh.position.y = pivotY + yOffset;
 
   // --- Forward pitch (lean) ---
@@ -227,7 +233,11 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
   }
 
   // --- Scale (x, y, z) ---
-  const baseScale = critter.rosterEntry!.scale;
+  // Same override pattern as pivotY — calibrate can mutate baseScale
+  // hot. Fallback chain keeps the production path unchanged.
+  const baseScale =
+    critter.rosterOverride?.scale ??
+    critter.rosterEntry!.scale;
 
   // Z stretch: charge_rush active envelope
   const stretchZ = 1 + chargeActive * 0.22 * p.chargeStretchMult;

@@ -267,11 +267,21 @@ canvas.addEventListener('click', (ev) => {
 
 // Slider handlers — each mutates the selected slot's mesh transform and
 // records the new value in rosterTransform so Export has the data.
+//
+// In addition to writing the transform directly on glbMesh, each slider
+// also pushes the value into `critter.rosterOverride`. Without that push,
+// `tickProceduralAnimation` re-reads `rosterEntry.scale` / `.pivotY` and
+// re-writes `glbMesh.scale.{x,y,z}` / `position.y` on every frame,
+// clobbering the direct mutation ~16 ms after the user releases the
+// slider — the classic "why doesn't the slider do anything" symptom.
+// Rotation is unaffected by procedural (it only writes `.x` / `.z`),
+// but we still track it in the override for symmetry + future-proofing.
 ctlScale.addEventListener('input', () => {
   if (selectedSlotIdx === null) return;
   const slot = slots[selectedSlotIdx]!;
   const v = +ctlScale.value;
   slot.rosterTransform.scale = v;
+  slot.critter.rosterOverride = { ...slot.critter.rosterOverride, scale: v };
   // Apply to glbMesh (if loaded) — the Critter's inner group scale.
   if (slot.critter.glbMesh) {
     slot.critter.glbMesh.scale.setScalar(v);
@@ -283,6 +293,7 @@ ctlPivot.addEventListener('input', () => {
   const slot = slots[selectedSlotIdx]!;
   const v = +ctlPivot.value;
   slot.rosterTransform.pivotY = v;
+  slot.critter.rosterOverride = { ...slot.critter.rosterOverride, pivotY: v };
   if (slot.critter.glbMesh) {
     // PivotY in the roster is applied as position.y += entry.pivotY on
     // the inner group. Mutating it means resetting to offset.y then
@@ -296,6 +307,7 @@ ctlRot.addEventListener('input', () => {
   const slot = slots[selectedSlotIdx]!;
   const v = +ctlRot.value;
   slot.rosterTransform.rotationY = v;
+  slot.critter.rosterOverride = { ...slot.critter.rosterOverride, rotation: v };
   if (slot.critter.glbMesh) {
     slot.critter.glbMesh.rotation.y = v;
   }

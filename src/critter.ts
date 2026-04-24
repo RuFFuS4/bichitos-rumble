@@ -173,6 +173,23 @@ export class Critter {
   skipPhysics = false;
   /** Loaded GLB scene graph (null while loading or if procedural-only). */
   glbMesh: THREE.Group | null = null;  // public for debug tuning (make private after)
+  /**
+   * Per-instance live override of roster visual params. Read by
+   * `tickProceduralAnimation` so tooling (the /calibrate.html lab) can
+   * mutate `scale` / `pivotY` on the live critter and see the change
+   * hot — otherwise procedural re-writes `glbMesh.scale.{x,y,z}` and
+   * `glbMesh.position.y` back to the static roster values every frame,
+   * making the sliders look dead.
+   *
+   * `rotation` is carried for symmetry but is currently NOT read by
+   * procedural (it writes `rotation.x` / `rotation.z` only, never `.y`,
+   * which is what the rotation slider touches directly on `glbMesh`).
+   *
+   * Undefined in the game path — the match never sets this, so
+   * procedural falls back to `rosterEntry.*` exactly as before. Zero
+   * gameplay change by design.
+   */
+  rosterOverride?: Partial<Pick<RosterEntry, 'scale' | 'pivotY' | 'rotation'>>;
   /** Pre-collected MeshStandardMaterials from the GLB for fast visual updates. */
   private glbMaterials: THREE.MeshStandardMaterial[] = [];
   /**
