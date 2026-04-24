@@ -1650,10 +1650,15 @@ export class Game {
 
   /** Lab-only: rebuild the arena with a specific seed, keeping the current
    *  match (and the same pack cosmetics the match is already using). */
-  public debugForceArenaSeed(seed: number): void {
-    const currentPack = this.arena.getCurrentPackId() ?? undefined;
+  public debugForceArenaSeed(seed: number, packId?: ArenaPackId): void {
+    // Pack precedence: explicit caller arg > current arena pack > undefined
+    // (procedural sky, no decor). The optional argument lets the lab /
+    // browser console rebuild with a specific pack without going through
+    // the full restartMatch flow — useful for manual QA of pack visuals
+    // and in-arena decor layouts.
+    const desiredPack = packId ?? this.arena.getCurrentPackId() ?? undefined;
     this.arena.reset();
-    this.arena.buildFromSeed(seed, currentPack);
+    this.arena.buildFromSeed(seed, desiredPack);
   }
 
   /** Lab-only: read-only snapshot of arena state for display panels. */
