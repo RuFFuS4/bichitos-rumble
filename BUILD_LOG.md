@@ -9,6 +9,116 @@
 
 ---
 
+## 2026-04-25 — Decor editor: Preview in game + DECOR_TYPES audit (+12 props)
+
+Two small but consequential additions on top of the v2 UX iteration.
+
+### Preview in game
+
+New "Preview in game" button in /decor-editor.html. Saves the current
+working copy to `localStorage[decor-editor:<packId>]` (the same key
+the editor already uses) and opens the game in a new tab with
+`/?arenaPack=<id>&decorPreview=1`. The game side honours that combo
+and substitutes the localStorage layout for `DECOR_LAYOUTS[packId]`
+on the next offline match — only for that pack, only when the flag
+is on. Production builds without those query params are unchanged.
+
+Wiring (3 small touches):
+- `src/arena-decor-layouts.ts`
+  - Captures `previewPackId` once at module load by parsing
+    `window.location.search`. Validates against the pack id whitelist
+    so a typo or stale URL just falls through to normal play.
+  - `getDecorLayout(packId)` checks: when `packId === previewPackId`
+    AND the localStorage entry is structurally valid, returns it.
+    Otherwise returns `DECOR_LAYOUTS[packId]` exactly like before.
+  - New export `getPreviewPackId()` lets callers know which pack is
+    pinned (or `null` if normal mode).
+- `src/game.ts`
+  - The offline match path that used to call `getRandomPackId()`
+    unconditionally now does `getPreviewPackId() ?? getRandomPackId()`.
+    Online path untouched — server is authoritative there.
+- `src/main.ts`
+  - When `getPreviewPackId()` returns non-null at boot, paints a small
+    fixed banner top-centre: "🎨 Preview: <pack> ← back to editor".
+    The link href is `/decor-editor.html`. Banner is HTML+inline CSS
+    only; no new module, no new asset.
+
+`SoT remains the export`. localStorage is the working buffer; only
+copy-paste into `arena-decor-layouts.ts` actually ships. The preview
+exists so the user can iterate visually without that round-trip.
+
+End-to-end smoke confirmed: drag a prop → click "Preview in game" →
+new tab opens at `/?arenaPack=jungle&decorPreview=1` → banner
+visible → start match → arena.appliedPackId = "jungle" + 12 props
+reparented (the 11 authored + 1 dragged), not the 11 from code.
+
+### DECOR_TYPES audit + expansion (+12 props)
+
+Cross-checked `public/models/arenas/<pack>/*.glb` (33 GLBs total)
+against the catalog. Found 12 valid props that the prior catalog
+missed. Conservative: the 54 MB `tree_jungle_broadleaf.glb` stays
+deliberately excluded; the 5.8 MB `palm_beach_tilted.glb` is included
+but called out as the heaviest entry.
+
+Props added (with file size + new key):
+
+  frozen_tundra (+2):
+    icebergmid_tundra      iceberg_mid.glb         248 KB
+    icebergtall_tundra     iceberg_tall.glb        319 KB
+
+  desert_dunes (+3):
+    spiretall_desert       sandstone_spire_tall.glb  361 KB
+    minecart_desert        minecart_rusted.glb       830 KB
+    palm_desert            palm_desert.glb           829 KB
+
+  coral_beach (+4):
+    coralpink_beach        coral_stack_pink.glb       743 KB
+    coralred_beach         coral_stack_red.glb        877 KB
+    shipwreck_beach        shipwreck_hull_piece.glb   629 KB
+    palm_beach             palm_beach_tilted.glb    5 858 KB ⚠ heaviest
+
+  kitsune_shrine (+3):
+    lanternlarge_shrine    stone_lantern.glb          719 KB
+    sakura_shrine          sakura_tree.glb          2 720 KB
+    toriilarge_shrine      torii_gate_large.glb       257 KB
+
+Excluded (and why):
+
+  jungle:
+    tree_jungle_broadleaf.glb  53 982 KB — single asset is ~half the
+                                pre-launch payload. Not catalog-worthy
+                                until a re-export trims it, even at
+                                small scale; the loader still pulls
+                                the full 54 MB to decode.
+
+Result: catalog grew from 20 → 32 entries. Editor type dropdown now
+shows 4 / 6 / 7 / 8 / 7 props per pack (was 4 / 4 / 4 / 4 / 4).
+
+Files touched:
+- src/arena-decor-layouts.ts  (DECOR_TYPES expanded + preview support)
+- src/game.ts                 (+1 import, +1 helper call)
+- src/main.ts                 (+1 import, +banner block)
+- src/decoreditor/main.ts     (+button ref + handler)
+- decor-editor.html           (+Preview section + button)
+- BUILD_LOG.md / DEV_TOOLS.md / MEMORY.md (docs)
+
+Preflight all green: tsc (client + server), verify-glbs 8/8, vite
+build 4.42s, manual smoke validated drag → preview → match render
++ 12 reparented props from localStorage.
+
+Limitations / deferred:
+- localStorage layer not yet unified across editors (calibrate /
+  anim-lab still each define their own helpers). Comment in code
+  notes the lift, but scope is intentionally tight here.
+- "Preview in game" opens a new tab; if the user has popups blocked
+  the editor falls back to in-tab navigation. Either way the back-
+  to-editor link covers the round trip.
+- No "preview is stale" warning when the user re-edits the source TS
+  while the preview tab is open. Not worth the complexity now —
+  manual reload of the preview tab is enough.
+
+---
+
 ## 2026-04-25 — In-arena decor system + decor-editor + skybox fix
 
 Three interlocking moves to stabilise the arena visual layer.

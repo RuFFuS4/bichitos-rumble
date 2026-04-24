@@ -36,6 +36,16 @@ el lab se vuelve ilegible para quien entre después.
 >    Export emits a paste-ready TS snippet for
 >    `src/arena-decor-layouts.ts`.
 >
+>    **Preview in game** (added 2026-04-25 final iteration): button
+>    saves the current working copy to localStorage and opens the
+>    game with `?arenaPack=<id>&decorPreview=1`. The game substitutes
+>    your localStorage layout for `DECOR_LAYOUTS[<id>]` on the next
+>    offline match (only for that pack, only with that flag); a
+>    "← back to editor" banner stays pinned top-centre while preview
+>    mode is active. Production URLs without those params are
+>    unaffected. Export still defines the canonical layout — preview
+>    is a working buffer.
+>
 > Full anim-lab design in BUILD_LOG.md §"2026-04-25 Animation
 > Validation Lab". Decor system design in BUILD_LOG.md §"2026-04-25
 > In-arena decor". Full mesh2motion integration notes:

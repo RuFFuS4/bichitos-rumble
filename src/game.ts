@@ -50,6 +50,7 @@ import { play as playSoundEffect } from './audio';
 import { spawnShockwaveRing } from './abilities';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
+import { getPreviewPackId } from './arena-decor-layouts';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended' | 'online';
 
@@ -452,7 +453,14 @@ export class Game {
     // props are swapped per match to keep the look varied across
     // consecutive runs without any menu knob.
     this.arena.reset();
-    this.arena.buildFromSeed((Math.random() * 0xFFFFFFFF) | 0, getRandomPackId());
+    // Pack selection in offline matches: random by default, but the
+    // /decor-editor.html "Preview in game" button can pin a specific
+    // pack via the ?arenaPack=<id>&decorPreview=1 URL params, which
+    // arena-decor-layouts captured at module load. Honour that pin so
+    // the editor preview lands on the user's expected pack instead of
+    // a random roll.
+    const offlinePack = getPreviewPackId() ?? getRandomPackId();
+    this.arena.buildFromSeed((Math.random() * 0xFFFFFFFF) | 0, offlinePack);
     const roster = buildMatchRoster(
       playerConfig,
       MAX_CRITTERS_PER_MATCH - 1,

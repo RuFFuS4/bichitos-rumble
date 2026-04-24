@@ -165,6 +165,7 @@ const historyLabel  = qSpan('history-label');
 const btnResetLocal = qBtn('btn-reset-local');
 const localIndicator= qSpan('local-indicator');
 const ctlPreviewGlb = qInput('ctl-preview-glb');
+const btnPreviewIngame = qBtn('btn-preview-ingame');
 const btnExport     = qBtn('btn-export');
 const exportOut     = qPre('export-out');
 const placementsList= qDiv('placements-list');
@@ -660,6 +661,23 @@ btnResetLocal.addEventListener('click', () => {
 
 ctlPreviewGlb.addEventListener('change', () => {
   setPreviewMode(ctlPreviewGlb.checked);
+});
+
+btnPreviewIngame.addEventListener('click', () => {
+  // Force-save the working copy first so the game reads the freshest
+  // version of localStorage (saveLocal also fires automatically on
+  // every change, but defending against any race / disabled case).
+  saveLocal();
+  // Open the game with the pack pinned and the preview flag on.
+  // window.open in a new tab keeps the editor available for tweaks
+  // without losing the working copy. Falls back to same-tab navigation
+  // if the popup blocker intervenes.
+  const url = `/?arenaPack=${encodeURIComponent(currentPack)}&decorPreview=1`;
+  const win = window.open(url, '_blank');
+  if (!win) {
+    // Pop-up blocked — degrade gracefully to in-tab navigation.
+    window.location.href = url;
+  }
 });
 
 btnExport.addEventListener('click', () => {

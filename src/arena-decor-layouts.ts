@@ -76,27 +76,42 @@ export const DECOR_TYPES: Record<string, {
   'palmtall_jungle':{ glbPath: './models/arenas/jungle/tree_palm_tall.glb',   scaleBase: 0.30, label: 'Palm (tall)' },
 
   // --- frozen_tundra ---
-  'iceshard_tundra':  { glbPath: './models/arenas/frozen_tundra/ice_shard.glb',     scaleBase: 0.50, label: 'Ice shard' },
-  'iceberg_tundra':   { glbPath: './models/arenas/frozen_tundra/iceberg_low.glb',    scaleBase: 0.55, label: 'Iceberg (low)' },
-  'pine_tundra':      { glbPath: './models/arenas/frozen_tundra/pine_snow.glb',      scaleBase: 0.40, label: 'Pine (snowy)' },
-  'signpost_tundra':  { glbPath: './models/arenas/frozen_tundra/signpost_wood.glb',  scaleBase: 0.55, label: 'Signpost' },
+  'iceshard_tundra':     { glbPath: './models/arenas/frozen_tundra/ice_shard.glb',     scaleBase: 0.50, label: 'Ice shard' },
+  'iceberg_tundra':      { glbPath: './models/arenas/frozen_tundra/iceberg_low.glb',    scaleBase: 0.55, label: 'Iceberg (low)' },
+  'icebergmid_tundra':   { glbPath: './models/arenas/frozen_tundra/iceberg_mid.glb',    scaleBase: 0.50, label: 'Iceberg (mid)' },
+  'icebergtall_tundra':  { glbPath: './models/arenas/frozen_tundra/iceberg_tall.glb',   scaleBase: 0.40, label: 'Iceberg (tall)' },
+  'pine_tundra':         { glbPath: './models/arenas/frozen_tundra/pine_snow.glb',      scaleBase: 0.40, label: 'Pine (snowy)' },
+  'signpost_tundra':     { glbPath: './models/arenas/frozen_tundra/signpost_wood.glb',  scaleBase: 0.55, label: 'Signpost' },
 
   // --- desert_dunes ---
-  'cactus_desert':    { glbPath: './models/arenas/desert_dunes/cactus_saguaro.glb',          scaleBase: 0.40, label: 'Cactus' },
-  'spire_desert':     { glbPath: './models/arenas/desert_dunes/sandstone_spire_short.glb',   scaleBase: 0.50, label: 'Sandstone spire' },
-  'bones_desert':     { glbPath: './models/arenas/desert_dunes/bones_skull_scatter.glb',     scaleBase: 0.55, label: 'Bones scatter' },
-  'flag_desert':      { glbPath: './models/arenas/desert_dunes/cloth_flag_tattered.glb',     scaleBase: 0.55, label: 'Tattered flag' },
+  'cactus_desert':       { glbPath: './models/arenas/desert_dunes/cactus_saguaro.glb',          scaleBase: 0.40, label: 'Cactus' },
+  'spire_desert':        { glbPath: './models/arenas/desert_dunes/sandstone_spire_short.glb',   scaleBase: 0.50, label: 'Sandstone spire (short)' },
+  'spiretall_desert':    { glbPath: './models/arenas/desert_dunes/sandstone_spire_tall.glb',    scaleBase: 0.35, label: 'Sandstone spire (tall)' },
+  'bones_desert':        { glbPath: './models/arenas/desert_dunes/bones_skull_scatter.glb',     scaleBase: 0.55, label: 'Bones scatter' },
+  'flag_desert':         { glbPath: './models/arenas/desert_dunes/cloth_flag_tattered.glb',     scaleBase: 0.55, label: 'Tattered flag' },
+  'minecart_desert':     { glbPath: './models/arenas/desert_dunes/minecart_rusted.glb',         scaleBase: 0.45, label: 'Rusted minecart' },
+  'palm_desert':         { glbPath: './models/arenas/desert_dunes/palm_desert.glb',             scaleBase: 0.40, label: 'Palm (desert)' },
 
   // --- coral_beach ---
-  'coral_beach':      { glbPath: './models/arenas/coral_beach/coral_brain.glb',           scaleBase: 0.50, label: 'Coral brain' },
-  'shell_beach':      { glbPath: './models/arenas/coral_beach/seashell_scatter.glb',      scaleBase: 0.55, label: 'Shell scatter' },
-  'starfish_beach':   { glbPath: './models/arenas/coral_beach/starfish_decor.glb',        scaleBase: 0.55, label: 'Starfish' },
-  'boulder_beach':    { glbPath: './models/arenas/coral_beach/boulder_wet.glb',           scaleBase: 0.45, label: 'Wet boulder' },
+  'coral_beach':         { glbPath: './models/arenas/coral_beach/coral_brain.glb',           scaleBase: 0.50, label: 'Coral brain' },
+  'coralpink_beach':     { glbPath: './models/arenas/coral_beach/coral_stack_pink.glb',      scaleBase: 0.50, label: 'Coral stack (pink)' },
+  'coralred_beach':      { glbPath: './models/arenas/coral_beach/coral_stack_red.glb',       scaleBase: 0.50, label: 'Coral stack (red)' },
+  'shell_beach':         { glbPath: './models/arenas/coral_beach/seashell_scatter.glb',      scaleBase: 0.55, label: 'Shell scatter' },
+  'starfish_beach':      { glbPath: './models/arenas/coral_beach/starfish_decor.glb',        scaleBase: 0.55, label: 'Starfish' },
+  'boulder_beach':       { glbPath: './models/arenas/coral_beach/boulder_wet.glb',           scaleBase: 0.45, label: 'Wet boulder' },
+  'shipwreck_beach':     { glbPath: './models/arenas/coral_beach/shipwreck_hull_piece.glb',  scaleBase: 0.45, label: 'Shipwreck hull piece' },
+  // palm_beach_tilted.glb (5.8 MB) — heaviest in this pack. Included for
+  // composition variety; if a future build is bandwidth-sensitive,
+  // reconsider. Listed in BUILD_LOG audit as the largest beach prop.
+  'palm_beach':          { glbPath: './models/arenas/coral_beach/palm_beach_tilted.glb',     scaleBase: 0.35, label: 'Palm (tilted, beach)' },
 
   // --- kitsune_shrine ---
-  'lantern_shrine':       { glbPath: './models/arenas/kitsune_shrine/stone_lantern_small.glb',  scaleBase: 0.50, label: 'Stone lantern' },
+  'lantern_shrine':       { glbPath: './models/arenas/kitsune_shrine/stone_lantern_small.glb',  scaleBase: 0.50, label: 'Stone lantern (small)' },
+  'lanternlarge_shrine':  { glbPath: './models/arenas/kitsune_shrine/stone_lantern.glb',        scaleBase: 0.45, label: 'Stone lantern (large)' },
   'bamboo_shrine':        { glbPath: './models/arenas/kitsune_shrine/bamboo_cluster.glb',       scaleBase: 0.45, label: 'Bamboo cluster' },
+  'sakura_shrine':        { glbPath: './models/arenas/kitsune_shrine/sakura_tree.glb',          scaleBase: 0.35, label: 'Sakura tree' },
   'toriismall_shrine':    { glbPath: './models/arenas/kitsune_shrine/torii_gate_small.glb',     scaleBase: 0.45, label: 'Torii gate (small)' },
+  'toriilarge_shrine':    { glbPath: './models/arenas/kitsune_shrine/torii_gate_large.glb',     scaleBase: 0.40, label: 'Torii gate (large)' },
   'kitsunestatue_shrine': { glbPath: './models/arenas/kitsune_shrine/kitsune_statue_white.glb', scaleBase: 0.40, label: 'Kitsune statue' },
 };
 
@@ -139,12 +154,98 @@ export const DECOR_LAYOUTS: Record<ArenaPackId, DecorPlacement[]> = {
 };
 
 // ---------------------------------------------------------------------------
+// Preview-in-game support — query string + localStorage bridge
+// ---------------------------------------------------------------------------
+//
+// The /decor-editor.html "Preview in game" button writes the current
+// working copy to `localStorage[decor-editor:<packId>]` and redirects
+// to `/?arenaPack=<id>&decorPreview=1`. When the game boots with that
+// query string, this module captures the pack id and switches
+// `getDecorLayout` to read from localStorage instead of the authored
+// DECOR_LAYOUTS for THAT pack only.
+//
+// Lifecycle:
+//   - Module load (boot, both /decor-editor.html and /index.html)
+//     parses the URL once. If `decorPreview=1`, `previewPackId` is set
+//     to the value of `arenaPack` (if it's a valid ArenaPackId).
+//   - `getDecorLayout(packId)` checks: when `packId === previewPackId`,
+//     it tries to load from localStorage; on any failure it falls back
+//     to DECOR_LAYOUTS[packId]. Other packs are unaffected.
+//   - Production (no query string) → `previewPackId` stays null →
+//     getDecorLayout always returns DECOR_LAYOUTS[packId] (existing
+//     behaviour). ZERO change for normal play.
+//
+// localStorage shape (mirrors what /decor-editor.html writes):
+//   key:   "decor-editor:<packId>"
+//   value: JSON of DecorPlacement[]
+
+const PREVIEW_STORAGE_NS = 'decor-editor';
+
+let previewPackId: ArenaPackId | null = null;
+
+(function initPreviewFromUrl() {
+  // Module-level side-effect: only runs in browser builds. SSR-safe
+  // because we guard for `typeof window`. Reads URL once at import.
+  if (typeof window === 'undefined') return;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('decorPreview') !== '1') return;
+    const raw = params.get('arenaPack');
+    if (!raw) return;
+    const validIds: readonly string[] = [
+      'jungle', 'frozen_tundra', 'desert_dunes', 'coral_beach', 'kitsune_shrine',
+    ];
+    if (validIds.includes(raw)) {
+      previewPackId = raw as ArenaPackId;
+      console.info('[arena-decor-layouts] preview mode active for pack:', previewPackId);
+    }
+  } catch {
+    /* malformed URL — silently skip */
+  }
+})();
+
+/** True when the URL asked for a decor preview that we can satisfy.
+ *  Used by main.ts to surface a small "preview mode" indicator + a
+ *  link back to the editor, and by game.ts to force the offline pack
+ *  selection so the preview actually applies on the next match. */
+export function getPreviewPackId(): ArenaPackId | null {
+  return previewPackId;
+}
+
+/** Read the localStorage working copy for a pack, or null on miss /
+ *  corrupt data. Reused by getDecorLayout when preview is active. */
+function readLocalStorageLayout(packId: ArenaPackId): DecorPlacement[] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(`${PREVIEW_STORAGE_NS}:${packId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    if (!parsed.every((p) => typeof p?.r === 'number' && typeof p?.angle === 'number'
+                          && typeof p?.rotY === 'number' && typeof p?.scale === 'number'
+                          && typeof p?.type === 'string')) return null;
+    return parsed as DecorPlacement[];
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Look up a layout. Returns empty array for packs not yet populated so
- *  callers can iterate without guarding. */
+/** Look up the decor layout for a pack. When the URL activated preview
+ *  mode for THIS pack, returns the localStorage working copy instead
+ *  of the authored layout. Falls back to DECOR_LAYOUTS on any miss so
+ *  no pack ever crashes. */
 export function getDecorLayout(packId: ArenaPackId): DecorPlacement[] {
+  if (previewPackId === packId) {
+    const local = readLocalStorageLayout(packId);
+    if (local) {
+      console.info('[arena-decor-layouts] using preview layout from localStorage:', packId, local.length, 'props');
+      return local;
+    }
+  }
   return DECOR_LAYOUTS[packId] ?? [];
 }
 

@@ -202,9 +202,20 @@
     </section>
 
     <section>
+      <h2>Preview</h2>
+      <button id="btn-preview-ingame">▶ Preview in game</button>
+      <div class="hint-text" style="margin-top: 6px">
+        Saves the current pack layout to <code>localStorage</code> and opens the
+        game with <code>?arenaPack=&lt;pack&gt;&amp;decorPreview=1</code>. The next offline
+        match uses your working copy. Production builds without that
+        param keep using <code>DECOR_LAYOUTS</code> from code.
+      </div>
+    </section>
+
+    <section>
       <h2>Export</h2>
       <button class="primary" id="btn-export">Copy TS snippet to clipboard</button>
-      <div class="hint-text" style="margin-top: 6px">Paste inside <code>DECOR_LAYOUTS</code> in <code>src/arena-decor-layouts.ts</code>.</div>
+      <div class="hint-text" style="margin-top: 6px">Paste inside <code>DECOR_LAYOUTS</code> in <code>src/arena-decor-layouts.ts</code>. This is the canonical source of truth — preview is just a working copy.</div>
       <pre class="export-box" id="export-out" style="margin-top: 8px">(no export yet)</pre>
     </section>
   </aside>

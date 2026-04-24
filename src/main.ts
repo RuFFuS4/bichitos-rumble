@@ -15,6 +15,7 @@ import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 import { initOnlineBeltToast } from './online-belt-toast';
 import { updateDustPuffs } from './dust-puff';
+import { getPreviewPackId } from './arena-decor-layouts';
 
 // ---------------------------------------------------------------------------
 // Sprite sheet preload — enables `.sprite-hud-*` / `.sprite-ability-*` CSS
@@ -357,6 +358,43 @@ if (btnMusic) {
 
 // Game
 const game = new Game(scene);
+
+// Decor preview banner — only shown when /decor-editor.html opened
+// the game with `?arenaPack=<id>&decorPreview=1`. Acts as both a
+// reminder ("you're not in normal play, you're previewing local
+// edits") and a 1-click way back to the editor. Production builds
+// without the query string skip this entirely (getPreviewPackId
+// returns null) so normal players never see it.
+{
+  const previewPack = getPreviewPackId();
+  if (previewPack) {
+    const banner = document.createElement('div');
+    banner.id = 'decor-preview-banner';
+    banner.innerHTML = `
+      <span style="opacity: 0.7">🎨 Preview:</span>
+      <strong>${previewPack}</strong>
+      <a href="/decor-editor.html" style="color: #ffdc5c; margin-left: 10px; text-decoration: none">← back to editor</a>
+    `;
+    Object.assign(banner.style, {
+      position: 'fixed',
+      top: '8px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      background: 'rgba(10, 12, 22, 0.92)',
+      color: '#e0e4ee',
+      border: '1px solid #ffdc5c',
+      borderRadius: '6px',
+      padding: '6px 14px',
+      fontFamily: 'Segoe UI, Arial, sans-serif',
+      fontSize: '12px',
+      letterSpacing: '0.04em',
+      zIndex: '999',
+      pointerEvents: 'auto',
+      backdropFilter: 'blur(4px)',
+    } as CSSStyleDeclaration);
+    document.body.appendChild(banner);
+  }
+}
 
 // Online mode entry — "Play Online" button on title screen
 //

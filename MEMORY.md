@@ -27,6 +27,16 @@
   para preview GLB real. Export emite TS pegable. **Editor NO escribe
   archivos** — pegar manualmente en `arena-decor-layouts.ts` es la
   única vía de persistir a código.
+- **Preview in game**: botón en el editor → abre
+  `/?arenaPack=<id>&decorPreview=1`. `arena-decor-layouts.ts` parsea
+  ese query string al cargar; cuando `decorPreview=1`, `getDecorLayout`
+  lee `localStorage:decor-editor:<id>` en vez de `DECOR_LAYOUTS[id]`
+  para ESE pack. `game.ts` honra el pin via `getPreviewPackId() ?? getRandomPackId()`
+  en el path offline. Banner "← back to editor" en main.ts cuando
+  preview activo. Producción sin query string no se entera de nada.
+- **Catálogo DECOR_TYPES** (2026-04-25 audit): 32 entries (4/6/7/8/7
+  por pack jungle/tundra/desert/beach/shrine). Único excluido por
+  peso: `tree_jungle_broadleaf.glb` (54 MB).
 
 ### Skybox (añadido 2026-04-25)
 
