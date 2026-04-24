@@ -246,7 +246,7 @@ export class DevApi {
   // Bot overrides reset on a new match so each run starts clean.
   // -------------------------------------------------------------------------
 
-  startMatch(player: string, bots: string[], opts: { seed?: number } = {}): void {
+  startMatch(player: string, bots: string[], opts: { seed?: number; packId?: string } = {}): void {
     this.game.debugStartOfflineMatch(player, bots, opts);
     this.botOverrides.clear();
     this.resetEventMemory();

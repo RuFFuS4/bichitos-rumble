@@ -346,12 +346,21 @@ export class BrawlRoom extends Room<GameState> {
     this.arenaSim = new ArenaSim(seed);
     this.state.arenaSeed = seed;
     this.state.arenaRadius = this.arenaSim.currentRadius;
+    // Cosmetic pack. Clients derive skybox + fog + ground + props from
+    // this. Server picks uniformly so every match looks different. No
+    // import dependency on client code — the list is small and stable,
+    // duplicated here on purpose.
+    const ARENA_PACK_IDS = [
+      'jungle', 'frozen_tundra', 'desert_dunes', 'coral_beach', 'kitsune_shrine',
+    ];
+    const packId = ARENA_PACK_IDS[Math.floor(Math.random() * ARENA_PACK_IDS.length)]!;
+    this.state.arenaPackId = packId;
 
     this.state.phase = 'countdown';
     this.state.countdownLeft = SIM.match.countdown;
     this.state.matchTimer = SIM.match.duration;
     this.state.waitingTimeLeft = 0;
-    console.log(`[BrawlRoom] waiting → countdown (${this.state.players.size} players, seed=${seed})`);
+    console.log(`[BrawlRoom] waiting → countdown (${this.state.players.size} players, seed=${seed}, pack=${packId})`);
 
     // Once we're in countdown, nobody else can join. Colyseus maxClients
     // already caps that but we also lock the room explicitly to avoid any

@@ -49,6 +49,7 @@ import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefee
 import { play as playSoundEffect } from './audio';
 import { spawnShockwaveRing } from './abilities';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
+import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended' | 'online';
 
@@ -400,9 +401,13 @@ export class Game {
     const playerConfig = CRITTER_PRESETS.find(p => p.name === entry?.displayName)
       ?? CRITTER_PRESETS[0]; // safety fallback
 
-    // Rebuild the arena with a fresh random seed (offline)
+    // Rebuild the arena with a fresh random seed (offline). The pack
+    // (jungle / frozen_tundra / desert_dunes / coral_beach / kitsune_shrine)
+    // is also rolled randomly — skybox, fog, ground texture and decorative
+    // props are swapped per match to keep the look varied across
+    // consecutive runs without any menu knob.
     this.arena.reset();
-    this.arena.buildFromSeed((Math.random() * 0xFFFFFFFF) | 0);
+    this.arena.buildFromSeed((Math.random() * 0xFFFFFFFF) | 0, getRandomPackId());
     const roster = buildMatchRoster(
       playerConfig,
       MAX_CRITTERS_PER_MATCH - 1,
@@ -840,10 +845,16 @@ export class Game {
     // visibility and warning blink from server collapse level.
     const seed = state.arenaSeed;
     if (typeof seed === 'number' && seed !== 0) {
+      // arenaPackId ships as a string; verify before passing so a
+      // mismatched server (older build missing the field) just falls back
+      // to the procedural default instead of breaking the sync path.
+      const rawPack = state.arenaPackId;
+      const packId: ArenaPackId | undefined = isArenaPackId(rawPack) ? rawPack : undefined;
       this.arena.syncFromServer(
         seed,
         state.arenaCollapseLevel ?? 0,
         state.arenaWarningBatch ?? -1,
+        packId,
       );
       // Tick the falling-fragment tumble animation every frame. We use
       // tickVisuals (not update) because `update` also drives the offline
@@ -1541,7 +1552,7 @@ export class Game {
   public debugStartOfflineMatch(
     playerName: string,
     botNames: string[],
-    options: { seed?: number } = {},
+    options: { seed?: number; packId?: string } = {},
   ): void {
     const playerConfig = CRITTER_PRESETS.find(c => c.name === playerName);
     if (!playerConfig) { console.warn('[Lab] unknown player:', playerName); return; }
@@ -1570,7 +1581,11 @@ export class Game {
 
     const seed = options.seed ?? ((Math.random() * 0xFFFFFFFF) | 0);
     this.arena.reset();
-    this.arena.buildFromSeed(seed);
+    // Lab doesn't expose a pack picker yet — roll randomly too so the
+    // /tools.html path matches normal play. If a specific pack is needed
+    // for testing, `options.packId` is forwarded when provided.
+    const labPack = isArenaPackId(options.packId) ? options.packId : getRandomPackId();
+    this.arena.buildFromSeed(seed, labPack);
 
     this.rebuildCritters(roster);
 
@@ -1588,10 +1603,12 @@ export class Game {
     hideOverlay();
   }
 
-  /** Lab-only: rebuild the arena with a specific seed, keeping the current match. */
+  /** Lab-only: rebuild the arena with a specific seed, keeping the current
+   *  match (and the same pack cosmetics the match is already using). */
   public debugForceArenaSeed(seed: number): void {
+    const currentPack = this.arena.getCurrentPackId() ?? undefined;
     this.arena.reset();
-    this.arena.buildFromSeed(seed);
+    this.arena.buildFromSeed(seed, currentPack);
   }
 
   /** Lab-only: read-only snapshot of arena state for display panels. */

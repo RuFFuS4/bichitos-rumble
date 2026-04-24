@@ -395,8 +395,12 @@
     /* HUD sprite overlay inside .lives-dot — paints when
        body.has-hud-sprites is set (see the SPRITE ICON SYSTEMS section
        down below). The 3D thumbnail (if any) is the background-image;
-       the sprite sits on top, so the sprite wins when the sheet loads. */
-    .lives-avatar-sprite {
+       the sprite sits on top, so the sprite wins when the sheet loads.
+       Compound selector (.sprite-hud.lives-avatar-sprite) bumps the
+       specificity to 0,0,2 so it wins over the generic .sprite-hud
+       rule's `width: var(--icon-size, 24px)` — without this the sprite
+       renders 24x24 in the corner of the 70x70 dot. */
+    .sprite-hud.lives-avatar-sprite {
       position: absolute;
       inset: 0;
       width: 100%;
@@ -923,6 +927,31 @@
       box-shadow: 0 3px 10px rgba(0,0,0,0.5);
       transition: background-image 0.18s ease-out, transform 0.18s;
       position: relative; /* stay above the ::before glow */
+      overflow: hidden;   /* keep the sprite overlay inside the rounded corners */
+    }
+    /* 2D sprite painted on top of the slot-avatar (same pattern as the
+       HUD lives-dot). Compound selector bumps specificity above the
+       generic .sprite-hud width rule — otherwise the sprite paints at
+       the default 24x24 in the slot corner instead of filling it. */
+    .sprite-hud.slot-avatar-sprite {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    /* When the HUD sprite sheet is live, the sprite fills the slot and
+       its lower strip is transparent (the PNG has the debug label area
+       erased to alpha=0). We want that strip to read as "empty slot"
+       (dark glass of the pane), NOT as the critter's baseColor — a
+       colourful rectangle under each chibi head was distracting and
+       looked like a broken banner. `!important` is required because
+       buildSlotAvatar writes the baseColor to `element.style.background`
+       inline. When the sheet 404s, the fallback path (no
+       has-hud-sprites) keeps the coloured placeholder. */
+    body.has-hud-sprites .critter-slot .slot-avatar {
+      background: rgba(255, 255, 255, 0.06) !important;
     }
     .critter-slot:hover .slot-avatar {
       transform: scale(1.04);
@@ -1060,19 +1089,27 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      width: 90%;
+      /* Compact centred block so the three rows stack as a unit under the
+         name/role/tagline, rather than stretching across the pane width.
+         Width chosen so 5 pips + gaps + the 70px label sit naturally in
+         the middle without drifting. */
+      width: fit-content;
       margin-left: auto;
       margin-right: auto;
     }
+    /* Grid with fixed columns so every row lines up identically — labels
+       right-aligned in column A, pips left-aligned in column B with a
+       constant gutter. No more "SPEED" floating 3px further right than
+       "WEIGHT" because the flex was free to stretch. */
     .stat-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: 70px auto;
       align-items: center;
-      gap: 12px;
+      column-gap: 14px;
       font-size: 11px;
       letter-spacing: 1.4px;
     }
     .stat-label {
-      width: 60px;
       text-align: right;
       text-transform: uppercase;
       opacity: 0.75;
@@ -1081,12 +1118,14 @@
     }
     /* Stat pips — five circles per row, filled up to the critter's level
        (1..5 on the P/W/S -2..+2 scale shifted to 1..5). Replaces the old
-       gradient bar for a more arcade/cartoon feel that matches the HUD. */
+       gradient bar for a more arcade/cartoon feel that matches the HUD.
+       Grid cell is auto-sized to the pip row — no flex stretching so
+       every row has the same pip run width. */
     .stat-pips {
-      flex: 1;
       display: flex;
       gap: 5px;
       align-items: center;
+      justify-content: flex-start;
     }
     .stat-pip {
       width: 13px;
@@ -2346,8 +2385,14 @@
        SPRITE ICON SYSTEMS
        -----------------------------------------------------------------
        Two AI-generated sprite sheets power the HUD + ability icons:
-         - /images/hud-icons.png     (4 cols × 7 rows, ~256 px per cell)
+         - /images/hud-icons.png     (4 cols × 6 rows, 256 × 256 per cell)
          - /images/ability-icons.png (3 cols × 9 rows, ~256 px per cell)
+
+       The HUD sheet is authored in HUD_mejorado.png (project root) with
+       a 4×6 grid of clean icons + 20 px margin + 20 px gutter. The
+       script `scripts/rebuild-hud-sheet.mjs` recomposes it into the
+       runtime sheet: uniform 256×256 cells, zero padding, so the CSS
+       keeps using simple percentage math.
 
        Visibility is gated by classes on <body>:
          body.has-hud-sprites     → HUD sprites on, emoji fallbacks hidden
@@ -2372,9 +2417,10 @@
 
     .sprite-hud {
       background-image: url('./images/hud-icons.png');
-      /* Grid: 4 cols × 7 rows → the image is 4× wide and 7× tall relative
-         to one cell. Set background-size so each cell fills the element. */
-      background-size: 400% 700%;
+      /* Grid: 4 cols × 6 rows. Each cell is 1/4 wide and 1/6 tall of
+         the image, so scaling the image to 400% × 600% of the element
+         makes one cell exactly fill the element. */
+      background-size: 400% 600%;
     }
     .sprite-ability {
       background-image: url('./images/ability-icons.png');
@@ -2391,40 +2437,41 @@
     body.has-hud-sprites     .sprite-fallback-hud     { display: none; }
     body.has-ability-sprites .sprite-fallback-ability { display: none; }
 
-    /* ---- HUD sprite positions (col, row → percentage of grid) ---- */
+    /* ---- HUD sprite positions (col, row → percentage of grid) ----
+       With 4×6 layout: col→0/33.3/66.6/100%, row→0/20/40/60/80/100%. */
     /* Row 0: Hearts + immunity */
     .sprite-hud-heart-full    { background-position:   0%   0%; }
     .sprite-hud-heart-half    { background-position:  33.333%   0%; }
     .sprite-hud-heart-empty   { background-position:  66.666%   0%; }
     .sprite-hud-immunity-star { background-position: 100%   0%; }
-    /* Row 1: Critter heads */
-    .sprite-hud-trunk         { background-position:   0%  16.666%; }
-    .sprite-hud-kurama        { background-position:  33.333%  16.666%; }
-    .sprite-hud-sergei        { background-position:  66.666%  16.666%; }
-    .sprite-hud-shelly        { background-position: 100%  16.666%; }
-    /* Row 2: Critter heads */
-    .sprite-hud-kermit        { background-position:   0%  33.333%; }
-    .sprite-hud-sihans        { background-position:  33.333%  33.333%; }
-    .sprite-hud-kowalski      { background-position:  66.666%  33.333%; }
-    .sprite-hud-cheeto        { background-position: 100%  33.333%; }
+    /* Row 1: Critter heads A */
+    .sprite-hud-trunk         { background-position:   0%  20%; }
+    .sprite-hud-kurama        { background-position:  33.333%  20%; }
+    .sprite-hud-sergei        { background-position:  66.666%  20%; }
+    .sprite-hud-shelly        { background-position: 100%  20%; }
+    /* Row 2: Critter heads B */
+    .sprite-hud-kermit        { background-position:   0%  40%; }
+    .sprite-hud-sihans        { background-position:  33.333%  40%; }
+    .sprite-hud-kowalski      { background-position:  66.666%  40%; }
+    .sprite-hud-cheeto        { background-position: 100%  40%; }
     /* Row 3: Crab + meta */
-    .sprite-hud-sebastian     { background-position:   0%  50%; }
-    .sprite-hud-bot-mask      { background-position:  33.333%  50%; }
-    .sprite-hud-timer         { background-position:  66.666%  50%; }
-    .sprite-hud-skull         { background-position: 100%  50%; }
-    /* Row 4: Trophies + sfx */
-    .sprite-hud-trophy        { background-position:   0%  66.666%; }
-    .sprite-hud-crown         { background-position:  33.333%  66.666%; }
-    .sprite-hud-sfx-on        { background-position:  66.666%  66.666%; }
-    .sprite-hud-sfx-off       { background-position: 100%  66.666%; }
-    /* Row 5: Music + UI */
-    .sprite-hud-music-on      { background-position:   0%  83.333%; }
-    .sprite-hud-music-off     { background-position:  33.333%  83.333%; }
-    .sprite-hud-life-pill     { background-position:  66.666%  83.333%; }
-    .sprite-hud-countdown     { background-position: 100%  83.333%; }
-    /* Row 6: Scoreboard + belts */
-    .sprite-hud-scoreboard    { background-position:   0% 100%; }
-    .sprite-hud-belts-trophy  { background-position:  33.333% 100%; }
+    .sprite-hud-sebastian     { background-position:   0%  60%; }
+    .sprite-hud-bot-mask      { background-position:  33.333%  60%; }
+    .sprite-hud-timer         { background-position:  66.666%  60%; }
+    .sprite-hud-skull         { background-position: 100%  60%; }
+    /* Row 4: Trophy + crown + sfx */
+    .sprite-hud-trophy        { background-position:   0%  80%; }
+    .sprite-hud-crown         { background-position:  33.333%  80%; }
+    .sprite-hud-sfx-on        { background-position:  66.666%  80%; }
+    .sprite-hud-sfx-off       { background-position: 100%  80%; }
+    /* Row 5: Music + belts (belts-trophy occupies col 2; col 3 is blank) */
+    .sprite-hud-music-on      { background-position:   0% 100%; }
+    .sprite-hud-music-off     { background-position:  33.333% 100%; }
+    .sprite-hud-belts-trophy  { background-position:  66.666% 100%; }
+    /* Removed in the v2 sheet: life-pill / countdown / scoreboard — all
+       three were CSS declarations without a single consumer in TS/JS,
+       so dropping them breaks nothing. Restore from git if an usage is
+       added later. */
 
     /* ---- Ability sprite positions (3 cols × 9 rows) ----
        Columns (J / K / L) → 0%, 50%, 100%

@@ -34,6 +34,7 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
+import { getClipOverride } from './animation-overrides';
 
 /**
  * Logical animation states the game can request. Not every GLB needs every
@@ -102,10 +103,25 @@ const HEAVY_STATES = new Set<SkeletalState>([
 /** How long (seconds) a state swap takes to blend. Short but not snap. */
 const DEFAULT_CROSSFADE = 0.15;
 
+/**
+ * How a logical state resolved to its clip. Used by the anim lab to show
+ * WHY each state picked the clip it did.
+ *
+ *   'override'  — ANIMATION_OVERRIDES hit; clip chosen by hand.
+ *   'exact'     — Tier 1 of findClipForState (exact name match).
+ *   'prefix'    — Tier 2 (keyword at start of clip name).
+ *   'contains'  — Tier 3 (keyword anywhere in clip name).
+ *   'missing'   — no clip resolved.
+ */
+export type ResolveSource = 'override' | 'exact' | 'prefix' | 'contains' | 'missing';
+
 export class SkeletalAnimator {
   private readonly mixer: THREE.AnimationMixer;
   /** Map from logical state → resolved Action (or null if no clip matched). */
   private readonly actions: Partial<Record<SkeletalState, THREE.AnimationAction>> = {};
+  /** Map from logical state → how the clip was resolved. Exposed for the
+   *  anim lab so we can show "override vs auto" per row. */
+  private readonly resolveSources: Partial<Record<SkeletalState, ResolveSource>> = {};
   /** Which state is currently the "dominant" one being played. */
   private currentState: SkeletalState | null = null;
   /** If the current state is a one-shot, what to fall back to when it finishes. */
@@ -117,9 +133,25 @@ export class SkeletalAnimator {
   private readonly clips: THREE.AnimationClip[];
   /** Lazy-created Actions keyed by exact clip name — for playClipByName. */
   private readonly clipActionsByName = new Map<string, THREE.AnimationAction>();
+  /** Critter id (e.g. 'sergei', 'trunk') used to look up
+   *  per-critter overrides in `animation-overrides.ts`. null when the
+   *  animator is instantiated outside a roster context (tests, lab). */
+  private readonly critterId: string | null;
 
-  constructor(root: THREE.Object3D, clips: THREE.AnimationClip[]) {
+  /**
+   * @param root         the scene-graph node the mixer binds to.
+   * @param clips        all AnimationClips attached to the GLB.
+   * @param critterId    optional roster id (lowercase — 'sergei' etc.).
+   *                     When supplied, `ANIMATION_OVERRIDES[critterId]`
+   *                     is consulted first for each state (Tier 0). If
+   *                     the override points to a clip that exists in
+   *                     the GLB, it wins over the 3-tier resolver. If
+   *                     the override is missing or points to a clip
+   *                     not in this GLB, the resolver runs normally.
+   */
+  constructor(root: THREE.Object3D, clips: THREE.AnimationClip[], critterId: string | null = null) {
     this.mixer = new THREE.AnimationMixer(root);
+    this.critterId = critterId;
 
     // Filter out clips where every track has zero variance — these are
     // bind-pose snapshots, commonly auto-generated when a Blender action
@@ -150,7 +182,19 @@ export class SkeletalAnimator {
     this.availableClipNames = liveClips.map(c => c.name);
     this.clips = liveClips;
 
-    // Resolve each logical state to an actual clip (first keyword match).
+    // Resolve each logical state to an actual clip.
+    //
+    // Priority:
+    //   Tier 0 — per-critter override in animation-overrides.ts (only
+    //            consulted when critterId is supplied + the override
+    //            points to a clip name actually present in this GLB).
+    //   Tier 1 — exact match on the state name after delimiter strip.
+    //   Tier 2 — prefix match on a keyword (starts-with).
+    //   Tier 3 — substring match (contains anywhere).
+    //
+    // The 3 tier fallback runs inside findClipForState. Tier 0 is
+    // resolved here because it needs the critterId.
+    //
     // Some states may end up unresolved → actions[state] === undefined.
     const states: SkeletalState[] = [
       'idle', 'walk', 'run',
@@ -159,14 +203,41 @@ export class SkeletalAnimator {
       'victory', 'defeat', 'fall', 'hit', 'respawn',
     ];
     for (const state of states) {
-      const clip = findClipForState(liveClips, state);
-      if (!clip) continue;
+      let clip: THREE.AnimationClip | null = null;
+      let source: ResolveSource = 'missing';
+
+      const overrideName = getClipOverride(this.critterId, state);
+      if (overrideName) {
+        const found = liveClips.find(c => c.name === overrideName);
+        if (found) {
+          clip = found;
+          source = 'override';
+        } else {
+          console.debug(
+            `[SkeletalAnimator] override for ${this.critterId}.${state} points to`,
+            `"${overrideName}" which is not in the GLB clip list — falling back to resolver.`,
+          );
+        }
+      }
+
+      if (!clip) {
+        const result = findClipForStateTiered(liveClips, state);
+        clip = result.clip;
+        source = result.source;
+      }
+
+      if (!clip) {
+        this.resolveSources[state] = 'missing';
+        continue;
+      }
+
       const action = this.mixer.clipAction(clip);
       if (!LOOPING_STATES.has(state)) {
         action.setLoop(THREE.LoopOnce, 1);
         action.clampWhenFinished = true;
       }
       this.actions[state] = action;
+      this.resolveSources[state] = source;
     }
 
     // Fire a fallback when one-shot actions end, so the critter doesn't
@@ -199,10 +270,17 @@ export class SkeletalAnimator {
    * @param fallback       after a one-shot finishes, auto-play this state
    *                       (defaults to 'idle' if unspecified for one-shots).
    * @param crossfadeSec   blend time with the previous action
+   * @param timeScale      playback speed multiplier for this state's clip.
+   *                       1.0 = authored speed. Used by ability code to align
+   *                       a long clip with a short ability active window
+   *                       (e.g. Sergei's 1.03s Gorilla Rush at 2.3× plays
+   *                       in ~0.45s so the strike pose lands on time).
+   *                       Loop states default to 1.0 each time; one-shots
+   *                       keep the last-set timeScale for the duration.
    */
   play(
     state: SkeletalState,
-    opts: { fallback?: SkeletalState; crossfade?: number; force?: boolean } = {},
+    opts: { fallback?: SkeletalState; crossfade?: number; force?: boolean; timeScale?: number } = {},
   ): boolean {
     const action = this.actions[state];
     if (!action) {
@@ -216,6 +294,7 @@ export class SkeletalAnimator {
         return this.play(opts.fallback, {
           crossfade: opts.crossfade,
           force: opts.force,
+          timeScale: opts.timeScale,
           // Clear fallback on the recursive call so we don't recurse past
           // one level (the fallback chain is intentionally shallow).
         });
@@ -236,7 +315,7 @@ export class SkeletalAnimator {
     action.reset();
     action.enabled = true;
     action.setEffectiveWeight(1);
-    action.setEffectiveTimeScale(1);
+    action.setEffectiveTimeScale(opts.timeScale ?? 1);
     action.play();
 
     if (prevAction && prevAction !== action) {
@@ -260,11 +339,17 @@ export class SkeletalAnimator {
 
   /**
    * List every clip that came with the GLB, along with which logical
-   * state (if any) our fuzzy resolver maps it to. Used by the /tools.html
-   * lab Skeletal Clips panel to inspect whether an imported GLB's clip
-   * names are being picked up correctly.
+   * state (if any) our fuzzy resolver maps it to, plus the tier that
+   * won the mapping (`override | exact | prefix | contains`). Used by
+   * the /tools.html lab AND the dedicated /anim-lab.html to inspect
+   * and override clip assignments.
    */
-  listClips(): Array<{ name: string; state: SkeletalState | null }> {
+  listClips(): Array<{
+    name: string;
+    duration: number;
+    state: SkeletalState | null;
+    source: ResolveSource | null;
+  }> {
     return this.clips.map(clip => {
       let matchedState: SkeletalState | null = null;
       for (const [state, action] of Object.entries(this.actions)) {
@@ -273,8 +358,47 @@ export class SkeletalAnimator {
           break;
         }
       }
-      return { name: clip.name, state: matchedState };
+      return {
+        name: clip.name,
+        duration: clip.duration,
+        state: matchedState,
+        source: matchedState ? (this.resolveSources[matchedState] ?? null) : null,
+      };
     });
+  }
+
+  /**
+   * Per-state mapping report — what clip (by name) each logical state
+   * resolved to, and which tier won. Used by /anim-lab.html for the
+   * "mapping" panel that shows every state and its resolver decision.
+   *
+   * States with no resolution come back as { clipName: null, source:
+   * 'missing' }. Never returns undefined — lab UI can render a full
+   * table without guarding.
+   */
+  getResolveReport(): Array<{
+    state: SkeletalState;
+    clipName: string | null;
+    source: ResolveSource;
+  }> {
+    const states: SkeletalState[] = [
+      'idle', 'walk', 'run',
+      'headbutt_anticip', 'headbutt_lunge',
+      'ability_1', 'ability_2', 'ability_3',
+      'victory', 'defeat', 'fall', 'hit', 'respawn',
+    ];
+    return states.map(state => {
+      const action = this.actions[state];
+      const clipName = action ? action.getClip().name : null;
+      const source = this.resolveSources[state] ?? 'missing';
+      return { state, clipName, source };
+    });
+  }
+
+  /** Raw clip list — exposes the internal array without mutation rights.
+   *  Lab uses this to let the user pick ANY clip by name in dropdowns. */
+  getRawClipNames(): string[] {
+    return [...this.availableClipNames];
   }
 
   /**
@@ -392,8 +516,14 @@ export class SkeletalAnimator {
  * Detection is per-component within each keyframe so Vec3/Quaternion
  * tracks are handled correctly (a flat min/max would alias cross-component
  * differences as variance and miss truly-static channels).
+ *
+ * eps bumped from 1e-4 to 1e-3 in the 2026-04-24 pass so idle clips that
+ * ship with real but tiny breath micro-motion (e.g. Meshy idles with
+ * 0.5mm rib translation) aren't accidentally dropped as "dead", leaving
+ * the critter visibly T-posed in the preview while its ability clips
+ * play fine.
  */
-function isClipEffectivelyStatic(clip: THREE.AnimationClip, eps = 1e-4): boolean {
+function isClipEffectivelyStatic(clip: THREE.AnimationClip, eps = 1e-3): boolean {
   for (const track of clip.tracks) {
     if (track.times.length < 2) continue;
     const stride = track.values.length / track.times.length;
@@ -408,27 +538,50 @@ function isClipEffectivelyStatic(clip: THREE.AnimationClip, eps = 1e-4): boolean
   return true;
 }
 
-function findClipForState(
+/**
+ * Same matcher as the legacy `findClipForState` but also reports WHICH
+ * tier won. Exposed for the anim lab so each resolved state can show
+ * its origin (exact / prefix / contains / missing). The old
+ * `findClipForState` wrapper was removed once its only consumer (the
+ * constructor loop) started needing the tier info.
+ */
+export function findClipForStateTiered(
   clips: THREE.AnimationClip[],
   state: SkeletalState,
-): THREE.AnimationClip | null {
-  if (clips.length === 0) return null;
+): { clip: THREE.AnimationClip | null; source: ResolveSource } {
+  if (clips.length === 0) return { clip: null, source: 'missing' };
   const keywords = STATE_KEYWORDS[state];
   const lowered = clips.map(c => ({ clip: c, name: c.name.toLowerCase() }));
 
-  // 1) Exact match on the state name (or snake_case variant).
+  // Tier 1 — exact match on the state name (or snake_case variant).
+  // Wins immediately. "Run" beats "Running" for state='run' because
+  // only "run" strips to 'run'. Idempotent order: if two clips both
+  // exact-match the first one in the GLB order takes it.
   const snake = state.replace(/_/g, '');
   for (const { clip, name } of lowered) {
     const n = name.replace(/[_\s-]/g, '');
-    if (n === state || n === snake) return clip;
+    if (n === state || n === snake) return { clip, source: 'exact' };
   }
 
-  // 2) First keyword substring match.
+  // Tier 2 — prefix match: clip name starts with the keyword (ignoring
+  // delimiters). Catches canonical Mixamo-ish names like "Run_InPlace",
+  // "Idle_Alert" where the logical state is at the head of the clip. We
+  // prefer prefix over substring so "Running" (prefix match on 'run')
+  // beats a hypothetical "AbilityRunnySlam" (substring match).
   for (const kw of keywords) {
     for (const { clip, name } of lowered) {
-      if (name.includes(kw)) return clip;
+      const normalised = name.replace(/[_\s-]/g, '');
+      if (normalised.startsWith(kw.replace(/[_\s-]/g, ''))) return { clip, source: 'prefix' };
     }
   }
 
-  return null;
+  // Tier 3 — substring match (original behaviour). Last-resort catch-all
+  // for authored names where the keyword lives somewhere in the middle.
+  for (const kw of keywords) {
+    for (const { clip, name } of lowered) {
+      if (name.includes(kw)) return { clip, source: 'contains' };
+    }
+  }
+
+  return { clip: null, source: 'missing' };
 }

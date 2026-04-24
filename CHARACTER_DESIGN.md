@@ -59,6 +59,61 @@ Shell Shield, Sebastian Claw Rush + Crab Slash — suman 4, no 5).
 La capa procedural de `critter-animation.ts` cubre automáticamente
 lo que falta.
 
+### Feel pass log (timing + VFX alineados con clips esqueléticos)
+
+Valores finales post-feel-pass. El orden planificado es
+Sergei → Trunk → Cheeto → Kurama → Shelly → Kermit → Sihans →
+Kowalski → Sebastian. Cada entrada registra: duración real del
+clip, valores de la ability, y VFX/SFX añadidos.
+
+#### Sergei — feel pass DONE (2026-04-24)
+
+Clip durations (de `scripts/inspect-clips.mjs`):
+- `Ability1GorillaRush` 1.03 s · `Ability2Shockwave` 0.80 s · `Ability3Frenzy` 2.43 s
+
+| Ability | Param | Antes | Después | Notas |
+|---|---|---|---|---|
+| **Gorilla Rush** | duration | 0.32 | **0.28** | Más corta + reactiva |
+| | impulse | 18 | **20** | Pega más fuerte |
+| | speedMultiplier | 2.4 | **2.6** | Burst notable |
+| | massMultiplier | 2.2 | 2.2 | OK |
+| | windUp | 0.06 | **0.04** | Casi sin anticipación |
+| | cooldown | 4.5 | **4.0** | Más accesible |
+| | **clipPlaybackRate** | — | **2.3×** | **NUEVO**: clip 1.03s → 0.45s efectivo, alineado con active window |
+| **Shockwave** | radius | 3.2 | **3.5** | AoE signature más amplio |
+| | force | 30 | **34** | Knockback notable |
+| | windUp | 0.35 | **0.30** | Más reactivo |
+| | cooldown | 6.5 | **6.0** | Matching FEEL base |
+| **Frenzy** | duration | 4.0 | **2.5** | Match clip 2.43s (buff no dura tras la anim) |
+| | speedMultiplier | 1.3 | **1.45** | Compensa la ventana más corta |
+| | massMultiplier | 1.35 | **1.5** | Peso + mass hit |
+| | windUp | 0.4 | **0.35** | Se acorta ligero |
+| | cooldown | 18.0 | **15.0** | Más frecuente dado que dura menos |
+
+VFX añadido:
+- **`spawnFrenzyBurst()`** en `abilities.ts` — battle-cry ring dorado
+  + flash rojo central, 600ms, radio 2.5u. Se dispara al activar
+  Frenzy. Acompaña al pulse emissive rojo que ya existía.
+- Camera shake ligera (0.55× de la de Ground Pound) en el frame de
+  activación de Frenzy.
+
+Infra añadida (reutilizable por el resto del roster):
+- `AbilityDef.clipPlaybackRate?: number` — permite acelerar/frenar
+  un clip específico cuando la ability dispara. `skeletal.play()`
+  acepta `opts.timeScale` que se propaga desde el def.
+
+SFX: pendiente. Por ahora comparte `'abilityFire'` sintético
+genérico. Plan post-jam: signature con Suno.
+
+#### Trunk — TODO
+#### Cheeto — TODO
+#### Kurama — TODO
+#### Shelly — TODO
+#### Kermit — TODO
+#### Sihans — TODO
+#### Kowalski — TODO
+#### Sebastian — TODO
+
 ### Qué está realmente implementado hoy
 
 - **3 factories base** (`charge_rush`, `ground_pound`, `frenzy`) con per-kit overrides cliente/servidor.

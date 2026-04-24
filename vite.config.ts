@@ -1,12 +1,14 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 
-// Two HTML entries: the normal game (index) and the internal dev/balance
-// tool (tools). Both are built to /dist; tools.html is never linked from
-// the game UI, so it's only reachable by deliberately typing the URL.
-// Vercel serves static files before rewrites, so /tools.html resolves
-// to the built file even though vercel.json rewrites everything else to
-// index.html.
+// Four HTML entries: the normal game (index), the internal dev/balance
+// tool (tools), the roster calibration lab (calibrate), and the
+// animation validation + override lab (anim-lab). All build to /dist;
+// only index.html is linked from UI, the other three are reachable by
+// deliberately typing the URL. Vercel serves static files before
+// rewrites, so `/tools.html`, `/calibrate.html` and `/anim-lab.html`
+// resolve to the built files even though vercel.json rewrites
+// everything else to index.html.
 //
 // manualChunks: Three.js + Colyseus are the two big libraries and they
 // have very different cache lifetimes (Three is rarely updated, Colyseus
@@ -36,8 +38,10 @@ export default defineConfig({
     },
     rollupOptions: {
       input: {
-        index: resolve(__dirname, 'index.html'),
-        tools: resolve(__dirname, 'tools.html'),
+        index:     resolve(__dirname, 'index.html'),
+        tools:     resolve(__dirname, 'tools.html'),
+        calibrate: resolve(__dirname, 'calibrate.html'),
+        animLab:   resolve(__dirname, 'anim-lab.html'),
       },
       output: {
         manualChunks(id) {

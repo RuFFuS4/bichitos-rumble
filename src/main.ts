@@ -129,9 +129,66 @@ const skyMat = new THREE.ShaderMaterial({
     }
   `,
 });
-const skyDome = new THREE.Mesh(new THREE.SphereGeometry(200, 24, 18), skyMat);
+// Explicit generic so later reassignments to MeshBasicMaterial (pack
+// skybox swap) don't fight TS's narrow ShaderMaterial inference.
+const skyDome: THREE.Mesh<THREE.SphereGeometry, THREE.Material> =
+  new THREE.Mesh(new THREE.SphereGeometry(200, 24, 18), skyMat);
 skyDome.renderOrder = -1;
 scene.add(skyDome);
+
+// --- Pack-aware skybox / fog setters ------------------------------------
+//
+// Exported so arena-decorations.ts can swap the shader sky for a textured
+// equirect sky when an arena pack is active, and revert when leaving the
+// match (back to menu). Fog colour follows the same path — scene.fog is
+// FogExp2, so we just retune its .color in-place.
+
+const DEFAULT_FOG_COLOR = 0xb6d1e8;
+const DEFAULT_CLEAR_COLOR = 0x87b0d8;
+
+/**
+ * Swap the sky dome to a textured equirect sphere for an arena pack, or
+ * pass `null` to restore the procedural shader gradient used in menus.
+ * Safe to call repeatedly — the skydome mesh is reused, only its material
+ * and clear-color change.
+ */
+export function setSceneSkyboxTexture(tex: THREE.Texture | null): void {
+  if (tex) {
+    // MeshBasicMaterial inside-out renders the equirect as a skybox.
+    // The mapping flag set in loadPackSkyboxTexture makes this "just work".
+    const texMat = new THREE.MeshBasicMaterial({
+      map: tex,
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+    });
+    const prev = skyDome.material;
+    skyDome.material = texMat;
+    // The shader material is authored and reused between packs — don't
+    // dispose it, just dispose prior textured materials to avoid a leak
+    // on repeated swaps.
+    if (prev !== skyMat && prev instanceof THREE.Material) prev.dispose();
+  } else {
+    const prev = skyDome.material;
+    skyDome.material = skyMat;
+    if (prev !== skyMat && prev instanceof THREE.Material) prev.dispose();
+  }
+}
+
+/**
+ * Retune the global fog colour. FogExp2 uses a Color, so we mutate it in
+ * place (no Scene re-assignment needed). Pass `null` to restore the
+ * default menu-time horizon colour.
+ */
+export function setSceneFogColor(color: number | null): void {
+  const target = color ?? DEFAULT_FOG_COLOR;
+  if (scene.fog && 'color' in scene.fog) {
+    (scene.fog as THREE.FogExp2).color.setHex(target);
+  }
+  // Also tint the clear colour so the 1-frame gap before the skydome
+  // paints isn't jarring (the old default was a fixed sky blue).
+  renderer.setClearColor(color ?? DEFAULT_CLEAR_COLOR);
+}
 
 // Distant cloud band — a flat disc at altitude + below the arena, hinting
 // that the platform is floating very high above terrain. Single plane,

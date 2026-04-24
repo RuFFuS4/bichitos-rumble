@@ -9,6 +9,556 @@
 
 ---
 
+## 2026-04-25 — Animation Validation Lab + overrides system
+
+Sesión de control: antes de meterme en feel pass de Trunk (siguiente
+crítter del roster), construyo una herramienta para evitar repetir el
+bug "Sergei Running vs Run" por otra vía, y para que los próximos
+feel-passes arranquen con visibilidad total de qué clip va a cada
+state.
+
+### Qué había ya
+
+Investigado antes de tocar:
+- **`/animations` (mesh2motion)**: editor de animaciones para
+  PRODUCIR clips. No es validador runtime. Descartado para este scope.
+- **Panel "Skeletal clips" en `/tools.html`**: colapsado por defecto,
+  sólo muestra los clips del crítter "player" de una partida activa,
+  no permite cambiar crítter fluido, no explica el tier del resolver,
+  no permite overrides, no exporta. Insuficiente.
+
+Conclusión: crear herramienta nueva.
+
+### Nuevo: `/anim-lab.html` (cuarto entry Vite)
+
+Estructura paralela a `/calibrate.html`:
+- **Panel izquierdo** — roster picker (9 críttrs clickables).
+- **Viewport** — Three.js scene, orbit camera, lit, solo el critter.
+- **Panel derecho**:
+  - Playback: Play/Pause/Restart/Stop/Loop + speed slider.
+  - Clips in GLB: lista de todos los clips con duración, state
+    resuelto, y botón Play individual.
+  - Resolved mapping: los 13 logical states con dropdown de override
+    por state + badge del tier resolver (exact/prefix/contains/
+    override/missing con colores distintos).
+  - Export overrides: dumpa al clipboard un snippet pasteable para
+    `src/animation-overrides.ts`.
+
+Archivos nuevos:
+- `anim-lab.html` (HTML entry).
+- `src/animlab/main.ts` (lógica — 380 LOC).
+
+Build: el nuevo chunk `animLab-*.js` pesa 7.4 KB gzipped.
+
+### Arquitectura del mapping — decisión
+
+**SoT del mapping de clips**: `src/animation-overrides.ts` (nuevo).
+Record sparse:
+```ts
+export const ANIMATION_OVERRIDES: Record<string, Partial<Record<SkeletalState, string>>> = {
+  // sergei: { run: 'Run' },  // example (not currently needed)
+};
+```
+
+Hoy el record está **vacío** — el resolver automático ya maneja
+todos los casos del roster actual. El file existe como escape hatch
+documentado para el primer crítter futuro cuyos clip names
+confundan al resolver.
+
+**Resolver ampliado a 4 tiers**:
+- **Tier 0 — override** (nuevo): `ANIMATION_OVERRIDES[critterId]?.[state]`.
+  Consultado primero si el `SkeletalAnimator` recibe `critterId`. Si
+  el override apunta a un clip presente en el GLB, gana. Si no
+  existe, fallback al resolver automático (best-effort, no hard
+  contract).
+- **Tiers 1-3** (existían): exact → prefix → contains, sin cambios.
+
+`SkeletalAnimator` ahora acepta `critterId` opcional en el
+constructor. Propagado desde `Critter.attachGlbMesh` con
+`entry.id`. `listClips()` amplía su shape para incluir `duration` +
+`source` (el tier que ganó). Nuevo getter `getResolveReport()`
+devuelve el estado completo de los 13 logical states — usado tanto
+por la tabla del lab como potencialmente por cualquier futuro
+debug/telemetría.
+
+### Integración en `/tools.html`
+
+El sidebar del dev lab gana 3 links al final (reemplaza el único que
+tenía a `/animations`):
+- `🎬 /animations` — mesh2motion (create clips).
+- `🎞️ /anim-lab` — validate + override runtime mapping.
+- `📏 /calibrate` — roster scale/pivot/rotation.
+
+Consistencia de navegación interna sin linkar ninguna desde la
+portada del juego (las tres con `noindex` meta).
+
+### Cero regresiones
+
+- Typecheck cliente + servidor limpios.
+- `npx vite build` OK: 4 HTML entries (index/tools/calibrate/anim-lab),
+  6.62 s.
+- No se toca el resolver de los 3 tiers existentes — se AÑADE el
+  Tier 0 como capa opcional sobre lo que ya había.
+- Overrides vacíos por default → comportamiento idéntico al anterior
+  para los críttrs actuales. Sergei `run → Run` sigue resolviendo
+  por Tier 1 (exact), verificado en el lab.
+
+### Commit + push
+
+Rama: `dev`. Commit próximo con todos los cambios acumulados desde el
+último push (handoff de ayer noche quedó sin commit en el remote —
+esta sesión cierra el backlog).
+
+---
+
+## 2026-04-24 noche tardía — Closing handoff (fin de sesión larga)
+
+Sesión maratón. El usuario cierra para reenganchar desde móvil en la
+próxima, así que el foco fue **dejar todo bien atado** en docs +
+confirmar cero regresiones por QA visual real (screenshots MCP).
+
+### Descubierto y corregido vía screenshots reales
+
+Descubrí que la QA por DOM que hice antes (`preview_eval` + DOM
+inspection) daba pase verde pero **escondía dos bugs visuales** que
+sólo se ven con screenshot real:
+
+1. **Specificity de sprites 2D** — `.sprite-hud { width: 24px }`
+   ganaba a `.slot-avatar-sprite { width: 100% }` por orden de
+   declaración. Resultado: sprites pintando 24×24 en la esquina del
+   slot (y del lives-dot), dejando ver el baseColor detrás. DOM
+   reportaba `spriteVisible: true`, pero visualmente era un desastre.
+   Fix: compound selectors `.sprite-hud.slot-avatar-sprite` y
+   `.sprite-hud.lives-avatar-sprite` suben specificity a (0,0,2).
+
+2. **Labels de debug en `hud-icons.png`** — la sheet v1 llevaba
+   captions ("5. ELEPHANT", "6. FOX 9-TAILS", …) bajo cada icon
+   pensados como referencia para el artist pass. Con el fix del
+   specificity los sprites pasaron a cubrir el slot entero y los
+   labels se empezaron a ver. Intenté limpiarlos con
+   `trim-hud-sheet.mjs` (alpha=0 en la zona del label). El usuario
+   pasó poco después `HUD_mejorado.png` — sheet v2 authored limpia
+   en grid 4×6 (antes 4×7). Creé
+   `scripts/rebuild-hud-sheet.mjs` que extrae cells del authored y
+   recompone un grid uniforme de 256×256 sin margen. CSS actualizado
+   a `background-size: 400% 600%` y positions recalibrados.
+
+### Handoff — documentación reorganizada
+
+- **`NEXT_STEPS.md`** reescrito con estructura priorizada:
+  - 🟢 AHORA MISMO (unblocked) — Trunk feel pass en cabeza.
+  - 🟡 Bloqueado por asset del usuario (ability-icons v2 mejorado).
+  - 🔵 Bloqueado por QA manual (lista remitida a
+    `VALIDATION_CHECKLIST.md`).
+  - 🟣 Post-jam / backlog.
+  - 🚫 NO TOCAR salvo bug real — zonas cerradas del proyecto.
+  - ✅ Snapshot del proyecto: scripts activos vs obsoletos, docs al
+    día, etc.
+  - 📚 Guía de MCP screenshots (viewport portrait / rAF pausado /
+    browser cache).
+- **`MEMORY.md`** gana una sección nueva al tope "Fuentes de verdad"
+  con:
+  - Escala visual (IN_GAME_TARGET_HEIGHT = 1.7, roster.scale ya no
+    es la SoT visible).
+  - Sheet HUD canónica (HUD_mejorado.png → rebuild-hud-sheet.mjs →
+    hud-icons.png).
+  - Specificity de sprites (lección aprendida).
+  - Clip resolver 3-tier + eps 1e-3.
+  - Arena packs aleatorios + sync.
+  - MCP Preview limitaciones + workarounds.
+  - Scripts activos vs obsoletos.
+- **`VALIDATION_CHECKLIST.md`** añade sección "Tanda 2026-04-24"
+  con la checklist específica para la próxima ronda de QA visual
+  manual (selector, HUD, calibrate, escala in-game, Trunk feel pass
+  cuando llegue, HUD de abilities cuando llegue).
+
+### Trunk feel pass — decisión de NO avanzar ahora
+
+El usuario explicitó "si no ves seguro avanzar sin QA manual seria,
+entonces no fuerces código". Trunk feel pass requiere verificación
+visual del timing + impact + recovery — algo que no puedo validar sin
+que él juegue la partida. Como va a estar en móvil en la próxima
+sesión y no puede hacer playtesting cómodo, **opto por no tocar
+código de gameplay**. Dejo la receta completamente detallada en
+`NEXT_STEPS.md §"AHORA MISMO"` con scope estrecho para que cuando
+pueda hacer QA, la ejecute sin replanteamientos.
+
+### Estado del repo tras este handoff
+
+- Sheet HUD: v2 integrada y verificada (selector + HUD in-match +
+  calibrate lab).
+- Typecheck cliente + servidor limpios.
+- `npx vite build` limpia (3 HTML entries, 5-7s).
+- Docs actualizadas y consistentes entre sí.
+- 0 cambios de gameplay respecto a la sesión anterior — sólo assets
+  + CSS + docs.
+
+---
+
+## 2026-04-24 noche — Arena pack visual fixes + character selector polish
+
+Intervención en dos frentes tras captures del usuario:
+
+### Arena pack visual fixes (A + B + C)
+
+**A · props fuera del terreno**: los props flotaban sobre el skybox
+hemisferio inferior porque no había superficie bajo ellos (arena
+jugable acaba en r=12). Fix: nuevo `outerRing` decorativo (radius
+11.9–18 u, altura `FRAG.arenaHeight`) texturizado con el ground
+tile del pack — se renderiza entre el arena jugable y el void,
+dando piso visual a los props. Además `loadPackPropMeshes` mide
+bbox tras scale y desplaza Y para que `bbox.min.y === 0`: los GLB
+con origin en el centro del mesh ya no se hunden por debajo del
+arena. Se ve como un suelo continuo desde r=0 hasta r=18.
+
+**B · skybox equivocado**: `tex.mapping =
+EquirectangularReflectionMapping` estaba mal aplicado (ese mapping
+es para reflejos PBR, no para pintar sphere inside-out). Fix:
+`tex.mapping = UVMapping` (default) + `ClampToEdgeWrapping` —
+la sphere ya tiene UVs equirect naturales. Los skyboxes
+generados por IA (sunset desert, aurora tundra, dusk kitsune)
+ahora se ven en toda su resolución.
+
+**C · decoración cae con el arena**: nuevo queue
+`fallingDecorations` + asociación determinística prop→batch via
+proximidad angular (`computePropBatchIndex`). Cuando un batch
+colapsa (offline `collapseCurrentBatch` + online `syncFromServer`)
+los props con `batchIdx === N` entran en caída con gravedad +
+tumble. El `outerRing` cae como pieza única cuando colapsa el
+último batch. Mecánica independiente de `fallingFragments` —
+misma cadencia de tick pero colas separadas.
+
+### Character selector — intervención estructural (4 sub-bugs)
+
+**2.1 Miniaturas 3D → 2D sprite-hud**. `buildSlotAvatar` ahora
+añade un `<span class="sprite-hud sprite-hud-{id}
+slot-avatar-sprite">` superpuesto al slot. Si
+`body.has-hud-sprites` está activa (sheet cargado), el chibi 2D
+cubre el slot. Thumbnail 3D se queda SOLO como fallback cuando
+el sheet no carga — cuando sí carga, ni se genera (ahorro de
+GPU cycles). CSS nuevo `.slot-avatar-sprite` con inset absoluto.
+Mismo patrón que el HUD in-match, consistencia garantizada.
+
+**2.3 Clip resolver → 3 tiers**. Antes: exact + contains. Ahora:
+exact → prefix → contains. "Run" gana sobre "Running" en tier 1
+(exact); "Idle_Alert" gana sobre "MyAbilityIdleSlam" en tier 2
+(prefix) cuando no hay exact. `isClipEffectivelyStatic` eps
+subido 1e-4 → 1e-3: idles con breath micro-motion (~0.5 mm) ya
+no caen en la criba de "clip efectivamente estático" y se drop
+accidentalmente. Causa real de "Sergei reproduce desordenado":
+era un idle que se descartaba como static y caía a un clip
+fallback inapropiado.
+
+**2.4 Info pane stats alignment**. Grid CSS con columnas fijas
+`grid-template-columns: 70px auto` + `width: fit-content`
+centrado. Labels (SPEED / WEIGHT / POWER) alineados a la derecha
+en columna 1, pips a la izquierda en columna 2, sin stretching.
+Antes un flex libre hacía que rows se alineasen distinto según
+cuántos pips estaban on.
+
+**2.2a Auto-fit sobre idle-pose height**. `attachGlbMesh`
+reordenado: mide bind pose → crea skeletal → `play('idle')` +
+`update(0.033)` (1 frame) → re-mide bbox en idle pose → aplica
+`IN_GAME_TARGET_HEIGHT = 1.7 u` sobre esa medida. La bind pose
+(T-pose-ish export) era mala referencia porque los idles suelen
+diferir hasta 15% en silhouette — ahora cada crítter termina
+realmente a 1.7 u en idle real, no en T-pose teórica.
+
+**2.2b Roster calibration lab**. Tercer entry point Vite:
+`/calibrate.html`. Página dedicada con los 9 playable críttrs en
+grid 3x3, cámara orbit con drag + wheel zoom, labels flotantes.
+Click selecciona un crítter → sidebar con sliders `scale`,
+`pivotY`, `rotationY` que mutan la transform en vivo. Botón
+"Re-fit all to target" recompone el auto-fit a una altura
+custom (permite probar 1.5, 1.7, 1.9 u sin recompilar). Botón
+"Export roster.ts snippet" dumpa el diff al clipboard + consola
+como comentarios pasteables. Sin Colyseus, sin HUD, sin match:
+puro Three.js + DOM controls, 6 KB gzipped. URL: `/calibrate.html`
+en dev, también en producción (con `noindex` meta por si acaso).
+
+Archivos tocados:
+- `src/arena.ts` — outerRing, fallingDecorations, collapseOuterRing,
+  collapsePropBatch, computePropBatchIndex, tickFallingDecorations
+- `src/arena-decorations.ts` — mapping UVMapping, Y-offset por prop
+- `src/main.ts` — refactored `setSceneSkyboxTexture` + `setSceneFogColor`
+- `src/critter.ts` — auto-fit sobre idle pose post-mixer
+- `src/critter-skeletal.ts` — 3-tier clip resolver + eps 1e-3
+- `src/hud/character-select.ts` — sprite 2D en slots
+- `index.html` — CSS `.slot-avatar-sprite`, stats-row grid
+- `calibrate.html` + `src/calibrate/main.ts` — lab nuevo
+- `vite.config.ts` — entry `calibrate`
+
+Typecheck + vite build limpios en ambos frentes.
+
+---
+
+## 2026-04-24 tarde — Arena decorations loader: packs aleatorios por partida
+
+Cerrado el bloque B del post-jam ahead of schedule. Cada partida ahora
+rolea un `packId` distinto entre los 5 biomas (jungle / frozen_tundra /
+desert_dunes / coral_beach / kitsune_shrine) y aplica skybox +
+fog + ground texture + props al arena sin tocar una sola línea de la
+lógica de colapso.
+
+### Nuevo módulo: `src/arena-decorations.ts`
+
+Catálogo único de los 5 packs. Por cada uno:
+- Lista de GLB filenames (5-8 props).
+- `fogColor` sintonizado con el horizonte del skybox.
+- Override opcional `propScale` per-prop (usado para encoger el
+  `tree_jungle_broadleaf` de 54 MB que aplastaba la composición).
+
+**Layout determinístico**: `layoutPackProps(packId, seed)` usa
+`mulberry32(seed ^ packIdHash)` para distribuir los props en un anillo
+fuera del radio jugable (r 14.5–18.5). Cliente y servidor calculan el
+mismo layout a partir de los mismos inputs → 0 bytes de sincronización
+extra en la wire. Cada prop tiene jitter de ángulo, radio, rotY y
+escala (0.9–1.15×) sobre la base del pack.
+
+**Loaders**: `loadPackGroundTexture`, `loadPackSkyboxTexture`,
+`loadPackPropMeshes`. Cache de texturas propia + reutiliza el cache de
+`model-loader` para GLBs.
+
+**Failure mode**: si un asset 404s, el prop se vuelve un `THREE.Group`
+vacío y un console.debug. La partida nunca rompe por falta de
+cosmética.
+
+### Sincronización cliente ↔ servidor
+
+- `server/src/state/GameState.ts`: campo nuevo
+  `@type('string') arenaPackId: string = 'jungle'`. Default 'jungle' →
+  graceful degradation para builds viejos.
+- `server/src/BrawlRoom.transitionToCountdown`: rolea `packId` uniforme
+  y lo asigna al state. Lista de pack IDs duplicada inline en el
+  server (pequeña, estable, evita dependencia client→server).
+- `src/game.ts update()` online: lee `state.arenaPackId`, verifica con
+  `isArenaPackId()` (guard contra valores no válidos) y lo pasa a
+  `arena.syncFromServer(seed, level, warn, packId)`.
+
+### Cambios en `src/arena.ts`
+
+- `buildFromSeed(seed, packId?)`: packId opcional → acepta la llamada
+  legacy (sin pack) y la nueva. Si se pasa, dispara `applyPack()`
+  async; si no, usa `clearPack()` para mantener el look default.
+- Nueva propiedad privada `decorationsGroup: THREE.Group | null`.
+  Se añade a `scene` directamente, NO a `this.group` (fragments), así
+  que NUNCA entra en el iterador de collapse.
+- `applyPack(packId, seed)`:
+  1. Bump de `packApplyToken` — loaders async más viejos detectan
+     que están obsoletos y bailan sin tocar la escena.
+  2. Fog + clearColor sincrónico (evita 1 frame con horizonte erróneo).
+  3. Ground texture async → aplica map a los materials de los fragment
+     "top" meshes (heurística: el flag `receiveShadow` lo identifica).
+  4. Skybox async → `setSceneSkyboxTexture()` en main.ts swapea el
+     material del `skyDome` (shader → MeshBasicMaterial textured).
+  5. Props: `layoutPackProps()` + `loadPackPropMeshes()` → nuevo group
+     con los 5-8 meshes posicionados → add a scene.
+- `clearPack()`: revierte skybox al shader default, fog al color
+  original, drop decorationsGroup, `clearGroundTexture()` limpia el
+  `.map` de todos los fragments.
+- `syncFromServer(..., packId?)`: si packId cambia sin re-seed,
+  `applyPack()` se llama sin rebuild de fragments. Caso raro pero
+  soportado.
+- `getCurrentPackId()`: getter público usado por `debugForceArenaSeed`
+  para no perder el pack al recalcular layout en el lab.
+
+### Cambios en `src/main.ts`
+
+Export nuevo:
+- `setSceneSkyboxTexture(tex | null)`: swap del material del skyDome.
+  Null → vuelve al shader procedural (menús, title).
+- `setSceneFogColor(color | null)`: mutación in-place del color de
+  `scene.fog` + clearColor del renderer. Null → defaults original.
+
+El mesh del skyDome se anota ahora como
+`THREE.Mesh<SphereGeometry, Material>` para que TS acepte la
+reasignación entre ShaderMaterial y MeshBasicMaterial.
+
+### Game flow offline / online
+
+- **Offline** (`enterCountdown` + `debugStartOfflineMatch`): rolea
+  `getRandomPackId()` por partida. `debugStartOfflineMatch` acepta
+  `options.packId?: string` si el lab quiere forzar un pack.
+  `debugForceArenaSeed` preserva el pack del partido en curso.
+- **Online**: lee del state, pasa al syncFromServer.
+
+### Typecheck
+
+Cliente y servidor limpios post-cambios. No se tocó ninguna lógica de
+física / collapse / síntesis de audio / skeletal, solo la capa visual.
+
+---
+
+## 2026-04-24 tarde — Arena packs ×2 más (Kitsune Shrine + Coral Reef Beach)
+
+Con los otros 2 packs generados, cerramos el set de 5 packs cosméticos
+para el loader de decoraciones (pendiente por implementar, es el
+siguiente bloque B del post-jam roadmap).
+
+- **Kitsune Shrine**: 7 props, **12 MB**. `bamboo_cluster.glb`
+  (5.6 MB, 127k verts) y `sakura_tree.glb` (2.7 MB, 65k verts) son
+  los problemáticos — IA modeló tallos/blossoms individualmente
+  pese al prompt restringido. Aggressive-simplify + compress-textures
+  probados; ninguno recupera (el peso es ~100% geometría).
+  Aceptados por política `tree_jungle_broadleaf`: valen la pena por
+  identidad visual del pack. Los otros 5 props (torii×2,
+  stone_lantern×2, kitsune_statue) bajo 1.5 MB cada uno.
+- **Coral Reef Beach**: 8 props finales, **12 MB**. De los 9 raws,
+  el usuario entregó 2 variantes de starfish (`lying_flat` y
+  `lying_ground`); la primera bajó a 274 KB / 5393 verts, la
+  segunda a 720 KB / 11k verts — promovida la `lying_flat` como
+  canónica `starfish_decor.glb`. `palm_beach_tilted.glb` (5.9 MB,
+  130k verts) y `coral_brain.glb` (2.5 MB, 62k verts) son los
+  problemáticos (fronds / grooves modelados en geom pese al
+  prompt retry ultra-estricto). Corales branching y la shipwreck
+  entraron limpios bajo 1 MB cada uno.
+- Los prompts retry de Beach (reescritos esta mañana con wording
+  "blob / dome / wedge / clump" + referencias a Minecraft / Lego)
+  redujeron muchísimo el problema original (1M+ caras) pero no
+  lo eliminaron del todo en los 2 props más orgánicos.
+- Bug menor del pipeline: el usuario entregó `seashell_scatter.glb.glb`
+  (doble extensión). Renombrado al copiar — no afecta al optimize.
+- Lección actualizada en `ARENA_PROMPTS.md` para el siguiente pack
+  que alguien genere: incluso con el prompt ultra-estricto,
+  palmeras y árboles con canopy siguen saliendo con cientos de
+  miles de verts. La regla definitiva: "árbol = 1 trunk + 1
+  canopy dome, ZERO detail extra". Cualquier cosa más delicada
+  colapsa el optimizer.
+
+Estado final de packs para el loader (pendiente implementar):
+Jungle (5), Tundra (6), Desert (7), Shrine (7), Beach (8) →
+33 props repartidos en 5 biomas.
+
+---
+
+## 2026-04-24 — Arena packs ×2, HUD/tamaños fixes, feel pass Sergei
+
+Mañana de integración tras cerrar los cinturones. Cuatro bloques
+independientes que caen uno detrás de otro; ninguno toca mecánica
+core, todo es polish + assets.
+
+### Frozen Tundra + Desert Dunes integrados
+
+Mismo pipeline que Jungle:
+1. El usuario genera props con la IA + skybox + ground texture.
+2. Copio raws a `public/models/arenas/_raw/<pack>/` (gitignored).
+3. `scripts/optimize-arena-props.mjs --pack <name>` (meshopt +
+   gltf-transform simplify + sharp texture pass).
+4. Si algún prop sale monstruoso (>5 MB o >100k verts), aggressive
+   simplify o prompt retry.
+
+- **Frozen Tundra**: 6 props, **2.3 MB**. El `pine_snow.glb` falló
+  al primer intento (4.2M verts por per-needle geometry, insalvable
+  — misma patología que el `bush_tropical` de Jungle). Prompt de
+  "retry" más estricto ("low-poly Christmas tree stacked cones,
+  NO needles") generó dos opciones; option1 bajó a 4527 verts /
+  420 KB, adoptada como principal. Lección burned-in en
+  `ARENA_PROMPTS.md` como patrón canónico para formas naturales
+  delicadas.
+- **Desert Dunes**: 7 props, **3.6 MB**. `palm_desert.glb` original
+  (910k verts, 53 MB raw) fue el prop problemático del pack.
+  Recuperado con la 2ª variante `palm_desert_optional.glb` que el
+  usuario había generado como backup (790 KB, 14k verts) —
+  adoptada como principal; la primera va al limbo de los raws.
+- Los **prompts del Coral Reef Beach** se reescribieron por
+  completo con wording ultra-estricto anti-multi-mesh: formas
+  delicadas ("branches", "fronds", "planks", "shells") sustituidas
+  por sólidas ("blob", "dome", "wedge", "clump") + referencias
+  explícitas a Minecraft/Lego/Fall Guys/Fortnite.
+
+Estado de packs: Jungle (5 props, ships), Tundra (6, ships), Desert
+(7, ships). Faltan Beach (prompts listos, pendiente regen usuario)
+y Kitsune (prompts originales, no empezado).
+
+### Bug #1: HUD avatar incoherente entre bichitos
+
+Síntoma reportado el 23 abril por el usuario: en la misma partida
+Sergei/Sebastian pintaban correctamente su cabeza chibi del sprite
+`hud-icons.png`, pero Shelly/Kowalski caían al thumbnail 3D
+renderizado como si el sprite no hubiese cargado.
+
+**Diagnóstico**: el sprite sheet tiene padding transparente
+alrededor de cada cabeza. El thumbnail 3D del `.lives-dot` se
+cargaba como `background-image` del padre **en todos los casos**;
+se filtraba por los bordes transparentes del sprite overlay. Los
+sprites con silueta ancha (Sergei gorila, Sebastian cangrejo)
+tapaban más el thumbnail → invisible; los de silueta estrecha
+(Shelly tortuga baja, Kowalski pingüino esbelto) dejaban ver el
+thumbnail por los lados → confusión visual.
+
+**Fix** (`src/hud/runtime.ts initAllLivesHUD`): saltar la carga
+del thumbnail 3D si `body.has-hud-sprites` está activa. El
+`.lives-dot` queda con el `baseColor` sólido bajo el sprite,
+coherencia total entre los 4 corners. Thumbnail se mantiene como
+fallback degradado cuando el sprite sheet no carga (tablet con
+asset fallido, etc.).
+
+### Bug #2: tamaños in-game no uniformes
+
+Alturas post-scale del roster varían de 1.38u (Cheeto) a ~2.0u
+(Trunk) porque cada `scale` se calibró a ojo sobre meshes con
+distintas alturas raw (Tripo ~0.6u, Meshy ~1–2.4u). Usuario
+reporta que Sergei se ve "grande" y Shelly "pequeña" cuando el
+design dice lo contrario.
+
+**Fix** (`src/critter.ts attachGlbMesh`): auto-fit visual análogo
+al del preview. Nueva constante `IN_GAME_TARGET_HEIGHT = 1.7` u;
+tras medir `bindPoseHeight`, se escala el `group` GLB con
+`k = 1.7/bindPoseHeight`. Física 100% intacta — el auto-fit
+toca `group.scale` (inner mesh visible), no `this.mesh` (parent
+que lleva `physicsRadius`, position, headbutt cone).
+
+### Feel pass Sergei (primero del roster, plantilla para los demás)
+
+El feel pass queda "parked" desde hace una semana por la prioridad
+de cinturones + arenas. Hoy se cierra sobre Sergei; los otros 8
+heredan la plantilla.
+
+**Clip durations reales** (`scripts/inspect-clips.mjs`):
+- `Ability1GorillaRush` 1.03 s
+- `Ability2Shockwave` 0.80 s
+- `Ability3Frenzy` 2.43 s
+
+**Gaps identificados**:
+- Gorilla Rush: clip 1.03 s vs ability active 0.32 s → strike pose
+  llegaba tarde, se sentía torpe en vez de ágil. Fix: **acelerar el
+  clip a 2.3×** (clip efectivo 0.45 s, alineado con windUp 0.04 +
+  active 0.28 + tail). Además ajustar los valores numéricos
+  aguas abajo (impulse 18→20, speedMult 2.4→2.6, cooldown 4.5→4.0).
+- Shockwave: clip 0.80 s vs 0.35 total → alineado, sin cambio de
+  playback. Bumps de signature: radius 3.2→3.5, force 30→34.
+- Frenzy: clip 2.43 s vs buff 4.0 s → clip terminaba mid-buff,
+  falta impacto. Fix: **acortar buff a 2.5 s matching clip** y
+  subir multiplicadores (speed 1.3→1.45, mass 1.35→1.5) para que
+  la ventana corta sea más intensa. Cooldown 18→15 s porque dura
+  menos tiempo.
+
+**Infra reutilizable añadida**:
+- `AbilityDef.clipPlaybackRate?: number` — campo opcional. Si
+  está, al disparar la ability se pasa al `skeletal.play()` como
+  `timeScale`. Any ability de cualquier crítter puede reutilizarlo.
+- `SkeletalAnimator.play()` ahora acepta `opts.timeScale` que
+  setea `action.setEffectiveTimeScale()`.
+
+**VFX añadido**:
+- `spawnFrenzyBurst()` en `abilities.ts` — battle-cry ring dorado
+  + flash rojo central, 600 ms, radio 2.5 u. Se dispara al activar
+  Frenzy. Complementa el emissive pulse rojo ya existente.
+- Camera shake en el frame de activación de Frenzy (0.55× de la
+  del Ground Pound).
+
+**SFX**: pendiente. Por ahora Frenzy + charge_rush comparten el
+mismo `'abilityFire'` sintetizado. Plan: SFX signature por crítter
+via Suno + Web Audio. Post-jam probablemente, mencionado en
+`NEXT_STEPS.md`.
+
+Plantilla numérica completa en `CHARACTER_DESIGN.md` §"Feel pass
+log" para los próximos 8 críttrs. Orden acordado:
+Sergei → Trunk → Cheeto → Kurama → Shelly → Kermit → Sihans →
+Kowalski → Sebastian.
+
+---
+
 ## 2026-04-23 — UI pass: selector polish + HUD rework + 6 ULTIs + sprite system
 
 Tanda grande de pulido visual/UX. El roster ya está cerrado (9/9 skeletal

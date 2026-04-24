@@ -883,7 +883,15 @@ export function mountLabSidebar(devApi: DevApi): void {
     'Other internal tools: ' +
     '<a href="/animations" target="_blank" rel="noopener" ' +
     'style="color:#ffdc5c;text-decoration:none;">🎬 /animations</a> ' +
-    '<span style="opacity:0.55">(mesh2motion-based animation lab)</span>';
+    '<span style="opacity:0.55">(mesh2motion — create clips)</span>' +
+    '<br>' +
+    '<a href="/anim-lab.html" target="_blank" rel="noopener" ' +
+    'style="color:#ffdc5c;text-decoration:none;">🎞️ /anim-lab</a> ' +
+    '<span style="opacity:0.55">(validate + override runtime clip mapping)</span>' +
+    '<br>' +
+    '<a href="/calibrate.html" target="_blank" rel="noopener" ' +
+    'style="color:#ffdc5c;text-decoration:none;">📏 /calibrate</a> ' +
+    '<span style="opacity:0.55">(tune per-critter scale / pivot / rotation)</span>';
   root.appendChild(siblingLinks);
 
   // =======================================================================

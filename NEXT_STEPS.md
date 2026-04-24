@@ -1,486 +1,350 @@
 # Next Steps — Bichitos Rumble
 
-> **Deadline: May 1, 2026 @ 13:37 UTC** (~8 días restantes desde 2026-04-23).
-> **Submitted to Vibe Jam** (Google Form enviado 2026-04-23).
-> **Game is LIVE on vibej.am** at https://www.bichitosrumble.com.
-> Single source of truth for what to work on next. Dispatch sessions:
-> read this first.
-
-## Bugs observados en sesión (2026-04-23 tarde) — arreglar próxima
-
-Bugs detectados en partida real, captura que el usuario pasó el 23 abril.
-Actualmente NO resueltos, entrar al inicio de la próxima sesión:
-
-- **HUD avatar in-game incoherente entre bichitos**. En la misma
-  partida, Sergei y Sebastian muestran el sprite HUD correctamente
-  (cabeza chibi del `hud-icons.png`), mientras que Shelly y Kowalski
-  muestran el thumbnail 3D renderizado (que es el fallback). Causa
-  probable: el sprite overlay `<span class="sprite-hud-{slug}">` NO
-  se aplica en algunos porque el slug no coincide con el identifier
-  esperado, o el thumbnail 3D que va de backgroundImage se pinta
-  encima. Revisar `runtime.ts initAllLivesHUD` y `.lives-avatar-sprite`
-  z-order vs la prop `background-image: url(<thumb>)` del padre.
-- **Tamaños de personajes in-game poco uniformes**. El auto-fit del
-  character-select aplica sólo al preview (fitWrapper en
-  `preview.ts`); en la arena real se usan los `scale` por-crítter
-  del roster calibrados para hitbox + feel. Revisar si hace falta
-  un segundo auto-fit análogo para gameplay, o si el roster se
-  recalibra manualmente ahora que los Meshy están integrados.
-  Ver captura de la partida — el gorila Sergei se ve grande vs la
-  tortuga Shelly, que se ve muy pequeña.
-
-## Prioridades inmediatas (2026-04-23 en adelante)
-
-Con el submit ya dentro, el juego queda en **polish puro** hasta el deadline.
-Orden acordado con el usuario:
-
-1. **Refinar character selector** — validar visualmente el auto-fit,
-   aún hay pulido por hacer en info pane / anim timing de idle.
-2. **Habilidades + timing de animaciones** — Sergei primero (feel pass
-   bloqueado desde hace días), luego resto del roster. Incluye alinear
-   durations de clip con `duration`/`windUp` de las abilities.
-3. **Sprites HUD restantes** — hearts, bot-mask, belts-trophy, sfx/music,
-   critter-head fallbacks en life corners.
-4. **Feel + VFX por ability** — partículas, shockwaves dedicadas,
-   squash/stretch cuando toque el clip heavy.
-5. **Lighthouse + cross-device playtest**.
-
-## Roadmap hasta la entrega (legacy, casi cerrado)
-
-Lo que sigue es roadmap original. La mayoría está tachado; queda lo
-que el usuario decida rescatar.
-
-### Fase 1 · ESTA SEMANA (18-24 abril) — parcial
-- [x] Branding firma `@RGomezR14` en portada (bottom-left, link a X)
-- [x] SFX in-game (Web Audio API sintético) desde hace tiempo
-- [x] 3 pistas Suno generadas y añadidas a `public/audio/`
-      (intro / ingame / special)
-- [x] API de música en `src/audio.ts` (musicGain, playMusic,
-      crossfade, preload, mute persistente)
-- [x] Hooks por phase en `game.ts` (title/countdown/ended + online
-      waiting/countdown/ended + lab debug*). Lab hereda auto.
-
-### Fase 2 — EN CURSO, adelantada
-- [x] **4P online + bot-fill** — hecho
-  - [x] maxClients 4 en server + client
-  - [x] 60s waiting timeout → spawn de bots hasta llenar la sala
-  - [x] Instant-start si entran 4 humanos antes del timeout
-  - [x] Bot AI server-side (`server/src/sim/bot.ts`)
-  - [x] Bot-takeover on disconnect (si alive ≥ 2)
-  - [x] Waiting screen con contador + slots humano/bot/empty
-  - [x] Badge 🤖 en HUD lives-row para bots
-  - [x] End-screen distingue victoria de/contra bot
-  - Documentación: `ONLINE.md` (living doc del flujo online completo)
-
-### Fase 3 · EN CURSO — innegociables
-- [x] **Capa de animación skeletal opcional** (`src/critter-skeletal.ts`)
-      + loader GLB con clips + hooks por fase (idle/run/victory/defeat/
-      ability/hit/fall) — listo desde hace días.
-- [x] **Animation lab integrado** (`/animations`) con Mesh2Motion como
-      base + roster picker propio (9 críttrs con rig sugerido por
-      morfología) + banner INTERNAL + noindex. Exportas GLB animado →
-      sustituyes en `public/models/critters/` → engine detecta los
-      clips automáticamente. Tripo Animate para los no cubiertos
-      (Shelly tortuga, Kermit sapo, Sihans topo).
-- [x] **Warning visual de destrucción** renovado: sustituido red blink
-      por per-fragment shake + warm emissive + seismic rumble SFX.
-- [ ] **Animaciones reales por crítter** (INNEGOCIABLE — decisión 2026-04-20):
-      - Estado a fecha: Sergei con Idle de Mixamo retargeado, el resto en
-        procedural. La capa procedural cumple spec pero queremos skeletal
-        distintivo antes de abrir habilidades.
-      - **Plan en curso**: integrar auto-bind del rig Tripo existente
-        en el lab `/animations` (Mesh2Motion). Al seleccionar el
-        crítter, la herramienta debe saltarse el paso de rigging y
-        aceptar el skeleton que ya trae el GLB (39 bones Tripo), con
-        un mapping bone-a-bone a uno de los templates de MM (human).
-        Así el usuario elige animaciones desde el catálogo de MM in-lab,
-        las previsualiza y exporta directamente al GLB correcto.
-        Estimado: 3-5 h de cirugía en `mesh2motion/src/`.
-      - **Fallback si la integración de MM explota**: construir un
-        `/preview.html` interno (1-2 h) donde el usuario dropea un FBX
-        Mixamo y lo ve retargeted en vivo sobre el crítter elegido vía
-        Three.js `AnimationMixer`. Más aislado, no toca MM.
-      - **Fallback al fallback**: Mixamo + Blender MCP batch (ya
-        validado con Sergei Idle) — funciona pero sin preview.
-      - Pipeline limpio de retargeting ya documentado en este archivo
-        y en `BLENDER_MCP.md` (mapping Mixamo→Tripo = 20 bones).
-- [ ] **Repaso de código + docs + limpieza general** (antes de empezar
-      habilidades, después de cerrar animaciones):
-      - Revisar `src/` para dead code, funciones > responsabilidad,
-        oportunidades de extracción común, constantes hardcoded que
-        deben bajar a `FEEL` / config.
-      - Pasar el lint, typecheck, y tamaño de bundles.
-      - Consolidar `.md` — detectar redundancia (mucho ha ido creciendo
-        orgánicamente en estos días), eliminar secciones obsoletas,
-        arreglar referencias a archivos que ya no existen.
-      - Candidatos sospechosos: `scripts/inspect-sergei-clips.mjs`
-        (throwaway), `sergei.glb.bak`, `tools/sergei-pose-baseline.json`,
-        `tools/sergei-views/`, `tools/sergei-views-cleared/` — ver si
-        aún valen o se van al `.gitignore`.
-      - Revisar `ONLINE.md` / `DEV_TOOLS.md` / `BUILD_LOG.md` (2400+
-        líneas) y decidir si partes antiguas se archivan.
-- [ ] **Top 4 habilidades distintivas** (8-12h, prioridad por impacto).
-      Pospuestas hasta que el batch de validación del user termine.
-  1. **Shelly Shell Shield** — invulnerability pose + reflect
-     (la menos arriesgada técnicamente, reusa `immunityTimer`)
-  2. **Trunk Grip** — grab + throw (signature Bruiser, más sistémica)
-  3. **Kowalski Snowball** — introduce sistema proyectiles (reutilizable)
-  4. **Cheeto Shadow Step** — introduce sistema teleport (reutilizable)
-
-  Cada nuevo sistema base habilita otras Tier 2 abilities después.
-- [ ] **Destrucción iterada Pattern C** (3-4h) — cortes no-radiales.
-      Decidido: solo si sobra tiempo. El warning nuevo ya cumple.
-
-### Fase 4 · Última semana (28 abril - 1 mayo)
-- [x] Gamepad support + toast detección — adelantado al paralelizar
-      animaciones externas (usuario en Mixamo/Tripo).
-- [ ] Lighthouse pass + mejoras si hace falta (1-2h)
-- [ ] Playtesting remoto en producción (2-3 sesiones cortas)
-- [ ] Screenshots promocionales para jam listing
-- [ ] **Freeze 24h** antes del deadline. Solo hotfix crítico.
-
-### Gating / cortes si hay presión
-
-- Si al **25 abril** no está cerrado el sonido → recortar Tier 1 abilities
-  de 4 a 2-3.
-- Si al **28 abril** no tenemos 4P estable → congelar a 2P.
-- Si al **30 abril** no hay destrucción nueva → la actual queda.
-- **Orden invariable**: branding → sonido → 4P → innegociables → polish → submission.
-  Nunca saltar estas prioridades.
+> **Deadline: May 1, 2026 @ 13:37 UTC** · **Submitted to Vibe Jam** 2026-04-23
+> Live: https://www.bichitosrumble.com · **Single source of truth for what's next.**
+>
+> Reorganizado 2026-04-24 noche (sesión de handoff). Las secciones al
+> principio se leen en 30 segundos: qué hacer ya, qué está parado y por
+> qué, qué NO tocar. El roadmap histórico (Fases 1-4 del jam) queda al
+> final como referencia.
 
 ---
 
-## Visual + UX backlog (2026-04-23)
+## 🟢 AHORA MISMO — UNBLOCKED
 
-Ideas acumuladas para cuando toque la pasada de presentación final.
-Marcadas por impacto/urgencia. Las que ya se atacaron quedan tachadas
-al cerrarse.
+Lo que puedes retomar sin esperar a nadie ni nada. En orden.
 
-### Hacer ahora (bloque 2026-04-23)
-- [x] **Sistema de stats P/W/S (-2..+2)** — centralizar
-      Power/Weight/Speed en 5 niveles y derivar numéricos de ahí.
-      Simplifica ajustar cada bichito y el HUD ya muestra estas 3
-      barras. Ver `src/pws-stats.ts` + roster nuevo.
-- [x] **Fragmentos del arena caen al vacío** — en vez de desaparecer
-      en place, se les quita la colisión + aplican gravedad + rotan
-      ligeramente + se eliminan al salir de cámara.
-- [x] **Iluminación general del ingame** — tres puntos + rim + fill,
-      intensidades mejores, tono cálido del sol.
-- [x] **Fondo ingame** — sensación de "plataforma flotando" (cielo
-      con nubes lejanas + perspectiva de altura).
-- [x] **321 countdown mejorado** — críttrs caen del cielo durante la
-      cuenta, SFX de impacto + partículas de polvo al aterrizar.
-- [x] **`AI_PROMPTS.md`** — prompts listos para IAs generativas:
-      favicon, HUD del bichito (avatar + vidas + belts icono + habs),
-      iconos de habilidades, SFX personalizados via Suno.
+### 0. [CERRADO 2026-04-24 noche] Animation Validation Lab
 
-### Planeadas — más adelante
-- **Variedad en plataformas** (según el trailer que el usuario me
-  pasó) — cada arena con tema visual distinto (jungla, desierto,
-  hielo, playa, …). Afecta sólo texturas + meshes decorativos; la
-  lógica del colapso queda intacta.
-- **Elementos "traviesos" en el terreno** — zonas que empujan,
-  resortes, corrientes de aire, hielo resbaladizo aislado. Solo al
-  final si sobra tiempo.
-- **Voz para el countdown 3-2-1-GO!** — grabar o generar con una IA
-  de voz (ElevenLabs, etc.). Hoy es sólo texto + overlay pop.
-- **Sonidos personalizados en Suno** — además de la música. SFX
-  signature de cada bichito (rugido de Cheeto, trompeteo de Trunk,
-  cua-cua de Kermit, …). Hoy los SFX son sintetizados en Web Audio.
-- **HUD individual por bichito con arte real** — cuando
-  `AI_PROMPTS.md` salga, generar los 9 avatares + marcos + iconos
-  de cinturón (modo emoji y modo modelo 3D).
-- **Favicon** (AI_PROMPTS.md) — ahora es default Vite.
+`/anim-lab.html` operativo. 9 críttrs × 13 logical states inspeccionables
+visualmente. Resolver ampliado a **4 tiers** (override > exact > prefix
+> contains). Fuente de verdad del mapping: `src/animation-overrides.ts`.
 
----
+**Cuándo usarlo**:
+- Nuevo crítter importado con clips ambiguos → abrir lab, ver qué
+  tier resuelve cada state, si algo sale raro añadir override.
+- Debug de clip seleccionado mal → ver `source` badge.
+- Pre-flight de feel pass: antes de Trunk/Cheeto/etc, verificar en
+  el lab que todos los clips críticos (idle/run/abilities) están
+  resolviendo bien. Si algún clip clave sale "missing" o "contains"
+  (último recurso), resolver con override antes de pasar al feel.
 
-## Standby list — nada se descarta
+### 1. Feel pass Trunk (Bruiser)
 
-Todo lo que hemos hablado sigue vivo. Si una fase acaba antes de tiempo,
-cualquiera de estas puede rescatarse / avanzarse:
+Siguiente en el orden acordado tras cerrar Sergei el 2026-04-24 mediodía.
+Plantilla aplicada sobre Sergei disponible en
+`CHARACTER_DESIGN.md §"Feel pass log"`. Receta resumida:
 
-### Nivel 1 — rescatar si hay tiempo
-- **Tier 2 habilidades distintivas** (reutilizan sistemas ya creados):
-  - Kermit Poison Cloud (proyectil con zona AoE de slow)
-  - Sihans Tunnel (teleport + zona lenta)
-  - Cheeto Tiger Roar (cono direccional)
-  - Sebastian Claw Sweep (cono direccional)
-  - Kurama Mirror Trick (decoy, requiere sistema ilusión nuevo)
-  - Kowalski Ice Age (superficie resbaladiza, requiere sistema nuevo)
-- **Animaciones óseas via Tripo3D** para momentos específicos (victoria,
-  ability ultimate dramática) — post-procedural
-- **Frenzy VFX visual** exclusivo (Sergei/Kurama/Shelly tienen Frenzy
-  pero sin feedback visual dramático)
-- **Reconnect** (Colyseus `allowReconnection`) si aparecen quejas
-- **Waiting screen polish visual** más allá del contador funcional
-- **Victory poses** por personaje
-- **Stats display en end screen**
-- **Warp animation** en portal transitions
+1. Medir clips reales con `scripts/inspect-clips.mjs` →
+   `public/models/critters/trunk.glb`.
+2. Alinear `duration` / `windUp` / `cooldown` del kit Trunk
+   (`src/abilities.ts CRITTER_ABILITIES.Trunk`) con las duraciones de
+   clip. Añadir `clipPlaybackRate` si el gap clip↔ability es grande
+   (Gorilla Rush usó 2.3× como referencia).
+3. Identificar el "frame de impacto" del clip (el momento que el mesh
+   golpea). Ahí disparar VFX: shockwave ring / dust burst /
+   squash-stretch. Sergei reusó `spawnShockwaveRing` y estrenó
+   `spawnFrenzyBurst` — Trunk probablemente amplía el radius del
+   shockwave (es un elefante) y añade stomp dust.
+4. Documentar en `CHARACTER_DESIGN.md §"Feel pass log"` una tabla
+   idéntica a la de Sergei con el delta de valores.
+5. QA offline + online: partida con Trunk como player + bot,
+   verificar que las 3 abilities se sienten punchy y el clip lee bien.
 
-### Nivel 2 — post-jam (no prometer)
-- Rediseño complejo del arena (fragmentos irregulares no-sectores)
-- Client-side prediction + rollback
-- Matchmaking / ranking / login / persistence
-- Full 9-character unique ability kits (Tier 2 extendido)
-- Pedestals por personaje (preview scene)
-- HUD mobile restructure
-- Selección ritualizada al estilo fighting game
+**Scope estrecho**: sólo Trunk. No reabrir selector / HUD / escala
+base. No refactors. No features nuevas.
+
+### 2. Polish del info pane (si queda tiempo tras Trunk)
+
+El info pane stats ya tiene grid CSS alineado pero hay margen para
+ajustes finos (ver `CHARACTER_DESIGN.md §"Slot transitions"` ideas
+de transiciones + stat bounce que no son bloqueantes).
+
+### 3. Sprites HUD residuales
+
+Hoy usamos sprites 2D en selector + lives-dots. Quedan iconos por
+integrar desde la misma sheet (`hearts`, `bot-mask`, `belts-trophy`,
+`sfx/music`) en los sitios específicos del HUD donde todavía se ven
+emojis. Ver `AI_PROMPTS.md §8`. Tarea cosmética, no toca lógica.
 
 ---
 
-## Estado cerrado — lo que ya funciona
+## 🟡 BLOQUEADO POR ASSET DEL USUARIO
 
-### Bloques A/B/C cerrados en producción
-- **A** — Multiplayer vertical slice (Colyseus 2P)
-- **B** — Online kit completo + arena fragmentos + state-machine hardening +
-  rotation-mirror fix (post-mortem en `ERROR_LOG.md`)
-- **C** — Roster 9 playables con GLB + per-kit server tuning + transforms correctos
-- **C follow-up** — 3D thumbnails en character select + per-critter glow
-- **Speed bump ×1.3** — 9 base speeds escaladas preservando ratios
+No empezar hasta que llegue el archivo. Cuando llegue, aplicar
+directamente — los tickets están detallados para ejecución sin
+re-diseñar.
 
-### Animación procedural shared (primera capa)
-Ya implementada en `src/critter-animation.ts`:
-- idle breath derivado de mass (más pesado = más lento + profundo)
-- run bounce derivado de speed
-- forward lean proporcional al speed durante carrera
-- run sway lateral proporcional a mass
-- headbutt pose (anticipación + lunge con squash/stretch)
-- charge rush stretch forward
-- ground pound crouch visible en GLB
+### A. `ability-icons.png` mejorado
 
-Esta capa sigue vigente debajo de las animaciones distintivas por personaje
-(Fase 3) — las distintivas se superponen.
+El usuario va a pasar una v2 del sprite sheet de abilities, análoga
+a `HUD_mejorado.png` que ya se integró. Al recibirlo, ejecutar **tres
+cambios en una misma pasada**:
 
-### Lab tool `/tools.html` (v2 — 2026-04-18)
-Herramienta interna accesible en producción tipeando `/tools.html`. No
-linkada desde el juego, `<meta robots="noindex,nofollow">` aplicado.
+1. **Integrar la sheet**: si viene con márgenes/gutters análogos al
+   HUD principal (20 px margen + 20 px gutter en grid), clonar el
+   approach de `scripts/rebuild-hud-sheet.mjs` creando un
+   `scripts/rebuild-ability-sheet.mjs`. Output a
+   `public/images/ability-icons.png`. Ajustar `background-size` del
+   CSS `.sprite-ability` al nuevo grid (hoy 300% × 900% para 3×9).
 
-Arquitectura: `DevApi` (`src/tools/dev-api.ts`) centraliza toda la
-superficie de debug. El sidebar habla solo con DevApi y Game conserva
-sus 5 métodos `debug*` originales sin crecer más.
+2. **Ampliar el tamaño de los iconos en el HUD de abilities**: hoy
+   `.ability-slot` muestra un icon pequeño + `[J]` + nombre + barra
+   horizontal. Rediseño: icon grande en círculo (~64 px), keybind en
+   chip pegado al círculo, nombre debajo. Estilo MOBA moderno.
 
-Paneles:
-- **Matchup** + **Arena inspector** (seed/pattern/batches)
-- **Bots** — dropdown por bot (normal/idle/passive/aggressive/chase/
-  ability_only) + aplicar a todos. Respaldado por
-  `Critter.debugBotBehaviour`, leído cada frame en `bot.ts`.
-- **Gameplay** — event log en vivo (headbutt/ability/fall/respawn/
-  eliminate/collapse) + cooldowns del player + Reset CDs + Force J/K/L
-  + teleport player/bots a presets.
-- **Animation** (7 sliders) + **Playback** (speed/pause/slow) + **Info**
-- **Performance** — FPS, frame ms, drawcalls, tris, geometries, textures,
-  critters, fragments alive/total.
-- **Input** — move vector, held actions, teclas activas, gamepad list.
+3. **Cooldown radial sobre el icon**: reemplazar la barra horizontal
+   `.ability-fill` por un sweep circular pintado ENCIMA del icon y
+   que se retrae mientras recupera. Estilo League of Legends /
+   Overwatch. Implementación recomendada:
+   ```css
+   .ability-cooldown-mask {
+     position: absolute; inset: 0; border-radius: 50%;
+     background: conic-gradient(
+       from 0deg,
+       rgba(0,0,0,0.7) 0deg,
+       rgba(0,0,0,0.7) var(--cd-angle, 0deg),
+       transparent   var(--cd-angle, 0deg)
+     );
+     pointer-events: none;
+   }
+   ```
+   `updateAbilityHUD` setea `--cd-angle = (cooldownLeft/cooldown)*360deg`
+   cada frame. Al completar, flash dorado corto.
 
-Sticky-key fix aplicado (window.blur + sidebar pointerdown/focusin).
-Consola: `__devApi` expuesto además de `__game`.
-
-### Temporary-but-real roster identity
-| Critter   | Role         | Kit          | Speed / Mass / HB |
-|-----------|--------------|--------------|--------------------|
-| Sergei    | Balanced     | CR + GP + F  | 13 / 1.1 / 15      |
-| Trunk     | Bruiser      | CR + GP      | 9.1 / 1.4 / 17     |
-| Kurama    | Trickster    | CR + GP + F  | 15.6 / 0.8 / 12    |
-| Shelly    | Tank         | CR + GP + F  | 8.45 / 1.5 / 16    |
-| Kermit    | Controller   | CR + GP      | 11.7 / 1.0 / 13    |
-| Sihans    | Trapper      | CR + GP      | 10.4 / 1.15 / 14   |
-| Kowalski  | Mage         | CR + GP      | 13 / 0.9 / 11      |
-| Cheeto    | Assassin     | CR + GP      | 16.9 / 0.7 / 11    |
-| Sebastian | Glass Cannon | CR + GP      | 13.65 / 0.75 / 18  |
-
-Kits temporales reutilizan factories base. Mapping final en
-`CHARACTER_DESIGN.md` — sección "Gap entre kits temporales y habilidades
-definitivas".
+**Archivos a tocar**: `index.html` (CSS `.ability-slot` +
+`.ability-fill`), `src/hud/runtime.ts` (`initAbilityHUD` +
+`updateAbilityHUD`), y el script nuevo de sheet si aplica.
 
 ---
 
-## Deuda técnica aceptada para la jam
+## 🔵 BLOQUEADO POR QA MANUAL
 
-- **Fragment generator duplicado** client ↔ server (byte-identical via sed)
-- **Arena collapse = 2 patrones macro** (A outer→inner, B axis-split)
-- **Colyseus v3 state callbacks** via `getStateCallbacks()` — quirky pero funciona
-- **Patch latency de ~33ms** en transiciones de colapso (warning de 3s compensa)
-- **`BrawlRoom.internal` Map** para per-player non-synced data
-- **Offline y online generan seeds independientes** — sin abstracción común
+No son bugs; son cosas que necesitan verificación visual con navegador
+real (desktop + móvil). El usuario tiene que hacerlo — yo puedo QA por
+DOM pero no puedo juzgar sensación visual en 4P online.
+
+Ver `VALIDATION_CHECKLIST.md §"Tanda 2026-04-24"` para la lista
+completa con checkboxes. Resumen:
+
+- **Selector**: miniaturas 2D correctas, sensación de tamaño uniforme,
+  fallback sin sprite sheet, drag rotación preview, confirm / refresh.
+- **`/calibrate.html`**: carga, sliders funcionan, export al
+  portapapeles, re-fit global.
+- **Escala in-game**: 4 críttrs distintos en partida se perciben
+  consistentes. Ningún pivot hace que floten o se hundan.
+- **HUD in-match**: 4 avatares 2D nítidos, no pisan Vibe Jam / portal.
+- **Partidas online 4P**: consistencia entre clientes (especialmente
+  pack cosmético compartido + auto-fit visible igual).
+- **Cross-device**: desktop + móvil touch + gamepad.
+
+Si algo de eso sale mal, anotar en `ERROR_LOG.md` y convertir a ticket
+de `AHORA MISMO — UNBLOCKED`. Mientras no salga, es post-jam polish.
 
 ---
 
-## Diagnostic tools (en producción, solo si los invocas)
+## 🟣 POST-JAM / BACKLOG / NO TOCAR AHORA
 
-Consola del browser en partida viva:
+No abrir estos melones sin motivo (bug real en producción que no
+tenga otra salida). Registrados para que no se pierdan, pero fuera
+de scope del jam.
 
-- `__arena.checkPlayer()` — primer probe si vuelve visible/física desync
-- `__arena.check(x, z)` — check geométrico en un punto
-- `__arena.compass()` — marcadores N/S/E/W mundo
-- `__arena.dump()` — lista fragments con alive/visible
-- `__arena.logCollapses()` — log por batch collapse/warning
-
-Post-mortem del bug de rotación en `ERROR_LOG.md` entry 2026-04-17.
+- **Signature abilities definitivas** — 6 de los 9 ULTIs son
+  placeholder `frenzy`. Detalles en `CHARACTER_DESIGN.md
+  §"Qué hacer si la urgencia dicta avanzar antes"` + arquitectura en
+  `ULTI_DESIGN.md`. Nuevos sistemas requeridos: grab-throw (Trunk),
+  ilusiones (Kurama), input-inversion (Kermit), terreno persistente
+  (Sihans), proyectiles (Kowalski), teleport target (Cheeto), conos
+  direccionales (Cheeto ULTI / Sebastian H2), damage reflect
+  (Shelly H2). Cada uno es >4h.
+- **Reconnect online** (Colyseus `allowReconnection`).
+- **Matchmaking por región / ranking / login / persistence**.
+- **Pedestales temáticos por crítter** en `/preview.ts`.
+- **Arena packs 6-10** (Savanna, Moonlight Jungle, Swamp, …) siguiendo
+  la receta de `ARENA_PROMPTS.md`.
+- **Pattern C de collapse** (cortes no-radiales).
+- **Lighthouse deep optimization** — más allá del pass cosmético.
+- **Sonidos signature por crítter** (Suno, para reemplazar los Web
+  Audio sintetizados actuales).
+- **HUD mobile restructure** más allá del layout actual.
+- **Voz para el countdown 3-2-1-GO!** (ElevenLabs o equivalente).
+- **Arena loader decorations — picker manual** en `/tools.html`
+  (`debugStartOfflineMatch` ya acepta `options.packId`, sólo falta
+  widget). Mejora de descubribilidad, cero bloqueo.
+- **Link `/calibrate.html` desde `/tools.html`** (propuesta
+  pendiente — hay hueco en la sidebar para un botón "↗ Roster Cal").
+- **`pine_snow_option2` / palm_desert 2ª variante** — packs Tundra
+  y Desert tienen una segunda variante de árbol/palmera descartada;
+  si se regenera mejor, integrar como alternativa para arena layout.
 
 ---
 
-## Key architecture notes (dispatch sessions)
+## 🚫 NO TOCAR SALVO BUG REAL
 
-- Work on `dev`, merge to `main` for deploy. Vercel (client) y Railway
-  (server) auto-deploy desde `main`.
-- Server en `server/` — Colyseus 0.16, schema v3, multi-stage Dockerfile.
+Las siguientes zonas están estables y **no se reabren** en trabajo
+normal. Si aparece un bug concreto, sí — pero no refactors ni
+"limpieza preventiva":
+
+- **Sistema del selector de personajes** (sprites 2D + fallback + info
+  pane). Cerrado 2026-04-24 noche tras ciclo de QA visual real.
+- **Auto-fit de tamaño visual** (`IN_GAME_TARGET_HEIGHT = 1.7` en
+  `src/critter.ts attachGlbMesh`). El roster calibra `scale` pero la
+  SoT visible es el auto-fit.
+- **Clip resolver de animaciones** (ahora **4-tier**: override >
+  exact > prefix > contains en `src/critter-skeletal.ts`). Sergei
+  Run/Running resuelto. Overrides explícitos en
+  `src/animation-overrides.ts` — hoy vacío por defecto.
+- **`/anim-lab.html`** (cuarto entry Vite, 2026-04-24 noche). Lab
+  dedicado para validar + overridear clip mappings por crítter. No
+  reescribirlo sin motivo; si falta algo, extender el panel
+  existente.
+- **Sheet `hud-icons.png`** generada desde `HUD_mejorado.png` via
+  `scripts/rebuild-hud-sheet.mjs`. No editar el PNG final a mano —
+  siempre regenerar desde la fuente autored.
+- **Arena decorations loader + packs** — 5 packs integrados + sync
+  online funcionando. Ver `BUILD_LOG.md §"2026-04-24"`.
+- **Feel pass Sergei** (valores + clipPlaybackRate + VFX
+  `spawnFrenzyBurst`). Cerrado.
+- **Online identity / cinturones offline + online** — 16 belts
+  integrados, 21 assets optimizados. Cerrado.
+
+---
+
+## ✅ ESTADO DEL PROYECTO (snapshot 2026-04-24)
+
+Qué está vivo, qué es pura referencia, qué ya no se usa.
+
+### Scripts activos (seguir usando)
+
+- `scripts/rebuild-hud-sheet.mjs` — regenera `public/images/hud-icons.png`
+  desde `HUD_mejorado.png` (4×6 grid con márgenes). **Ejecutar cada
+  vez que el PNG authored cambie.**
+- `scripts/optimize-arena-props.mjs` — pipeline de props de arena.
+- `scripts/aggressive-simplify.mjs` — last-resort para props monstruosos.
+- `scripts/compress-arena-textures.mjs` — compresión de textures post-simplify.
+- `scripts/inspect-clips.mjs` — medir duraciones de clips de un GLB.
+- `scripts/import-belts.mjs` — pipeline de cinturones.
+- `scripts/import-critter.mjs` — pipeline de críttrs.
+- `scripts/verify-critter-glbs.mjs` — sanity check en `npm run check`.
+
+### Scripts históricos / obsoletos (no borrar aún, pero no usar)
+
+- `scripts/trim-hud-sheet.mjs` — **OBSOLETO**. Se usó durante el fix
+  de labels visibles antes de que el usuario pasara `HUD_mejorado.png`
+  con iconos ya limpios. `rebuild-hud-sheet.mjs` cubre el mismo rol
+  de forma correcta. No borrar todavía por si vuelve a aparecer algún
+  sheet con labels que limpiar; marcado como obsoleto en su comentario
+  cabecera. Candidate a limpieza post-jam.
+- `scripts/inspect-bounds.mjs` / `inspect-parts.mjs` / `doctor.mjs` —
+  utilities one-off. Mantener.
+
+### Documentación — estado
+
+| Doc | Rol | Estado |
+|---|---|---|
+| `NEXT_STEPS.md` | SoT de "qué hacer" | Reorganizado este handoff |
+| `MEMORY.md` | Decisiones clave + valores | Sección nueva 2026-04-24 al tope |
+| `BUILD_LOG.md` | Changelog narrativo | Entrada "Closing handoff" añadida |
+| `VALIDATION_CHECKLIST.md` | QA manual pendiente | Sección "Tanda 2026-04-24" añadida |
+| `CHARACTER_DESIGN.md` | Design + Feel pass log | Sergei cerrado, Trunk siguiente |
+| `ARENA_PROMPTS.md` | Prompts IA + notas | 5 packs integrados |
+| `BADGES_DESIGN.md` | Sistema de cinturones | Cerrado |
+| `ONLINE.md` | Flujo online | Al día |
+| `DEV_TOOLS.md` | Lab `/tools.html` | Al día |
+| `ERROR_LOG.md` | Post-mortems | Histórico |
+
+---
+
+## 📚 REPRODUCIR SCREENSHOTS con MCP Claude Preview
+
+Aprendizaje del 2026-04-24: el MCP arranca Chromium con viewport
+**portrait** (~452×1600 px). El juego tiene overlay anti-portrait que
+oculta el canvas → screenshots devolvían buffer vacío. Fix obligatorio:
+
+```js
+mcp__Claude_Preview__preview_resize({
+  serverId: "<id>",
+  width: 1280, height: 800,
+});
+```
+
+**ANTES** de cualquier screenshot. Ojo: los presets `desktop` /
+`tablet` no redimensionan (reset a native size). Siempre width/height
+explícitos.
+
+Otras limitaciones importantes:
+
+- **rAF pausado sin foco**: `requestAnimationFrame` no corre cuando el
+  tab MCP no tiene foco. El game loop se congela. Workaround:
+  `preview_eval` con `window.__game.update(0.016)` manualmente en un
+  bucle for, luego screenshot.
+- **Browser cache de PNG tras soft reload**: `location.reload()` no
+  invalida assets estáticos. Para forzar fresh fetch: usar
+  `location.href = '/?_t=' + Date.now()` o fetch con `?t=` manual.
+- **Screenshot sin sincronizar con update manual**: `await
+  requestAnimationFrame` dos veces tras un update antes de capturar
+  o el compositor no repintará.
+
+QA por DOM (`preview_eval` con DOM queries) sigue siendo válida y a
+menudo más rápida, pero **el screenshot real revela bugs visuales
+que el DOM no** — ejemplo: el specificity bug que pintaba sprites
+24×24 en la esquina, invisible en DOM (`spriteVisible: true`) pero
+obvio en captura.
+
+---
+
+## 📜 Roadmap histórico (referencia — ya casi todo cerrado)
+
+Conservado abajo tal cual estaba. Los items con `[x]` son histórico
+confirmado; los `[ ]` sin sección explícita arriba ya no aplican al
+scope del jam. No borrar por ahora — sirve de referencia si alguna
+fase se quiere relanzar post-jam.
+
+### Fase 1 · Branding + audio (18-24 abril) — cerrada
+- [x] Firma `@RGomezR14` en portada
+- [x] SFX sintéticos in-game
+- [x] 3 pistas Suno
+- [x] API música + crossfade + mute persistente
+- [x] Hooks de música por phase
+
+### Fase 2 · Online 4P — cerrada
+- [x] maxClients 4 + bot-fill 60s + waiting screen
+- [x] Bot-takeover on disconnect
+- [x] Badge 🤖 + end-screen distingue bots
+
+### Fase 3 · Skeletal + lab — parcial
+- [x] Capa skeletal + loader GLB
+- [x] Lab `/animations` (Mesh2Motion)
+- [x] Warning visual shake + rumble
+- [x] Sergei feel pass (2026-04-24)
+- [ ] Top 4 habilidades distintivas — post-jam
+- [ ] Pattern C collapse — post-jam (no bloquea)
+
+### Fase 4 · Última semana — en progreso
+- [x] Gamepad + toast
+- [ ] Lighthouse pass — pendiente
+- [ ] Playtesting 4P producción — pendiente (QA manual)
+- [ ] Screenshots promocionales — pendiente
+- [ ] **Freeze 24h antes deadline**: solo hotfix crítico
+
+---
+
+## 🗂️ Key architecture notes (dispatch sessions)
+
+Copiado del viejo NEXT_STEPS para evitar perderlo:
+
+- Work on `dev`, merge to `main` for deploy. Vercel (client) + Railway
+  (server) auto-deploy from `main`.
+- Server en `server/`: Colyseus 0.16, schema v3, multi-stage Dockerfile.
 - Arena fragments generator DEBE estar byte-identical cliente ↔ servidor.
 - NUNCA poner campos non-synced en clases Schema — usar `BrawlRoom.internal`.
 - Match-end en server: siempre vía `BrawlRoom.endMatch()` (locka la room).
 - Offline mode NO debe regresar con ningún cambio online.
-- `/tools.html` = 2º entry de Vite, servido estático antes del SPA rewrite.
-- **Lab debug API**: todo lo nuevo del lab va en `DevApi` (`src/tools/
-  dev-api.ts`). `Game` no debe crecer más métodos `debug*` — los 5 que
-  tiene (speedScale, startOfflineMatch, forceArenaSeed, getArenaInfo,
-  endMatchImmediately) son los pilares, DevApi envuelve el resto.
-- `Critter.debugBotBehaviour` es el único campo "debug-only" en la clase
-  gameplay. Default `'normal'` = comportamiento de producción intacto.
-- **Referencia viva del lab**: `DEV_TOOLS.md`. Contiene paneles,
-  EventType, recording format, cómo añadir una feature nueva al lab sin
-  romper nada (patrón de DOM caching para paneles con dropdowns live,
-  etc). Actualizar cada vez que se toque el lab.
-- **Animation lab** en `/animations` (Mesh2Motion adaptado). Subpackage
-  `mesh2motion/` con su propio build. Para añadir una adaptación
-  nueva tocar `src/BichitosRosterPicker.ts` sin modificar el engine
-  de mesh2motion. Update upstream = diff manual contra
-  `mesh2motion/README-INTEGRATION.md`.
-- **Checklist vivo de validación**: `VALIDATION_CHECKLIST.md`. Todo
-  lo pendiente de probar manualmente (gamepad, shake arena, 4P online,
-  stats end-screen, Mesh2Motion, etc.) consolidado en un único lugar.
-  Actualizar con cada feature sin validar.
-
----
-
-## 📦 Post-Jam Backlog — consolidado 2026-04-23
-
-Todo lo acordado verbalmente con el usuario que NO entra en la ventana
-del jam pero queda prometido. Fuente única de verdad para cuando
-abramos el post-jam release. Ordenado por complejidad creciente.
-
-### A · Drop-in (< 1 h cada uno) — sólo faltan assets o pequeños edits
-
-- **Cinturones 3D integrados**. 16 PNG/GLB de cinturón llegando del
-  usuario → swap `icon: '🦍'` etc. en `src/badges.ts` + `.belt-icon`
-  innerHTML en `src/hall-of-belts.ts` + `.badge-toast-icon` en
-  `src/badge-toast.ts` + `online-belt-toast.ts` por `<img>` reales.
-  Todos los puntos de integración ya están marcados en los comentarios
-  del código con TODO "Phase 5" / "drop-in".
-- **Remaining HUD sprite integrations**. Hearts, bot-mask, belts-trophy,
-  sfx/music icons, critter-head fallbacks en life corners. La sprite
-  sheet y las clases CSS (`.sprite-hud-*`) ya están; sólo hay que
-  reemplazar los emojis 🔊 🎶 🏆 🤖 ❤ por los spans sprite con
-  fallback emoji. Ver `AI_PROMPTS.md` §8.
-- **Favicon multi-tamaño**. Hoy `/favicon-br.png` es un único tamaño.
-  Generar 16×16 + 32×32 + 192×192 y wire en `<head>`.
-
-### B · Features medianas (2–4 h cada una)
-
-- **Arena packs 3D — sistema de carga**. 4 packs principales (Jungle
-  Tropic, Frozen Tundra, Desert Dunes, Coral Reef Beach) + 4 extras
-  (Savanna, Kitsune Shrine, Swamp, Jungle Moonlight). Los **prompts
-  completos** (preamble + tabla de props + skybox + placement) viven
-  en `AI_PROMPTS.md §10`. Falta el **loader en código**:
-  `src/arena-decorations.ts` nuevo + hook en `Arena.buildFromSeed` +
-  JSON de placement per-pack + picker de debug en `/tools.html`.
-  El gameplay del arena (fragmentos, colapso, falloff) no se toca —
-  los packs son puramente cosmética + futuro audio ambient.
-- **Slayer Belt → ampliar last-hitter más allá de headbutts**. Hoy
-  `server/src/sim/physics.ts` marca attackerSid sólo en headbutt
-  collisions. Añadir el mismo stamp para ability knockbacks
-  (`ground_pound` impulsa al defensor → también cuenta) y para
-  `charge_rush` si el attacker colisiona durante el dash. Extender
-  la lógica en el effect dispatch de `server/src/sim/abilities.ts`.
-- **Change-nickname flow**. Ya tenemos el token en localStorage y el
-  endpoint `POST /api/player` acepta token match. Añadir un botón
-  "Change nickname" en el character-select que permita registrar un
-  apodo nuevo pasando el token actual + nuevo nickname; server lo
-  renombra si el token coincide y el nombre está libre.
-- **Display name para guests online**. Hoy si entras sin nickname eres
-  "guest" y no puntúas. Podríamos generar "Guest #1234" automático y
-  mostrarlo como tag, aunque sin credit de belts (marcado visual
-  distinto en el leaderboard — gris, sin posibilidad de ranking).
-- **Per-match kills overlay**. En el end-screen, mostrar "You killed
-  3 humans this match" si tienes identity online. Stats ya capturadas
-  en `InternalPlayerData.killsVsHumansThisMatch`.
-
-### C · Features grandes (6–12 h cada una, plan por diseño)
-
-- **Signature abilities definitivas por crítter**. 6 de los 9 ULTIs
-  son placeholder `frenzy` (Trunk Stampede, Kermit Hypnosapo, Sihans
-  Diggy Rush, Kowalski Blizzard, Cheeto Tiger Rage, Sebastian Red
-  Claw) + 8 Hab-2 placeholder. El plan priorizado está en
-  `CHARACTER_DESIGN.md §"Qué hacer si la urgencia dicta avanzar
-  antes"`:
-  1. Trunk Ground Pound con STUN (añadir estado `stunned` + timer).
-  2. Cheeto Tiger Roar + Sebastian Claw Sweep — conos direccionales.
-  3. Kowalski Snowball — sistema de proyectiles.
-  4. Cheeto Shadow Step + Sihans Tunnel — teleport simple.
-  5. Shelly Shell Shield — invulnerability + reflect.
-  6. Kurama Mirror Trick / Copycat, Kermit input-inversion, Sihans
-     runtime arena edits, Kowalski ice-surface — sistemas nuevos
-     muy grandes, dejar para el final o descartar.
-- **Feel pass per crítter**. Alinear `duration` / `windUp` /
-  `cooldown` de cada ability con la duración del clip esqueletal
-  correspondiente, SFX signature (Suno + Web Audio), VFX propio
-  (partículas, shockwaves dedicadas, squash/stretch en heavy clips).
-  Sergei quedó parked como pionero del proceso. Orden sugerido:
-  Sergei → Trunk → Cheeto → Kurama → Shelly → Kermit → Sihans →
-  Kowalski → Sebastian.
-- **Rebuild character selector**. Refinamiento pendiente que quedó
-  en pausa al pivotar a Online Belts. Auto-fit actual funciona pero
-  las poses Mixamo de los Meshy no-humanoid (Sebastian agazapado,
-  Sihans tumbado) quedan raras. Opciones: a) pedir regens a Meshy
-  con clip idle menos humanoide; b) hack procedural para levantar
-  el mesh cuando idle-pose height < 1.0 u; c) background animado
-  del escenario seleccionado (conecta con Arena Packs).
-- **Pattern C collapse** (non-radial cuts). El colapso actual es
-  radial desde fuera hacia dentro. Añadir patrones con cortes
-  diagonales / asimétricos. Cambio local en `arena-fragments.ts`.
-
-### D · Infra / calidad
-
-- **Lighthouse pass en prod URL**. Perf + accessibility + SEO +
-  best-practices. Objetivo: verde en los 4.
-- **Cross-device playtest real**. iOS Safari, Android Chrome, tablet
-  en landscape, desktop con 2-3 navegadores distintos, gamepad
-  (Xbox + PS + pro controllers), teclado internacional.
-- **Anti-cheat beyond rate-limit**. Hoy el Slayer Belt es
-  server-authoritative (client no puede inflar kills). Throne / Flash
-  / Ironclad / Hot Streak dependen del durationMs + lives + streak
-  que también derivan del server. Pero un endpoint futuro que acepte
-  input del cliente debería validar via token. Revisar si alguien
-  se inventa partidas vía requests manuales.
-- **Moderación nickname avanzada**. Lista de palabras prohibidas más
-  amplia (inglés + español), flag-and-report, soft-delete de cuentas
-  con nickname inapropiado (admin endpoint con ADMIN_TOKEN env).
-- **Backup SQLite**. Cron job que copie el .sqlite a S3/R2 cada
-  12–24 h. Railway volume es persistente pero no tolerante a DB
-  corruption; un backup fuera-de-Railway es barato.
-- **Allow reconnection online** (Colyseus `allowReconnection`). Hoy
-  una pérdida de red = out permanente. Post-jam queremos que un
-  disconnect reintroduzca al jugador con sus cooldowns / lives.
-- **Region-based matchmaking**. Hoy un único room pool en Railway
-  US. Si la base de jugadores crece, replicar server en EU + SA +
-  AP con matchmaking por latencia.
-- **Display name polish**. Reserved-words list mayor, username
-  collision prompts (sugerencias en vez de rechazo puro), longer
-  length con character-level validation.
-
-### E · Validación pendiente
-
-- **`VALIDATION_CHECKLIST.md` completo**. Hay secciones A–F (añadidas
-  2026-04-23) sin ejecutar aún. Son pruebas manuales que no se
-  pueden automatizar desde el IDE — gamepad físico, partidas
-  multi-dispositivo, render-quality checks, touch devices reales.
-  Retomar cuando el usuario tenga tiempo para la tanda de validación.
-
----
-
-### Tracking posterior
-
-Cuando cerremos el jam (submit ya está hecho, deadline 1 may):
-1. Post-mortem corto en `BUILD_LOG.md` — qué funcionó, qué no, qué
-   sorprendió del playtest real.
-2. Roadmap post-jam ordenado por votación si hay comunidad.
-3. Cerrar features A primero (drop-ins rápidos), luego B, luego las
-   C grandes cuando haya ventana clara.
+- `/tools.html` = 2º entry de Vite. `/calibrate.html` = 3º entry
+  (añadido 2026-04-24).
+- **Lab debug API**: `DevApi` (`src/tools/dev-api.ts`) centraliza
+  todo. Game solo expone 5 métodos `debug*`.
+- `Critter.debugBotBehaviour` es el único campo "debug-only" en la
+  clase gameplay. Default `'normal'` = producción intacto.
+- Live tool reference: `DEV_TOOLS.md`.
+- Validation live reference: `VALIDATION_CHECKLIST.md`.

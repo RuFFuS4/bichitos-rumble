@@ -83,10 +83,22 @@ export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = 
     spriteOverlay.className = `sprite-hud sprite-hud-${slug} lives-avatar-sprite`;
     dot.appendChild(spriteOverlay);
 
+    // 3D thumbnail is ONLY a fallback for when the sprite sheet didn't load.
+    // If it loaded (body.has-hud-sprites set), skip the thumbnail so the
+    // sprite sits on a clean coloured dot — each cell in the PNG has
+    // transparent padding around the chibi head, and a 3D thumbnail behind
+    // leaks through those edges, making slots with tighter silhouettes
+    // (Shelly turtle, Kowalski penguin) look blurry-3D rather than chibi-2D
+    // while slots with bulkier silhouettes (Sergei gorilla, Sebastian crab)
+    // look fine. Dropping the thumbnail when sprites are live makes all 4
+    // corners visually consistent.
     const entry = getRosterEntry(c.config.name);
-    if (entry) {
+    if (entry && !document.body.classList.contains('has-hud-sprites')) {
       getCritterThumbnail(entry).then((url) => {
         if (!url) return;
+        // Recheck: sprite sheet may have finished loading asynchronously
+        // while the thumbnail was being generated — if so, skip the paint.
+        if (document.body.classList.contains('has-hud-sprites')) return;
         dot.style.backgroundImage = `url(${url})`;
         dot.style.backgroundSize = 'cover';
         dot.style.backgroundPosition = 'center';

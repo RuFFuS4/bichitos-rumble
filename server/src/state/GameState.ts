@@ -29,6 +29,13 @@ export class GameState extends Schema {
   @type('number') arenaCollapseLevel: number = 0;
   /** Batch index currently blinking red (-1 if none). */
   @type('number') arenaWarningBatch: number = -1;
+  /** Cosmetic pack ID: 'jungle' | 'frozen_tundra' | 'desert_dunes' |
+   *  'coral_beach' | 'kitsune_shrine'. Chosen per match by the server;
+   *  clients swap skybox + fog + ground texture + props based on it.
+   *  Default 'jungle' so older clients missing the field still render
+   *  a sensible arena (graceful degradation — the server never breaks
+   *  an old client just by adding cosmetics). */
+  @type('string') arenaPackId: string = 'jungle';
 
   @type({ map: PlayerSchema }) players = new MapSchema<PlayerSchema>();
 }

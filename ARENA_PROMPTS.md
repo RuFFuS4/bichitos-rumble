@@ -179,6 +179,13 @@ placement around larger icebergs.
 
 ### `pine_snow.glb` (667 chars)
 
+> **Resolved 2026-04-24**: first-generation prompt (below) failed
+> with 4.2M verts (per-needle primitives). The RETRY prompt at the
+> bottom of this entry fixed it — second-generation option1 shipped
+> with 13k verts raw, simplified to 4527 verts / 420 KB final. The
+> original prompt is kept as negative reference. When generating
+> Beach / future packs, default to the RETRY-style wording (below).
+
 ```
 For "Bichitos Rumble" cartoon arena brawler — chunky chibi style,
 bold outlines, vibrant saturated colours, slight cel-shading, NO
@@ -195,6 +202,27 @@ Dimensions: 3.8 m tall, ~1.2 m wide canopy. Classic triangular pine
 silhouette. Dark green needles (#2a5a3a) mostly covered by chunky
 white snow layers on top of each branch tier. Brown trunk base
 (#5a3a1a) visible ~0.5 m.
+```
+
+### `pine_snow.glb` — RETRY prompt (stricter, 790 chars)
+
+```
+For "Bichitos Rumble" cartoon arena brawler — chunky chibi style,
+bold outlines, vibrant saturated colours, NO realism.
+ABSOLUTE GEOMETRY CONSTRAINT: the WHOLE tree must be ONE single
+merged mesh with ONE material. Do NOT model individual needles or
+individual leaves. The canopy is a stack of three chunky cone
+sections (like a simple Christmas tree / ice-cream cone) with thick
+snow caps layered on top. Under 2000 triangles total.
+Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
+skeleton, no lighting. Origin at base centre, Y=0.
+
+Generate: STYLISED SNOW-COVERED CONIFER, "LOW-POLY CHRISTMAS TREE".
+
+Dimensions: 3.8 m tall, ~1.2 m wide base. Three stacked cone tiers
+diminishing upward, dark green sides (#2a5a3a) with thick white
+snow (#f5faff) blanketing the top of each cone and sloping down
+~30 %. Short brown trunk visible ~0.3 m at the base (#5a3a1a).
 ```
 
 ### `signpost_wood.glb` (585 chars)
@@ -356,6 +384,16 @@ on the skin. Top: 2–3 small magenta flower buds (#e060c0).
 
 ### `palm_desert.glb` (549 chars)
 
+> **⚠ NOTE 2026-04-24**: first-generation attempt of this prompt shipped
+> 910k vertices (53 MB raw → 10.8 MB after standard optimize, 21.8 MB
+> after aggressive-simplify — the IA modelled each frond as a separate
+> primitive). The user generated a backup variant called
+> `palm_desert_optional.glb` with a simpler prompt — that one landed at
+> 14k verts / 790 KB and is the one that ships as `palm_desert.glb`.
+> If you want a second palm variant in the arena, regenerate using the
+> "rewritten Beach prompt" style — replace "5 wispy drooping fronds"
+> with "ONE solid domed canopy blob". See the Beach pack for reference.
+
 ```
 For "Bichitos Rumble" cartoon arena brawler — chunky chibi style,
 bold outlines, vibrant saturated colours, NO realism.
@@ -427,6 +465,35 @@ cloth banner attached at top with diagonal red-orange stripes
 
 # Pack 4 — CORAL REEF BEACH (🌊, Shelly / Sebastian)
 
+> **Integrated 2026-04-24 tarde**: 8 props, 12 MB total. Problem
+> children: `palm_beach_tilted.glb` (5.9 MB, 130k verts — IA modeló
+> fronds individualmente pese al prompt retry) y `coral_brain.glb`
+> (2.5 MB, 62k verts — swirl grooves en geometría, no textura).
+> Aceptados por política `tree_jungle_broadleaf`. Prompts abajo son
+> los RETRY ultra-estrictos que SÍ ayudaron en la mayoría (corales
+> branching salieron en <1 MB, shipwreck en 628 KB, seashell como
+> single conch en 516 KB — todo bajo control excepto orgánicos
+> complejos). Si alguien regenera: considerar dejar sakura/palm/
+> bamboo como "fallout aceptado" y no gastar más intentos.
+
+> **⚠ LESSON LEARNED 2026-04-24**: first-generation prompts asked for
+> delicate shapes (branching coral, 5-6 fronds, cluster of shells,
+> broken planks) which the IA consistently splits into one-mesh-per-
+> feature, hitting 1M+ triangles even with the "single merged mesh"
+> constraint in the prompt. Original prompts are kept at the bottom
+> of this pack for reference; the REWRITTEN ones below are what you
+> should feed the IA. They replace every "delicate" silhouette with
+> a chunky low-poly alternative that forces the IA into single-mesh
+> output.
+>
+> Rules of thumb for writing beach props:
+>   - NO "branches", "fronds", "planks", "shells" (plural delicate).
+>   - Use words the IA interprets as solid masses: "blob", "dome",
+>     "lump", "clump", "chunk", "wedge", "nugget".
+>   - Reference low-poly games directly: "like a Minecraft block",
+>     "like a Fall Guys obstacle", "like Lego".
+>   - Cap triangles VERY low: < 1500 for anything risky.
+
 ## Files to generate
 
 - `public/images/skyboxes/coral_beach.png` (2048×1024)
@@ -485,127 +552,161 @@ Technical: fully seamless / tileable, 1024×1024 PNG, no alpha, no
 watermark.
 ```
 
-## Prop prompts
+## Prop prompts (rewritten 2026-04-24 — ultra-strict single-mesh wording)
 
-### `coral_stack_red.glb` (574 chars)
+### `coral_stack_red.glb` (793 chars)
 
 ```
-For "Bichitos Rumble" cartoon arena brawler — chunky chibi style,
-vibrant saturated colours, NO realism.
-CRITICAL GEOMETRY CONSTRAINT: single merged mesh with ONE material.
-Do NOT split branches. Target < 3000 triangles.
+For "Bichitos Rumble" cartoon arena brawler — low-poly chibi style,
+bold outlines, vibrant saturated colours, NO realism.
+ABSOLUTE GEOMETRY CONSTRAINT: the ENTIRE prop must be ONE single
+merged mesh with ONE material. Do NOT model individual branches.
+NO forked delicate tips. The silhouette is a CHUNKY SOLID LUMP
+with 3–4 stubby bumps coming out of it, like a low-poly lava
+lamp blob or a Fall Guys obstacle. Under 1500 triangles total.
 Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
 skeleton, no lighting. Origin at base centre, Y=0.
 
-Generate: RED BRANCHING CORAL FORMATION.
+Generate: RED CORAL LUMP — a thick vertical solid column with
+3 or 4 rounded bulges poking sideways.
 
-Dimensions: 3.0 m tall, ~1.5 m wide. Organic branching coral in
-coral red (#e25a3a → #f0805a) with subtle deeper red veins. Chunky
-simplified branch shapes, stubby not delicate.
+Dimensions: 2.5 m tall, ~1.2 m wide base tapering to ~0.7 m top.
+Solid coral red (#e25a3a → #f0805a) with subtle darker red
+stripes wrapping around. Think "Lego coral piece", not real coral.
 ```
 
-### `coral_stack_pink.glb` (554 chars)
+### `coral_stack_pink.glb` (723 chars)
 
 ```
-For "Bichitos Rumble" cartoon arena brawler — chunky chibi style,
-vibrant saturated colours, NO realism.
-CRITICAL GEOMETRY CONSTRAINT: single merged mesh with ONE material.
-Target < 2500 triangles.
-Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
-skeleton, no lighting. Origin at base centre, Y=0.
-
-Generate: PINK CABBAGE CORAL.
-
-Dimensions: 2.4 m tall, ~1.2 m wide. Tightly curled cabbage-style
-folds, coral pink (#f09a9a → #d86878). Organic lumpy silhouette,
-base widens slightly.
-```
-
-### `coral_brain.glb` (498 chars)
-
-```
-For "Bichitos Rumble" cartoon arena brawler — chunky chibi style,
+For "Bichitos Rumble" cartoon arena brawler — low-poly chibi style,
 vibrant colours, NO realism.
-CRITICAL GEOMETRY CONSTRAINT: single merged mesh with ONE material.
-Target < 2000 triangles.
+ABSOLUTE GEOMETRY CONSTRAINT: the ENTIRE prop is ONE single merged
+mesh with ONE material. No separate folds, no loose leaves. The
+shape is a FAT ROUND CLUMP, like a stacked scoop of ice cream or
+a Minecraft block of coral. Under 1200 triangles.
 Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
 skeleton, no lighting. Origin at base centre, Y=0.
 
-Generate: BRAIN CORAL ROUND DOME.
+Generate: PINK CORAL CLUMP — a solid blob shape with a few flat
+horizontal grooves wrapping around it to suggest folds.
 
-Dimensions: 1.2 m diameter, 0.8 m tall. Round half-sphere with
-swirly surface grooves. Muted sandstone-pink (#c89090).
+Dimensions: 2.0 m tall, ~1.3 m wide. Coral pink (#f09a9a →
+#d86878), matte cartoon finish, 2–3 faint groove lines only.
 ```
 
-### `palm_beach_tilted.glb` (620 chars)
+### `coral_brain.glb` (669 chars)
 
 ```
-For "Bichitos Rumble" cartoon arena brawler — chunky chibi style,
-vibrant saturated colours, NO realism.
-CRITICAL GEOMETRY CONSTRAINT: single merged mesh with ONE material.
-Do NOT split fronds or coconuts. Target < 3000 triangles.
-Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
-skeleton, no lighting. Origin at base centre, Y=0.
-
-Generate: COCONUT PALM TREE TILTED SIDEWAYS ~45° as if leaning
-toward the sea.
-
-Dimensions: 3.5 m long trunk (measured along tilt), warm brown
-(#8a5a2a) segmented. Crown at top with 5–6 drooping fronds
-(#3aa24a). 3 coconuts clustered.
-```
-
-### `shipwreck_hull_piece.glb` (632 chars)
-
-```
-For "Bichitos Rumble" cartoon arena brawler — chunky chibi style,
-vibrant saturated colours, NO realism.
-CRITICAL GEOMETRY CONSTRAINT: single merged mesh with ONE material.
-Target < 3000 triangles.
-Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
-skeleton, no lighting. Origin at base centre, Y=0.
-
-Generate: BROKEN WOODEN SHIP HULL FRAGMENT.
-
-Dimensions: 2.5 × 1.5 × 2.0 m. Curved wooden planks (dark weathered
-brown #4a2d14 → #6a3a1a), broken jagged edges, a few iron bolts,
-small patches of green-white barnacles clinging. Half-sunk feel,
-bottom edge ragged.
-```
-
-### `boulder_wet.glb` (586 chars)
-
-```
-For "Bichitos Rumble" cartoon arena brawler — chunky chibi style,
-vibrant saturated colours, NO realism.
-CRITICAL GEOMETRY CONSTRAINT: single merged mesh with ONE material.
-Target < 2000 triangles.
-Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
-skeleton, no lighting. Origin at base centre, Y=0.
-
-Generate: ROUNDED WET-SAND BOULDER WITH TIDE POOL on top.
-
-Dimensions: 1.5 m tall, ~1.8 m wide. Smooth rounded dark grey
-boulder (#5a6060) with a shallow flat pool carved into the top
-(~0.6 m diameter, turquoise water #40c0c0) and a small orange
-starfish inside.
-```
-
-### `seashell_scatter.glb` (541 chars)
-
-```
-For "Bichitos Rumble" cartoon arena brawler — chunky chibi style,
+For "Bichitos Rumble" cartoon arena brawler — low-poly chibi style,
 vibrant colours, NO realism.
-CRITICAL GEOMETRY CONSTRAINT: single merged mesh with ONE material.
-All shells merged. Target < 1500 triangles.
+ABSOLUTE GEOMETRY CONSTRAINT: ONE single merged mesh, ONE material.
+No separate grooves, no engraving. Grooves are BAKED INTO THE
+TEXTURE, not geometry. Under 1000 triangles.
 Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
 skeleton, no lighting. Origin at base centre, Y=0.
 
-Generate: CLUSTER OF 5–6 SEASHELLS.
+Generate: BRAIN CORAL DOME — a smooth rounded half-sphere mound
+with the brain-coral swirl pattern PAINTED on the texture only.
 
-Dimensions: 0.3 m cluster footprint. Mix of conch (spiral), scallop
-(fan), and snail shells. Warm whites and soft pinks (#f0e0d0,
-#f09a9a). Scattered tightly around a shared centre.
+Dimensions: 1.2 m diameter, 0.7 m tall. Muted sandstone-pink
+(#c89090), subtle darker swirl lines in the texture.
+```
+
+### `palm_beach_tilted.glb` (810 chars)
+
+```
+For "Bichitos Rumble" cartoon arena brawler — low-poly chibi style,
+vibrant saturated colours, NO realism.
+ABSOLUTE GEOMETRY CONSTRAINT: the ENTIRE tree is ONE single merged
+mesh with ONE material. The canopy is a SINGLE CHUNKY DOMED BLOB,
+NOT individual fronds or leaves. Think Fortnite palm tree, or a
+low-poly Lego palm. Coconuts are BAKED INTO THE TEXTURE, not
+modelled as separate spheres. Under 1500 triangles total.
+Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
+skeleton, no lighting. Origin at base centre, Y=0.
+
+Generate: TILTED COCONUT PALM — a curved trunk leaning ~30°, with
+a single rounded flat-bottomed foliage dome at the top.
+
+Dimensions: 3.2 m along trunk length, trunk warm brown (#8a5a2a),
+canopy fresh green (#3aa24a), ~1.5 m canopy diameter. Coconuts as
+brown dots painted on the canopy underside.
+```
+
+### `shipwreck_hull_piece.glb` (743 chars)
+
+```
+For "Bichitos Rumble" cartoon arena brawler — low-poly chibi style,
+vibrant colours, NO realism.
+ABSOLUTE GEOMETRY CONSTRAINT: ONE single merged mesh, ONE material.
+NO separate planks. The ENTIRE hull is ONE curved wedge shape.
+Plank seams, iron bolts, barnacle patches are ALL in the texture,
+NOT extra geometry. Under 1500 triangles.
+Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
+skeleton, no lighting. Origin at base centre, Y=0.
+
+Generate: SHIP HULL WEDGE — a single slightly-curved boat-hull
+chunk, half-buried look, jagged ragged top edge.
+
+Dimensions: 2.5 × 1.5 × 1.5 m. Weathered dark brown (#4a2d14 →
+#6a3a1a), plank seams painted on texture, 2–3 iron bolt dots
+painted, green-white barnacle patches as texture stains.
+```
+
+### `boulder_wet.glb` (716 chars)
+
+```
+For "Bichitos Rumble" cartoon arena brawler — low-poly chibi style,
+vibrant colours, NO realism.
+ABSOLUTE GEOMETRY CONSTRAINT: ONE single merged mesh, ONE material.
+The tide pool on top is a SHALLOW INDENT in the same mesh — NOT
+a separate water plane. Water colour + starfish are PAINTED on
+the texture inside the indent. Under 1200 triangles.
+Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
+skeleton, no lighting. Origin at base centre, Y=0.
+
+Generate: WET BOULDER WITH TIDE POOL DEPRESSION on top.
+
+Dimensions: 1.3 m tall, ~1.6 m wide. Smooth rounded dark grey
+(#5a6060), top has a flat circular dip ~0.5 m wide with
+turquoise (#40c0c0) + orange starfish dot painted in the texture.
+```
+
+### `seashell_scatter.glb` (707 chars)
+
+```
+For "Bichitos Rumble" cartoon arena brawler — low-poly chibi style,
+vibrant colours, NO realism.
+ABSOLUTE GEOMETRY CONSTRAINT: ONE single merged mesh, ONE material.
+NO separate shells. The whole prop is ONE single cartoon
+conch-shell-shaped blob (just one big shell, not a cluster).
+Shell spiral stripes are PAINTED on the texture, not geometry.
+Under 800 triangles.
+Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
+skeleton, no lighting. Origin at base centre, Y=0.
+
+Generate: SINGLE BIG CARTOON CONCH SHELL lying on its side.
+
+Dimensions: 0.6 m long, 0.35 m tall. Creamy white (#f0e0d0) with
+soft pink spiral band (#f09a9a) and a darker ridge painted on.
+```
+
+### `starfish_decor.glb` (670 chars)
+
+```
+For "Bichitos Rumble" cartoon arena brawler — low-poly chibi style,
+vibrant colours, NO realism.
+ABSOLUTE GEOMETRY CONSTRAINT: ONE single merged mesh, ONE material.
+The starfish is a FLAT EXTRUDED STAR SHAPE — 5 points in one
+continuous mesh, not 5 separate arm meshes. Surface dots are
+PAINTED in the texture. Under 500 triangles.
+Output: GLB, Y-up metres, 1024px PBR baked, metalness ≤ 0.3, no
+skeleton, no lighting. Origin at base centre, Y=0.
+
+Generate: FLAT FIVE-POINT STARFISH lying on the ground.
+
+Dimensions: 0.4 m wide, 0.04 m tall. Coral orange (#f07040), a
+few cream-white dot patterns painted on top.
 ```
 
 ### `starfish_decor.glb` (478 chars)
@@ -627,6 +728,16 @@ coral orange (#f07040), subtle dot texture on top.
 ---
 
 # Pack 5 (extra) — KITSUNE SHRINE (🦊, Kurama)
+
+> **Integrated 2026-04-24 tarde**: 7 props, 12 MB total. Problem
+> children: `bamboo_cluster.glb` (5.6 MB, 127k verts — stalks
+> individuales) y `sakura_tree.glb` (2.7 MB, 65k verts — blossoms
+> individuales). Aceptados. Resto del pack (torii gates ×2, stone
+> lanterns ×2, kitsune_statue) en <1.5 MB cada uno. Si alguien
+> regenera bamboo: pedir "SINGLE solid cluster wedge, stalks baked
+> into the texture, NOT separated 3D tubes". Si regenera sakura:
+> "canopy as ONE fluffy pink dome, blossoms baked into texture,
+> NO individual petals".
 
 ## Files to generate
 

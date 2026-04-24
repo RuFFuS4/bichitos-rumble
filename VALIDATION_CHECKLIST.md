@@ -7,8 +7,168 @@ partidas reales con varios clientes, archivos reales, etc).
 Orden de los bloques = orden recomendado para hacer el batch. Cada
 bloque se puede probar independientemente.
 
-Última actualización: 2026-04-23 (UI pass: character-select auto-fit +
-HUD in-match rework + pause + 6 ULTIs + sprite system).
+Última actualización: **2026-04-24 noche** (handoff — sheet HUD v2
+integrada, selector cerrado, Trunk feel pass en espera).
+
+---
+
+## ⭐ TANDA 2026-04-24 — lo más importante ahora mismo
+
+Consolidación de la sesión larga 2026-04-24. La sheet HUD v2
+(`HUD_mejorado.png`) quedó integrada y el selector + HUD in-match +
+calibrate lab se verificaron por screenshot MCP (viewport 1280×800).
+Esta sección lista los tests que el usuario (y no yo) tiene que
+hacer para firmar que nada se rompió entre cliente real y móvil.
+
+**Requisito**: `preview_resize` a desktop antes de cualquier
+verificación MCP. En navegador real no hace falta.
+
+### T1 · Selector con miniaturas 2D (grid + info pane)
+
+- [ ] Los 9 slots muestran la **cabeza chibi 2D** del pack HUD (no
+      snapshot 3D) con nítidez. Trunk elefante, Kurama zorro, Sergei
+      gorila, Shelly tortuga, Kermit rana, Sihans topo con gafas,
+      Kowalski pingüino, Cheeto tigre, Sebastian cangrejo.
+- [ ] Debajo de cada icon NO se ve texto tipo "5. ELEPHANT". Sólo
+      icon + fondo neutro tenue uniforme.
+- [ ] Slot seleccionado tiene marco dorado + tick sutil.
+- [ ] Stats pane a la derecha: `SPEED / WEIGHT / POWER` con 5 pips
+      cada uno, **alineados** en columnas consistentes entre las 3
+      filas (problema anterior de desalineo cerrado).
+- [ ] Abilities J/K/L con chip dorado del keybind + nombre + icon a
+      la izquierda.
+- [ ] Pedestal 3D a la derecha rotando con el crítter seleccionado.
+
+### T2 · Selector — fallback sin sprite sheet
+
+- [ ] Renombrar temporalmente `public/images/hud-icons.png` a `_bak`
+      y recargar la página (o usar DevTools Network → Block request
+      URL para simular 404).
+- [ ] Los slots deben volver al **thumbnail 3D renderizado** como
+      fallback (esto confirma que la lógica `body.has-hud-sprites`
+      sigue funcionando).
+- [ ] Restaurar el PNG.
+
+### T3 · Selector — interacción
+
+- [ ] `←` / `→` navega entre slots y el preview 3D swap correcto
+      (sin pop de tamaño).
+- [ ] Click / tap en un slot distinto lo selecciona sin confirmar.
+- [ ] Click / tap en el slot ya seleccionado confirma → countdown.
+- [ ] Drag en el canvas del preview rota el crítter suavemente.
+- [ ] Refresh del navegador → arranca en title, no se congela nada.
+
+### T4 · `/calibrate.html` (roster calibration lab)
+
+- [ ] Navegar a `https://localhost:5173/calibrate.html` o en prod
+      `https://www.bichitosrumble.com/calibrate.html`.
+- [ ] Se cargan los 9 críttrs en grid 3×3 con sus labels flotantes.
+- [ ] Click en un crítter lo selecciona; la sidebar derecha activa
+      los sliders `SCALE / PIVOTY / ROTATION Y`.
+- [ ] Mover sliders modifica el crítter en vivo.
+- [ ] Slider `IN-GAME TARGET` + botón "RE-FIT ALL TO TARGET"
+      recomputa el auto-fit de los 9 a la nueva altura.
+- [ ] Botón "EXPORT ROSTER.TS SNIPPET" copia al portapapeles un
+      bloque de comentarios tipo `// Sergei (sergei): scale: …`.
+- [ ] Scroll del ratón hace zoom en la cámara; drag la orbita.
+
+### T5 · HUD in-match — consistencia 4 avatares
+
+- [ ] Empezar una partida offline vs bots con 4 críttrs.
+- [ ] Las 4 esquinas muestran el avatar chibi del crítter (NO
+      thumbnail 3D difuminado). Jugador local con borde dorado.
+- [ ] Cada corner: avatar nítido + nombre en mayúsculas + 3
+      corazones rojos + badge 🤖 si es bot.
+- [ ] Ningún corner pisa el Vibe Jam badge (bottom-right) ni el
+      portal legend (top-left).
+- [ ] Cuando un bot muere, su corner se atenúa (opacity 0.35).
+
+### T6 · Tamaño in-game uniforme
+
+- [ ] En una partida con 4 críttrs distintos (p. ej. Trunk, Cheeto,
+      Kermit, Sergei), los 4 se perciben de **tamaño similar**
+      verticalmente. Trunk no debe parecer gigante; Cheeto no debe
+      parecer diminuto.
+- [ ] Ninguno "flota" sobre el suelo del arena; ninguno se "hunde"
+      (feet at ground level).
+- [ ] Si detectas desbalance claro: anotar crítter y valor
+      aproximado en `ERROR_LOG.md` + abrir `/calibrate.html` para
+      exportar un snippet a aplicar en `roster.ts`.
+
+### T7 · Arena packs cosméticos
+
+- [ ] 5 partidas consecutivas offline. Cada una debería salir con
+      un pack distinto (jungle / frozen_tundra / desert_dunes /
+      coral_beach / kitsune_shrine). No siempre todos en 5 runs
+      (random puede repetir) pero al menos 3 biomas distintos en 5
+      partidas.
+- [ ] Cada pack muestra su skybox (sunset desert, aurora tundra,
+      ocean beach, shrine dusk, jungle) SIN plano marrón uniforme.
+- [ ] El **outerRing** bajo los props (anillo decorativo de radius
+      12–18) se ve con la textura del ground del pack.
+- [ ] Los props decorativos están **encima** del outerRing, no
+      flotando ni hundidos.
+- [ ] Cuando el arena colapsa, los props asociados al batch caen
+      con el fragment correspondiente.
+
+### T8 · Partidas online 4P (consistencia entre clientes)
+
+- [ ] 2 clientes (desktop + móvil o 2 tabs) entran al mismo room.
+- [ ] El pack cosmético es el **MISMO** en ambos clientes (random
+      decidido por el server, sincronizado via `arenaPackId`).
+- [ ] Los props están en la **misma posición** en ambos clientes
+      (layout determinístico seed + packId).
+- [ ] El auto-fit de tamaños es consistente.
+
+### T9 · Cross-device smoke test
+
+- [ ] **Desktop** (Chrome / Firefox): selector + partida OK.
+- [ ] **Móvil touch** en landscape: joystick + 3 botones + tap en
+      el selector funcionan. Los avatares del HUD se ven nítidos.
+- [ ] **Gamepad** conectado al desktop: stick navega menús, A
+      confirma, X/Y son abilities.
+
+### T10 · Trunk feel pass (pendiente — solo si se ejecuta)
+
+Cuando Trunk feel pass se haya aplicado (pendiente del ticket
+`NEXT_STEPS.md §"AHORA MISMO"`), validar:
+
+- [ ] Idle: Trunk en el selector / preview reproduce `Idle` clip
+      sin jerks.
+- [ ] Run: al moverse en partida, la anim `Run` es suave.
+- [ ] **Trunk Ram (J)**: se siente punchy + rápido. El "frame de
+      impacto" del clip coincide con el momento que el dash tiene
+      efecto. Duración del clip alineada con `duration + windUp`.
+- [ ] **Earthquake (K)**: shockwave ring más ancho que el de
+      Sergei (Trunk es el Bruiser grande). Camera shake fuerte.
+- [ ] **Stampede (L ulti)**: entrada con burst visual (similar al
+      `spawnFrenzyBurst` de Sergei). Duración del buff = duración
+      del clip, no se queda desincronizado.
+- [ ] Offline + online: los 3 se ven igual.
+- [ ] Ningún clip queda atascado (T-pose, pose final) al terminar.
+
+### T11 · HUD de abilities (pendiente — solo si se ejecuta)
+
+Cuando el usuario pase `ability-icons-v2.png` y se haya integrado:
+
+- [ ] Los 3 slots J/K/L muestran el icon **grande en círculo**
+      (~64 px) en vez de un icon chico con texto al lado.
+- [ ] El keybind (J/K/L) queda legible como chip pegado al círculo.
+- [ ] El nombre de la ability queda debajo / al lado, legible.
+- [ ] **Cooldown radial**: cuando la ability está en CD, un sweep
+      oscuro circular se pinta ENCIMA del icon y se retrae conforme
+      recupera. Al llegar a 0% el icon queda 100% visible.
+- [ ] Al completar el CD hay un flash dorado corto (si se añadió).
+- [ ] Consistencia entre los 9 críttrs (todos con el mismo
+      tratamiento visual del sweep).
+
+### T12 · Screenshots promocionales (deferred — pre-ship)
+
+Tomar screenshots limpios para el jam listing:
+- [ ] Selector con un crítter llamativo seleccionado.
+- [ ] Partida 4P con arena en colapso parcial.
+- [ ] End screen con victoria.
+- [ ] 1–2 en móvil para demostrar cross-device.
 
 ---
 

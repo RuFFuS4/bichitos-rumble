@@ -33,27 +33,46 @@ let cachedPresets: CritterConfig[] = [];
 // ---- Thumbnail avatar ---------------------------------------------------
 
 /**
- * Build the slot avatar: a coloured placeholder circle that gets swapped
- * for a real 3D thumbnail once the GLB thumbnail module has rendered it.
- * If the critter has no GLB (internal placeholders), the placeholder
- * stays as a solid colour.
+ * Build the slot avatar. Strategy (first that paints wins):
+ *   1. AI-generated 2D chibi head from `hud-icons.png` — same sheet the
+ *      in-match HUD uses. CSS class `.sprite-hud-{id}` resolves to the
+ *      correct cell (see SPRITE ICON SYSTEMS in index.html). The sprite
+ *      overlay always sits on the avatar as a `position:absolute; inset:0`
+ *      child so the CSS gate (`body.has-hud-sprites`) can toggle it on
+ *      without re-rendering the grid.
+ *   2. 3D thumbnail render (legacy path), kept as a fallback for users
+ *      whose sprite sheet 404s. Only loaded when `has-hud-sprites` is
+ *      NOT set, otherwise we'd burn GPU cycles rendering an invisible
+ *      canvas.
+ *   3. Solid `baseColor` dot — last-resort placeholder before any of
+ *      the above can paint.
  */
 function buildSlotAvatar(entry: RosterEntry): HTMLDivElement {
   const avatar = document.createElement('div');
   avatar.className = 'slot-avatar';
-  // Placeholder colour while the thumbnail is rendering. Also the final
-  // appearance if the critter has no GLB (procedural bots don't reach
-  // this code path, so this is mostly dead-safe).
   avatar.style.background = '#' + entry.baseColor.toString(16).padStart(6, '0');
 
-  getCritterThumbnail(entry).then((url) => {
-    if (!url) return;
-    avatar.style.backgroundImage = `url(${url})`;
-    avatar.style.backgroundSize = 'contain';
-    avatar.style.backgroundRepeat = 'no-repeat';
-    avatar.style.backgroundPosition = 'center';
-    avatar.style.backgroundColor = 'transparent';
-  });
+  // 2D sprite layer. Always created (CSS visibility is gated by the
+  // body.has-hud-sprites class — if the sheet never loads this stays
+  // invisible and we fall through to the thumbnail).
+  const spriteOverlay = document.createElement('span');
+  spriteOverlay.className = `sprite-hud sprite-hud-${entry.id} slot-avatar-sprite`;
+  avatar.appendChild(spriteOverlay);
+
+  // Only fetch the 3D thumbnail when sprites aren't live — otherwise
+  // it's wasted work (the sprite tile fully covers the avatar square).
+  if (!document.body.classList.contains('has-hud-sprites')) {
+    getCritterThumbnail(entry).then((url) => {
+      if (!url) return;
+      // Recheck — the sheet may have loaded mid-render; let the sprite win.
+      if (document.body.classList.contains('has-hud-sprites')) return;
+      avatar.style.backgroundImage = `url(${url})`;
+      avatar.style.backgroundSize = 'contain';
+      avatar.style.backgroundRepeat = 'no-repeat';
+      avatar.style.backgroundPosition = 'center';
+      avatar.style.backgroundColor = 'transparent';
+    });
+  }
 
   return avatar;
 }

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="googlebot" content="noindex, nofollow" />
+  <meta name="description" content="Animation validation + override lab for Bichitos Rumble." />
+  <link rel="icon" type="image/png" sizes="any" href="/favicon-br.png" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <title>Bichitos Rumble — Animation Lab</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #12131a; }
+    canvas { display: block; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #e0e4ee;
+    }
+
+    #banner {
+      position: fixed; top: 0; left: 0; right: 0;
+      background: linear-gradient(90deg, #3b0f14, #1a0a10);
+      border-bottom: 1px solid #e74c3c;
+      padding: 8px 14px;
+      font: bold 11px/1 ui-monospace, monospace;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      text-align: center;
+      color: #ffbbb2;
+      z-index: 10;
+    }
+
+    #roster-panel {
+      position: fixed;
+      top: 40px; left: 0; bottom: 0;
+      width: 180px;
+      padding: 12px;
+      background: rgba(14, 16, 26, 0.95);
+      border-right: 1px solid rgba(255,255,255,0.08);
+      overflow-y: auto;
+      z-index: 5;
+    }
+    #roster-panel h2 {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      opacity: 0.55;
+      margin-bottom: 10px;
+    }
+    .roster-card {
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      cursor: pointer;
+      background: rgba(255,255,255,0.03);
+      font-size: 12px;
+      transition: all 0.15s;
+    }
+    .roster-card:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,220,92,0.35);
+    }
+    .roster-card.active {
+      background: rgba(255,220,92,0.15);
+      border-color: rgba(255,220,92,0.85);
+      color: #ffdc5c;
+    }
+    .roster-card .role {
+      display: block;
+      font-size: 10px;
+      opacity: 0.55;
+      margin-top: 2px;
+      font-family: ui-monospace, monospace;
+    }
+
+    #right-panel {
+      position: fixed;
+      top: 40px; right: 0; bottom: 0;
+      width: 480px;
+      padding: 16px;
+      background: rgba(14, 16, 26, 0.95);
+      border-left: 1px solid rgba(255,255,255,0.08);
+      overflow-y: auto;
+      z-index: 5;
+    }
+
+    #right-panel h1 {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+      color: #ffdc5c;
+    }
+    #right-panel .subtitle {
+      font-size: 11px;
+      opacity: 0.55;
+      margin-bottom: 16px;
+      font-family: ui-monospace, monospace;
+    }
+
+    #right-panel h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      opacity: 0.55;
+      margin: 18px 0 8px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding-top: 10px;
+    }
+
+    .playback-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .playback-row .now-playing {
+      flex: 1 1 100%;
+      font: 11px/1.4 ui-monospace, monospace;
+      opacity: 0.65;
+      padding: 4px 0;
+    }
+    .playback-row .now-playing b {
+      color: #ffdc5c;
+    }
+
+    .slider-row {
+      display: grid;
+      grid-template-columns: 80px 1fr 50px;
+      gap: 8px;
+      align-items: center;
+      font-size: 11px;
+      margin-bottom: 8px;
+    }
+    .slider-row label {
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      opacity: 0.7;
+    }
+    .slider-row input[type=range] { accent-color: #ffdc5c; }
+    .slider-row span.val {
+      text-align: right;
+      font-family: ui-monospace, monospace;
+      color: #ffdc5c;
+    }
+
+    button {
+      padding: 7px 10px;
+      background: linear-gradient(180deg, #2a2f3d, #1a1d29);
+      color: #ffdc5c;
+      border: 1px solid rgba(255,220,92,0.35);
+      border-radius: 4px;
+      font: bold 10px/1 ui-monospace, monospace;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    button:hover {
+      background: linear-gradient(180deg, #333849, #222634);
+      border-color: rgba(255,220,92,0.6);
+    }
+    button:active { transform: translateY(1px); }
+    button.secondary {
+      color: #9aa3b5;
+      border-color: rgba(255,255,255,0.15);
+    }
+    button:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    #clip-list {
+      max-height: 200px;
+      overflow-y: auto;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 4px;
+    }
+    .clip-row {
+      display: grid;
+      grid-template-columns: 1fr 60px 80px 60px;
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font: 11px/1.4 ui-monospace, monospace;
+      align-items: center;
+      gap: 6px;
+    }
+    .clip-row:last-child { border-bottom: none; }
+    .clip-row .name { color: #cdd4e2; }
+    .clip-row .dur { text-align: right; opacity: 0.55; }
+    .clip-row .state {
+      text-align: center;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      opacity: 0.8;
+    }
+    .clip-row .state.resolved { color: #9ff29f; }
+    .clip-row .state.none { color: #606870; }
+    .clip-row button {
+      padding: 3px 6px;
+      font-size: 9px;
+    }
+    .clip-row.playing { background: rgba(255,220,92,0.08); }
+
+    #mapping-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    #mapping-table th {
+      text-align: left;
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      opacity: 0.5;
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    #mapping-table td {
+      padding: 5px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-family: ui-monospace, monospace;
+      vertical-align: middle;
+    }
+    #mapping-table td.state { color: #ffdc5c; }
+    #mapping-table td.source {
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.65;
+    }
+    #mapping-table td.source.override { color: #ffdc5c; opacity: 0.9; }
+    #mapping-table td.source.exact { color: #9ff29f; }
+    #mapping-table td.source.prefix { color: #9acaff; }
+    #mapping-table td.source.contains { color: #d8a8f0; }
+    #mapping-table td.source.missing { color: #606870; }
+    #mapping-table select {
+      background: #1a1d29;
+      color: #e0e4ee;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 3px;
+      font: 11px ui-monospace, monospace;
+      padding: 3px 4px;
+      width: 100%;
+    }
+    #mapping-table select.override { border-color: rgba(255,220,92,0.6); color: #ffdc5c; }
+
+    .export-box {
+      margin-top: 10px;
+      padding: 10px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 4px;
+      font: 10px/1.5 ui-monospace, monospace;
+      color: #b0dfb0;
+      max-height: 180px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+
+    #viewport-hint {
+      position: fixed;
+      bottom: 14px; left: 196px;
+      font: 11px/1.4 ui-monospace, monospace;
+      color: rgba(255,255,255,0.4);
+      z-index: 2;
+    }
+
+    .help {
+      font-size: 10.5px;
+      line-height: 1.5;
+      opacity: 0.7;
+      margin-top: 6px;
+    }
+    .help code {
+      background: rgba(255,255,255,0.08);
+      padding: 1px 4px;
+      border-radius: 2px;
+      font-family: ui-monospace, monospace;
+    }
+  </style>
+</head>
+<body>
+  <div id="banner">INTERNAL · Animation Validation + Override Lab · not for players</div>
+
+  <div id="roster-panel">
+    <h2>Roster</h2>
+    <div id="roster-cards"></div>
+    <div class="help" style="margin-top: 14px">
+      Click a critter to load its GLB + skeletal animator.
+    </div>
+  </div>
+
+  <div id="right-panel">
+    <h1 id="selected-name">—</h1>
+    <div class="subtitle" id="selected-sub">select a critter</div>
+
+    <h2>Playback</h2>
+    <div class="playback-row">
+      <button id="btn-play">▶ Play</button>
+      <button id="btn-pause">⏸ Pause</button>
+      <button id="btn-restart">⟲ Restart</button>
+      <button id="btn-stop" class="secondary">⏹ Stop</button>
+      <label style="margin-left:6px;font-size:11px;opacity:0.75;">
+        <input type="checkbox" id="chk-loop" checked /> Loop
+      </label>
+      <div class="now-playing">now playing: <b id="now-playing">none</b></div>
+    </div>
+    <div class="slider-row">
+      <label>Speed</label>
+      <input id="ctl-speed" type="range" min="0.1" max="3.0" step="0.05" value="1.0" />
+      <span class="val" id="val-speed">1.00×</span>
+    </div>
+
+    <h2>Clips in GLB</h2>
+    <div id="clip-list"></div>
+
+    <h2>Resolved mapping</h2>
+    <table id="mapping-table">
+      <thead>
+        <tr><th>State</th><th>Clip</th><th>Source</th></tr>
+      </thead>
+      <tbody id="mapping-rows"></tbody>
+    </table>
+    <div class="help">
+      Dropdowns let you override the auto-resolved clip for each logical
+      state. Selecting the default entry ("(auto: …)") clears the
+      override. Overrides take effect after clicking <b>Apply &amp; reload</b>
+      — the critter is rebuilt so the new mapping is in effect from clip
+      resolution onwards.
+    </div>
+    <div class="playback-row" style="margin-top: 12px">
+      <button id="btn-apply">Apply &amp; reload critter</button>
+      <button id="btn-reset" class="secondary">Clear all overrides</button>
+    </div>
+
+    <h2>Export overrides</h2>
+    <button id="btn-export">Copy snippet to clipboard</button>
+    <pre class="export-box" id="export-out">(pick a critter + set overrides, then Export)</pre>
+    <div class="help">
+      Paste the snippet into <code>src/animation-overrides.ts</code> inside
+      the <code>ANIMATION_OVERRIDES</code> record. On next page reload the
+      game engine picks the overrides up as Tier 0 of the resolver.
+    </div>
+  </div>
+
+  <div id="viewport-hint">scroll = zoom · drag = orbit</div>
+
+  <script type="module" src="/src/animlab/main.ts"></script>
+</body>
+</html>
