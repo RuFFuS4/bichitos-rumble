@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 ## Project
 Bichitos Rumble is a lightweight web arena brawler for the 2026 Vibe Coding Game Jam.
