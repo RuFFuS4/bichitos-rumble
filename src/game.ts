@@ -256,6 +256,35 @@ export class Game {
     } else {
       this.enterTitle();
     }
+
+    // Warm the model cache in browser idle time so character-select
+    // swaps are instant and `enterCountdown`'s preload is a cache hit.
+    // Only the 9 playable critters (internal Rojo/Azul/Verde/Morado
+    // don't ship GLBs). Scheduled AFTER enterTitle() so the title
+    // paints first — the user never sees this blocking.
+    this.scheduleIdlePreload();
+  }
+
+  /**
+   * Kick off a background fetch of every playable critter's GLB during
+   * browser idle time. Uses `requestIdleCallback` where available,
+   * falls back to `setTimeout`. Failures are swallowed by
+   * `preloadModels` (Promise.allSettled). Cache hits on subsequent
+   * loads eliminate the character-select → countdown fetch spike.
+   */
+  private scheduleIdlePreload(): void {
+    const paths = getPlayableNames()
+      .map((n) => getRosterEntry(n)?.glbPath)
+      .filter((p): p is string => typeof p === 'string' && p.length > 0);
+    if (paths.length === 0) return;
+    const ric = (window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+    }).requestIdleCallback;
+    const fire = () => {
+      void preloadModels(paths);
+    };
+    if (ric) ric(fire, { timeout: 5000 });
+    else setTimeout(fire, 1200);
   }
 
   // -------------------------------------------------------------------------

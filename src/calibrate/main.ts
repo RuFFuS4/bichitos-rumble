@@ -92,9 +92,32 @@ const CELL = 3.0; // world units between cell centres
 
 const playableRoster = getDisplayRoster().filter((e) => e.status === 'playable');
 
-// Build each slot synchronously — the Critter constructor adds its mesh
-// to the passed scene, then we re-parent it to a per-slot holder so we
-// can manipulate the transform without racing the GLB loader.
+// Calibrate used to create all 9 Critters synchronously at boot — which
+// kicked off 9 parallel GLB fetches (~56 MB total) and froze the page
+// until the biggest one landed. Two optimisations:
+//
+//   1. Create holder + label synchronously for every slot so the grid
+//      layout / camera framing don't reflow as critters land.
+//   2. Create the actual Critter (triggers the async GLB load) for the
+//      first slot immediately; schedule the rest with a small stagger
+//      so the browser has time to paint + respond to input between
+//      loads. Uses requestIdleCallback when available to piggyback on
+//      browser idle time; falls back to setTimeout with a growing delay
+//      so the first 2-3 land fast and the rest stream in behind.
+//
+// Side effect the user should know: the slots populate over a few
+// seconds instead of all at once. Labels already read so it's obvious
+// what's loading. No change to the sliders / export flow.
+
+interface PendingSlot {
+  entry: RosterEntry;
+  preset: ReturnType<typeof CRITTER_PRESETS.find>;
+  holder: THREE.Group;
+  label: HTMLDivElement;
+  worldPos: THREE.Vector3;
+}
+const pendingSlots: PendingSlot[] = [];
+
 for (let i = 0; i < playableRoster.length; i++) {
   const entry = playableRoster[i]!;
   const preset = CRITTER_PRESETS.find((c) => c.name === entry.displayName);
@@ -110,10 +133,6 @@ for (let i = 0; i < playableRoster.length; i++) {
   holder.position.set(x, 0, z);
   scene.add(holder);
 
-  const critter = new Critter(preset, scene);
-  scene.remove(critter.mesh);
-  holder.add(critter.mesh);
-
   const label = document.createElement('div');
   label.className = 'critter-label';
   label.textContent = entry.displayName;
@@ -127,20 +146,59 @@ for (let i = 0; i < playableRoster.length; i++) {
   label.style.zIndex = '3';
   document.body.appendChild(label);
 
-  slots.push({
-    entry,
-    holder,
-    critter,
+  pendingSlots.push({
+    entry, preset, holder, label,
     worldPos: new THREE.Vector3(x, 0, z),
-    label,
+  });
+}
+
+// Kick off critter creation staggered. First one immediate; others with
+// a growing delay so the page is interactive and the network has
+// headroom. With 9 critters at 180 ms stagger the last lands at ~1.6 s,
+// but the page is fully responsive from frame one.
+function spawnCritterForSlot(p: PendingSlot): void {
+  if (!p.preset) return;
+  const critter = new Critter(p.preset, scene);
+  scene.remove(critter.mesh);
+  p.holder.add(critter.mesh);
+  slots.push({
+    entry: p.entry,
+    holder: p.holder,
+    critter,
+    worldPos: p.worldPos,
+    label: p.label,
     bindPoseHeight: null,
     rosterTransform: {
-      scale: entry.scale,
-      pivotY: entry.pivotY,
-      rotationY: entry.rotation,
+      scale: p.entry.scale,
+      pivotY: p.entry.pivotY,
+      rotationY: p.entry.rotation,
     },
   });
 }
+
+// First slot: synchronous (no wait — user sees something immediately).
+if (pendingSlots.length > 0) {
+  spawnCritterForSlot(pendingSlots[0]!);
+}
+// Remaining slots: staggered schedule. Prefer requestIdleCallback to
+// ride browser idle; fall back to a simple setTimeout ladder.
+const STAGGER_MS = 180;
+const ric = (window as unknown as {
+  requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+}).requestIdleCallback;
+for (let i = 1; i < pendingSlots.length; i++) {
+  const p = pendingSlots[i]!;
+  const scheduleAt = i * STAGGER_MS;
+  if (ric) {
+    setTimeout(() => ric(() => spawnCritterForSlot(p), { timeout: 2000 }), scheduleAt);
+  } else {
+    setTimeout(() => spawnCritterForSlot(p), scheduleAt);
+  }
+}
+
+// (The original synchronous slots.push() block used to live here. Moved
+// into `spawnCritterForSlot` above so it runs lazily with the staggered
+// schedule. Removed verbatim to avoid confusing future readers.)
 
 // ---------------------------------------------------------------------------
 // Selection + sidebar wiring
