@@ -128,24 +128,58 @@ verificación MCP. En navegador real no hace falta.
 - [ ] **Gamepad** conectado al desktop: stick navega menús, A
       confirma, X/Y son abilities.
 
-### T10 · Trunk feel pass (pendiente — solo si se ejecuta)
+### T10 · Trunk — firma por playtest (2026-04-25)
 
-Cuando Trunk feel pass se haya aplicado (pendiente del ticket
-`NEXT_STEPS.md §"AHORA MISMO"`), validar:
+Mini playtest dedicado de 3-5 min antes de cerrar Trunk y pasar a
+Kurama. Valores aplicados: `CHARACTER_DESIGN.md §"Trunk — feel pass"`.
 
-- [ ] Idle: Trunk en el selector / preview reproduce `Idle` clip
-      sin jerks.
-- [ ] Run: al moverse en partida, la anim `Run` es suave.
-- [ ] **Trunk Ram (J)**: se siente punchy + rápido. El "frame de
-      impacto" del clip coincide con el momento que el dash tiene
-      efecto. Duración del clip alineada con `duration + windUp`.
-- [ ] **Earthquake (K)**: shockwave ring más ancho que el de
-      Sergei (Trunk es el Bruiser grande). Camera shake fuerte.
-- [ ] **Stampede (L ulti)**: entrada con burst visual (similar al
-      `spawnFrenzyBurst` de Sergei). Duración del buff = duración
-      del clip, no se queda desincronizado.
-- [ ] Offline + online: los 3 se ven igual.
-- [ ] Ningún clip queda atascado (T-pose, pose final) al terminar.
+**Plan de prueba (ejecución ~3 min)**
+
+1. `npm run dev` → portada → **vs Bots** → seleccionar **Trunk** → SPACE.
+2. **Aislar J**: activa sólo Trunk Ram (`J`) 3 veces seguidas. Ignora
+   bots, enfócate en la sensación.
+3. **Aislar K**: activa sólo Earthquake (`K`) 3 veces. Desde parado
+   (cerca de bots) y en movimiento (esquivando).
+4. **Probar L solo**: activa Stampede (`L`) y deja correr los 3 s
+   completos del buff sin usar J/K. Observa específicamente los
+   primeros ~2 s del buff.
+5. **Combo K→L**: activa K, espera 1 s, activa L. Verifica si se
+   confunden visualmente.
+6. **Contraste Sergei**: volver al title (`T`), seleccionar Sergei,
+   partida nueva, repetir J/K. Comparar sensación mentalmente.
+
+**Sign-off (4 puntos del usuario — tachar mentalmente)**
+
+- [ ] **J pesado pero no ridículo** — Trunk se abalanza con peso;
+      mass ×3.5 se siente al chocar (el bot sale claramente más lejos
+      que con Sergei). NO se ve cómico ni dibujo animado acelerado.
+- [ ] **K se lee como Earthquake/stomp** — anim de pisotón clara, NO
+      la anim de agarre. Shockwave ring notablemente más ancho que el
+      de Sergei (4.5 vs 3.5 u).
+- [ ] **L NO se confunde con K** — el stomp breve al inicio de L puede
+      leerse como "planta patas antes de embestir". Si lo lees como
+      "otra vez K", hay problema.
+- [ ] **Trunk ≠ Sergei** — Trunk se siente más pesado en todos los
+      ejes (dash, knockback, buff). Sergei es ágil balanced; Trunk es
+      bulldozer. Identidad reconocible.
+
+Los 4 ticks = **Trunk DONE**. Actualizar
+`CHARACTER_DESIGN.md §"Trunk — feel pass"` retirando el "pendiente de
+firma" + `NEXT_STEPS.md` moviendo Trunk a "zonas cerradas".
+
+**3 riesgos conocidos — síntoma · causa · ajuste**
+
+Si alguno de los siguientes síntomas aparece, aplicar el ajuste y
+repetir el mini playtest. No son cambios grandes — son 1-2 números.
+
+| Riesgo | Síntoma observable | Causa probable | Ajuste concreto (1 línea) |
+|---|---|---|---|
+| **L stomp previo al buff** | "K y L parecen la misma animación al inicio" / "el pisotón al activar L es confuso, interrumpe el flow del buff" | Clip `Ability3GroundPound` se dispara 1.96 s al activar frenzy (auto-resuelto por prefix porque es el único clip con nombre `Ability3*`). | **Opción A (barata)**: añadir `ability_3: 'Idle'` dentro de `trunk: {}` en `src/animation-overrides.ts`. El idle clip se reproduce clamped y el buff emissive rojo toma over inmediatamente. **Opción B (más correcta)**: modificar `src/critter.ts tickSkeletal` para skip `skeletal.play(slotState)` cuando `state.def.type === 'frenzy'` sin clip específico. Fuera de scope estrecho; evaluar post-jam. |
+| **Ram demasiado cartoon** | "J se ve acelerado como dibujo animado" / "el movimiento de colmillos es cómico" / "el clip se nota atropellado" | `clipPlaybackRate: 5.0×` sobre clip de 4.58 s es agresivo. Visualmente bien a 0.92 s efectivo, pero el eye puede leerlo como speedup artificial. | En `src/abilities.ts CRITTER_ABILITIES.Trunk[0]`: bajar `clipPlaybackRate` de `5.0` a **`3.5`** (clip efectivo 1.31 s). Si se siente que la ability acaba antes del clip, subir también `duration: 0.35 → 0.45` para alinear. |
+| **Earthquake windUp muy largo** | "K se siente lento en arrancar" / "muero antes de que la onda salga" / "en arena pequeña late-game no llego a usarla" | `windUp: 0.60` s es telegraph deliberado (bruiser anticipation). Puede ser excesivo cuando el espacio se reduce o contra assassins. | En `src/abilities.ts CRITTER_ABILITIES.Trunk[1]`: bajar `windUp` de `0.60` a **`0.45`**. Si siguen quejándose, también `cooldown: 7.5 → 6.5`. |
+
+**Si aparece un síntoma que NO está arriba**: documentar en
+`ERROR_LOG.md` y NO tocar nada. Abrir ticket separado.
 
 ### T11 · HUD de abilities (pendiente — solo si se ejecuta)
 
