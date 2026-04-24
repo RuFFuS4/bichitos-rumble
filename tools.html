@@ -99,6 +99,42 @@
       60%  { transform: translate(-50%, -50%) scale(0.95); opacity: 1; }
       100% { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
     }
+    /* Per-player life corners — mirror of index.html (simplified
+       rules, same semantics). Without these the 4 #player-life-*
+       divs added to the body would collide in the top-left flow.
+       Kept as lightweight as possible; the lab doesn't need the
+       full production styling — just readable positioning. */
+    .player-life-corner {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 12px 12px;
+      background: rgba(10, 10, 24, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(4px);
+      pointer-events: none;
+      z-index: 22;
+    }
+    .player-life-corner.corner-tl { top: 118px; left: 18px; }
+    .player-life-corner.corner-tr { top: 72px;  right: 18px; }
+    .player-life-corner.corner-bl { bottom: 24px; left: 18px; }
+    .player-life-corner.corner-br { bottom: 62px; right: 18px; }
+    .player-life-corner.is-local {
+      border-color: rgba(255, 220, 92, 0.7);
+      box-shadow: 0 0 18px rgba(255, 220, 92, 0.35), 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
+    .player-life-corner.is-dead { opacity: 0.35; }
+    body:not(.match-active) .player-life-corner { display: none; }
+    /* The corner contents (.lives-dot avatar, .lives-name, .lives-hearts)
+       ride the default browser layout in tools.html — enough to be
+       legible during lab playtests. Full sprite styling lives in
+       index.html's SPRITE ICON SYSTEMS block; we don't duplicate it
+       here since the lab rarely needs the sprite polish. */
+
     /* Ability cooldown bars */
     #ability-bar-container {
       position: absolute;
@@ -830,6 +866,17 @@
         <button id="btn-music" class="settings-btn" title="Disable music" aria-pressed="false">🎶</button>
       </div>
     </div>
+    <!-- Four per-player life corners. Mirror `index.html`: initAllLivesHUD
+         writes into these divs. Positioning / styling is defined in
+         index.html's CSS (.player-life-corner, .corner-*). Tools.html used
+         to ship just #hud-lives (single container) which crashed
+         debugStartOfflineMatch after the HUD rework — kept for backward
+         compatibility in case something still reads it, but the corners
+         are what the runtime expects. -->
+    <div id="player-life-0" class="player-life-corner corner-tl"></div>
+    <div id="player-life-1" class="player-life-corner corner-tr"></div>
+    <div id="player-life-2" class="player-life-corner corner-bl"></div>
+    <div id="player-life-3" class="player-life-corner corner-br"></div>
     <div id="overlay" style="display:none;"></div>
     <div id="ability-bar-container"></div>
     <div id="portal-legend">

@@ -14,27 +14,32 @@ import { getCritterThumbnail } from '../slot-thumbnail';
 
 // ---- Top bar -------------------------------------------------------------
 
-const aliveEl = document.getElementById('hud-alive')!;
-const timerEl = document.getElementById('hud-timer')!;
+const aliveEl = document.getElementById('hud-alive');
+const timerEl = document.getElementById('hud-timer');
 // Four per-player life corners (top-left, top-right, bottom-left, bottom-right).
-// Populated by initAllLivesHUD per critter index.
-const lifeCornerEls: HTMLElement[] = [
-  document.getElementById('player-life-0')!,
-  document.getElementById('player-life-1')!,
-  document.getElementById('player-life-2')!,
-  document.getElementById('player-life-3')!,
+// Populated by initAllLivesHUD per critter index. Each one is nullable
+// because `/tools.html` and other secondary entries ship a reduced HUD
+// without the corner divs (legacy — the main index.html has them all).
+// Any loop/writer below must null-check before reading `.innerHTML` etc.
+const lifeCornerEls: Array<HTMLElement | null> = [
+  document.getElementById('player-life-0'),
+  document.getElementById('player-life-1'),
+  document.getElementById('player-life-2'),
+  document.getElementById('player-life-3'),
 ];
-const overlayEl = document.getElementById('overlay')!;
-const abilityContainer = document.getElementById('ability-bar-container')!;
-const portalLegendReturnEl = document.getElementById('portal-legend-return')!;
-const portalToggleBtn = document.getElementById('btn-portal-toggle')!;
+const overlayEl = document.getElementById('overlay');
+const abilityContainer = document.getElementById('ability-bar-container');
+const portalLegendReturnEl = document.getElementById('portal-legend-return');
+const portalToggleBtn = document.getElementById('btn-portal-toggle');
 const spectatorPrompt = document.getElementById('spectator-prompt');
 
 export function updateHUD(aliveCount: number, timeLeft: number): void {
-  aliveEl.textContent = `Alive: ${aliveCount}`;
-  const mins = Math.floor(timeLeft / 60);
-  const secs = Math.floor(timeLeft % 60);
-  timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+  if (aliveEl) aliveEl.textContent = `Alive: ${aliveCount}`;
+  if (timerEl) {
+    const mins = Math.floor(timeLeft / 60);
+    const secs = Math.floor(timeLeft % 60);
+    timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
 }
 
 // ---- Lives HUD ----------------------------------------------------------
@@ -51,8 +56,11 @@ let liveEls: { root: HTMLElement; hearts: HTMLElement }[] = [];
  */
 export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = -1): void {
   // Clear any stale content in all four corners — a restart can land
-  // in the same corner elements.
+  // in the same corner elements. Corners may be null in secondary
+  // entries (e.g. `/tools.html` without the 4-corner HUD); skip
+  // silently if so.
   for (const corner of lifeCornerEls) {
+    if (!corner) continue;
     corner.innerHTML = '';
     corner.classList.remove('is-local', 'is-dead');
     corner.style.display = 'none';
@@ -62,6 +70,7 @@ export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = 
   for (let i = 0; i < critters.length && i < lifeCornerEls.length; i++) {
     const c = critters[i];
     const corner = lifeCornerEls[i];
+    if (!corner) continue; // missing corner element → skip this slot
     corner.style.display = '';
     if (i === localPlayerIndex) corner.classList.add('is-local');
 
@@ -156,6 +165,7 @@ const DIGIT_VARIANT_CLASSES = [
 ];
 
 export function showOverlay(main: string, sub?: string): void {
+  if (!overlayEl) return;
   const html = main + (sub ? `<div class="sub">${sub}</div>` : '');
   // Only pop when the visible text actually changes (e.g. countdown tick),
   // so setting the same value back-to-back doesn't re-trigger the animation.
@@ -192,6 +202,7 @@ function digitVariant(text: string): string | null {
 }
 
 export function hideOverlay(): void {
+  if (!overlayEl) return;
   overlayEl.style.display = 'none';
   overlayEl.classList.remove(...DIGIT_VARIANT_CLASSES, 'pop');
 }
@@ -216,6 +227,7 @@ export function initAbilityHUD(
   critterSlug: string | null = null,
   unavailable?: Set<number>,
 ): void {
+  if (!abilityContainer) return;
   abilityContainer.innerHTML = '';
   slotEls = [];
 
@@ -293,6 +305,7 @@ export function updateAbilityHUD(states: AbilityState[]): void {
 
 /** Configure the portal HUD legend: visibility and which rows to show. */
 export function setPortalLegend(showReturn: boolean): void {
+  if (!portalLegendReturnEl) return;
   portalLegendReturnEl.style.display = showReturn ? '' : 'none';
 }
 
@@ -301,11 +314,13 @@ let portalToggleHandler: (() => void) | null = null;
 export function setPortalToggleHandler(handler: () => void): void {
   portalToggleHandler = handler;
 }
-portalToggleBtn.addEventListener('click', (e) => {
-  e.preventDefault();
-  portalToggleBtn.blur();
-  portalToggleHandler?.();
-});
+if (portalToggleBtn) {
+  portalToggleBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    portalToggleBtn.blur();
+    portalToggleHandler?.();
+  });
+}
 
 // ---- Spectator prompt (online — "you're out, press T") ------------------
 
