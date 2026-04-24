@@ -29,39 +29,128 @@ visualmente. Resolver ampliado a **4 tiers** (override > exact > prefix
   resolviendo bien. Si algún clip clave sale "missing" o "contains"
   (último recurso), resolver con override antes de pasar al feel.
 
-### 1. [CERRADO 2026-04-25] Feel pass Trunk (Bruiser)
+### 1. [PENDIENTE DE FIRMA POR PLAYTEST] Feel pass Trunk
 
-Hecho en esta sesión tras smoke test del anim-lab. Detalles completos en
-`CHARACTER_DESIGN.md §"Trunk — feel pass DONE (2026-04-25)"`. Resumen:
+Código aplicado 2026-04-25 pero **no cerrado ciegamente** — requiere
+playtest visual del usuario antes de firmar como DONE.
 
-- **Anim-lab detectó mismatch** entre kit placeholder y clip names del
-  GLB: slot K (Earthquake ground_pound) caía sobre `Ability2TrunkGrip`
-  (un agarre) y slot L (Stampede frenzy) sobre `Ability3GroundPound`
-  (un pisotón). Fix vía override sparse en
-  `src/animation-overrides.ts`: `trunk.ability_2 → Ability3GroundPound`.
-  Primer uso productivo del sistema de overrides.
-- Timings ajustados: Ram más pesado (impulse 14→16, mass 3.0→3.5,
-  clipPlaybackRate 5.0× para clip de 4.58s), Earthquake más ancho
-  (radius 4.2→4.5, force 34→40), Stampede más largo + buff de mass
-  mayor (1.35→1.80, duration 4.0→3.0).
-- VFX: ninguno nuevo — reusa `spawnShockwaveRing` con radio aumentado
-  para leer "bigger than Sergei" sin código extra.
-- Override retirable: cuando llegue el tipo de ability `grab` real
-  para Trunk y el kit se alinee con el diseño final.
+Detalles completos en `CHARACTER_DESIGN.md §"Trunk — feel pass"`.
+Resumen ejecutivo:
 
-### 2. Feel pass Cheeto (Assassin)
+- `trunk.ability_2 → Ability3GroundPound` (override productivo).
+- Ram clipPlaybackRate 5.0× / Earthquake 2.8× / Stampede procedural.
+- Radius 4.5 y mass ×3.5 marcan identidad bruiser.
 
-Siguiente en el orden. Receta replicable del patrón Sergei / Trunk:
+**Qué debería salir bien en el playtest**:
+- J Ram se siente punchy (clip 4.58s → efectivo 0.92s + impulso ×16,
+  mass ×3.5 = embestida pesada).
+- K Earthquake reproduce el stomp correcto (override) con radio ancho
+  4.5u y knockback 40 (shockwave ring más grande que Sergei por el
+  parametro).
+- L Stampede aguanta 3.0s con speed ×1.25 y mass ×1.80 — bulldozer
+  doble, menos espeed que Sergei pero más peso (coherente con
+  Bruiser).
 
-1. Smoke test en `/anim-lab.html` — inspeccionar clips + resolver + si
-   hay mismatch añadir override correspondiente.
-2. Medir clips con `scripts/inspect-clips.mjs public/models/critters/cheeto.glb`.
-3. Alinear `duration` / `windUp` / `cooldown` + `clipPlaybackRate` si
-   hay gap grande. Identidad: Assassin = rápido, ligero, alpha-strike.
-4. VFX mínimos dentro de lo existente (shockwave más fino + tiro).
+**Puntos concretos a vigilar durante playtest**:
+1. **Stomp previo al buff en L (Stampede)** — el clip
+   `Ability3GroundPound` se reproduce 1.96s al inicio del frenzy. Lee
+   como "planta patas antes de embestir" (aceptable) pero también
+   puede leerse como "K y L hacen lo mismo visualmente al principio"
+   (problemático). Si el usuario ve que confunde K con L: Plan B.
+2. **Ram a 5× playback** — puede verse demasiado acelerado / cartoon.
+   Si lo nota raro: bajar a 3.5–4.0×.
+3. **Earthquake windUp 0.60s** — largo. Vale para telegraph bruiser
+   pero puede frustrar en arena pequeña cuando todos colapsan.
+
+**Plan B si ab_3 stomp molesta**:
+- **Opción A (bajo coste)**: override `trunk.ability_3 → 'Idle'` — al
+  activar L reproduce 1 frame de idle clampado + el buff emissive
+  toma over inmediatamente. Cero animación "stomp" previa.
+- **Opción B (modificación más quirúrgica)**: tocar
+  `src/critter.ts tickSkeletal` para NO disparar clip cuando
+  `state.def.type === 'frenzy' && !clip specific`. Un if. Afecta
+  también a Kermit ab_3 (Hypnosapo, también procedural) y a cualquier
+  futuro frenzy sin clip. Más correcto a nivel arquitectura pero no
+  es scope estrecho.
+
+### 2. Feel pass siguiente (ver §"Siguiente crítter recomendado" abajo)
+
+---
+
+## 🔬 BARRIDO DE MAPPING DEL ROSTER (2026-04-25)
+
+Snapshot de `/anim-lab.html` contra los 9 playable critters. Se
+capturó clips disponibles + resolver `source` tier por cada ab_1/ab_2/
+ab_3 + idle/run/walk. Tabla abajo.
+
+Leyenda veredicto:
+- ✅ **correcto**: clip encaja semánticamente con el placeholder slot.
+- 🟢 **aceptable**: clip es distinto del diseño del placeholder pero no
+  crea incoherencia visual grave.
+- 🟡 **dudoso**: clip no encaja del todo pero no hay mejor alternativa
+  en el GLB.
+- ❌ **incorrecto**: clip contradice el slot y hay alternativa mejor
+  dentro del GLB — candidato a override.
+- 📐 **by-design**: clip `missing` intencional; procedural
+  (`PROCEDURAL_PARTS.md`).
+
+| Crítter | #clips | ab_1 clip resolver | ab_2 clip resolver | ab_3 clip resolver | Veredicto / acción |
+|---|---:|---|---|---|---|
+| **Sergei** (Balanced) | 10 | Ability1GorillaRush · prefix ✅ | Ability2Shockwave · prefix ✅ | Ability3Frenzy · prefix ✅ | **✅ sano completo**. Único crítter 100% alineado diseño↔clips. Feel pass DONE. |
+| **Trunk** (Bruiser) | 8 | Ability1TrunkRam · prefix ✅ | Ability3GroundPound · **override** ✅ | Ability3GroundPound · prefix 🟡 | **✅ arreglado vía override** (ab_2). ab_3 observado (stomp previo al buff). Feel pass en firma. |
+| **Kurama** (Trickster) | 9 | Ability1FoxDash · prefix ✅ | Ability2MirrorTrick · prefix 🟢 | Ability3Copycat · prefix 🟢 | **🟢 sin override**. Clip MirrorTrick lee aceptable como "burst con efecto" para GP placeholder. Copycat puede leerse como "celebración dramática" al entrar en Frenzy. Sin mismatch grave. |
+| **Shelly** (Tank) | 6 | — · missing 📐 | — · missing 📐 | Ability3MegaShell · prefix ✅ | **✅ sano**. ab_1 Shell Charge + ab_2 Shell Shield procedurales por diseño (mesh spin + hide parts). ab_3 Mega Shell encaja perfectamente con frenzy placeholder. |
+| **Kermit** (Controller) | 7 | Ability1LeapForward · prefix ✅ | Ability2PoisonCloud · prefix 🟡 | — · missing 📐 | **🟡 sin override**. Poison Cloud clip no encaja con GP stomp pero no hay otro clip de impacto; dejarlo. ab_3 Hypnosapo procedural por diseño (emissive flicker). |
+| **Sihans** (Trapper) | 9 | Ability1BurrowRush · prefix ✅ | Ability2Tunnel · prefix 🟢 | Ability3DiggyDiggyHole · prefix 🟢 | **🟢 sin override**. Todos los clips son "el topo cavando" en distintos modos → coherente con placeholder GP y Frenzy. |
+| **Kowalski** (Mage) | 8 | Ability1IceSlide · prefix ✅ | Ability2Snowball · prefix 🟡 | Ability3IceAge · prefix 🟢 | **🟡 sin override**. Snowball clip muestra al pingüino lanzando proyectil — no es un stomp, pero tampoco contradice. Ice Age como entrada dramática al frenzy. |
+| **Cheeto** (Assassin) | 8 | Ability1Pounce · prefix ✅ | Ability2ShadowStep · prefix ❌⚠️ | Ability3TigerRoar · prefix ✅ | **⚠️ mismatch parcial sin override viable**. ShadowStep es teleport visual — contradice "Paw Stomp" GP placeholder claramente. Pero NO hay otro clip de stomp en Cheeto. Único remedio sería cuando el kit definitivo de Cheeto llegue. Tiger Roar rugido encaja bien con Frenzy buff entry. |
+| **Sebastian** (Glass Cannon) | 7 | — · missing 📐 | Ability2ClawSweep · prefix 🟡 | — · missing 📐 | **🟡 sin override**. ab_1 Claw Rush + ab_3 Crab Slash procedurales por diseño (dash lateral + mesh scale). ab_2 ClawSweep es arco horizontal — no encaja perfecto con GP radial pero no hay otro clip. |
+
+### Candidatos a override tras barrido — ninguno
+
+Cero overrides adicionales añadidos. Razones:
+
+- **Mismatches que duelen pero no tienen remedio dentro del GLB**
+  (Cheeto ShadowStep, Sebastian ClawSweep, Kowalski Snowball): los
+  clips existentes son los únicos de su slot. Forzar un override
+  a otro clip (p. ej. `Idle` como no-op) sería peor visualmente que
+  aceptar el mismatch. Se resolverán cuando el kit definitivo de
+  cada crítter reemplace el placeholder (post-jam).
+- **Mismatches leves que el reviewer acepta** (Kurama MirrorTrick,
+  Sihans Tunnel, Kermit PoisonCloud, Kowalski IceAge): no contradicen,
+  solo divergen en intent. Esperar al kit definitivo.
+
+La **única entrada del `ANIMATION_OVERRIDES` record** sigue siendo
+Trunk (primer caso donde un clip del propio GLB encaja mejor en
+OTRO slot del kit placeholder).
+
+### Siguiente crítter recomendado: **Kurama (Trickster)**
+
+**Por qué Kurama y no Cheeto** (que sería el orden del roadmap):
+
+| Criterio | Kurama | Cheeto | Ganador |
+|---|---|---|---|
+| Overrides necesarios | 0 | 1 potencial pero sin clip alternativo viable | **Kurama** |
+| Clips/diseño alineados | 3/3 nombres coherentes con el placeholder | 2/3 (ab_2 ShadowStep ≠ Paw Stomp) | **Kurama** |
+| Riesgo de abrir melón | Muy bajo — solo tuning numérico | Alto — el mismatch ShadowStep no se puede resolver sin reescribir el kit o clip | **Kurama** |
+| Impacto visual (identidad distintiva) | Alta — Trickster con 9 colas, dash ágil | Alta — Assassin felino | Empate |
+| Diferenciación vs Sergei/Trunk | Trickster vs Balanced/Bruiser — tercera arquetipo | Assassin — también distinto | Empate |
+
+Elijo **Kurama** por **menor riesgo, cero overrides, tuning limpio**.
+Cheeto iría después — cuando tengamos más confianza en el patrón +
+posiblemente el kit definitivo del Assassin habiendo resuelto el
+problema de ShadowStep ≠ Paw Stomp (o decidido que ShadowStep se
+queda como K real).
+
+Receta para Kurama feel pass:
+1. Smoke test en `/anim-lab.html` ya hecho (✅ sano, sin overrides).
+2. Medir clips: `node scripts/inspect-clips.mjs public/models/critters/kurama.glb`.
+3. Alinear `duration` / `windUp` / `cooldown` + `clipPlaybackRate`
+   siguiendo patrón Sergei/Trunk. Identidad Trickster: speed alta
+   (ya 15.6), mass baja (0.8), dashes cortos pero numerosos.
+4. VFX: reusar shockwave ring con colores/tamaño coherentes con
+   identidad kitsune (sin nuevo código).
 5. Documentar en `CHARACTER_DESIGN.md §"Feel pass log"`.
-
-**Scope estrecho**: sólo Cheeto. No reabrir lo cerrado.
 
 ### 2. Polish del info pane (si queda tiempo tras Trunk)
 
