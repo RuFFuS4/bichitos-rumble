@@ -9,6 +9,31 @@
 
 ---
 
+## 2026-04-24 — Server ability kit sync for Sergei + Trunk
+
+Codex pass para desbloquear playtest online/offline coherente.
+
+Durante el barrido inicial detecté que `src/abilities.ts` ya tenía los
+valores del feel pass de Sergei y Trunk, pero
+`server/src/sim/abilities.ts` seguía con tuning anterior. Eso hacía que
+los cooldowns, windUp, duración, impulso, radio/fuerza y multipliers de
+frenzy no coincidieran entre partida local y simulación online.
+
+Fix aplicado:
+- **Sergei** server kit sincronizado con el cliente: Gorilla Rush
+  `4.0s / 0.28s / windUp 0.04 / impulse 20`, Shockwave
+  `radius 3.5 / force 34 / cooldown 6.0`, Frenzy
+  `duration 2.5 / cooldown 15.0 / speed ×1.45 / mass ×1.5`.
+- **Trunk** server kit sincronizado con el cliente: Trunk Ram
+  `cooldown 4.5 / duration 0.35 / windUp 0.08 / impulse 16 / mass ×3.5`,
+  Earthquake `radius 4.5 / force 40 / windUp 0.60 / cooldown 7.5`,
+  Stampede `duration 3.0 / speed ×1.25 / mass ×1.80`.
+
+No se toca gameplay nuevo ni UI. Es una corrección de consistencia para
+que el siguiente playtest no dé resultados distintos según modo.
+
+---
+
 ## 2026-04-25 — Smoke test anim-lab + Feel pass Trunk (first override use)
 
 Primera sesión productiva usando `/anim-lab.html` para validar el estado

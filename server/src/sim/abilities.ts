@@ -48,18 +48,20 @@ export interface AbilityDef {
 // factory overrides so offline and online feel identical per critter.
 const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Sergei: [
-    { type: 'charge_rush',  cooldown: 4.5, duration: 0.32, windUp: 0.06,
-      impulse: 18, speedMultiplier: 2.4, massMultiplier: 2.2 },
-    { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.35,
-      radius: 3.2, force: 30 },
-    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+    { type: 'charge_rush',  cooldown: 4.0, duration: 0.28, windUp: 0.04,
+      impulse: 20, speedMultiplier: 2.6, massMultiplier: 2.2 },
+    { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.30,
+      radius: 3.5, force: 34 },
+    { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.35,
+      frenzySpeedMult: 1.45, frenzyMassMult: 1.5 },
   ],
   Trunk: [
-    { type: 'charge_rush',  cooldown: 5.0, duration: 0.40, windUp: 0.06,
-      impulse: 14, speedMultiplier: 2.0, massMultiplier: 3.0 },
-    { type: 'ground_pound', cooldown: 8.5, duration: 0.05, windUp: 0.5,
-      radius: 4.2, force: 34 },
-    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+    { type: 'charge_rush',  cooldown: 4.5, duration: 0.35, windUp: 0.08,
+      impulse: 16, speedMultiplier: 2.1, massMultiplier: 3.5 },
+    { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.60,
+      radius: 4.5, force: 40 },
+    { type: 'frenzy',       cooldown: 18.0, duration: 3.0, windUp: 0.45,
+      frenzySpeedMult: 1.25, frenzyMassMult: 1.80 },
   ],
 
   // --- Bloque C: 7 remaining playables ---
