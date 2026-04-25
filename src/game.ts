@@ -50,6 +50,7 @@ import { play as playSoundEffect } from './audio';
 import { spawnShockwaveRing } from './abilities';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
+import { getPreviewPackId } from './arena-decor-layouts';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended' | 'online';
 
@@ -335,6 +336,22 @@ export class Game {
     clearMenuActions();
   }
 
+  /**
+   * Public read-only pause probe. Used by the outer game loop in main.ts
+   * to skip per-frame ambient visual tickers (dust puffs, camera shake)
+   * while the offline pause menu is up — otherwise an in-flight puff
+   * animation would keep expanding behind the menu, and a lingering
+   * camera shake would tremble the frozen frame.
+   *
+   * Only the offline pause branch sets `this.paused = true`; online
+   * matches stay on false because the server is authoritative and no
+   * pause concept exists. So callers can treat this as "freeze offline
+   * ambient visuals" safely.
+   */
+  public isPaused(): boolean {
+    return this.paused;
+  }
+
   // -------------------------------------------------------------------------
   // Phase transitions
   // -------------------------------------------------------------------------
@@ -436,7 +453,14 @@ export class Game {
     // props are swapped per match to keep the look varied across
     // consecutive runs without any menu knob.
     this.arena.reset();
-    this.arena.buildFromSeed((Math.random() * 0xFFFFFFFF) | 0, getRandomPackId());
+    // Pack selection in offline matches: random by default, but the
+    // /decor-editor.html "Preview in game" button can pin a specific
+    // pack via the ?arenaPack=<id>&decorPreview=1 URL params, which
+    // arena-decor-layouts captured at module load. Honour that pin so
+    // the editor preview lands on the user's expected pack instead of
+    // a random roll.
+    const offlinePack = getPreviewPackId() ?? getRandomPackId();
+    this.arena.buildFromSeed((Math.random() * 0xFFFFFFFF) | 0, offlinePack);
     const roster = buildMatchRoster(
       playerConfig,
       MAX_CRITTERS_PER_MATCH - 1,
@@ -1634,10 +1658,15 @@ export class Game {
 
   /** Lab-only: rebuild the arena with a specific seed, keeping the current
    *  match (and the same pack cosmetics the match is already using). */
-  public debugForceArenaSeed(seed: number): void {
-    const currentPack = this.arena.getCurrentPackId() ?? undefined;
+  public debugForceArenaSeed(seed: number, packId?: ArenaPackId): void {
+    // Pack precedence: explicit caller arg > current arena pack > undefined
+    // (procedural sky, no decor). The optional argument lets the lab /
+    // browser console rebuild with a specific pack without going through
+    // the full restartMatch flow — useful for manual QA of pack visuals
+    // and in-arena decor layouts.
+    const desiredPack = packId ?? this.arena.getCurrentPackId() ?? undefined;
     this.arena.reset();
-    this.arena.buildFromSeed(seed, currentPack);
+    this.arena.buildFromSeed(seed, desiredPack);
   }
 
   /** Lab-only: read-only snapshot of arena state for display panels. */

@@ -25,6 +25,7 @@
 
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
+import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
 
 // --- Public API ----------------------------------------------------------
 
@@ -75,83 +76,71 @@ interface PackDef {
   propScale?: Partial<Record<string, number>>;
 }
 
+// 2026-04-25: outer-ring props are intentionally EMPTY for every pack.
+// The previous outer-ring system placed large props at radius 14.5–18.5
+// (later tightened to 12.5–14) to "frame" the arena, but this read as
+// "the playable terrain extends past where you can actually walk." All
+// decoration now lives INSIDE the playable arena via DECOR_LAYOUTS in
+// arena-decor-layouts.ts. The PackDef shape is kept (and `props` is
+// retained) for two reasons:
+//   1. Backward compat with code paths that still reference PACKS[id].props
+//      (placement loops, tests). With an empty array those loops no-op.
+//   2. We can still ship pack-only fogColor + propScale here without any
+//      structural refactor.
+// Side effect (intentional): tree_jungle_broadleaf.glb (54 MB) no longer
+// loads — it was only referenced from this exterior ring.
 const PACKS: Record<ArenaPackId, PackDef> = {
   jungle: {
-    props: [
-      'tree_palm_tall.glb',
-      'tree_palm_mid.glb',
-      'tree_jungle_broadleaf.glb',
-      'totem_tiki.glb',
-      'stone_ruin_block.glb',
-    ],
+    props: [],
     fogColor: 0xa6c68a, // warm green horizon
-    propScale: {
-      // broadleaf is the beast of the pack (54 MB, 1M+ tris). Shrink so
-      // it doesn't loom unnaturally over the arena.
-      'tree_jungle_broadleaf.glb': 0.7,
-    },
   },
   frozen_tundra: {
-    props: [
-      'iceberg_tall.glb',
-      'iceberg_mid.glb',
-      'iceberg_low.glb',
-      'ice_shard.glb',
-      'pine_snow.glb',
-      'signpost_wood.glb',
-    ],
+    props: [],
     fogColor: 0xbcc8e0, // pale lavender ice horizon
   },
   desert_dunes: {
-    props: [
-      'sandstone_spire_tall.glb',
-      'sandstone_spire_short.glb',
-      'cactus_saguaro.glb',
-      'palm_desert.glb',
-      'minecart_rusted.glb',
-      'bones_skull_scatter.glb',
-      'cloth_flag_tattered.glb',
-    ],
+    props: [],
     fogColor: 0xeab88a, // dusty golden sunset horizon
   },
   coral_beach: {
-    props: [
-      'coral_stack_red.glb',
-      'coral_stack_pink.glb',
-      'coral_brain.glb',
-      'palm_beach_tilted.glb',
-      'shipwreck_hull_piece.glb',
-      'boulder_wet.glb',
-      'seashell_scatter.glb',
-      'starfish_decor.glb',
-    ],
+    props: [],
     fogColor: 0x9fd9e0, // cream-turquoise sea horizon
   },
   kitsune_shrine: {
-    props: [
-      'torii_gate_large.glb',
-      'torii_gate_small.glb',
-      'stone_lantern.glb',
-      'stone_lantern_small.glb',
-      'bamboo_cluster.glb',
-      'sakura_tree.glb',
-      'kitsune_statue_white.glb',
-    ],
+    props: [],
     fogColor: 0xd4a8c0, // dusty pink mist
   },
 };
 
 // --- Placement -----------------------------------------------------------
 //
-// Props live in a ring OUTSIDE the playable arena (FRAG.maxRadius = 12 u)
-// so nothing collides with gameplay. Given the seed, we distribute props
-// equidistantly around the ring and jitter each slot a tiny bit so the
-// result doesn't look like a clock face.
+// Props live in a ring JUST OUTSIDE the playable arena (FRAG.maxRadius
+// = 12 u) so nothing collides with gameplay. An earlier pass placed
+// them at 14.5–18.5 u which combined with the 12→18 skirt read as
+// "extended terrain, most of which isn't walkable." We now hug the
+// playable edge tightly so the props feel like they frame the arena,
+// not push it out.
+//
+// Distribution: N angular slots equally spaced around the ring, each
+// slot perturbed by a bigger wobble than the old clock-face pass, and
+// a post-layout rejection-sampling pass nudges any pair of props that
+// ended up uncomfortably close.
 
 /** Inner ring radius (just outside the arena edge). */
-const PROP_RING_INNER = 14.5;
-/** Outer ring radius (visible but not clipping the skybox). */
-const PROP_RING_OUTER = 18.5;
+const PROP_RING_INNER = 12.5;
+/** Outer ring radius (keeps props inside the decorative skirt, which
+ *  now caps at FRAG.maxRadius + 2 = 14). */
+const PROP_RING_OUTER = 14.0;
+/** Minimum world-space distance between any two prop centres. Enforced
+ *  by a rejection pass after initial layout. Kept well below one arena
+ *  band (3 u) so we still cover the ring densely enough when a pack
+ *  has many props. */
+const PROP_MIN_DIST = 2.4;
+/** How aggressively each slot jitters around its clock position,
+ *  as a fraction of the full slot width (2π / N). 0 = perfect clock,
+ *  1 = can swap neighbour positions. 0.85 breaks the pattern without
+ *  risking overlaps that the rejection pass can't recover from. */
+const PROP_WOBBLE_FRACTION = 0.85;
 
 export interface PropPlacement {
   /** Relative filename in public/models/arenas/<packId>/. */
@@ -195,10 +184,13 @@ export function layoutPackProps(packId: ArenaPackId, seed: number): PropPlacemen
   const placements: PropPlacement[] = [];
   for (let i = 0; i < N; i++) {
     const glbName = pack.props[i]!;
-    // Evenly spaced around the ring, with a small random wobble so the
-    // composition feels natural rather than clock-like.
-    const baseAngle = (i / N) * Math.PI * 2;
-    const wobble = (rng() - 0.5) * (Math.PI / N) * 0.6;
+    // Evenly spaced around the ring, with a random wobble up to
+    // ±PROP_WOBBLE_FRACTION × half-slot so the composition feels natural
+    // rather than clock-like. At 0.85 the wobble is almost as wide as
+    // the slot itself but the rejection pass below prevents overlaps.
+    const slotWidth = (Math.PI * 2) / N;
+    const baseAngle = i * slotWidth;
+    const wobble = (rng() - 0.5) * slotWidth * PROP_WOBBLE_FRACTION;
     const angle = baseAngle + wobble;
     const radius = PROP_RING_INNER + rng() * (PROP_RING_OUTER - PROP_RING_INNER);
     const rotY = rng() * Math.PI * 2;
@@ -215,6 +207,38 @@ export function layoutPackProps(packId: ArenaPackId, seed: number): PropPlacemen
       rotY,
       scale: baseScale * jitter,
     });
+  }
+  // Rejection pass — if any two props landed within PROP_MIN_DIST of
+  // each other, shift the later one along its own angular slot (small
+  // step, bounded retries) to find a clean spot. Deterministic: the
+  // same seed still produces the same final layout because we keep
+  // using the already-seeded rng. Runs in O(N²) which is fine for
+  // N ≤ 10 (every pack has 5–8 props today).
+  const SHIFT_STEP = 0.08;     // ~4.6° per attempt
+  const MAX_SHIFTS = 8;        // ±32° total swing worst case
+  for (let i = 1; i < placements.length; i++) {
+    for (let attempt = 0; attempt < MAX_SHIFTS; attempt++) {
+      let tooClose = false;
+      const p = placements[i]!;
+      const px = Math.cos(p.angle) * p.radius;
+      const pz = Math.sin(p.angle) * p.radius;
+      for (let j = 0; j < i; j++) {
+        const q = placements[j]!;
+        const qx = Math.cos(q.angle) * q.radius;
+        const qz = Math.sin(q.angle) * q.radius;
+        const dx = px - qx;
+        const dz = pz - qz;
+        if (dx * dx + dz * dz < PROP_MIN_DIST * PROP_MIN_DIST) {
+          tooClose = true;
+          break;
+        }
+      }
+      if (!tooClose) break;
+      // Nudge in a deterministic direction (sign chosen from rng once
+      // per retry chain so the whole sequence stays reproducible).
+      const dir = rng() < 0.5 ? -1 : 1;
+      p.angle += dir * SHIFT_STEP;
+    }
   }
   return placements;
 }
@@ -336,4 +360,79 @@ export async function loadPackPropMeshes(
 /** Fog colour for the pack, used to tint scene.fog when the pack loads. */
 export function getPackFogColor(packId: ArenaPackId): number {
   return PACKS[packId]?.fogColor ?? 0xb6d1e8;
+}
+
+// ---------------------------------------------------------------------------
+// In-arena decorations — small props authored in arena-decor-layouts.ts
+// and parented to the fragment that contains them so they fall together.
+// ---------------------------------------------------------------------------
+
+/**
+ * Result of loading one in-arena decor placement: the loaded mesh +
+ * its source placement (the caller needs the placement to compute the
+ * host fragment via pointInFragment).
+ */
+export interface InArenaDecor {
+  mesh: THREE.Group;
+  placement: DecorPlacement;
+}
+
+/**
+ * Resolve every placement in the layout to a positioned + scaled mesh.
+ * Failures (missing GLB, unknown type) silently drop that entry — a
+ * match never breaks because of cosmetics.
+ *
+ * The mesh is pre-positioned in WORLD space (caller will reparent it to
+ * the host fragment via THREE attach to preserve the world transform,
+ * so the decor follows the fragment when it falls).
+ */
+export async function loadInArenaDecorations(
+  placements: DecorPlacement[],
+): Promise<InArenaDecor[]> {
+  if (placements.length === 0) return [];
+  const out: InArenaDecor[] = [];
+  for (const p of placements) {
+    const type = DECOR_TYPES[p.type];
+    if (!type) {
+      console.debug('[arena-decorations] unknown decor type, skipping:', p.type);
+      continue;
+    }
+    try {
+      const mesh = await loadModel(type.glbPath);
+      // Two-pass scaling: first measure bbox at unit scale, then auto-
+      // fit to the type's displayHeight (world units), then apply the
+      // per-instance placement.scale as a relative multiplier. This is
+      // the same pattern Critter.attachGlbMesh uses for IN_GAME_TARGET_
+      // HEIGHT — keeps the catalogue legible (per-prop heights instead
+      // of opaque scale multipliers) and tolerates GLB exporters that
+      // normalise to different sizes.
+      mesh.scale.setScalar(1);
+      mesh.rotation.y = p.rotY;
+      mesh.position.set(
+        Math.cos(p.angle) * p.r,
+        0,
+        Math.sin(p.angle) * p.r,
+      );
+      mesh.updateMatrixWorld(true);
+      const bboxRaw = new THREE.Box3().setFromObject(mesh);
+      const measuredH = Number.isFinite(bboxRaw.max.y - bboxRaw.min.y)
+        ? Math.max(0.001, bboxRaw.max.y - bboxRaw.min.y)
+        : 1;
+      const fitFactor = type.displayHeight / measuredH;
+      mesh.scale.setScalar(fitFactor * p.scale);
+      // Re-measure post-scale to ground the prop. Auto-grounding on
+      // bbox.min.y matters because some IA-generated GLBs centre on
+      // bbox instead of base; without this lift the prop sinks halfway
+      // into the floor.
+      mesh.updateMatrixWorld(true);
+      const bbox = new THREE.Box3().setFromObject(mesh);
+      if (Number.isFinite(bbox.min.y)) {
+        mesh.position.y = -bbox.min.y;
+      }
+      out.push({ mesh, placement: p });
+    } catch (err) {
+      console.debug('[arena-decorations] in-arena decor failed to load:', p.type, err);
+    }
+  }
+  return out;
 }

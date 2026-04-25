@@ -9,6 +9,331 @@
 
 ---
 
+## 2026-04-25 — Decor scale fix (scaleBase → displayHeight) + tool-storage shared
+
+Two follow-ups on top of the Preview-in-game iteration. Both surfaced
+during visual validation: props rendered ridiculously small next to
+critters, and the editor / game / future tools were all carrying
+duplicated localStorage helpers.
+
+### Scale diagnosis (root cause)
+
+Native bbox audit of all 33 decor GLBs:
+- 30 of 33 export at ~1.9 u on the longest axis (Tripo / Meshy AI's
+  default normalisation). 4 jungle assets ship as KHR_mesh_quantized
+  (raw int16 = 16383 in the buffer), but Three.js dequantises them
+  back to ~1.9 u at load — same target.
+- The previous catalog used `scaleBase: 0.30..0.55` directly as a
+  multiplier of the native size. With ~1.9 u native, that produced
+  final heights of 0.57–1.05 u. Critters auto-fit to 1.7 u (see
+  Critter.attachGlbMesh / IN_GAME_TARGET_HEIGHT).
+- Result: every prop landed at 33–60% of critter height. Palms and
+  trees came out shorter than the critters that should walk past them.
+
+### Solution: `displayHeight` (target world units) + bbox auto-fit
+
+Mirrors the pattern Critter.attachGlbMesh already uses (auto-fit to
+IN_GAME_TARGET_HEIGHT). Same approach for decor:
+
+- `DECOR_TYPES[<key>].scaleBase` → renamed to `displayHeight`. New
+  value is the TARGET silhouette height in arena units.
+- `loadInArenaDecorations` (arena-decorations.ts) and
+  `rebuildPreviewGroup` (decoreditor/main.ts) both now run a
+  two-pass scale: measure bbox at unit-scale → factor = displayHeight
+  / measuredHeight → final scale = factor × placement.scale.
+- `placement.scale` keeps its semantic but now means "relative
+  multiplier on top of the type's authored displayHeight" (1.0 = the
+  intended size, 1.5 = 50% taller). Slider range tightened to
+  0.5..1.6 to reflect the new meaning.
+
+Authored displayHeights, by silhouette tier:
+  scatter / floor      0.6     skull pile, shipwreck piece
+  knee-height          0.9–1.0 rocks, low icebergs, boulders
+  chest-height         1.4–1.5 ice shards, bones, corals
+  critter-height       1.6–2.0 totems, lanterns, signposts, cacti
+  tall                 2.4–2.8 small torii, mid icebergs, bamboo, palms (mid)
+  tower-over           3.0–3.5 large torii, sakura, palms (tall)
+
+Editor UX:
+- Selected-prop header now reads e.g. `Palm (tall) ≈ 3.50 u (2.1×
+  critter)` so the operator sees both the absolute height and the
+  ratio against a critter (1.7 u reference). Updates live as the
+  scale slider moves.
+- Hint paragraph under the slider explains that `1.00 = author intent`
+  and that the badge above is the resulting world-space height.
+- GLB preview toggle now matches what the game renders (same auto-fit
+  formula); calibrating in the editor and seeing the result in-game
+  no longer drift.
+
+Smoke validated in dev: all 11 jungle props reparent correctly, scale
+factors land at 1.844 / 0.733 / 1.627 / 1.159 / ... — visually palms
+tower over critters, rocks read knee-height, totems sit at critter
+height. Cartoon proportions match the design intent.
+
+### tool-storage shared helper
+
+New module: `src/tools/tool-storage.ts`. Five helpers + a key builder:
+
+  toolStorageKey(toolName, entityId)
+  loadFromStorage<T>(key, validator?)
+  saveToStorage(key, value)
+  clearStorage(key)
+  hasStorageKey(key)
+  storageDivergesFromCode(key, codeRef)
+
+SSR-safe (guards on `typeof window`), silently degrades on quota /
+disabled / Safari-private-mode failures, validators are optional.
+Code-divergence comparison is JSON-stringify based — cheap and the
+editor payloads are <1 KB.
+
+Migrated /decor-editor.html to use it. /calibrate.html and /anim-lab
+.html were intentionally LEFT UNTOUCHED — both work today and the
+goal is "establish the contract", not "force-migrate everything in
+one PR". When either of those gets its next iteration, the lift is
+trivial (drop the inline helpers, import the module). Doc note left
+in tool-storage.ts.
+
+### Files touched
+
+- src/arena-decor-layouts.ts   (DECOR_TYPES scaleBase → displayHeight)
+- src/arena-decorations.ts     (loadInArenaDecorations bbox auto-fit)
+- src/decoreditor/main.ts      (preview auto-fit + UX hint + tool-storage)
+- decor-editor.html            (slider hint + range tightened)
+- src/tools/tool-storage.ts    (NEW shared module)
+- BUILD_LOG.md / DEV_TOOLS.md / MEMORY.md / NEXT_STEPS.md
+
+Preflight green: tsc client + server clean, vite build 6.34s, manual
+smoke validated drag → preview → match render with correct cartoon
+proportions.
+
+Limitations / deferred:
+- /calibrate and /anim-lab still embed their own inline localStorage
+  helpers. Comment in tool-storage.ts marks them as candidates for the
+  next iteration.
+- "Export patch + apply script" workflow (auto-write to source files
+  from a tool's localStorage state) is the natural next step but
+  deliberately not in this commit. Plan: emit a typed JSON patch +
+  ship `scripts/apply-tool-patch.mjs` that consumes it. Tracked in
+  NEXT_STEPS.
+
+---
+
+## 2026-04-25 — Decor editor: Preview in game + DECOR_TYPES audit (+12 props)
+
+Two small but consequential additions on top of the v2 UX iteration.
+
+### Preview in game
+
+New "Preview in game" button in /decor-editor.html. Saves the current
+working copy to `localStorage[decor-editor:<packId>]` (the same key
+the editor already uses) and opens the game in a new tab with
+`/?arenaPack=<id>&decorPreview=1`. The game side honours that combo
+and substitutes the localStorage layout for `DECOR_LAYOUTS[packId]`
+on the next offline match — only for that pack, only when the flag
+is on. Production builds without those query params are unchanged.
+
+Wiring (3 small touches):
+- `src/arena-decor-layouts.ts`
+  - Captures `previewPackId` once at module load by parsing
+    `window.location.search`. Validates against the pack id whitelist
+    so a typo or stale URL just falls through to normal play.
+  - `getDecorLayout(packId)` checks: when `packId === previewPackId`
+    AND the localStorage entry is structurally valid, returns it.
+    Otherwise returns `DECOR_LAYOUTS[packId]` exactly like before.
+  - New export `getPreviewPackId()` lets callers know which pack is
+    pinned (or `null` if normal mode).
+- `src/game.ts`
+  - The offline match path that used to call `getRandomPackId()`
+    unconditionally now does `getPreviewPackId() ?? getRandomPackId()`.
+    Online path untouched — server is authoritative there.
+- `src/main.ts`
+  - When `getPreviewPackId()` returns non-null at boot, paints a small
+    fixed banner top-centre: "🎨 Preview: <pack> ← back to editor".
+    The link href is `/decor-editor.html`. Banner is HTML+inline CSS
+    only; no new module, no new asset.
+
+`SoT remains the export`. localStorage is the working buffer; only
+copy-paste into `arena-decor-layouts.ts` actually ships. The preview
+exists so the user can iterate visually without that round-trip.
+
+End-to-end smoke confirmed: drag a prop → click "Preview in game" →
+new tab opens at `/?arenaPack=jungle&decorPreview=1` → banner
+visible → start match → arena.appliedPackId = "jungle" + 12 props
+reparented (the 11 authored + 1 dragged), not the 11 from code.
+
+### DECOR_TYPES audit + expansion (+12 props)
+
+Cross-checked `public/models/arenas/<pack>/*.glb` (33 GLBs total)
+against the catalog. Found 12 valid props that the prior catalog
+missed. Conservative: the 54 MB `tree_jungle_broadleaf.glb` stays
+deliberately excluded; the 5.8 MB `palm_beach_tilted.glb` is included
+but called out as the heaviest entry.
+
+Props added (with file size + new key):
+
+  frozen_tundra (+2):
+    icebergmid_tundra      iceberg_mid.glb         248 KB
+    icebergtall_tundra     iceberg_tall.glb        319 KB
+
+  desert_dunes (+3):
+    spiretall_desert       sandstone_spire_tall.glb  361 KB
+    minecart_desert        minecart_rusted.glb       830 KB
+    palm_desert            palm_desert.glb           829 KB
+
+  coral_beach (+4):
+    coralpink_beach        coral_stack_pink.glb       743 KB
+    coralred_beach         coral_stack_red.glb        877 KB
+    shipwreck_beach        shipwreck_hull_piece.glb   629 KB
+    palm_beach             palm_beach_tilted.glb    5 858 KB ⚠ heaviest
+
+  kitsune_shrine (+3):
+    lanternlarge_shrine    stone_lantern.glb          719 KB
+    sakura_shrine          sakura_tree.glb          2 720 KB
+    toriilarge_shrine      torii_gate_large.glb       257 KB
+
+Excluded (and why):
+
+  jungle:
+    tree_jungle_broadleaf.glb  53 982 KB — single asset is ~half the
+                                pre-launch payload. Not catalog-worthy
+                                until a re-export trims it, even at
+                                small scale; the loader still pulls
+                                the full 54 MB to decode.
+
+Result: catalog grew from 20 → 32 entries. Editor type dropdown now
+shows 4 / 6 / 7 / 8 / 7 props per pack (was 4 / 4 / 4 / 4 / 4).
+
+Files touched:
+- src/arena-decor-layouts.ts  (DECOR_TYPES expanded + preview support)
+- src/game.ts                 (+1 import, +1 helper call)
+- src/main.ts                 (+1 import, +banner block)
+- src/decoreditor/main.ts     (+button ref + handler)
+- decor-editor.html           (+Preview section + button)
+- BUILD_LOG.md / DEV_TOOLS.md / MEMORY.md (docs)
+
+Preflight all green: tsc (client + server), verify-glbs 8/8, vite
+build 4.42s, manual smoke validated drag → preview → match render
++ 12 reparented props from localStorage.
+
+Limitations / deferred:
+- localStorage layer not yet unified across editors (calibrate /
+  anim-lab still each define their own helpers). Comment in code
+  notes the lift, but scope is intentionally tight here.
+- "Preview in game" opens a new tab; if the user has popups blocked
+  the editor falls back to in-tab navigation. Either way the back-
+  to-editor link covers the round trip.
+- No "preview is stale" warning when the user re-edits the source TS
+  while the preview tab is open. Not worth the complexity now —
+  manual reload of the preview tab is enough.
+
+---
+
+## 2026-04-25 — In-arena decor system + decor-editor + skybox fix
+
+Three interlocking moves to stabilise the arena visual layer.
+
+### 1. Skybox no longer clipped
+
+`skyDome` had radius 200 and `camera.far` was also 200 — the dome's
+far hemisphere reached ~370 u from the camera's offset position
+(0, 23, 25), so a chunk of any pack-textured equirect got clipped by
+the projection. Reduced `SKYDOME_RADIUS` to 150 (+ shader normalisation
+constant updated to match) so the dome stays safely inside the
+frustum. Validated in all 5 packs — full sky horizons render, no
+black gaps.
+
+### 2. In-arena decor system
+
+Replaces the legacy outer-ring of large props with **small props
+INSIDE the playable arena**, parented to the fragment that contains
+each prop so the prop falls together when that sector collapses. No
+new falling-state machine — Three.js parent transforms do it for free
+once the mesh is reparented via `Object3D.attach`.
+
+- New SoT: `src/arena-decor-layouts.ts`
+  - `DECOR_TYPES` catalog: 20 entries (4 per pack), all reusing GLBs
+    already shipped under `public/models/arenas/<pack>/` — no new
+    assets. Tree_jungle_broadleaf.glb (54 MB) intentionally OMITTED
+    from the catalog and the legacy outer ring is now empty for every
+    pack, so that GLB no longer loads at runtime.
+  - `DECOR_LAYOUTS[packId]`: array literal per pack. `jungle` ships
+    an authored 11-prop seed; the other 4 packs start empty.
+- Runtime path:
+  - `loadInArenaDecorations(placements)` in `arena-decorations.ts` —
+    async loader, auto-grounds via bbox.min.y (Meshy/Tripo origin
+    inconsistencies fixed at load).
+  - `Arena.findFragmentAt(x, z)` — uses `pointInFragment` to resolve
+    a prop to its host fragment. -1 = skip (out of arena).
+  - `Arena.applyPack()` reparents each prop via `host.attach(mesh)`
+    after the pack's outer-ring + skybox + ground texture finish.
+- Skirt outer radius reduced 14 → 12.5 (FRAG.maxRadius + 0.5). The
+  skirt is now just a 0.5 u anti-gap with the skybox lower hemisphere
+  — no longer reads as extended-but-non-walkable terrain.
+
+Validated: 11 jungle props reparent correctly (`decorReparented: 11`
+in scene-graph crawl). Reparenting math verified by moving a host
+fragment to (0, -5, 0) with rotation X = π/6 — children inherit the
+transform. The collapse cascade therefore drags decor along for free.
+
+### 3. /decor-editor.html visual placement tool — v2 (UX iteration)
+
+MVP shipped 2026-04-25 morning (top-down ortho, click-to-place,
+sliders, export). Same-day iteration adds production-ready UX:
+
+- **Drag & drop** — pointerdown / pointermove / pointerup with offset
+  capture (no snap to cursor) and clamp to the playable ring so a
+  drag never produces an invalid export.
+- **Undo / Redo** — Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z. Snapshot history
+  (deep clone) with 50-entry cap. Pushes on place / delete / drag-end
+  / slider-release / type-change. Slider `input` doesn't push so a
+  slow drag-as-you-tune doesn't spam the stack — only `change` (on
+  release) does.
+- **localStorage per-pack** — `decor-editor:<packId>` JSON. Auto-save
+  on every push / undo / redo. Auto-load on boot + on pack switch.
+  "Reset local" button (with confirm dialog) wipes the working copy
+  and reloads from `arena-decor-layouts.ts`. Indicator shows whether
+  the current state matches code, diverges, or has no local entry.
+- **Optional GLB preview toggle** — checkbox in the View section.
+  Off = fast coloured discs (default); On = real arena GLBs lazy-
+  loaded via the existing `model-loader` cache. Drag falls back to
+  placeholders for snappy movement, then rebuilds the preview on
+  pointerup. Async rebuild guarded by a token so rapid edits don't
+  stack stale GLBs.
+
+Export still emits a paste-ready TS snippet — that's the canonical
+SoT in `arena-decor-layouts.ts`. localStorage is the working copy
+between exports.
+
+Helper fix during validation: `debugForceArenaSeed(seed)` now also
+accepts an optional `packId` arg for manual QA from the console
+(`window.__game.debugForceArenaSeed(42, 'jungle')`). Was rebuilding
+with the previous pack only; now any pack from the lab.
+
+Files touched (totals across the morning + UX iteration commits):
+- new: `src/arena-decor-layouts.ts` (SoT data layer)
+- new: `decor-editor.html` (page entry)
+- new: `src/decoreditor/main.ts` (editor logic)
+- modified: `src/arena.ts`, `src/arena-decorations.ts`, `src/main.ts`,
+  `src/game.ts`, `src/tools/sidebar.ts`, `vite.config.ts`,
+  `DEV_TOOLS.md`, `MEMORY.md`, `NEXT_STEPS.md`
+
+Preflight all passed (typecheck client + server, verify-glbs 8/8,
+vite build green). Validated visually in dev — drag, undo/redo,
+local persistence, reset, GLB preview toggle, jungle in-game render
+with 11 props, 4 empty packs load clean, all 5 skyboxes render full.
+
+Limitations (deliberate, documented):
+- Editor is per-pack — switching packs without "Export" or "Reset
+  local" leaves the old pack's working copy in localStorage. That's
+  by design (you can come back to it next session).
+- Real-GLB preview during drag falls back to discs (movement was
+  choppy with full meshes). Acceptable trade-off.
+- The localStorage shape is intentionally narrow so we can lift it
+  into a tiny shared module later for /calibrate and /anim-lab.
+  Not done yet — scope kept tight.
+
+---
+
 ## 2026-04-24 — Server ability kit sync for Sergei + Trunk
 
 Codex pass para desbloquear playtest online/offline coherente.

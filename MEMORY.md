@@ -2,6 +2,83 @@
 
 ## Fuentes de verdad (canónico — 2026-04-24 handoff)
 
+### Decoración in-arena (añadido 2026-04-25)
+
+- **SoT real**: `src/arena-decor-layouts.ts` — `DECOR_TYPES` (catálogo
+  de prop types con GLB path + scaleBase) y `DECOR_LAYOUTS[packId]`
+  (array literal por pack). Sólo `jungle` poblado con seed authored
+  (11 props); otros 4 packs vacíos a la espera de diseño manual via
+  editor.
+- **Runtime**: `Arena.applyPack()` carga los placements via
+  `loadInArenaDecorations()` y reparenta cada mesh al fragment que
+  lo contiene (`Arena.findFragmentAt(x,z)` + `host.attach(mesh)`).
+  Cuando el fragment cae, su prop cae con él automáticamente.
+- **Sin colisión por diseño**: los críttrs atraviesan los props
+  (sólo afectan visual). `pointInFragment` / `isPointOnArena` usan
+  geometría de fragments, intactas.
+- **Outer ring legacy**: vacío para todos los packs (`PACKS[id].props
+  = []`). Side effect: `tree_jungle_broadleaf.glb` (54 MB) ya no se
+  carga.
+- **Skirt outer**: `OUTER_RING_OUTER_R = FRAG.maxRadius + 0.5` (12.5
+  total). Ya no parece terreno extendido, sólo anti-gap con skybox.
+- **Editor**: `/decor-editor.html` — top-down ortho, click+drag con
+  clamp al anillo jugable, undo/redo Ctrl+Z/Y (50 snapshots),
+  auto-save por pack en `localStorage:decor-editor:<packId>`, toggle
+  para preview GLB real. Export emite TS pegable. **Editor NO escribe
+  archivos** — pegar manualmente en `arena-decor-layouts.ts` es la
+  única vía de persistir a código.
+- **Preview in game**: botón en el editor → abre
+  `/?arenaPack=<id>&decorPreview=1`. `arena-decor-layouts.ts` parsea
+  ese query string al cargar; cuando `decorPreview=1`, `getDecorLayout`
+  lee `localStorage:decor-editor:<id>` en vez de `DECOR_LAYOUTS[id]`
+  para ESE pack. `game.ts` honra el pin via `getPreviewPackId() ?? getRandomPackId()`
+  en el path offline. Banner "← back to editor" en main.ts cuando
+  preview activo. Producción sin query string no se entera de nada.
+- **Catálogo DECOR_TYPES** (2026-04-25 audit + scale fix): 32 entries
+  (4/6/7/8/7 por pack jungle/tundra/desert/beach/shrine). Único
+  excluido por peso: `tree_jungle_broadleaf.glb` (54 MB).
+- **Escala in-game** (2026-04-25 fix): `DECOR_TYPES[<key>].displayHeight`
+  define la altura objetivo en world units. `loadInArenaDecorations`
+  + `rebuildPreviewGroup` miden bbox del GLB y auto-fit con
+  `factor = displayHeight / measuredHeight`, luego multiplican por
+  `placement.scale` (multiplicador relativo, 1.0 = author intent).
+  **Mismo patrón que `Critter.attachGlbMesh`** con `IN_GAME_TARGET_HEIGHT`.
+  Reference: críttrs ≈ 1.7 u; tier guide en arena-decor-layouts.ts.
+- **Editor scale slider** (2026-04-25): rango 0.5..1.6 (relativo al
+  displayHeight). El badge "≈ X u (n× critter)" en el header del
+  selected prop muestra el final size; updates live al mover slider.
+
+### Tools shared infrastructure (in progress)
+
+- **`src/tools/tool-storage.ts`** (NEW 2026-04-25): helpers compartidos
+  para localStorage working copy:
+  - `toolStorageKey(toolName, entityId)`
+  - `loadFromStorage<T>(key, validator?)`
+  - `saveToStorage(key, value)`
+  - `clearStorage(key)`
+  - `hasStorageKey(key)`
+  - `storageDivergesFromCode(key, codeRef)`
+- **Estado actual**: solo `/decor-editor.html` lo consume.
+  `/calibrate.html` y `/anim-lab.html` siguen con helpers inline —
+  migración deferida para evitar regresiones. Patrón pensado para
+  unificar cuando esas tools reciban su próxima iteración.
+- **Pendiente**: módulo de export-patch + script `scripts/apply-tool-
+  patch.mjs` para auto-aplicar working copies a archivos source. No
+  está en este commit; ver NEXT_STEPS.
+
+### Skybox (añadido 2026-04-25)
+
+- **SoT**: `SKYDOME_RADIUS = 150` en `src/main.ts`. **Mantener < 200
+  (camera.far) con margen ≥ 25 u** o el dome se clippea por el far
+  plane y los pack equirects se ven cortados.
+- Si se cambia el radio aquí, **actualizar también** la constante
+  `vWorldPos.y / 150.0` en el shader del `skyMat` (tiene comentario
+  recordándolo).
+- Equirect 2:1 en `public/images/skyboxes/<pack>.png` (1774×887).
+  Mapping `THREE.UVMapping`, BackSide. Validado en los 5 packs.
+
+
+
 Si algo de esta lista entra en conflicto con cualquier otra sección
 del proyecto, ESTA gana. Actualizar aquí cuando cambie la verdad
 subyacente, no en duplicado por varios docs.

@@ -15,6 +15,7 @@ import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 import { initOnlineBeltToast } from './online-belt-toast';
 import { updateDustPuffs } from './dust-puff';
+import { getPreviewPackId } from './arena-decor-layouts';
 
 // ---------------------------------------------------------------------------
 // Sprite sheet preload — enables `.sprite-hud-*` / `.sprite-ability-*` CSS
@@ -112,8 +113,11 @@ const skyMat = new THREE.ShaderMaterial({
     uniform vec3 bottomColor;
     varying vec3 vWorldPos;
     void main() {
-      // h in [-1..+1] over the skydome's vertical extent (radius 200).
-      float h = clamp(vWorldPos.y / 200.0, -1.0, 1.0);
+      // h in [-1..+1] over the skydome's vertical extent. Hardcoded to
+      // match SKYDOME_RADIUS (150) — keep these in sync if the radius
+      // ever changes again. We don't pass a uniform for this because
+      // the value is set once at boot and never animates.
+      float h = clamp(vWorldPos.y / 150.0, -1.0, 1.0);
       vec3 color;
       if (h > 0.2) {
         // Upper sky: middle → top
@@ -131,8 +135,19 @@ const skyMat = new THREE.ShaderMaterial({
 });
 // Explicit generic so later reassignments to MeshBasicMaterial (pack
 // skybox swap) don't fight TS's narrow ShaderMaterial inference.
+//
+// Radius 150: keeps the skydome safely INSIDE the perspective camera
+// frustum (camera.far = 200, camera position around (0, 23, 25)). With
+// a 200 u radius the dome's far hemisphere ended ~370 u from the camera
+// and got partially clipped by the far plane, which is why textured
+// pack skyboxes were partly invisible / cut off depending on view
+// angle. Radius 150 gives ~25 u of margin to the far plane in the
+// worst-case look direction. All gameplay objects (arena 12 u, props
+// ≤ 12.5 u, void at y −30) stay well inside the dome so the BackSide
+// equirect still reads as a continuous sky everywhere it matters.
+const SKYDOME_RADIUS = 150;
 const skyDome: THREE.Mesh<THREE.SphereGeometry, THREE.Material> =
-  new THREE.Mesh(new THREE.SphereGeometry(200, 24, 18), skyMat);
+  new THREE.Mesh(new THREE.SphereGeometry(SKYDOME_RADIUS, 24, 18), skyMat);
 skyDome.renderOrder = -1;
 scene.add(skyDome);
 
@@ -344,6 +359,43 @@ if (btnMusic) {
 // Game
 const game = new Game(scene);
 
+// Decor preview banner — only shown when /decor-editor.html opened
+// the game with `?arenaPack=<id>&decorPreview=1`. Acts as both a
+// reminder ("you're not in normal play, you're previewing local
+// edits") and a 1-click way back to the editor. Production builds
+// without the query string skip this entirely (getPreviewPackId
+// returns null) so normal players never see it.
+{
+  const previewPack = getPreviewPackId();
+  if (previewPack) {
+    const banner = document.createElement('div');
+    banner.id = 'decor-preview-banner';
+    banner.innerHTML = `
+      <span style="opacity: 0.7">🎨 Preview:</span>
+      <strong>${previewPack}</strong>
+      <a href="/decor-editor.html" style="color: #ffdc5c; margin-left: 10px; text-decoration: none">← back to editor</a>
+    `;
+    Object.assign(banner.style, {
+      position: 'fixed',
+      top: '8px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      background: 'rgba(10, 12, 22, 0.92)',
+      color: '#e0e4ee',
+      border: '1px solid #ffdc5c',
+      borderRadius: '6px',
+      padding: '6px 14px',
+      fontFamily: 'Segoe UI, Arial, sans-serif',
+      fontSize: '12px',
+      letterSpacing: '0.04em',
+      zIndex: '999',
+      pointerEvents: 'auto',
+      backdropFilter: 'blur(4px)',
+    } as CSSStyleDeclaration);
+    document.body.appendChild(banner);
+  }
+}
+
 // Online mode entry — "Play Online" button on title screen
 //
 // FEATURE GATE: the button is only shown when an online server URL is
@@ -374,9 +426,14 @@ function loop(now: number) {
   game.update(dt);
   // Dust puff pool tick — no-op when empty. Lives outside game.update so
   // puffs keep animating even through edge phase transitions.
-  updateDustPuffs(dt);
-  // Apply camera shake on top of the base position (no accumulation drift)
-  updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
+  // EXCEPT when the offline pause menu is up: if we keep advancing
+  // puff lifetimes, an in-flight ring would keep expanding behind the
+  // menu and look like gameplay never actually froze.
+  if (!game.isPaused()) updateDustPuffs(dt);
+  // Apply camera shake on top of the base position (no accumulation drift).
+  // Also silenced during offline pause so a lingering shake doesn't
+  // tremble the frozen frame after ESC.
+  if (!game.isPaused()) updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
   renderer.render(scene, camera);
   // Preview renders only when visible; cheap no-op otherwise
   tickPreview(dt);

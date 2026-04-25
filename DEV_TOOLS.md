@@ -23,9 +23,48 @@ el lab se vuelve ilegible para quien entre después.
 >    clips in /animations" and "run clips in the game".
 > 3. `/calibrate.html` — per-critter scale / pivotY / rotation lab
 >    (added 2026-04-24). Not related to animation; silhouette sizing.
+> 4. `/decor-editor.html` — per-pack in-arena decoration placement
+>    lab (added 2026-04-25, UX iteration 2026-04-25). Top-down ortho
+>    view of the arena with band-radius wireframes. Click-to-place,
+>    drag-to-move with offset + ring clamp, multi-select via list,
+>    sliders, type swap, delete. Ctrl+Z / Ctrl+Y for undo/redo (50
+>    snapshots). Per-pack auto-save in `localStorage`
+>    (`decor-editor:<packId>`) with a "Reset local" button to wipe
+>    the working copy and reload the code layout. Optional checkbox
+>    to render real GLBs instead of placeholders (lazy + cached;
+>    falls back to placeholders during a drag for snappy feedback).
+>    Export emits a paste-ready TS snippet for
+>    `src/arena-decor-layouts.ts`.
+>
+>    **Preview in game** (added 2026-04-25 final iteration): button
+>    saves the current working copy to localStorage and opens the
+>    game with `?arenaPack=<id>&decorPreview=1`. The game substitutes
+>    your localStorage layout for `DECOR_LAYOUTS[<id>]` on the next
+>    offline match (only for that pack, only with that flag); a
+>    "← back to editor" banner stays pinned top-centre while preview
+>    mode is active. Production URLs without those params are
+>    unaffected. Export still defines the canonical layout — preview
+>    is a working buffer.
+>
+>    **Scale model** (refactored 2026-04-25): each prop type carries
+>    a `displayHeight` (world units); the loader auto-fits the GLB to
+>    that height via bbox measurement. The slider's `placement.scale`
+>    is now a relative multiplier (1.0 = author intent). The editor
+>    header shows `≈ X u (n× critter)` so you see the final size and
+>    its ratio against a critter (1.7 u). Same auto-fit runs in the
+>    GLB preview AND in-game so what you see in the editor matches
+>    what ships.
+>
+> **Shared infrastructure** (2026-04-25): `src/tools/tool-storage.ts`
+> exposes `loadFromStorage / saveToStorage / clearStorage /
+> hasStorageKey / storageDivergesFromCode` plus a key builder.
+> /decor-editor consumes it; /calibrate and /anim-lab still use their
+> own inline helpers (migration deferred). New internal tools should
+> consume this module from day one.
 >
 > Full anim-lab design in BUILD_LOG.md §"2026-04-25 Animation
-> Validation Lab". Full mesh2motion integration notes:
+> Validation Lab". Decor system design in BUILD_LOG.md §"2026-04-25
+> In-arena decor". Full mesh2motion integration notes:
 > [`mesh2motion/README-INTEGRATION.md`](../mesh2motion/README-INTEGRATION.md).
 
 ## Propósito

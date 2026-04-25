@@ -13,6 +13,7 @@
     "import:critter": "node scripts/import-critter.mjs",
     "inspect:bounds": "node scripts/inspect-bounds.mjs",
     "og": "node scripts/make-og-image.mjs",
+    "favicon": "node scripts/make-favicon-ico.mjs",
     "compress:audio": "node scripts/compress-audio.mjs",
     "test:smoke": "playwright test",
     "check": "tsc --noEmit && node scripts/verify-critter-glbs.mjs && vite build",

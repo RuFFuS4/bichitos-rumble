@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 
-// Four HTML entries: the normal game (index), the internal dev/balance
-// tool (tools), the roster calibration lab (calibrate), and the
-// animation validation + override lab (anim-lab). All build to /dist;
-// only index.html is linked from UI, the other three are reachable by
-// deliberately typing the URL. Vercel serves static files before
+// Five HTML entries: the normal game (index), the internal dev/balance
+// tool (tools), the roster calibration lab (calibrate), the animation
+// validation + override lab (anim-lab), and the in-arena decoration
+// placement editor (decor-editor). All build to /dist; only index.html
+// is linked from UI, the others are reachable by deliberately typing
+// the URL. Vercel serves static files before
 // rewrites, so `/tools.html`, `/calibrate.html` and `/anim-lab.html`
 // resolve to the built files even though vercel.json rewrites
 // everything else to index.html.
@@ -38,10 +39,11 @@ export default defineConfig({
     },
     rollupOptions: {
       input: {
-        index:     resolve(__dirname, 'index.html'),
-        tools:     resolve(__dirname, 'tools.html'),
-        calibrate: resolve(__dirname, 'calibrate.html'),
-        animLab:   resolve(__dirname, 'anim-lab.html'),
+        index:       resolve(__dirname, 'index.html'),
+        tools:       resolve(__dirname, 'tools.html'),
+        calibrate:   resolve(__dirname, 'calibrate.html'),
+        animLab:     resolve(__dirname, 'anim-lab.html'),
+        decorEditor: resolve(__dirname, 'decor-editor.html'),
       },
       output: {
         manualChunks(id) {
