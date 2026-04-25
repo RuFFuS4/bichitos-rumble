@@ -653,12 +653,18 @@ ctlSelScale.addEventListener('input', () => {
   if (selectedIdx < 0) return;
   placements[selectedIdx]!.scale = round3(+ctlSelScale.value);
   valSelScale.textContent = placements[selectedIdx]!.scale.toFixed(2);
+  // Refresh the selected-info badge so the "≈ X u (n× critter)" line
+  // tracks the slider live. Without this it stays anchored to the
+  // value the prop had at selection time, which feels broken when
+  // the slider is supposed to drive the displayed height.
+  refreshSelectedInfo();
   rebuildDiscs();
 });
 ctlSelType.addEventListener('change', () => {
   if (selectedIdx < 0) return;
   if (DECOR_TYPES[ctlSelType.value]) {
     placements[selectedIdx]!.type = ctlSelType.value;
+    refreshSelectedInfo();      // keep the "≈ X u" badge in sync with the new type's displayHeight
     rebuildDiscs();
     rebuildPlacementsList();
     pushSnapshot();
