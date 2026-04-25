@@ -9,6 +9,115 @@
 
 ---
 
+## 2026-04-25 — Decor scale fix (scaleBase → displayHeight) + tool-storage shared
+
+Two follow-ups on top of the Preview-in-game iteration. Both surfaced
+during visual validation: props rendered ridiculously small next to
+critters, and the editor / game / future tools were all carrying
+duplicated localStorage helpers.
+
+### Scale diagnosis (root cause)
+
+Native bbox audit of all 33 decor GLBs:
+- 30 of 33 export at ~1.9 u on the longest axis (Tripo / Meshy AI's
+  default normalisation). 4 jungle assets ship as KHR_mesh_quantized
+  (raw int16 = 16383 in the buffer), but Three.js dequantises them
+  back to ~1.9 u at load — same target.
+- The previous catalog used `scaleBase: 0.30..0.55` directly as a
+  multiplier of the native size. With ~1.9 u native, that produced
+  final heights of 0.57–1.05 u. Critters auto-fit to 1.7 u (see
+  Critter.attachGlbMesh / IN_GAME_TARGET_HEIGHT).
+- Result: every prop landed at 33–60% of critter height. Palms and
+  trees came out shorter than the critters that should walk past them.
+
+### Solution: `displayHeight` (target world units) + bbox auto-fit
+
+Mirrors the pattern Critter.attachGlbMesh already uses (auto-fit to
+IN_GAME_TARGET_HEIGHT). Same approach for decor:
+
+- `DECOR_TYPES[<key>].scaleBase` → renamed to `displayHeight`. New
+  value is the TARGET silhouette height in arena units.
+- `loadInArenaDecorations` (arena-decorations.ts) and
+  `rebuildPreviewGroup` (decoreditor/main.ts) both now run a
+  two-pass scale: measure bbox at unit-scale → factor = displayHeight
+  / measuredHeight → final scale = factor × placement.scale.
+- `placement.scale` keeps its semantic but now means "relative
+  multiplier on top of the type's authored displayHeight" (1.0 = the
+  intended size, 1.5 = 50% taller). Slider range tightened to
+  0.5..1.6 to reflect the new meaning.
+
+Authored displayHeights, by silhouette tier:
+  scatter / floor      0.6     skull pile, shipwreck piece
+  knee-height          0.9–1.0 rocks, low icebergs, boulders
+  chest-height         1.4–1.5 ice shards, bones, corals
+  critter-height       1.6–2.0 totems, lanterns, signposts, cacti
+  tall                 2.4–2.8 small torii, mid icebergs, bamboo, palms (mid)
+  tower-over           3.0–3.5 large torii, sakura, palms (tall)
+
+Editor UX:
+- Selected-prop header now reads e.g. `Palm (tall) ≈ 3.50 u (2.1×
+  critter)` so the operator sees both the absolute height and the
+  ratio against a critter (1.7 u reference). Updates live as the
+  scale slider moves.
+- Hint paragraph under the slider explains that `1.00 = author intent`
+  and that the badge above is the resulting world-space height.
+- GLB preview toggle now matches what the game renders (same auto-fit
+  formula); calibrating in the editor and seeing the result in-game
+  no longer drift.
+
+Smoke validated in dev: all 11 jungle props reparent correctly, scale
+factors land at 1.844 / 0.733 / 1.627 / 1.159 / ... — visually palms
+tower over critters, rocks read knee-height, totems sit at critter
+height. Cartoon proportions match the design intent.
+
+### tool-storage shared helper
+
+New module: `src/tools/tool-storage.ts`. Five helpers + a key builder:
+
+  toolStorageKey(toolName, entityId)
+  loadFromStorage<T>(key, validator?)
+  saveToStorage(key, value)
+  clearStorage(key)
+  hasStorageKey(key)
+  storageDivergesFromCode(key, codeRef)
+
+SSR-safe (guards on `typeof window`), silently degrades on quota /
+disabled / Safari-private-mode failures, validators are optional.
+Code-divergence comparison is JSON-stringify based — cheap and the
+editor payloads are <1 KB.
+
+Migrated /decor-editor.html to use it. /calibrate.html and /anim-lab
+.html were intentionally LEFT UNTOUCHED — both work today and the
+goal is "establish the contract", not "force-migrate everything in
+one PR". When either of those gets its next iteration, the lift is
+trivial (drop the inline helpers, import the module). Doc note left
+in tool-storage.ts.
+
+### Files touched
+
+- src/arena-decor-layouts.ts   (DECOR_TYPES scaleBase → displayHeight)
+- src/arena-decorations.ts     (loadInArenaDecorations bbox auto-fit)
+- src/decoreditor/main.ts      (preview auto-fit + UX hint + tool-storage)
+- decor-editor.html            (slider hint + range tightened)
+- src/tools/tool-storage.ts    (NEW shared module)
+- BUILD_LOG.md / DEV_TOOLS.md / MEMORY.md / NEXT_STEPS.md
+
+Preflight green: tsc client + server clean, vite build 6.34s, manual
+smoke validated drag → preview → match render with correct cartoon
+proportions.
+
+Limitations / deferred:
+- /calibrate and /anim-lab still embed their own inline localStorage
+  helpers. Comment in tool-storage.ts marks them as candidates for the
+  next iteration.
+- "Export patch + apply script" workflow (auto-write to source files
+  from a tool's localStorage state) is the natural next step but
+  deliberately not in this commit. Plan: emit a typed JSON patch +
+  ship `scripts/apply-tool-patch.mjs` that consumes it. Tracked in
+  NEXT_STEPS.
+
+---
+
 ## 2026-04-25 — Decor editor: Preview in game + DECOR_TYPES audit (+12 props)
 
 Two small but consequential additions on top of the v2 UX iteration.

@@ -39,6 +39,14 @@ import {
 } from '../arena-decor-layouts';
 import { FRAG } from '../arena-fragments';
 import { loadModel } from '../model-loader';
+import {
+  toolStorageKey,
+  loadFromStorage,
+  saveToStorage,
+  clearStorage,
+  hasStorageKey,
+  storageDivergesFromCode,
+} from '../tools/tool-storage';
 
 // ---------------------------------------------------------------------------
 // Scene + ortho top-down camera
@@ -319,13 +327,25 @@ async function rebuildPreviewGroup(): Promise<void> {
     try {
       const mesh = await loadModel(type.glbPath);
       if (myToken !== previewToken) return;
-      mesh.scale.setScalar(type.scaleBase * p.scale);
+      // Auto-fit by bbox to the type's displayHeight, exactly mirroring
+      // arena-decorations.loadInArenaDecorations. Critical: the editor
+      // preview MUST match what the game renders — otherwise the user
+      // calibrates against a lie. Same two-pass scale: measure unit-
+      // scale → factor → apply factor × placement.scale.
+      mesh.scale.setScalar(1);
       mesh.rotation.y = p.rotY;
       mesh.position.set(
         Math.cos(p.angle) * p.r,
         0,
         Math.sin(p.angle) * p.r,
       );
+      mesh.updateMatrixWorld(true);
+      const rawBbox = new THREE.Box3().setFromObject(mesh);
+      const measuredH = Number.isFinite(rawBbox.max.y - rawBbox.min.y)
+        ? Math.max(0.001, rawBbox.max.y - rawBbox.min.y)
+        : 1;
+      const fitFactor = type.displayHeight / measuredH;
+      mesh.scale.setScalar(fitFactor * p.scale);
       mesh.updateMatrixWorld(true);
       const bbox = new THREE.Box3().setFromObject(mesh);
       if (Number.isFinite(bbox.min.y)) mesh.position.y = -bbox.min.y;
@@ -375,7 +395,16 @@ function refreshSelectedInfo(): void {
     return;
   }
   const p = placements[selectedIdx]!;
-  selectedInfo.innerHTML = `<strong>#${selectedIdx}</strong> &middot; ${decorTypeLabel(p.type)}`;
+  // Show the final approximate height the prop will render at in-game.
+  // displayHeight × placement.scale, with a critter-relative comparison
+  // so the user can eyeball "how tall is this versus a critter (1.7 u)".
+  const type = DECOR_TYPES[p.type];
+  const finalH = type ? type.displayHeight * p.scale : null;
+  const ratioCritter = finalH !== null ? finalH / 1.7 : null;
+  const ratioBadge = ratioCritter !== null
+    ? ` <span style="opacity:0.65;font-weight:400">≈ ${finalH!.toFixed(2)} u (${ratioCritter.toFixed(1)}× critter)</span>`
+    : '';
+  selectedInfo.innerHTML = `<strong>#${selectedIdx}</strong> &middot; ${decorTypeLabel(p.type)}${ratioBadge}`;
   [ctlSelR, ctlSelAngle, ctlSelRotY, ctlSelScale, ctlSelType, btnDelete]
     .forEach((el) => ((el as HTMLInputElement | HTMLButtonElement | HTMLSelectElement).disabled = false));
   ctlSelR.value = String(p.r);
@@ -879,64 +908,49 @@ window.addEventListener('keydown', (ev) => {
 // (calibrate + anim-lab can use the same shape) but we keep it inline
 // here to avoid scope creep on this iteration.
 
-const LOCAL_STORAGE_NS = 'decor-editor';
+// Tool name used by tool-storage helpers. Must stay 'decor-editor' so
+// existing browser localStorage entries (and the preview-in-game URL
+// flow that arena-decor-layouts.ts reads) keep working.
+const STORAGE_TOOL = 'decor-editor';
 
-function localStorageKey(packId: string): string {
-  return `${LOCAL_STORAGE_NS}:${packId}`;
+function isDecorPlacementArray(v: unknown): v is DecorPlacement[] {
+  if (!Array.isArray(v)) return false;
+  return v.every((p) =>
+    typeof p?.r === 'number'
+    && typeof p?.angle === 'number'
+    && typeof p?.rotY === 'number'
+    && typeof p?.scale === 'number'
+    && typeof p?.type === 'string',
+  );
 }
 
 function saveLocal(): void {
-  try {
-    localStorage.setItem(localStorageKey(currentPack), JSON.stringify(placements));
-  } catch {
-    /* quota or disabled — silently keep in memory */
-  }
+  saveToStorage(toolStorageKey(STORAGE_TOOL, currentPack), placements);
   refreshLocalIndicator();
 }
 
 function loadLocalOrCode(packId: ArenaPackId): DecorPlacement[] {
-  try {
-    const raw = localStorage.getItem(localStorageKey(packId));
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.every((p) => typeof p?.r === 'number')) {
-        return parsed as DecorPlacement[];
-      }
-      console.warn('[decor-editor] discarding corrupt localStorage entry for', packId);
-      localStorage.removeItem(localStorageKey(packId));
-    }
-  } catch {
-    /* fall through */
-  }
+  const local = loadFromStorage<DecorPlacement[]>(
+    toolStorageKey(STORAGE_TOOL, packId),
+    isDecorPlacementArray,
+  );
+  if (local) return local;
   return JSON.parse(JSON.stringify(DECOR_LAYOUTS[packId] ?? []));
 }
 
 function clearLocal(packId: ArenaPackId): void {
-  try { localStorage.removeItem(localStorageKey(packId)); } catch {}
-}
-
-/** True when storage[packId] exists AND its content differs from the
- *  authored layout. Drives the "Using local changes" indicator + the
- *  "Reset" button enable state. */
-function hasLocalDivergence(packId: ArenaPackId): boolean {
-  try {
-    const raw = localStorage.getItem(localStorageKey(packId));
-    if (!raw) return false;
-    const code = JSON.stringify(DECOR_LAYOUTS[packId] ?? []);
-    return raw !== code;
-  } catch {
-    return false;
-  }
+  clearStorage(toolStorageKey(STORAGE_TOOL, packId));
 }
 
 function refreshLocalIndicator(): void {
   if (!localIndicator || !btnResetLocal) return;
-  const has = !!(() => { try { return localStorage.getItem(localStorageKey(currentPack)); } catch { return null; } })();
+  const key = toolStorageKey(STORAGE_TOOL, currentPack);
+  const has = hasStorageKey(key);
   if (!has) {
     localIndicator.textContent = '— using code layout';
     localIndicator.dataset.kind = 'code';
     btnResetLocal.disabled = true;
-  } else if (hasLocalDivergence(currentPack)) {
+  } else if (storageDivergesFromCode(key, DECOR_LAYOUTS[currentPack] ?? [])) {
     localIndicator.textContent = '⚠ using local changes (≠ code) — Reset to discard';
     localIndicator.dataset.kind = 'diverged';
     btnResetLocal.disabled = false;

@@ -14,14 +14,38 @@
 
 Lo que puedes retomar sin esperar a nadie ni nada. En orden.
 
-### 0. [CERRADO 2026-04-25] In-arena decor system + editor v2
+### 0. [CERRADO 2026-04-25] In-arena decor system + editor v2 + scale fix
 
 `/decor-editor.html` operativo con drag, undo/redo, localStorage por
-pack y preview GLB opcional. Sistema de decoración runtime parentea
-props a fragments (caen con el fragment). `jungle` ya tiene 11 props
-authored; los otros 4 packs (`frozen_tundra`, `desert_dunes`,
-`coral_beach`, `kitsune_shrine`) están **vacíos a la espera de diseño
-visual desde el editor**.
+pack, preview GLB opcional y "Preview in game" (URL flag con
+fallback automático a code layout). Sistema de decoración runtime
+parentea props a fragments (caen con el fragment). Escala unificada
+vía `displayHeight` per-type + bbox auto-fit (mismo patrón que
+`Critter.attachGlbMesh`). `jungle` ya tiene 11 props authored; los
+otros 4 packs (`frozen_tundra`, `desert_dunes`, `coral_beach`,
+`kitsune_shrine`) están **vacíos a la espera de diseño visual desde
+el editor**.
+
+### 0.5. [PENDIENTE — accionable] Auto-apply patch para tools internas
+
+Patrón actual: editor → `localStorage` → "Copy snippet" → pegar a
+mano en source TS. Funciona pero el round-trip pega-edita es la
+fricción principal.
+
+Próximo paso natural (planteado pero NO implementado en 2026-04-25):
+- Cada tool emite un `ToolPatch` JSON tipado
+  (`{ tool: 'decor-editor', target: 'src/arena-decor-layouts.ts',
+    pack: 'jungle', placements: [...] }` o similar).
+- Nuevo script `scripts/apply-tool-patch.mjs` lee el patch y muta el
+  archivo source en sitio (regex acotada por bloque, igual que la
+  propuesta `apply-calibration` que aplazamos).
+- Botón "Apply patch" en cada tool descarga el JSON; el usuario lo
+  guarda en raíz, ejecuta `npm run apply-tool-patch`, revisa diff,
+  commit.
+
+Empezar por `/decor-editor` (más reciente, tipos más estables).
+Después `/calibrate` y `/anim-lab` migrarían sus helpers locales a
+`src/tools/tool-storage.ts` y añadirían su rama al script.
 
 **Flujo de trabajo para poblar un pack**:
 1. `npm run dev` → abrir `/decor-editor.html`.

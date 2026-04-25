@@ -46,6 +46,22 @@ el lab se vuelve ilegible para quien entre después.
 >    unaffected. Export still defines the canonical layout — preview
 >    is a working buffer.
 >
+>    **Scale model** (refactored 2026-04-25): each prop type carries
+>    a `displayHeight` (world units); the loader auto-fits the GLB to
+>    that height via bbox measurement. The slider's `placement.scale`
+>    is now a relative multiplier (1.0 = author intent). The editor
+>    header shows `≈ X u (n× critter)` so you see the final size and
+>    its ratio against a critter (1.7 u). Same auto-fit runs in the
+>    GLB preview AND in-game so what you see in the editor matches
+>    what ships.
+>
+> **Shared infrastructure** (2026-04-25): `src/tools/tool-storage.ts`
+> exposes `loadFromStorage / saveToStorage / clearStorage /
+> hasStorageKey / storageDivergesFromCode` plus a key builder.
+> /decor-editor consumes it; /calibrate and /anim-lab still use their
+> own inline helpers (migration deferred). New internal tools should
+> consume this module from day one.
+>
 > Full anim-lab design in BUILD_LOG.md §"2026-04-25 Animation
 > Validation Lab". Decor system design in BUILD_LOG.md §"2026-04-25
 > In-arena decor". Full mesh2motion integration notes:

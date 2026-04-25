@@ -34,9 +34,37 @@
   para ESE pack. `game.ts` honra el pin via `getPreviewPackId() ?? getRandomPackId()`
   en el path offline. Banner "← back to editor" en main.ts cuando
   preview activo. Producción sin query string no se entera de nada.
-- **Catálogo DECOR_TYPES** (2026-04-25 audit): 32 entries (4/6/7/8/7
-  por pack jungle/tundra/desert/beach/shrine). Único excluido por
-  peso: `tree_jungle_broadleaf.glb` (54 MB).
+- **Catálogo DECOR_TYPES** (2026-04-25 audit + scale fix): 32 entries
+  (4/6/7/8/7 por pack jungle/tundra/desert/beach/shrine). Único
+  excluido por peso: `tree_jungle_broadleaf.glb` (54 MB).
+- **Escala in-game** (2026-04-25 fix): `DECOR_TYPES[<key>].displayHeight`
+  define la altura objetivo en world units. `loadInArenaDecorations`
+  + `rebuildPreviewGroup` miden bbox del GLB y auto-fit con
+  `factor = displayHeight / measuredHeight`, luego multiplican por
+  `placement.scale` (multiplicador relativo, 1.0 = author intent).
+  **Mismo patrón que `Critter.attachGlbMesh`** con `IN_GAME_TARGET_HEIGHT`.
+  Reference: críttrs ≈ 1.7 u; tier guide en arena-decor-layouts.ts.
+- **Editor scale slider** (2026-04-25): rango 0.5..1.6 (relativo al
+  displayHeight). El badge "≈ X u (n× critter)" en el header del
+  selected prop muestra el final size; updates live al mover slider.
+
+### Tools shared infrastructure (in progress)
+
+- **`src/tools/tool-storage.ts`** (NEW 2026-04-25): helpers compartidos
+  para localStorage working copy:
+  - `toolStorageKey(toolName, entityId)`
+  - `loadFromStorage<T>(key, validator?)`
+  - `saveToStorage(key, value)`
+  - `clearStorage(key)`
+  - `hasStorageKey(key)`
+  - `storageDivergesFromCode(key, codeRef)`
+- **Estado actual**: solo `/decor-editor.html` lo consume.
+  `/calibrate.html` y `/anim-lab.html` siguen con helpers inline —
+  migración deferida para evitar regresiones. Patrón pensado para
+  unificar cuando esas tools reciban su próxima iteración.
+- **Pendiente**: módulo de export-patch + script `scripts/apply-tool-
+  patch.mjs` para auto-aplicar working copies a archivos source. No
+  está en este commit; ver NEXT_STEPS.
 
 ### Skybox (añadido 2026-04-25)
 

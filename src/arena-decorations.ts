@@ -399,16 +399,31 @@ export async function loadInArenaDecorations(
     }
     try {
       const mesh = await loadModel(type.glbPath);
-      mesh.scale.setScalar(type.scaleBase * p.scale);
+      // Two-pass scaling: first measure bbox at unit scale, then auto-
+      // fit to the type's displayHeight (world units), then apply the
+      // per-instance placement.scale as a relative multiplier. This is
+      // the same pattern Critter.attachGlbMesh uses for IN_GAME_TARGET_
+      // HEIGHT — keeps the catalogue legible (per-prop heights instead
+      // of opaque scale multipliers) and tolerates GLB exporters that
+      // normalise to different sizes.
+      mesh.scale.setScalar(1);
       mesh.rotation.y = p.rotY;
       mesh.position.set(
         Math.cos(p.angle) * p.r,
         0,
         Math.sin(p.angle) * p.r,
       );
-      // Lift so the model's bbox min.y lands on Y=0 (arena top surface).
-      // Some IA-generated GLBs centre on bbox instead of base; without
-      // this lift the prop sinks halfway into the floor.
+      mesh.updateMatrixWorld(true);
+      const bboxRaw = new THREE.Box3().setFromObject(mesh);
+      const measuredH = Number.isFinite(bboxRaw.max.y - bboxRaw.min.y)
+        ? Math.max(0.001, bboxRaw.max.y - bboxRaw.min.y)
+        : 1;
+      const fitFactor = type.displayHeight / measuredH;
+      mesh.scale.setScalar(fitFactor * p.scale);
+      // Re-measure post-scale to ground the prop. Auto-grounding on
+      // bbox.min.y matters because some IA-generated GLBs centre on
+      // bbox instead of base; without this lift the prop sinks halfway
+      // into the floor.
       mesh.updateMatrixWorld(true);
       const bbox = new THREE.Box3().setFromObject(mesh);
       if (Number.isFinite(bbox.min.y)) {
