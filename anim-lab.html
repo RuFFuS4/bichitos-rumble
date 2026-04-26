@@ -80,7 +80,7 @@
     #right-panel {
       position: fixed;
       top: 40px; right: 0; bottom: 0;
-      width: 480px;
+      width: 520px;
       padding: 16px;
       background: rgba(14, 16, 26, 0.95);
       border-left: 1px solid rgba(255,255,255,0.08);
@@ -98,7 +98,7 @@
     #right-panel .subtitle {
       font-size: 11px;
       opacity: 0.55;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       font-family: ui-monospace, monospace;
     }
 
@@ -106,44 +106,42 @@
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.2em;
-      opacity: 0.55;
+      opacity: 0.6;
       margin: 18px 0 8px;
-      border-top: 1px solid rgba(255,255,255,0.06);
-      padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding-top: 12px;
     }
+    #right-panel h2:first-of-type { border-top: none; padding-top: 0; }
 
-    .playback-row {
+    /* "Now playing" indicator */
+    .np-box {
       display: flex;
-      gap: 6px;
       align-items: center;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 10px;
+      background: rgba(255,220,92,0.06);
+      border: 1px solid rgba(255,220,92,0.25);
+      border-radius: 4px;
+      font: 11px ui-monospace, monospace;
+      margin-bottom: 12px;
     }
-    .playback-row .now-playing {
-      flex: 1 1 100%;
-      font: 11px/1.4 ui-monospace, monospace;
-      opacity: 0.65;
-      padding: 4px 0;
-    }
-    .playback-row .now-playing b {
-      color: #ffdc5c;
-    }
+    .np-box .np-label { opacity: 0.55; }
+    .np-box .np-state { color: #ffdc5c; font-weight: 700; }
+    .np-box .np-arrow { opacity: 0.4; }
+    .np-box .np-clip { color: #cdd4e2; }
+    .np-box.idle .np-clip { opacity: 0.45; }
 
-    .slider-row {
+    /* Top playback strip — Stop + loop + speed */
+    .top-pb {
       display: grid;
-      grid-template-columns: 80px 1fr 50px;
-      gap: 8px;
+      grid-template-columns: auto auto 1fr 56px;
+      gap: 10px;
       align-items: center;
       font-size: 11px;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
     }
-    .slider-row label {
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      opacity: 0.7;
-    }
-    .slider-row input[type=range] { accent-color: #ffdc5c; }
-    .slider-row span.val {
+    .top-pb input[type=range] { accent-color: #ffdc5c; }
+    .top-pb .speed-val {
       text-align: right;
       font-family: ui-monospace, monospace;
       color: #ffdc5c;
@@ -174,45 +172,13 @@
       cursor: not-allowed;
     }
 
-    #clip-list {
-      max-height: 200px;
-      overflow-y: auto;
-      background: rgba(0,0,0,0.25);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 4px;
-    }
-    .clip-row {
-      display: grid;
-      grid-template-columns: 1fr 60px 80px 60px;
-      padding: 6px 10px;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-      font: 11px/1.4 ui-monospace, monospace;
-      align-items: center;
-      gap: 6px;
-    }
-    .clip-row:last-child { border-bottom: none; }
-    .clip-row .name { color: #cdd4e2; }
-    .clip-row .dur { text-align: right; opacity: 0.55; }
-    .clip-row .state {
-      text-align: center;
-      font-size: 10px;
-      letter-spacing: 0.08em;
-      opacity: 0.8;
-    }
-    .clip-row .state.resolved { color: #9ff29f; }
-    .clip-row .state.none { color: #606870; }
-    .clip-row button {
-      padding: 3px 6px;
-      font-size: 9px;
-    }
-    .clip-row.playing { background: rgba(255,220,92,0.08); }
-
-    #mapping-table {
+    /* Mapping table — the centrepiece */
+    #mapping-table, #aux-mapping-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 11px;
+      font-size: 12px;
     }
-    #mapping-table th {
+    #mapping-table th, #aux-mapping-table th {
       text-align: left;
       font-size: 9px;
       letter-spacing: 0.15em;
@@ -220,26 +186,30 @@
       opacity: 0.5;
       padding: 6px 8px;
       border-bottom: 1px solid rgba(255,255,255,0.1);
+      font-weight: 700;
     }
-    #mapping-table td {
-      padding: 5px 8px;
+    #mapping-table td, #aux-mapping-table td {
+      padding: 6px 8px;
       border-bottom: 1px solid rgba(255,255,255,0.04);
       font-family: ui-monospace, monospace;
       vertical-align: middle;
     }
-    #mapping-table td.state { color: #ffdc5c; }
-    #mapping-table td.source {
-      font-size: 9px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      opacity: 0.65;
+    #mapping-table tbody tr.playing,
+    #aux-mapping-table tbody tr.playing {
+      background: rgba(255,220,92,0.10);
     }
-    #mapping-table td.source.override { color: #ffdc5c; opacity: 0.9; }
-    #mapping-table td.source.exact { color: #9ff29f; }
-    #mapping-table td.source.prefix { color: #9acaff; }
-    #mapping-table td.source.contains { color: #d8a8f0; }
-    #mapping-table td.source.missing { color: #606870; }
-    #mapping-table select {
+    #mapping-table tbody tr.playing td.state-name,
+    #aux-mapping-table tbody tr.playing td.state-name {
+      color: #ffdc5c;
+      font-weight: 700;
+    }
+    td.state-name { color: #cdd4e2; width: 110px; }
+    td.clip-cell { width: auto; }
+    td.play-cell { width: 56px; text-align: center; }
+    td.status-cell { width: 90px; }
+    td.tier-cell { width: 70px; font-size: 10px; opacity: 0.7; }
+
+    #mapping-table select, #aux-mapping-table select {
       background: #1a1d29;
       color: #e0e4ee;
       border: 1px solid rgba(255,255,255,0.12);
@@ -248,20 +218,133 @@
       padding: 3px 4px;
       width: 100%;
     }
-    #mapping-table select.override { border-color: rgba(255,220,92,0.6); color: #ffdc5c; }
+    #mapping-table select.override,
+    #aux-mapping-table select.override {
+      border-color: rgba(255,220,92,0.6);
+      color: #ffdc5c;
+    }
+
+    .play-cell button {
+      padding: 4px 8px;
+      font-size: 11px;
+      width: 100%;
+    }
+
+    /* Status badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font: 600 9px/1.4 ui-monospace, monospace;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .badge.auto     { background: rgba(154,202,255,0.12); color: #9acaff; border: 1px solid rgba(154,202,255,0.30); }
+    .badge.override { background: rgba(255,220,92,0.14);  color: #ffdc5c; border: 1px solid rgba(255,220,92,0.45); }
+    .badge.missing  { background: rgba(120,120,120,0.10); color: #808591; border: 1px solid rgba(120,120,120,0.25); }
+    .badge.tier-exact    { color: #9ff29f; }
+    .badge.tier-prefix   { color: #9acaff; }
+    .badge.tier-contains { color: #d8a8f0; }
+
+    /* Duplicate-clip warning */
+    #duplicate-warning {
+      margin-top: 10px;
+      padding: 8px 10px;
+      background: rgba(255,160,80,0.10);
+      border: 1px solid rgba(255,160,80,0.40);
+      color: #ffc080;
+      font: 11px/1.5 ui-monospace, monospace;
+      border-radius: 4px;
+    }
+
+    .row-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      margin-bottom: 4px;
+    }
+    .row-actions button { flex: 1 1 30%; }
+
+    .export-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .export-row button { flex: 1 1 30%; }
 
     .export-box {
-      margin-top: 10px;
+      margin-top: 8px;
       padding: 10px;
       background: rgba(0,0,0,0.35);
       border: 1px solid rgba(255,255,255,0.08);
       border-radius: 4px;
       font: 10px/1.5 ui-monospace, monospace;
       color: #b0dfb0;
-      max-height: 180px;
+      max-height: 160px;
       overflow: auto;
       white-space: pre-wrap;
     }
+
+    details.advanced {
+      margin-top: 18px;
+      padding: 8px 10px;
+      background: rgba(0,0,0,0.20);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 4px;
+    }
+    details.advanced summary {
+      cursor: pointer;
+      font: 10px ui-monospace, monospace;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      opacity: 0.55;
+      padding: 2px 0;
+      user-select: none;
+    }
+    details.advanced summary:hover { opacity: 0.85; }
+    details.advanced[open] summary { opacity: 0.85; margin-bottom: 8px; }
+    details.advanced h3 {
+      font: 600 10px ui-monospace, monospace;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      opacity: 0.7;
+      margin: 10px 0 6px;
+    }
+
+    #clip-list {
+      max-height: 220px;
+      overflow-y: auto;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 4px;
+    }
+    .clip-row {
+      display: grid;
+      grid-template-columns: 1fr 60px 110px 50px;
+      padding: 5px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font: 10px/1.4 ui-monospace, monospace;
+      align-items: center;
+      gap: 6px;
+    }
+    .clip-row:last-child { border-bottom: none; }
+    .clip-row .name { color: #cdd4e2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .clip-row .dur { text-align: right; opacity: 0.55; }
+    .clip-row .state-tag {
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      opacity: 0.75;
+    }
+    .clip-row .state-tag.resolved { color: #9ff29f; }
+    .clip-row .state-tag.none { color: #606870; }
+    .clip-row button {
+      padding: 3px 6px;
+      font-size: 9px;
+      width: 100%;
+    }
+    .clip-row.playing { background: rgba(255,220,92,0.08); }
 
     #viewport-hint {
       position: fixed;
@@ -286,13 +369,13 @@
   </style>
 </head>
 <body>
-  <div id="banner">INTERNAL · Animation Validation + Override Lab · not for players</div>
+  <div id="banner">INTERNAL · Animation Lab · not for players</div>
 
   <div id="roster-panel">
     <h2>Roster</h2>
     <div id="roster-cards"></div>
     <div class="help" style="margin-top: 14px">
-      Click a critter to load its GLB + skeletal animator.
+      Click a critter to load its GLB.
     </div>
   </div>
 
@@ -300,59 +383,85 @@
     <h1 id="selected-name">—</h1>
     <div class="subtitle" id="selected-sub">select a critter</div>
 
-    <h2>Playback</h2>
-    <div class="playback-row">
-      <button id="btn-play">▶ Play</button>
-      <button id="btn-pause">⏸ Pause</button>
-      <button id="btn-restart">⟲ Restart</button>
+    <div id="np-box" class="np-box idle">
+      <span class="np-label">Now playing:</span>
+      <span class="np-state" id="np-state">—</span>
+      <span class="np-arrow">→</span>
+      <span class="np-clip" id="np-clip">none</span>
+    </div>
+
+    <div class="top-pb">
       <button id="btn-stop" class="secondary">⏹ Stop</button>
-      <label style="margin-left:6px;font-size:11px;opacity:0.75;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;opacity:0.85;">
         <input type="checkbox" id="chk-loop" checked /> Loop
       </label>
-      <div class="now-playing">now playing: <b id="now-playing">none</b></div>
-    </div>
-    <div class="slider-row">
-      <label>Speed</label>
       <input id="ctl-speed" type="range" min="0.1" max="3.0" step="0.05" value="1.0" />
-      <span class="val" id="val-speed">1.00×</span>
+      <span class="speed-val" id="val-speed">1.00×</span>
     </div>
 
-    <h2>Clips in GLB</h2>
-    <div id="clip-list"></div>
-
-    <h2>Resolved mapping</h2>
+    <h2>Logical state → clip</h2>
     <table id="mapping-table">
       <thead>
-        <tr><th>State</th><th>Clip</th><th>Source</th></tr>
+        <tr>
+          <th>State</th>
+          <th>Clip</th>
+          <th>Play</th>
+          <th>Status</th>
+        </tr>
       </thead>
       <tbody id="mapping-rows"></tbody>
     </table>
-    <div class="help">
-      Dropdowns let you override the auto-resolved clip for each logical
-      state. Selecting the default entry ("(auto: …)") clears the
-      override. Overrides take effect after clicking <b>Apply &amp; reload</b>
-      — the critter is rebuilt so the new mapping is in effect from clip
-      resolution onwards.
+
+    <div id="duplicate-warning" style="display:none"></div>
+
+    <div class="row-actions">
+      <button id="btn-apply">Apply overrides locally</button>
+      <button id="btn-reset" class="secondary">Reset overrides for this critter</button>
+      <button id="btn-preview-all" class="secondary">▶ Preview all</button>
     </div>
-    <div class="playback-row" style="margin-top: 12px">
-      <button id="btn-apply">Apply &amp; reload critter</button>
-      <button id="btn-reset" class="secondary">Clear all overrides</button>
+    <div class="help">
+      <b>Dropdown</b>: changing a clip auto-plays it for instant feedback and saves the override. <b>Play column</b>: replays whatever is currently selected. <b>Apply</b>: rebuilds the skeletal animator so the resolver runs again with your overrides — only needed to verify "what would the resolver pick" if you've changed a state to <i>Auto</i>. <b>Reset</b>: clears all overrides for the selected critter.
     </div>
 
-    <h2>Export overrides</h2>
-    <button id="btn-export">📋 Copy TS snippet</button>
-    <button id="btn-export-json">📦 Copy JSON patch</button>
-    <button id="btn-download-json">💾 Download patch.json</button>
-    <pre class="export-box" id="export-out">(pick a critter + set overrides, then Export)</pre>
-    <div class="help">
-      <strong>TS snippet</strong>: paste manually into
-      <code>src/animation-overrides.ts</code> inside the
-      <code>ANIMATION_OVERRIDES</code> record.<br>
-      <strong>JSON patch</strong>: save as <code>tool-patch.json</code> at
-      the repo root and run
-      <code style="color:#ffdc5c">npm run apply-tool-patch</code> — the
-      script rewrites the source file in place.
+    <h2>Export</h2>
+    <div class="export-row">
+      <button id="btn-export">📋 Copy TS snippet</button>
+      <button id="btn-export-json">📦 Copy JSON patch</button>
+      <button id="btn-download-json">💾 Download patch.json</button>
     </div>
+    <pre class="export-box" id="export-out">(set overrides, then export)</pre>
+    <div class="help">
+      <b>TS snippet</b>: paste manually into the <code>ANIMATION_OVERRIDES</code> record in <code>src/animation-overrides.ts</code>. <b>JSON patch</b>: save as <code>tool-patch.json</code> at the repo root and run <code style="color:#ffdc5c">npm run apply-tool-patch</code>.
+    </div>
+
+    <details class="advanced">
+      <summary>Advanced — secondary states + raw clip list + resolver detail</summary>
+
+      <h3>Secondary states</h3>
+      <table id="aux-mapping-table">
+        <thead>
+          <tr>
+            <th>State</th>
+            <th>Clip</th>
+            <th>Play</th>
+            <th>Tier</th>
+          </tr>
+        </thead>
+        <tbody id="aux-mapping-rows"></tbody>
+      </table>
+      <div class="help" style="margin-top: 4px">
+        Walk / headbutt_anticip / headbutt_lunge / hit / respawn — usually
+        handled by procedural animation in code, not by skeletal clips.
+        Override only if a critter has a dedicated clip you want to wire up.
+      </div>
+
+      <h3>Clips in GLB (raw list)</h3>
+      <div id="clip-list"></div>
+      <div class="help" style="margin-top: 4px">
+        Every clip the GLB ships, in source order. Useful when comparing
+        the available pool against the dropdowns above.
+      </div>
+    </details>
   </div>
 
   <div id="viewport-hint">scroll = zoom · drag = orbit</div>
