@@ -468,11 +468,33 @@ export class Arena {
    */
   private findFragmentAt(x: number, z: number): number {
     if (!this.layout) return -1;
+    // Pass 1: strict containment — point lies inside the fragment shape.
     for (let i = 0; i < this.layout.fragments.length; i++) {
       const f = this.layout.fragments[i];
       if (f && pointInFragment(x, z, f)) return i;
     }
-    return -1;
+    // Pass 2: tolerant fallback — the random fragment generator leaves
+    // tiny angular gaps between sectors (sectorJitter), and authored
+    // decor placements that land inside one of those slivers would
+    // otherwise be silently dropped (5 of 11 jungle props in seed-
+    // dependent matches). For decor only, that's wasteful — we can
+    // safely attach the prop to whichever fragment is angularly
+    // closest, since the prop is visual-only and just needs SOME host
+    // group to inherit collapse motion. We still reject points that
+    // are outside the playable radius entirely (handled by callers).
+    const ang = Math.atan2(z, x);
+    let bestIdx = -1;
+    let bestDelta = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < this.layout.fragments.length; i++) {
+      const f = this.layout.fragments[i];
+      if (!f) continue;
+      const mid = (f.startAngle + f.endAngle) * 0.5;
+      // Wrap angular delta into [0, π] so 359°-vs-1° ≈ 2°, not 358°.
+      let d = Math.abs(ang - mid);
+      while (d > Math.PI) d = Math.abs(d - 2 * Math.PI);
+      if (d < bestDelta) { bestDelta = d; bestIdx = i; }
+    }
+    return bestIdx;
   }
 
   /**

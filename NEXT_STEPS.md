@@ -14,17 +14,18 @@
 
 Lo que puedes retomar sin esperar a nadie ni nada. En orden.
 
-### 0. [CERRADO 2026-04-25] In-arena decor system + editor v2 + scale fix
+### 0. [CERRADO 2026-04-26] In-arena decor system + 5 packs poblados
 
-`/decor-editor.html` operativo con drag, undo/redo, localStorage por
-pack, preview GLB opcional y "Preview in game" (URL flag con
-fallback automático a code layout). Sistema de decoración runtime
-parentea props a fragments (caen con el fragment). Escala unificada
-vía `displayHeight` per-type + bbox auto-fit (mismo patrón que
-`Critter.attachGlbMesh`). `jungle` ya tiene 11 props authored; los
-otros 4 packs (`frozen_tundra`, `desert_dunes`, `coral_beach`,
-`kitsune_shrine`) están **vacíos a la espera de diseño visual desde
-el editor**.
+Todos los 5 packs tienen layouts authored siguiendo el design doc de
+composición + gameplay (clusters, ritmo, heroes, separación angular,
+densidad por pack). 52 placements totales. Sistema runtime con
+fallback en `findFragmentAt` para no perder props en grietas de
+sector. Detalles técnicos en BUILD_LOG.md §"5 pack decor layouts
+populated" (2026-04-26).
+
+Pendiente: iteración visual fina pack por pack vía `/decor-editor`
+cuando haya feedback de playtest. Los layouts actuales son un primer
+draft autorizado, no inmutable.
 
 ### 0.5. [PENDIENTE — accionable] Auto-apply patch para tools internas
 

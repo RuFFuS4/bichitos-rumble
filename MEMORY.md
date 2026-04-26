@@ -2,6 +2,19 @@
 
 ## Fuentes de verdad (canónico — 2026-04-24 handoff)
 
+### Decor layouts por pack (autorizados 2026-04-26)
+
+- Los 5 packs tienen layouts authored en `DECOR_LAYOUTS` (52 placements
+  totales): jungle 11, frozen_tundra 9, desert_dunes 8, coral_beach 13,
+  kitsune_shrine 11.
+- Diseño: ver §"5 pack decor layouts populated" en BUILD_LOG.md
+  2026-04-26 — concepto, clusters, separación angular, heroes por pack.
+- **Bug fix relacionado**: `Arena.findFragmentAt` ahora hace pasada
+  estricta + fallback al fragment angularmente más cercano (antes
+  perdía 5/11 props en seeds desafortunadas). El parenting cae al
+  fragment más cercano cuando un placement aterriza en una grieta de
+  sector. Decor es visual-only, esto es correcto.
+
 ### Decoración in-arena (añadido 2026-04-25)
 
 - **SoT real**: `src/arena-decor-layouts.ts` — `DECOR_TYPES` (catálogo
