@@ -136,7 +136,7 @@ export type ClipOverrideMap = Partial<Record<SkeletalState, ClipOverrideValue>>;
 export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
   sergei: {
     ability_1: { clip: "Fall", speed: 1.8 },
-    ability_2: "Ability3Frenzy",
+    ability_2: { clip: "Defeat", speed: 1.5 },
     ability_3: { clip: "Running", speed: 2 },
     defeat: "Ability3Frenzy",
     fall: { clip: "Ability2Shockwave", loop: true },
