@@ -39,7 +39,45 @@
 
 import type { SkeletalState } from './critter-skeletal';
 
-export type ClipOverrideMap = Partial<Record<SkeletalState, string>>;
+/**
+ * Per-state override entry. Two equivalent forms accepted in source:
+ *
+ *   1. Shorthand string (back-compat with v1 lab patches and existing
+ *      authored entries — most overrides only need a clip name):
+ *
+ *        ability_2: 'Ability3GroundPound'
+ *
+ *   2. Object form (lab v2 patches — when speed or loop matter):
+ *
+ *        idle: { clip: 'Idle', speed: 1.15, loop: true }
+ *
+ * Both forms ship in the same `ANIMATION_OVERRIDES` record without any
+ * migration. Resolver helpers below normalise on read so callers don't
+ * need to switch on the shape.
+ *
+ * Runtime status of `speed` / `loop` (2026-04-27): currently TOOLING-
+ * ONLY metadata. The game's resolver path
+ * (`Critter.attachGlbMesh` → `SkeletalAnimator.play(state)`) reads
+ * `clip` only. The lab uses speed/loop for preview via
+ * `playClipByName(name, loop, speed)` so what you see in /anim-lab is
+ * what your tuning intent is — NOT yet what the live match will play
+ * back at. Promoting these fields to runtime is a Phase-2 change in
+ * `critter-skeletal.ts` (apply `setEffectiveTimeScale` / `setLoop`
+ * inside `play()` based on `getClipOverrideMeta`).
+ */
+export interface ClipOverrideEntry {
+  clip: string;
+  /** Playback speed multiplier (1 = real-time). Tooling metadata. */
+  speed?: number;
+  /** Loop flag. If omitted the resolver's per-state default applies
+   *  (idle/walk/run loop, others are one-shot). Tooling metadata. */
+  loop?: boolean;
+}
+
+/** A single override slot — string shorthand or full object. */
+export type ClipOverrideValue = string | ClipOverrideEntry;
+
+export type ClipOverrideMap = Partial<Record<SkeletalState, ClipOverrideValue>>;
 
 /**
  * Sparse per-critter overrides. Empty map = pure resolver. Each entry
@@ -121,8 +159,9 @@ export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
 };
 
 /**
- * Look up an override. Returns the authored clip name for a given
- * (critterId, state) pair, or null if no override is set.
+ * Look up an override clip name. Normalises both override shapes
+ * (string shorthand and object form) so existing call sites that
+ * only need the clip name continue to work without changes.
  *
  * Consumers should treat a hit here as a strong hint (check the clip
  * exists in the GLB; if it doesn't, fall back to the resolver) rather
@@ -132,10 +171,31 @@ export function getClipOverride(
   critterId: string | null | undefined,
   state: SkeletalState,
 ): string | null {
+  const entry = getClipOverrideMeta(critterId, state);
+  return entry?.clip ?? null;
+}
+
+/**
+ * Look up the FULL override metadata (clip + optional speed/loop) for
+ * a state. Always returns a normalised object shape — callers don't
+ * need to switch on whether the source used the shorthand or object
+ * form. Returns null when no override exists.
+ *
+ * Currently used by /anim-lab.html for display + preview-time speed.
+ * The runtime resolver doesn't consume speed/loop yet — see header
+ * docstring for the Phase-2 migration plan.
+ */
+export function getClipOverrideMeta(
+  critterId: string | null | undefined,
+  state: SkeletalState,
+): ClipOverrideEntry | null {
   if (!critterId) return null;
   const entry = ANIMATION_OVERRIDES[critterId];
   if (!entry) return null;
-  return entry[state] ?? null;
+  const v = entry[state];
+  if (v == null) return null;
+  if (typeof v === 'string') return { clip: v };
+  return v;
 }
 
 /**

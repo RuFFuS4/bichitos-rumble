@@ -2,54 +2,57 @@
 // Animation Lab — `/anim-lab.html`
 // ---------------------------------------------------------------------------
 //
-// Per-critter, per-logical-state clip assignment lab. The mental model
-// players don't need to learn this UX uses:
+// Per-critter, per-state clip + playback config. Mental model:
 //
-//   logical state → assigned clip → play
+//   logical state → (clip, speed, loop) → play
 //
-// One unified table per critter:
+// Single primary table per critter:
 //
-//   ┌──────────────┬────────────────────┬──────┬──────────┐
-//   │ State        │ Clip               │ Play │ Status   │
-//   ├──────────────┼────────────────────┼──────┼──────────┤
-//   │ idle         │ [Idle ▼]           │  ▶   │ auto     │
-//   │ run          │ [Run ▼]            │  ▶   │ auto     │
-//   │ ability_1    │ [(auto: Slam) ▼]   │  ▶   │ auto     │
-//   │ ability_2    │ [Custom ▼]         │  ▶   │ override │
-//   │ ability_3    │ [(auto: KO) ▼]     │  ▶   │ auto     │
-//   │ victory      │ ...                │      │          │
-//   │ defeat       │                    │      │          │
-//   │ fall         │                    │      │          │
-//   └──────────────┴────────────────────┴──────┴──────────┘
+//   ┌────────────┬────────────────────┬───────┬────┬─────┬──────────┐
+//   │ State      │ Clip               │ Speed │ ⤴  │Play │ Status   │
+//   ├────────────┼────────────────────┼───────┼────┼─────┼──────────┤
+//   │ idle       │ [Idle ▼]           │[1.00] │ ✓  │  ▶  │ auto     │
+//   │ run        │ [Run ▼]            │[1.15] │ ✓  │  ▶  │ override │
+//   │ ability_1  │ [(auto: Slam) ▼]   │[1.00] │    │  ▶  │ auto     │
+//   │ ability_2  │ [Custom ▼]         │[0.90] │    │  ▶  │ override │
+//   │ ability_3  │ [(auto: KO) ▼]     │[1.00] │    │  ▶  │ auto     │
+//   │ victory    │ ...                │       │    │     │          │
+//   │ defeat     │                    │       │    │     │          │
+//   │ fall       │                    │       │    │     │          │
+//   └────────────┴────────────────────┴───────┴────┴─────┴──────────┘
 //
-// Interactions:
-//   · Dropdown change       → clip auto-plays for instant preview AND
-//                             the override is recorded in sessionOverrides.
-//   · Row Play button       → replays the currently-selected clip.
-//   · Apply overrides       → rebuilds the SkeletalAnimator so the
-//                             resolver re-runs with the new override map
-//                             (only needed to verify auto behaviour).
-//   · Reset overrides       → clears every override for this critter +
-//                             rebuilds clean.
-//   · Preview all           → cycles primary states sequentially (~2 s
-//                             each) so you can sanity-check the whole
-//                             mapping in one go.
-//   · Export TS / JSON      → unchanged from previous iteration; the
-//                             JSON path feeds `npm run apply-tool-patch`.
+// Single source of truth per row: `getRowState(id, state)` reads from
+// (in priority order) the user's session edits, the authored baseline,
+// or sensible defaults. Every other surface — Play button, dropdown,
+// speed input, loop checkbox, status badge, export — derives from that
+// one read. This is the fix for the previous build's stale-closure bug
+// where Play replayed the original auto clip after the user had
+// changed the dropdown.
 //
-// Secondary states (walk / headbutt_anticip / headbutt_lunge / hit /
-// respawn) live in a collapsed "Advanced" section with the raw clip
-// list. Those states are usually procedural in code — clip overrides
-// for them are the exception.
+// State sync
+//   · `rowStates[id]` is per-critter Map<SkeletalState, RowState>.
+//   · Every interaction routes through `updateRowState(id, state,
+//     partial)` which:
+//        1. Stores the new RowState.
+//        2. Calls `syncToSession(id)` which projects the row state
+//           into `sessionOverrides[id]` in the AnimLabStateValue
+//           shape (string shorthand if only `clip`, object form if
+//           `speed`/`loop` differ from defaults).
+//        3. The export builders read `sessionOverrides` directly and
+//           bump the patch version to 2 if any object-form entry is
+//           present.
+//   · `loadCritter()` merges `AUTHORED_BASELINE[id]` with
+//     `sessionOverrides[id]` into the live `ANIMATION_OVERRIDES[id]`
+//     so the new SkeletalAnimator's resolver sees both.
 //
-// Override merge semantics — preserved from the previous iteration:
-//   · `AUTHORED_BASELINE` is a deep clone of ANIMATION_OVERRIDES at
-//     page load. Session edits merge ON TOP of this baseline, then are
-//     written into the live ANIMATION_OVERRIDES so the next
-//     SkeletalAnimator construction reads them via getClipOverride().
-//   · Without the baseline snapshot, loading a critter with no session
-//     override would `delete ANIMATION_OVERRIDES[id]` and wipe its
-//     authored entries — the bug the original lab hit on first QA.
+// Speed/loop runtime
+//   · The lab applies speed via the extended
+//     `SkeletalAnimator.playClipByName(clip, loop, speed)` (third arg
+//     was added 2026-04-27, defaults to 1).
+//   · The GAME runtime currently only reads `clip` via
+//     `getClipOverride()`. speed/loop are TOOLING METADATA — they
+//     ship in `ANIMATION_OVERRIDES` source but the resolver doesn't
+//     act on them yet. Documented in `animation-overrides.ts`.
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
@@ -62,6 +65,8 @@ import {
   copyPatchToClipboard,
   downloadPatch,
   type AnimLabPatch,
+  type AnimLabClipMeta,
+  type AnimLabStateValue,
 } from '../tools/tool-storage';
 
 const AUTHORED_BASELINE: Record<string, ClipOverrideMap> = JSON.parse(
@@ -69,7 +74,7 @@ const AUTHORED_BASELINE: Record<string, ClipOverrideMap> = JSON.parse(
 );
 
 // ---------------------------------------------------------------------------
-// State sets (drives the two tables)
+// State sets + defaults
 // ---------------------------------------------------------------------------
 
 const PRIMARY_STATES: SkeletalState[] = [
@@ -80,11 +85,26 @@ const SECONDARY_STATES: SkeletalState[] = [
   'walk', 'headbutt_anticip', 'headbutt_lunge', 'hit', 'respawn',
 ];
 
-// Sentinels in the dropdown beyond raw clip names. UI-only — neither
-// reaches the patch payload (both clear the override).
+/** Loop default per state — mirrors LOOPING_STATES in critter-skeletal.ts.
+ *  States not in this set play once and don't loop by default. */
+const LOOPING_DEFAULT = new Set<SkeletalState>(['idle', 'walk', 'run']);
+function defaultLoopFor(state: SkeletalState): boolean {
+  return LOOPING_DEFAULT.has(state);
+}
+
 const AUTO = '__auto__';
 const NONE = '__none__';
 type DropdownChoice = typeof AUTO | typeof NONE | string;
+
+interface RowState {
+  /** Dropdown selection: AUTO / NONE / specific clip name. */
+  clipChoice: DropdownChoice;
+  /** Playback speed multiplier (1 = real-time). */
+  speed: number;
+  /** Loop flag. `null` means "follow the state's default" (idle/walk/
+   *  run loop, others don't). User-set true/false overrides. */
+  loop: boolean | null;
+}
 
 // ---------------------------------------------------------------------------
 // Scene
@@ -105,7 +125,6 @@ scene.add(key);
 const rim = new THREE.DirectionalLight(0x9cb8ff, 0.45);
 rim.position.set(-4, 4, -3);
 scene.add(rim);
-
 scene.add(new THREE.GridHelper(10, 10, 0x444a5c, 0x2a2f3d));
 
 const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
@@ -120,22 +139,19 @@ const holder = new THREE.Group();
 scene.add(holder);
 let critter: Critter | null = null;
 
-/** Session-scoped real overrides. Only contains entries the user has
- *  pinned to a SPECIFIC clip name — Auto and None do not appear here.
- *  Every export reads from this directly so the patch is always sparse. */
-const sessionOverrides: Record<string, Partial<Record<SkeletalState, string>>> = {};
+/** Per-critter row states. Lazy: an entry only lands here once the
+ *  user has interacted with a row. Read via `getRowState(id, state)`
+ *  which falls back to authored / defaults when no entry exists. */
+const rowStates: Record<string, Map<SkeletalState, RowState>> = {};
 
-/** Per-critter dropdown memory: tracks which option the user picked in
- *  each row, including UI-only ones (Auto / None). Lets the table
- *  re-render with the right value across critter swaps within the
- *  session. Backed onto sessionOverrides by setDropdownChoice. */
-const userChoices: Record<string, Map<SkeletalState, DropdownChoice>> = {};
+/** Projected from `rowStates` by `syncToSession` after every edit.
+ *  Read-only mirror used by:
+ *    · `loadCritter` — to merge into `ANIMATION_OVERRIDES`.
+ *    · The export builders — to emit the patch payload. */
+const sessionOverrides: Record<string, Partial<Record<SkeletalState, AnimLabStateValue>>> = {};
 
 let currentId: string | null = null;
 let needsPanelRefresh = false;
-
-/** What is being previewed right now (driven by Play column / dropdown
- *  auto-play / Preview all / row click). null when stopped. */
 let currentlyPlayingState: SkeletalState | null = null;
 let currentlyPlayingClip: string | null = null;
 
@@ -162,8 +178,10 @@ function loadCritter(entry: RosterEntry): void {
     disposeMeshTree(critter.mesh);
     critter = null;
   }
-  // Merge authored baseline + session real overrides into the live map
-  // so the new SkeletalAnimator's getClipOverride hits read it.
+  // Merge authored baseline + session real overrides into the live
+  // ANIMATION_OVERRIDES so the new SkeletalAnimator's getClipOverride
+  // hits read them. Both maps store AnimLabStateValue (string OR
+  // object), the resolver normalises on read.
   const entryId = entry.id;
   const authored = AUTHORED_BASELINE[entryId] ?? {};
   const session = sessionOverrides[entryId] ?? {};
@@ -218,9 +236,6 @@ const npStateEl = document.getElementById('np-state')!;
 const npClipEl = document.getElementById('np-clip')!;
 
 const btnStop = document.getElementById('btn-stop') as HTMLButtonElement;
-const chkLoop = document.getElementById('chk-loop') as HTMLInputElement;
-const ctlSpeed = document.getElementById('ctl-speed') as HTMLInputElement;
-const valSpeed = document.getElementById('val-speed')!;
 
 const mappingRowsEl = document.getElementById('mapping-rows')!;
 const auxMappingRowsEl = document.getElementById('aux-mapping-rows')!;
@@ -237,34 +252,103 @@ const btnDownloadJson = document.getElementById('btn-download-json') as HTMLButt
 const exportOut = document.getElementById('export-out')!;
 
 // ---------------------------------------------------------------------------
-// Dropdown choice helpers
+// Row state helpers — single source of truth
 // ---------------------------------------------------------------------------
 
-function getUserChoiceMap(id: string): Map<SkeletalState, DropdownChoice> {
-  return userChoices[id] ??= new Map();
-}
-
-function getDropdownChoice(id: string, state: SkeletalState): DropdownChoice {
-  const choice = getUserChoiceMap(id).get(state);
-  if (choice !== undefined) return choice;
-  // No explicit choice yet — if there's an authored override, surface
-  // it as the row's initial value so the user sees what's in code.
+/** Read the current row state for (id, state). Order of resolution:
+ *
+ *   1. Session edit in `rowStates[id]` (user has touched this row).
+ *   2. Authored baseline in `ANIMATION_OVERRIDES` source — string or
+ *      object form.
+ *   3. Defaults: AUTO / 1.0 / null (follow state default loop).
+ */
+function getRowState(id: string, state: SkeletalState): RowState {
+  const stored = rowStates[id]?.get(state);
+  if (stored) return stored;
   const authored = AUTHORED_BASELINE[id]?.[state];
-  if (authored) return authored;
-  return AUTO;
+  if (authored != null) {
+    if (typeof authored === 'string') {
+      return { clipChoice: authored, speed: 1, loop: null };
+    }
+    return {
+      clipChoice: authored.clip,
+      speed: typeof authored.speed === 'number' ? authored.speed : 1,
+      loop: typeof authored.loop === 'boolean' ? authored.loop : null,
+    };
+  }
+  return { clipChoice: AUTO, speed: 1, loop: null };
 }
 
-function setDropdownChoice(id: string, state: SkeletalState, choice: DropdownChoice): void {
-  getUserChoiceMap(id).set(state, choice);
-  // Sync to sessionOverrides — only specific clip names persist; AUTO
-  // and NONE both clear the entry (both mean "no override").
-  const session = (sessionOverrides[id] ??= {});
-  if (choice === AUTO || choice === NONE) {
-    delete session[state];
-    if (Object.keys(session).length === 0) delete sessionOverrides[id];
-  } else {
-    session[state] = choice;
+/** Mutate a row's state and rebuild the sessionOverrides projection.
+ *  Every UI handler funnels through here — no other surface writes
+ *  to `rowStates` directly. */
+function updateRowState(id: string, state: SkeletalState, patch: Partial<RowState>): void {
+  const cur = getRowState(id, state);
+  const next: RowState = { ...cur, ...patch };
+  (rowStates[id] ??= new Map()).set(state, next);
+  syncToSession(id);
+}
+
+/** Project `rowStates[id]` into `sessionOverrides[id]` in the
+ *  AnimLabStateValue shape the patch + ANIMATION_OVERRIDES merge
+ *  consume. Called after every UI edit. */
+function syncToSession(id: string): void {
+  const map = rowStates[id];
+  if (!map || map.size === 0) {
+    delete sessionOverrides[id];
+    return;
   }
+  const entry: Partial<Record<SkeletalState, AnimLabStateValue>> = {};
+  for (const [state, rs] of map.entries()) {
+    const v = buildSessionValueFor(state, rs);
+    if (v !== null) entry[state] = v;
+  }
+  if (Object.keys(entry).length === 0) delete sessionOverrides[id];
+  else sessionOverrides[id] = entry;
+}
+
+/** Compute the single AnimLabStateValue for a row, or null if the row
+ *  contributes nothing to the patch (Auto with no metadata; None;
+ *  Auto with metadata but no resolvable clip name). */
+function buildSessionValueFor(state: SkeletalState, rs: RowState): AnimLabStateValue | null {
+  if (rs.clipChoice === NONE) return null;
+  const speedNonDefault = rs.speed !== 1;
+  const loopNonDefault = rs.loop !== null && rs.loop !== defaultLoopFor(state);
+  let clipName: string | null;
+  if (rs.clipChoice === AUTO) {
+    // Auto + no metadata = nothing to export. Auto + metadata snapshots
+    // the auto-resolved clip so the patch is self-contained.
+    if (!speedNonDefault && !loopNonDefault) return null;
+    clipName = resolveAutoClipFor(state);
+    if (!clipName) return null;
+  } else {
+    clipName = rs.clipChoice;
+  }
+  if (!speedNonDefault && !loopNonDefault) return clipName;
+  const obj: AnimLabClipMeta = { clip: clipName };
+  if (speedNonDefault) obj.speed = rs.speed;
+  if (loopNonDefault) obj.loop = rs.loop!;
+  return obj;
+}
+
+/** Live-resolve what the auto-tier resolver would pick for `state`.
+ *  Returns null when missing. Used by the dropdown's `(auto: …)`
+ *  label, the Play button's clip resolution, and `buildSessionValueFor`. */
+function resolveAutoClipFor(state: SkeletalState): string | null {
+  if (!critter?.skeletal) return null;
+  const r = critter.skeletal.getResolveReport().find((x) => x.state === state);
+  return r?.clipName ?? null;
+}
+
+/** Resolve the actual clip that should play for a state, taking the
+ *  user's current dropdown choice into account. Returns null when
+ *  None or missing. */
+function resolveClipForRow(state: SkeletalState): string | null {
+  if (!currentId) return null;
+  const rs = getRowState(currentId, state);
+  if (rs.clipChoice === NONE) return null;
+  if (rs.clipChoice === AUTO) return resolveAutoClipFor(state);
+  return rs.clipChoice;
 }
 
 // ---------------------------------------------------------------------------
@@ -293,11 +377,9 @@ function refreshAllPanels(): void {
 
   // Auto-play idle on first load if it has a clip — otherwise the
   // viewport is just a frozen pose and the user has no signal that
-  // anything works. Only fires once per critter load (controlled by
-  // the call site in frame()'s needsPanelRefresh handler).
+  // anything works.
   if (currentId && critter.skeletal && currentlyPlayingState === null) {
-    const idleClip = resolvedClipFor('idle');
-    if (idleClip) playClipForState('idle', idleClip);
+    if (resolveClipForRow('idle')) playRow('idle');
   }
 }
 
@@ -327,28 +409,16 @@ function buildMappingRow(state: SkeletalState, isPrimary: boolean): HTMLTableRow
   const autoClipName = reportRow.clipName;
   const autoSource = reportRow.source;
   const available = critter!.skeletal!.getRawClipNames();
-  const choice = getDropdownChoice(currentId!, state);
+  const rs = getRowState(currentId!, state);
+  const effectiveLoop = rs.loop ?? defaultLoopFor(state);
 
-  // Build dropdown — Auto + None + every clip in the GLB. Auto's label
-  // surfaces the resolver's choice so the user sees what would be used
-  // without having to think about tiers.
-  const autoLabel = autoClipName
-    ? `(auto: ${autoClipName})`
-    : '(auto: unresolved)';
+  const autoLabel = autoClipName ? `(auto: ${autoClipName})` : '(auto: unresolved)';
   const opts = [
     `<option value="${AUTO}">${escapeHtml(autoLabel)}</option>`,
     `<option value="${NONE}">(none — explicitly no clip)</option>`,
     ...available.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`),
   ].join('');
 
-  // Status badge — what would happen at runtime, in plain language.
-  // "auto" means the resolver picks; "override" means a specific clip;
-  // "missing" means no clip will play at all (auto with no match).
-  const badgeHtml = badgeForChoice(choice, autoClipName);
-
-  // Tier label only in the secondary table — power users sometimes
-  // care WHY auto picked a particular clip, but it's clutter for the
-  // primary table.
   const tierHtml = autoSource && autoSource !== 'missing'
     ? `<span class="badge tier-${autoSource}">${autoSource}</span>`
     : '<span class="badge missing">—</span>';
@@ -357,13 +427,17 @@ function buildMappingRow(state: SkeletalState, isPrimary: boolean): HTMLTableRow
     tr.innerHTML = `
       <td class="state-name">${state}</td>
       <td class="clip-cell"><select aria-label="Clip for ${state}">${opts}</select></td>
+      <td class="speed-cell"><input class="speed-input" type="number" min="0.1" max="3.0" step="0.05" value="${rs.speed.toFixed(2)}" aria-label="Speed for ${state}" /></td>
+      <td class="loop-cell"><input class="loop-input" type="checkbox" aria-label="Loop ${state}" ${effectiveLoop ? 'checked' : ''} /></td>
       <td class="play-cell"><button class="play-btn" aria-label="Play ${state}">▶</button></td>
-      <td class="status-cell">${badgeHtml}</td>
+      <td class="status-cell"></td>
     `;
   } else {
     tr.innerHTML = `
       <td class="state-name">${state}</td>
       <td class="clip-cell"><select aria-label="Clip for ${state}">${opts}</select></td>
+      <td class="speed-cell"><input class="speed-input" type="number" min="0.1" max="3.0" step="0.05" value="${rs.speed.toFixed(2)}" aria-label="Speed for ${state}" /></td>
+      <td class="loop-cell"><input class="loop-input" type="checkbox" aria-label="Loop ${state}" ${effectiveLoop ? 'checked' : ''} /></td>
       <td class="play-cell"><button class="play-btn" aria-label="Play ${state}">▶</button></td>
       <td class="tier-cell">${tierHtml}</td>
     `;
@@ -371,199 +445,137 @@ function buildMappingRow(state: SkeletalState, isPrimary: boolean): HTMLTableRow
 
   // Wire the select.
   const select = tr.querySelector('select') as HTMLSelectElement;
-  select.value = choice;
-  if (choice !== AUTO && choice !== NONE) select.classList.add('override');
+  select.value = rs.clipChoice;
+  syncRowVisualState(tr, state);
   select.addEventListener('change', () => {
-    onDropdownChange(state, select.value as DropdownChoice, tr, autoClipName);
+    onClipChange(state, select.value as DropdownChoice, tr);
   });
 
-  // Wire the row Play button.
+  // Speed input.
+  const speedInput = tr.querySelector('.speed-input') as HTMLInputElement;
+  speedInput.addEventListener('input', () => {
+    const v = +speedInput.value;
+    if (!Number.isFinite(v) || v <= 0) return;
+    onSpeedChange(state, v, tr);
+  });
+  speedInput.addEventListener('change', () => {
+    // Re-format on commit so half-typed values normalise.
+    if (!currentId) return;
+    const live = getRowState(currentId, state);
+    speedInput.value = live.speed.toFixed(2);
+  });
+
+  // Loop checkbox.
+  const loopInput = tr.querySelector('.loop-input') as HTMLInputElement;
+  loopInput.addEventListener('change', () => {
+    onLoopChange(state, loopInput.checked, tr);
+  });
+
+  // Play button — reads LIVE state every click. Fixes the previous
+  // build's bug where stale closure over `rs` made Play replay the
+  // original auto clip even after the dropdown changed.
   const playBtn = tr.querySelector('.play-btn') as HTMLButtonElement;
-  const canPlay = choice === NONE
-    ? false
-    : choice === AUTO
-      ? autoClipName !== null
-      : true;
-  playBtn.disabled = !canPlay;
   playBtn.addEventListener('click', () => {
-    const clipName = clipNameForChoice(choice, autoClipName);
-    if (!clipName) return;
-    playClipForState(state, clipName);
+    playRow(state);
   });
 
   return tr;
 }
 
-function clipNameForChoice(choice: DropdownChoice, autoClipName: string | null): string | null {
-  if (choice === NONE) return null;
-  if (choice === AUTO) return autoClipName;
-  return choice;
+/** Refresh the row's badge + override-styling based on the LIVE row
+ *  state. Called after every onClipChange / onSpeedChange / onLoopChange. */
+function syncRowVisualState(tr: HTMLTableRowElement, state: SkeletalState): void {
+  if (!currentId) return;
+  const rs = getRowState(currentId, state);
+  const select = tr.querySelector('select') as HTMLSelectElement;
+  select.classList.toggle('override', rs.clipChoice !== AUTO && rs.clipChoice !== NONE);
+
+  const playBtn = tr.querySelector('.play-btn') as HTMLButtonElement;
+  const clipName = resolveClipForRow(state);
+  playBtn.disabled = clipName === null;
+
+  const statusCell = tr.querySelector('.status-cell');
+  if (statusCell) statusCell.innerHTML = computeBadge(state, rs);
+
+  // Sync speed/loop input visual state — slight yellow tint when
+  // non-default so user sees at a glance which rows are tuned.
+  const speedInput = tr.querySelector('.speed-input') as HTMLInputElement | null;
+  if (speedInput) speedInput.classList.toggle('override', rs.speed !== 1);
+  const loopInput = tr.querySelector('.loop-input') as HTMLInputElement | null;
+  if (loopInput) {
+    const loopOverridden = rs.loop !== null && rs.loop !== defaultLoopFor(state);
+    loopInput.classList.toggle('override', loopOverridden);
+  }
 }
 
-function badgeForChoice(choice: DropdownChoice, autoClipName: string | null): string {
-  if (choice === NONE) return '<span class="badge missing">none</span>';
-  if (choice === AUTO) {
-    return autoClipName
-      ? '<span class="badge auto">auto</span>'
-      : '<span class="badge missing">missing</span>';
+function computeBadge(state: SkeletalState, rs: RowState): string {
+  if (rs.clipChoice === NONE) return '<span class="badge missing">none</span>';
+  const hasMetadata = rs.speed !== 1 || (rs.loop !== null && rs.loop !== defaultLoopFor(state));
+  if (rs.clipChoice === AUTO) {
+    const auto = resolveAutoClipFor(state);
+    if (!auto) return '<span class="badge missing">missing</span>';
+    return hasMetadata
+      ? '<span class="badge override">override</span>'
+      : '<span class="badge auto">auto</span>';
   }
   return '<span class="badge override">override</span>';
 }
 
-/** Resolve the clip that would play for `state` right now — taking the
- *  user's dropdown choice into account, falling back to the resolver's
- *  auto choice. Returns null if nothing should play (None or missing). */
-function resolvedClipFor(state: SkeletalState): string | null {
-  if (!currentId || !critter?.skeletal) return null;
-  const choice = getDropdownChoice(currentId, state);
-  if (choice === NONE) return null;
-  if (choice !== AUTO) return choice;
-  const r = critter.skeletal.getResolveReport().find((x) => x.state === state);
-  return r?.clipName ?? null;
-}
-
-function onDropdownChange(
-  state: SkeletalState,
-  v: DropdownChoice,
-  tr: HTMLTableRowElement,
-  autoClipName: string | null,
-): void {
+function onClipChange(state: SkeletalState, v: DropdownChoice, tr: HTMLTableRowElement): void {
   if (!currentId) return;
-  setDropdownChoice(currentId, state, v);
+  updateRowState(currentId, state, { clipChoice: v });
+  syncRowVisualState(tr, state);
+  refreshDuplicateWarning();
 
-  // Update visual cues for THIS row in place.
-  const select = tr.querySelector('select') as HTMLSelectElement;
-  select.classList.toggle('override', v !== AUTO && v !== NONE);
-  const statusCell = tr.querySelector('.status-cell');
-  if (statusCell) statusCell.innerHTML = badgeForChoice(v, autoClipName);
-  const playBtn = tr.querySelector('.play-btn') as HTMLButtonElement;
-  const canPlay = v === NONE ? false : v === AUTO ? autoClipName !== null : true;
-  playBtn.disabled = !canPlay;
-
-  // Auto-play: instant feedback. None stops playback; Auto/specific
-  // play their resolved clip.
   if (v === NONE) {
     if (critter?.skeletal && currentlyPlayingState === state) {
       critter.skeletal.stopAll();
+      currentlyPlayingState = null;
+      currentlyPlayingClip = null;
       updateNowPlaying(null, null);
     }
-  } else {
-    const clipName = clipNameForChoice(v, autoClipName);
-    if (clipName) playClipForState(state, clipName);
+    return;
   }
-
-  refreshDuplicateWarning();
+  // Auto-play the new clip immediately for instant feedback.
+  playRow(state);
 }
 
-function buildClipList(): void {
-  clipListEl.innerHTML = '';
-  if (!critter?.skeletal) {
-    clipListEl.innerHTML = '<div class="clip-row"><span class="name" style="grid-column:1/-1;opacity:0.55">(no skeletal animator — this GLB ships no clips)</span></div>';
-    return;
-  }
-  const clips = critter.skeletal.listClips();
-  if (clips.length === 0) {
-    clipListEl.innerHTML = '<div class="clip-row"><span class="name" style="grid-column:1/-1;opacity:0.55">(empty clip list)</span></div>';
-    return;
-  }
-  for (const c of clips) {
-    const row = document.createElement('div');
-    row.className = 'clip-row';
-    row.dataset.clip = c.name;
-    if (currentlyPlayingClip === c.name) row.classList.add('playing');
-    const stateLabel = c.state
-      ? `<span class="state-tag resolved">→ ${c.state}</span>`
-      : '<span class="state-tag none">(unmapped)</span>';
-    row.innerHTML = `
-      <span class="name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
-      <span class="dur">${c.duration.toFixed(2)}s</span>
-      ${stateLabel}
-      <button data-clip="${escapeHtml(c.name)}">▶</button>
-    `;
-    row.querySelector('button')?.addEventListener('click', () => {
-      // Raw clip play — no state association, used only for direct
-      // inspection in the Advanced section.
-      if (!critter?.skeletal) return;
-      const ok = critter.skeletal.playClipByName(c.name, chkLoop.checked);
-      if (!ok) return;
-      currentlyPlayingState = null;
-      currentlyPlayingClip = c.name;
-      updateNowPlaying(null, c.name);
-    });
-    clipListEl.appendChild(row);
-  }
+function onSpeedChange(state: SkeletalState, v: number, tr: HTMLTableRowElement): void {
+  if (!currentId) return;
+  updateRowState(currentId, state, { speed: v });
+  syncRowVisualState(tr, state);
+  // If this row is the one playing, replay so the new speed kicks in.
+  if (currentlyPlayingState === state) playRow(state);
 }
 
-// ---------------------------------------------------------------------------
-// Now-playing indicator + row highlight
-// ---------------------------------------------------------------------------
-
-function updateNowPlaying(state: SkeletalState | null, clipName: string | null): void {
-  if (!state && !clipName) {
-    npBox.classList.add('idle');
-    npStateEl.textContent = '—';
-    npClipEl.textContent = 'none';
-  } else {
-    npBox.classList.remove('idle');
-    npStateEl.textContent = state ?? '(raw clip)';
-    npClipEl.textContent = clipName ?? '(no clip)';
-  }
-  // Highlight rows matching the active state (mapping tables) or the
-  // active raw clip (clip-list rows).
-  document.querySelectorAll('#mapping-rows tr, #aux-mapping-rows tr').forEach((tr) => {
-    tr.classList.toggle('playing', tr.getAttribute('data-state') === state);
-  });
-  document.querySelectorAll('.clip-row').forEach((row) => {
-    row.classList.toggle('playing', row.getAttribute('data-clip') === clipName);
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Duplicate-clip warning
-// ---------------------------------------------------------------------------
-
-function refreshDuplicateWarning(): void {
-  if (!currentId || !critter?.skeletal) {
-    duplicateWarningEl.style.display = 'none';
-    duplicateWarningEl.innerHTML = '';
-    return;
-  }
-  // Map clipName → states using it (across primary + secondary).
-  const usage = new Map<string, SkeletalState[]>();
-  const allStates = [...PRIMARY_STATES, ...SECONDARY_STATES];
-  for (const state of allStates) {
-    const clipName = resolvedClipFor(state);
-    if (!clipName) continue;
-    const arr = usage.get(clipName) ?? [];
-    arr.push(state);
-    usage.set(clipName, arr);
-  }
-  const dupes = [...usage.entries()].filter(([, arr]) => arr.length >= 2);
-  if (dupes.length === 0) {
-    duplicateWarningEl.style.display = 'none';
-    duplicateWarningEl.innerHTML = '';
-    return;
-  }
-  duplicateWarningEl.style.display = 'block';
-  duplicateWarningEl.innerHTML = dupes
-    .map(
-      ([clip, states]) =>
-        `⚠ <b>${escapeHtml(states.join(' + '))}</b> all use <code>${escapeHtml(clip)}</code>`,
-    )
-    .join('<br>');
+function onLoopChange(state: SkeletalState, v: boolean, tr: HTMLTableRowElement): void {
+  if (!currentId) return;
+  // null means "follow default" — only store an explicit boolean if
+  // the user's choice DIFFERS from the default. Otherwise store the
+  // explicit choice anyway so toggling back to default still records
+  // the user touched it (UI is more honest that way).
+  updateRowState(currentId, state, { loop: v });
+  syncRowVisualState(tr, state);
+  if (currentlyPlayingState === state) playRow(state);
 }
 
 // ---------------------------------------------------------------------------
 // Playback
 // ---------------------------------------------------------------------------
 
-function playClipForState(state: SkeletalState, clipName: string): void {
-  if (!critter?.skeletal) return;
-  const ok = critter.skeletal.playClipByName(clipName, chkLoop.checked);
+/** Play whatever clip the LIVE row state resolves to, with that
+ *  state's speed + loop. All Play sources funnel through here. */
+function playRow(state: SkeletalState): void {
+  if (!currentId || !critter?.skeletal) return;
+  const rs = getRowState(currentId, state);
+  const clipName = resolveClipForRow(state);
+  if (!clipName) return;
+  const loop = rs.loop ?? defaultLoopFor(state);
+  const ok = critter.skeletal.playClipByName(clipName, loop, rs.speed);
   if (!ok) return;
   currentlyPlayingState = state;
   currentlyPlayingClip = clipName;
-  updateNowPlaying(state, clipName);
+  updateNowPlaying(state, clipName, rs.speed, loop);
 }
 
 btnStop.addEventListener('click', () => {
@@ -575,29 +587,11 @@ btnStop.addEventListener('click', () => {
   stopPreviewAll();
 });
 
-chkLoop.addEventListener('change', () => {
-  // Re-trigger current playback so the new loop setting takes effect.
-  if (currentlyPlayingState && currentlyPlayingClip) {
-    playClipForState(currentlyPlayingState, currentlyPlayingClip);
-  } else if (currentlyPlayingClip) {
-    // Raw clip preview — replay with the new loop setting.
-    if (!critter?.skeletal) return;
-    critter.skeletal.playClipByName(currentlyPlayingClip, chkLoop.checked);
-  }
-});
-
-ctlSpeed.addEventListener('input', () => {
-  valSpeed.textContent = (+ctlSpeed.value).toFixed(2) + '×';
-});
-
 // ---------------------------------------------------------------------------
 // Apply / Reset / Preview all
 // ---------------------------------------------------------------------------
 
 btnApply.addEventListener('click', () => {
-  // Reload the current critter so the SkeletalAnimator constructs with
-  // the merged ANIMATION_OVERRIDES applied — gives the resolver a
-  // chance to re-pick auto clips for any state still on Auto.
   const activeCard = document.querySelector('.roster-card.active') as HTMLElement | null;
   const id = activeCard?.dataset.id;
   if (!id) return;
@@ -607,12 +601,9 @@ btnApply.addEventListener('click', () => {
 
 btnReset.addEventListener('click', () => {
   if (!currentId) return;
+  delete rowStates[currentId];
   delete sessionOverrides[currentId];
-  delete userChoices[currentId];
   delete ANIMATION_OVERRIDES[currentId];
-  // Restore the authored baseline (if any) so the next reload has the
-  // SAME starting point as a fresh page load — Reset doesn't wipe
-  // authored entries, just session overrides on top.
   const authored = AUTHORED_BASELINE[currentId];
   if (authored && Object.keys(authored).length > 0) {
     ANIMATION_OVERRIDES[currentId] = { ...authored };
@@ -649,18 +640,124 @@ btnPreviewAll.addEventListener('click', () => {
     }
     const state = PRIMARY_STATES[previewAllIdx]!;
     previewAllIdx++;
-    const clip = resolvedClipFor(state);
+    const clip = resolveClipForRow(state);
     if (clip) {
-      playClipForState(state, clip);
+      playRow(state);
       previewAllTimer = window.setTimeout(tickPreview, PREVIEW_ALL_MS);
     } else {
-      // Skip missing/none — short delay so the UI tick is visible.
       previewAllTimer = window.setTimeout(tickPreview, 200);
     }
   };
   tickPreview();
   btnPreviewAll.textContent = '⏹ Stop preview';
 });
+
+// ---------------------------------------------------------------------------
+// Now-playing indicator + row highlight
+// ---------------------------------------------------------------------------
+
+function updateNowPlaying(
+  state: SkeletalState | null,
+  clipName: string | null,
+  speed?: number,
+  loop?: boolean,
+): void {
+  if (!state && !clipName) {
+    npBox.classList.add('idle');
+    npStateEl.textContent = '—';
+    npClipEl.textContent = 'none';
+  } else {
+    npBox.classList.remove('idle');
+    npStateEl.textContent = state ?? '(raw clip)';
+    let label = clipName ?? '(no clip)';
+    if (typeof speed === 'number') label += ` · ${speed.toFixed(2)}×`;
+    if (typeof loop === 'boolean') label += ` · loop ${loop ? 'on' : 'off'}`;
+    npClipEl.textContent = label;
+  }
+  document.querySelectorAll('#mapping-rows tr, #aux-mapping-rows tr').forEach((tr) => {
+    tr.classList.toggle('playing', tr.getAttribute('data-state') === state);
+  });
+  document.querySelectorAll('.clip-row').forEach((row) => {
+    row.classList.toggle('playing', row.getAttribute('data-clip') === clipName);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate-clip warning
+// ---------------------------------------------------------------------------
+
+function refreshDuplicateWarning(): void {
+  if (!currentId || !critter?.skeletal) {
+    duplicateWarningEl.style.display = 'none';
+    duplicateWarningEl.innerHTML = '';
+    return;
+  }
+  const usage = new Map<string, SkeletalState[]>();
+  const allStates = [...PRIMARY_STATES, ...SECONDARY_STATES];
+  for (const state of allStates) {
+    const clipName = resolveClipForRow(state);
+    if (!clipName) continue;
+    const arr = usage.get(clipName) ?? [];
+    arr.push(state);
+    usage.set(clipName, arr);
+  }
+  const dupes = [...usage.entries()].filter(([, arr]) => arr.length >= 2);
+  if (dupes.length === 0) {
+    duplicateWarningEl.style.display = 'none';
+    duplicateWarningEl.innerHTML = '';
+    return;
+  }
+  duplicateWarningEl.style.display = 'block';
+  duplicateWarningEl.innerHTML = dupes
+    .map(
+      ([clip, states]) =>
+        `⚠ <b>${escapeHtml(states.join(' + '))}</b> all use <code>${escapeHtml(clip)}</code>`,
+    )
+    .join('<br>');
+}
+
+// ---------------------------------------------------------------------------
+// Raw clip list (Advanced)
+// ---------------------------------------------------------------------------
+
+function buildClipList(): void {
+  clipListEl.innerHTML = '';
+  if (!critter?.skeletal) {
+    clipListEl.innerHTML = '<div class="clip-row"><span class="name" style="grid-column:1/-1;opacity:0.55">(no skeletal animator — this GLB ships no clips)</span></div>';
+    return;
+  }
+  const clips = critter.skeletal.listClips();
+  if (clips.length === 0) {
+    clipListEl.innerHTML = '<div class="clip-row"><span class="name" style="grid-column:1/-1;opacity:0.55">(empty clip list)</span></div>';
+    return;
+  }
+  for (const c of clips) {
+    const row = document.createElement('div');
+    row.className = 'clip-row';
+    row.dataset.clip = c.name;
+    if (currentlyPlayingClip === c.name) row.classList.add('playing');
+    const stateLabel = c.state
+      ? `<span class="state-tag resolved">→ ${c.state}</span>`
+      : '<span class="state-tag none">(unmapped)</span>';
+    row.innerHTML = `
+      <span class="name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+      <span class="dur">${c.duration.toFixed(2)}s</span>
+      ${stateLabel}
+      <button data-clip="${escapeHtml(c.name)}">▶</button>
+    `;
+    row.querySelector('button')?.addEventListener('click', () => {
+      // Raw-clip preview — bypasses per-row config; uses default loop=true,
+      // speed=1. For per-state preview the user clicks Play in the table.
+      if (!critter?.skeletal) return;
+      const ok = critter.skeletal.playClipByName(c.name, true, 1);
+      if (!ok) return;
+      currentlyPlayingState = null;
+      currentlyPlayingClip = c.name;
+      updateNowPlaying(null, c.name, 1, true);
+    });
+    clipListEl.appendChild(row);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Export — TS snippet, JSON patch, download
@@ -672,15 +769,42 @@ function buildAnimLabPatchData(): AnimLabPatch['data'] {
   for (const id of ids) {
     const map = sessionOverrides[id];
     if (!map) continue;
-    const inner: Record<string, string> = {};
+    const inner: Record<string, AnimLabStateValue> = {};
     const keys = Object.keys(map).sort() as SkeletalState[];
     for (const k of keys) {
       const v = map[k];
-      if (typeof v === 'string') inner[k] = v;
+      if (v == null) continue;
+      inner[k] = v;
     }
     if (Object.keys(inner).length > 0) data[id] = inner;
   }
   return data;
+}
+
+/** Auto-detect the right patch version: 2 if any value is object form
+ *  (i.e. has speed/loop metadata), 1 otherwise. */
+function detectAnimLabVersion(data: AnimLabPatch['data']): 1 | 2 {
+  for (const id of Object.keys(data)) {
+    const inner = data[id];
+    if (!inner) continue;
+    for (const v of Object.values(inner)) {
+      if (typeof v === 'object') return 2;
+    }
+  }
+  return 1;
+}
+
+/** Render a single value for the TS snippet — same logic as the
+ *  apply-script's `formatAnimLabValue`. Kept in sync by hand. */
+function formatAnimLabValueForTs(v: AnimLabStateValue): string {
+  if (typeof v === 'string') return JSON.stringify(v);
+  const hasSpeed = typeof v.speed === 'number' && v.speed !== 1;
+  const hasLoop = typeof v.loop === 'boolean';
+  if (!hasSpeed && !hasLoop) return JSON.stringify(v.clip);
+  const parts = [`clip: ${JSON.stringify(v.clip)}`];
+  if (hasSpeed) parts.push(`speed: ${v.speed}`);
+  if (hasLoop) parts.push(`loop: ${v.loop}`);
+  return `{ ${parts.join(', ')} }`;
 }
 
 btnExport.addEventListener('click', () => {
@@ -694,7 +818,7 @@ btnExport.addEventListener('click', () => {
   for (const id of Object.keys(data)) {
     lines.push(`  ${id}: {`);
     for (const k of Object.keys(data[id]!)) {
-      lines.push(`    ${k}: ${JSON.stringify(data[id]![k])},`);
+      lines.push(`    ${k}: ${formatAnimLabValueForTs(data[id]![k]!)},`);
     }
     lines.push(`  },`);
   }
@@ -709,7 +833,9 @@ btnExport.addEventListener('click', () => {
 });
 
 btnExportJson.addEventListener('click', async () => {
-  const patch = makeToolPatch<AnimLabPatch>('anim-lab', buildAnimLabPatchData());
+  const data = buildAnimLabPatchData();
+  const version = detectAnimLabVersion(data);
+  const patch = makeToolPatch<AnimLabPatch>('anim-lab', data, version);
   const out = JSON.stringify(patch, null, 2);
   exportOut.textContent = out;
   await copyPatchToClipboard(patch);
@@ -717,7 +843,9 @@ btnExportJson.addEventListener('click', async () => {
 });
 
 btnDownloadJson.addEventListener('click', () => {
-  const patch = makeToolPatch<AnimLabPatch>('anim-lab', buildAnimLabPatchData());
+  const data = buildAnimLabPatchData();
+  const version = detectAnimLabVersion(data);
+  const patch = makeToolPatch<AnimLabPatch>('anim-lab', data, version);
   exportOut.textContent = JSON.stringify(patch, null, 2);
   downloadPatch(patch);
 });
@@ -764,7 +892,7 @@ function updateCamera(): void {
 
 function resize(): void {
   const leftW = 180; // roster panel
-  const rightW = 520; // right panel (wider for the new layout)
+  const rightW = 560; // right panel (wider to fit Speed + Loop columns)
   const bannerH = 40;
   const w = window.innerWidth - leftW - rightW;
   const h = window.innerHeight - bannerH;
@@ -785,11 +913,9 @@ function frame(): void {
   const now = performance.now();
   const rawDt = Math.min((now - prevTime) / 1000, 0.1);
   prevTime = now;
-  const speed = +ctlSpeed.value;
-  const dt = rawDt * speed;
 
   if (critter) {
-    critter.update(dt);
+    critter.update(rawDt);
     if (
       needsPanelRefresh
       && critter.skeletal
@@ -812,8 +938,8 @@ if (typeof window !== 'undefined') {
     currentId,
     critter,
     sessionOverrides: structuredClone(sessionOverrides),
-    userChoices: Object.fromEntries(
-      Object.entries(userChoices).map(([id, m]) => [id, Object.fromEntries(m.entries())]),
+    rowStates: Object.fromEntries(
+      Object.entries(rowStates).map(([id, m]) => [id, Object.fromEntries(m.entries())]),
     ),
     effectiveOverrides: structuredClone(ANIMATION_OVERRIDES),
     currentlyPlaying: { state: currentlyPlayingState, clip: currentlyPlayingClip },
