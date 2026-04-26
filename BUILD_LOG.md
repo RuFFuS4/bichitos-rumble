@@ -9,6 +9,118 @@
 
 ---
 
+## 2026-04-26 — 5 pack decor layouts populated + findFragmentAt fallback fix
+
+Composition-and-gameplay phase: applied the previously-approved design
+doc to actual `DECOR_LAYOUTS` for every pack. Authored 52 placements
+total (jungle 11, frozen_tundra 9, desert_dunes 8, coral_beach 13,
+kitsune_shrine 11). Surfaced one runtime bug during validation and
+fixed it.
+
+### Layouts (per-pack design summary)
+
+All packs follow the global rules:
+  · Centro limpio (r ≤ 5.5): no decor.
+  · Anillo medio (r 5.5–8.5): max 1 prop per pack as accent.
+  · Borde (r ≥ 8.5): 80–90% of decor in clusters.
+  · No "perfect circles" — r varies ±0.2–0.5 within each cluster, rotY
+    varies freely so nothing reads as ruled out.
+  · Min cluster size = 2 props (single accents allowed only as
+    asymmetry breakers).
+
+**🌴 jungle (11)** — "Templo perdido devorado por la selva"
+  Cluster A "Palm overgrowth" (palmtall + 2 rocks), Cluster B "Templo
+  enterrado" (totem + 2 rocks), Cluster C "Mini bosquecillo asimétrico"
+  (2 palms separadas en r y angle distintos), Accent SE (2 rocks
+  micro-scatter), 1 mid-ring rock. Hero focal: palmtall.
+
+**❄️ frozen_tundra (9)** — "Llanura helada con bosque disperso"
+  Cluster A "Pinar nevado" (2 pines), Cluster B "Iceberg field
+  escalonado" (tall + mid + low en línea), Cluster C "Cluster
+  cristalino" (2 ice shards), Accent solitario "Wayfinder"
+  (signpost off-axis). Hero dual: pine + icebergtall.
+
+**🌵 desert_dunes (8)** — "Old west + civilización perdida"
+  Cluster A "Sandstone forest" (spiretall + 2 spires), Cluster B
+  "Oasis muerto" (palm + cactus + bones), Cluster C "Wreckage"
+  (minecart + flag). 3 clusters en triángulo casi equilátero
+  (separación angular ≥ 90°). Hero dual: spiretall + palm_desert.
+  Densidad LOW intencional — el desierto vive de los huecos.
+
+**🐠 coral_beach (13)** — "Playa coral con restos de naufragio"
+  Cluster A "Wrecked coast" (shipwreck + boulder + shell), Cluster B
+  "Coral garden" (brain + pink + red coral + shell), Cluster C
+  "Palm + roca + estrella" (palm + boulder + starfish), 2 tide-line
+  scatters irregulares (no arco perfecto), 1 mid-ring starfish.
+  Hero dual: palm_beach + shipwreck. Densidad ALTA — el pack más
+  cargado, vibrancia tropical.
+
+**⛩️ kitsune_shrine (11)** — "Santuario ritual entre bambúes y cerezos"
+  Cluster A "Ritual gate" (toriilarge + lantern), Cluster B
+  "Sakura altar" (sakura + kitsune statue + lanternlarge), Cluster C
+  "Bamboo grove E" (2 bamboos), Cluster C' "Bamboo grove W" (espejo),
+  Accent toriismall en mid-ring (rompe simetría en RADIO + ángulo),
+  1 lantern small mid-ring. Hero dual: sakura + toriilarge.
+  Único pack con simetría parcial deliberada.
+
+Total props authored: 52. Catálogo cubierto: 30 de los 32 tipos en
+DECOR_TYPES — los únicos no usados son tipos cuya silueta solapaba
+con otra mejor en cada pack (decisión de composición).
+
+### Bug fix surfaced during validation: findFragmentAt
+
+Symptom: jungle pinned via `?arenaPack=jungle&decorPreview=1` reported
+only 6 of 11 props reparented. Other packs hit similar drops on certain
+seed rolls.
+
+Root cause: `Arena.findFragmentAt(x, z)` did a strict
+`pointInFragment` check for every fragment and returned -1 if no
+fragment contained the point exactly. The fragment generator leaves
+small angular gaps between sectors (sectorJitter = 0.28 radians of
+slack) and an authored decor placement could land in one of those
+slivers, especially around cluster edges where r and angle were
+deliberately varied per the design rules. The caller in `applyPack`
+disposed those orphan meshes and the props silently vanished.
+
+Fix: two-pass lookup.
+  Pass 1 — strict `pointInFragment` (unchanged, preserves precise
+    parent assignment when possible).
+  Pass 2 — angular-nearest fallback: pick the fragment whose sector
+    midline is closest to the placement's atan2(z,x). Decor is
+    visual-only so attaching to the angularly-closest fragment is
+    correct — when that fragment falls, the decor falls with it,
+    which is the only thing the parenting needs to do.
+
+Verification post-fix: every pack reparents 100% of its authored
+props (jungle 11/11, tundra 9/9, desert 8/8, beach 13/13, shrine
+11/11, total 52/52). No console errors. No gameplay change — strict
+pass still wins when it matches.
+
+### Files touched
+
+  src/arena-decor-layouts.ts   (5 layouts populated, 52 placements)
+  src/arena.ts                 (findFragmentAt two-pass)
+  BUILD_LOG.md / MEMORY.md / DEV_TOOLS.md / NEXT_STEPS.md
+
+Preflight: tsc client + server clean, verify-glbs 8/8, vite build
+14.61s, manual smoke validated all 5 packs render their props.
+
+### Limitations / known follow-ups
+
+  · Pack ground texture caches across rapid in-session pack swaps
+    (decor-editor / debug API). Not a runtime issue in production —
+    each match loads one pack from a fresh page. No fix planned.
+  · The 4 previously-empty packs now have authored layouts; they're
+    a starting point, not final. Future iterations can polish via
+    /decor-editor.html (drag, undo, preview, export TS).
+  · Cardinal naming in code comments uses "N / S / E / W" loosely —
+    the actual screen-space mapping depends on camera (Z+ = bottom of
+    screen with current camera). Composition is correct because
+    angular SEPARATION between clusters is what matters, not the
+    cardinal label.
+
+---
+
 ## 2026-04-25 — Decor scale fix (scaleBase → displayHeight) + tool-storage shared
 
 Two follow-ups on top of the Preview-in-game iteration. Both surfaced
