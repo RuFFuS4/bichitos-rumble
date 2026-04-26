@@ -493,6 +493,26 @@ export class SkeletalAnimator {
     return true;
   }
 
+  /**
+   * Live-update the playback speed of an already-running clip without
+   * resetting its time. Used by /anim-lab.html so dragging or typing
+   * the per-row speed input doesn't cause the clip to snap back to
+   * t=0 on every keystroke — an `input` event fires per character,
+   * and calling `playClipByName` again would do `action.reset()` + a
+   * fresh `fadeIn(0.15)`, which visibly re-flickers the bone pose
+   * and looks like the animation is "broken".
+   *
+   * Returns true if the clip's action was found, false otherwise.
+   * The lab falls back to `playClipByName` when this returns false
+   * (usually because no preview is active yet).
+   */
+  setRunningClipTimeScale(clipName: string, speed: number): boolean {
+    const action = this.clipActionsByName.get(clipName);
+    if (!action) return false;
+    action.setEffectiveTimeScale(speed);
+    return true;
+  }
+
   /** Restore every AnimationAction this preview session mutated back to
    *  its authored (constructor-time) loop + clampWhenFinished. Called
    *  when manual mode releases (stopAll / next play(state)). */
