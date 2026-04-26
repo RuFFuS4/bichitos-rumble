@@ -23,6 +23,11 @@ el lab se vuelve ilegible para quien entre después.
 >    clips in /animations" and "run clips in the game".
 > 3. `/calibrate.html` — per-critter scale / pivotY / rotation lab
 >    (added 2026-04-24). Not related to animation; silhouette sizing.
+>    Per-critter `localStorage` working copy (`calibrate:<critterId>`)
+>    added 2026-04-26 — slider tweaks survive reloads, "Reset local
+>    working copy" reverts the selected critter to authored
+>    `roster.ts` values. Export emits TS snippet (manual paste) **or**
+>    JSON patch (`npm run apply-tool-patch`).
 > 4. `/decor-editor.html` — per-pack in-arena decoration placement
 >    lab (added 2026-04-25, UX iteration 2026-04-25). Top-down ortho
 >    view of the arena with band-radius wireframes. Click-to-place,
@@ -55,12 +60,57 @@ el lab se vuelve ilegible para quien entre después.
 >    GLB preview AND in-game so what you see in the editor matches
 >    what ships.
 >
-> **Shared infrastructure** (2026-04-25): `src/tools/tool-storage.ts`
-> exposes `loadFromStorage / saveToStorage / clearStorage /
-> hasStorageKey / storageDivergesFromCode` plus a key builder.
-> /decor-editor consumes it; /calibrate and /anim-lab still use their
-> own inline helpers (migration deferred). New internal tools should
-> consume this module from day one.
+> **Shared infrastructure** (2026-04-25, extended 2026-04-26):
+> `src/tools/tool-storage.ts` exposes:
+>
+>   - localStorage helpers — `loadFromStorage / saveToStorage /
+>     clearStorage / hasStorageKey / storageDivergesFromCode` + key
+>     builder. Consumed by `/decor-editor` (per-pack) and `/calibrate`
+>     (per-critter). `/anim-lab` still uses an inline helper (queue
+>     deferred — works as-is).
+>   - **ToolPatch envelope** + helpers — `makeToolPatch /
+>     copyPatchToClipboard / downloadPatch` and the `CalibratePatch /
+>     AnimLabPatch / DecorEditorPatch` discriminated union. Every lab
+>     emits the same `{ tool, version, generated, data }` shape so a
+>     single Node script can apply the patch (see workflow below).
+>
+> New internal tools should consume this module from day one.
+
+### Apply-patch workflow (2026-04-26)
+
+End-to-end loop for `/calibrate` and `/anim-lab` JSON patches —
+designed to remove the manual paste step:
+
+  1. Tune in the lab. localStorage holds the working copy so reloads
+     don't lose anything.
+  2. Click **📦 Copy JSON patch** (clipboard) or **💾 Download
+     patch.json** (file).
+  3. Save the JSON to `tool-patch.json` at the repo root.
+  4. Run:
+     ```
+     npm run apply-tool-patch              # writes the file
+     npm run apply-tool-patch -- --dry-run # preview the diff first
+     npm run apply-tool-patch -- --patch=path/to.json  # alt input
+     ```
+  5. The script (`scripts/apply-tool-patch.mjs`) routes by `tool`
+     field:
+       - `calibrate`     → rewrites per-critter `scale / pivotY /
+         rotation` in `src/roster.ts`. Sparse: only critters in the
+         patch are touched.
+       - `anim-lab`      → rewrites the entire `ANIMATION_OVERRIDES`
+         record in `src/animation-overrides.ts`. Critters absent
+         from the patch are dropped (not merged) — comments inside
+         the record are also wiped, so re-add doc blocks manually
+         after running the script if they matter.
+       - `decor-editor`  → rewrites the per-pack body in
+         `src/arena-decor-layouts.ts`. Sparse: packs absent from the
+         patch are left untouched.
+  6. Coloured diff is printed before any write. With `--dry-run`,
+     nothing is written. Without it, the file is rewritten and the
+     script suggests `git diff <file>` for review.
+
+The TS-snippet export buttons remain for manual-paste workflows and as
+a fallback when clipboard / Node is unavailable.
 >
 > Full anim-lab design in BUILD_LOG.md §"2026-04-25 Animation
 > Validation Lab". Decor system design in BUILD_LOG.md §"2026-04-25

@@ -61,23 +61,50 @@
   displayHeight). El badge "≈ X u (n× critter)" en el header del
   selected prop muestra el final size; updates live al mover slider.
 
-### Tools shared infrastructure (in progress)
+### Tools shared infrastructure (extended 2026-04-26)
 
-- **`src/tools/tool-storage.ts`** (NEW 2026-04-25): helpers compartidos
-  para localStorage working copy:
+- **`src/tools/tool-storage.ts`** (NEW 2026-04-25, ToolPatch added
+  2026-04-26): helpers compartidos para localStorage working copy
+  **y** export-patch unificado.
+
+  localStorage helpers:
   - `toolStorageKey(toolName, entityId)`
   - `loadFromStorage<T>(key, validator?)`
   - `saveToStorage(key, value)`
   - `clearStorage(key)`
   - `hasStorageKey(key)`
   - `storageDivergesFromCode(key, codeRef)`
-- **Estado actual**: solo `/decor-editor.html` lo consume.
-  `/calibrate.html` y `/anim-lab.html` siguen con helpers inline —
-  migración deferida para evitar regresiones. Patrón pensado para
-  unificar cuando esas tools reciban su próxima iteración.
-- **Pendiente**: módulo de export-patch + script `scripts/apply-tool-
-  patch.mjs` para auto-aplicar working copies a archivos source. No
-  está en este commit; ver NEXT_STEPS.
+
+  ToolPatch helpers (2026-04-26):
+  - `makeToolPatch<T extends ToolPatch>(tool, data): T` — envuelve
+    `{ tool, version: 1, generated: ISO, data }`.
+  - `copyPatchToClipboard(patch): Promise<boolean>`
+  - `downloadPatch(patch): void`
+  - Tipos: `CalibratePatch | AnimLabPatch | DecorEditorPatch` (unión
+    discriminada).
+
+- **Consumidores localStorage**:
+  - `/decor-editor.html` (per-pack `decor-editor:<packId>`)
+  - `/calibrate.html` (per-critter `calibrate:<critterId>` — añadido
+    2026-04-26)
+  - `/anim-lab.html` aún usa helper inline (migración deferida — no
+    es bloqueante).
+
+- **Apply-patch flow (2026-04-26)**: `scripts/apply-tool-patch.mjs`
+  + `npm run apply-tool-patch`. Lee `tool-patch.json` (o `--patch=`
+  alt) y enruta por `patch.tool` a:
+  - `calibrate` → `src/roster.ts` (per-critter scale/pivotY/
+    rotation)
+  - `anim-lab` → `src/animation-overrides.ts` (rewrite total del
+    record `ANIMATION_OVERRIDES` — comentarios se pierden, paste
+    manual sigue siendo opción)
+  - `decor-editor` → `src/arena-decor-layouts.ts` (per-pack body
+    replace)
+
+  Imprime diff coloreado antes de escribir; `--dry-run` previsualiza
+  sin escribir. Anclas regex muy acotadas por bloque (`id:
+  '<critter>'` / `<packId>: [` / `export const ANIMATION_
+  OVERRIDES`) para que el rewrite no se desborde.
 
 ### Skybox (añadido 2026-04-25)
 

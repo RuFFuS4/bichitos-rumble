@@ -9,6 +9,110 @@
 
 ---
 
+## 2026-04-26 — Tool-patch workflow (calibrate + anim-lab + decor-editor)
+
+**Goal**: reduce manual paste steps when applying lab tweaks to source
+code. Each lab (`/calibrate`, `/anim-lab`, `/decor-editor`) already
+exported a TS snippet that the user had to paste into the right
+source file. This iteration keeps that path but adds a JSON
+side-channel + Node script so the apply step is `npm run
+apply-tool-patch` instead of "find the file, find the block, paste,
+fix indentation".
+
+**Shape unified across labs** (`src/tools/tool-storage.ts`):
+
+```ts
+export interface ToolPatchBase {
+  tool: 'calibrate' | 'anim-lab' | 'decor-editor';
+  version: 1;
+  generated: string; // ISO 8601
+}
+export type ToolPatch = CalibratePatch | AnimLabPatch | DecorEditorPatch;
+```
+
+Each lab's "Export" group now has three buttons:
+
+  - **📋 Copy TS snippet** — manual paste path, unchanged.
+  - **📦 Copy JSON patch** — clipboard JSON, for the script path.
+  - **💾 Download patch.json** — writes a file (clipboard alt).
+
+**Apply script** — `scripts/apply-tool-patch.mjs`:
+
+  - Reads `tool-patch.json` (or `--patch=path`).
+  - Routes by `patch.tool`:
+    - `calibrate` → `src/roster.ts` (per-critter scale/pivotY/
+      rotation, sparse merge per critter id)
+    - `anim-lab` → `src/animation-overrides.ts` (whole
+      `ANIMATION_OVERRIDES` record rewrite)
+    - `decor-editor` → `src/arena-decor-layouts.ts` (per-pack body
+      replace)
+  - Coloured diff printed before any write. `--dry-run` to preview.
+  - Read-then-write semantics: either every entry applies or none.
+  - Block locator is regex-acotada (anchor + brace-balanced scan
+    until `},` / `]` / `;`) so rewrites never bleed outside the
+    intended scope.
+
+**Calibrate localStorage** (mirroring decor-editor pattern):
+
+  - Per-critter key `calibrate:<critterId>` with `{ scale, pivotY,
+    rotation }`.
+  - Slider tweaks auto-save; reload reapplies.
+  - "Reset local working copy" button reverts the selected critter
+    to authored `roster.ts` values and clears the entry.
+  - Inline indicator shows `using authored roster.ts values` vs
+    `local working copy active`.
+
+**Caveats**:
+
+  - `anim-lab` apply rewrites the whole `ANIMATION_OVERRIDES` record
+    — inline doc-comments are wiped. Documented in `applyAnimLab`
+    JSDoc and in DEV_TOOLS.md. Manual TS-snippet path is the
+    recommended route when comments matter.
+  - Number formatting: `formatNumber` trims trailing zeros (3.30 →
+    3.3). Existing source style sometimes uses fixed-2 decimals
+    (`scale: 1.00`); patches normalise to trimmed form.
+    Functionally identical, stylistic shift is visible in git diff.
+
+**Validation**:
+
+  - Typecheck clean.
+  - `vite build` clean (calibrate bundle 10.5 KB → 10.7 KB, +0.2 KB
+    for the localStorage feature).
+  - Dry-run tested with three fixture JSONs in `.tmp/`:
+    - `test-calibrate.json` → 1 effective change (Kurama scale
+      0.54 → 0.58); produces a 6-line hunk with ±2 ctx.
+    - `test-anim-lab.json` → adds Sergei.run override + Trunk
+      ability_1 + ability_2; clean del/add hunk for whole
+      `ANIMATION_OVERRIDES` record.
+    - `test-decor-editor.json` → replaces `coral_beach` with 2-prop
+      tiny layout; clean del/add hunk for the pack body.
+
+**Commits**:
+
+  - C1 `35b063e` — feat(tools): unified ToolPatch JSON format +
+    clipboard/download helpers
+  - C2 `3bb791c` — feat(calibrate): real TS snippet + JSON patch +
+    download buttons
+  - C3 `0df71b9` — feat(anim-lab): JSON patch + download buttons
+    (TS export unchanged)
+  - C4 `1ded781` — feat(tools): apply-tool-patch script — JSON →
+    source rewrite
+  - C5 `cdb4450` — feat(calibrate): per-critter localStorage
+    working copy
+  - C6 (this entry) — docs(tools): DEV_TOOLS + MEMORY entries for
+    the apply-patch flow
+
+**Next** (deferred — non-blocking):
+
+  - migrate `/anim-lab.html` localStorage to tool-storage helpers
+  - per-pack reset-and-export button in `/decor-editor` (currently
+    "Reset local" only clears localStorage; doesn't trigger an
+    export at the same time).
+  - `formatNumber` style mode for decor-editor that preserves
+    `.00` padding to match the existing layouts file style.
+
+---
+
 ## 2026-04-26 — 5 pack decor layouts populated + findFragmentAt fallback fix
 
 Composition-and-gameplay phase: applied the previously-approved design

@@ -43,6 +43,12 @@ import { getDisplayRoster, type RosterEntry } from '../roster';
 import { Critter, CRITTER_PRESETS } from '../critter';
 import type { SkeletalState } from '../critter-skeletal';
 import { ANIMATION_OVERRIDES, type ClipOverrideMap } from '../animation-overrides';
+import {
+  makeToolPatch,
+  copyPatchToClipboard,
+  downloadPatch,
+  type AnimLabPatch,
+} from '../tools/tool-storage';
 
 /**
  * Snapshot of the authored ANIMATION_OVERRIDES at page load. We mutate
@@ -202,6 +208,8 @@ const mappingRows = document.getElementById('mapping-rows')!;
 const btnApply = document.getElementById('btn-apply') as HTMLButtonElement;
 const btnReset = document.getElementById('btn-reset') as HTMLButtonElement;
 const btnExport = document.getElementById('btn-export') as HTMLButtonElement;
+const btnExportJson = document.getElementById('btn-export-json') as HTMLButtonElement;
+const btnDownloadJson = document.getElementById('btn-download-json') as HTMLButtonElement;
 const exportOut = document.getElementById('export-out')!;
 
 /** Currently-active manual clip (one-shot preview), if any. null when
@@ -382,24 +390,38 @@ btnReset.addEventListener('click', () => {
   if (entry) loadCritter(entry);
 });
 
-btnExport.addEventListener('click', () => {
-  // Build a pasteable snippet for animation-overrides.ts. Includes only
-  // critters that have at least one session override.
+// Build a sparse session-overrides snapshot used by every export mode.
+// Anim-lab is already inherently sparse: sessionOverrides only contains
+// critters the user actually changed.
+function buildAnimLabPatchData(): AnimLabPatch['data'] {
+  const data: AnimLabPatch['data'] = {};
   const ids = Object.keys(sessionOverrides).sort();
-  if (ids.length === 0) {
+  for (const id of ids) {
+    const map = sessionOverrides[id];
+    if (!map) continue;
+    const inner: Record<string, string> = {};
+    const keys = Object.keys(map).sort() as SkeletalState[];
+    for (const k of keys) {
+      const v = map[k];
+      if (typeof v === 'string') inner[k] = v;
+    }
+    if (Object.keys(inner).length > 0) data[id] = inner;
+  }
+  return data;
+}
+
+btnExport.addEventListener('click', () => {
+  const data = buildAnimLabPatchData();
+  if (Object.keys(data).length === 0) {
     exportOut.textContent = '(no overrides set — pick a critter, change the mapping, then Export)';
     return;
   }
   const lines: string[] = [];
   lines.push('// Paste inside ANIMATION_OVERRIDES in src/animation-overrides.ts');
-  for (const id of ids) {
-    const map = sessionOverrides[id];
-    if (!map) continue;
-    const keys = Object.keys(map).sort() as SkeletalState[];
-    if (keys.length === 0) continue;
+  for (const id of Object.keys(data)) {
     lines.push(`  ${id}: {`);
-    for (const k of keys) {
-      lines.push(`    ${k}: ${JSON.stringify(map[k])},`);
+    for (const k of Object.keys(data[id]!)) {
+      lines.push(`    ${k}: ${JSON.stringify(data[id]![k])},`);
     }
     lines.push(`  },`);
   }
@@ -411,6 +433,20 @@ btnExport.addEventListener('click', () => {
     });
   }
   console.log(out);
+});
+
+btnExportJson.addEventListener('click', async () => {
+  const patch = makeToolPatch<AnimLabPatch>('anim-lab', buildAnimLabPatchData());
+  const out = JSON.stringify(patch, null, 2);
+  exportOut.textContent = out;
+  await copyPatchToClipboard(patch);
+  console.log(out);
+});
+
+btnDownloadJson.addEventListener('click', () => {
+  const patch = makeToolPatch<AnimLabPatch>('anim-lab', buildAnimLabPatchData());
+  exportOut.textContent = JSON.stringify(patch, null, 2);
+  downloadPatch(patch);
 });
 
 // ---------------------------------------------------------------------------

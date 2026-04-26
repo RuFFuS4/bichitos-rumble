@@ -123,3 +123,139 @@ export function storageDivergesFromCode(key: string, codeRef: unknown): boolean 
     return false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// ToolPatch — unified export format for /<tool>.html → apply-tool-patch.mjs
+// ---------------------------------------------------------------------------
+//
+// Every internal lab emits the SAME shape so a single Node script
+// (scripts/apply-tool-patch.mjs) can route the patch to the correct
+// source file (roster.ts / animation-overrides.ts / arena-decor-
+// layouts.ts) without per-tool special-casing in the entry point.
+//
+// Contract:
+//   tool      — discriminator. The apply-script uses this to pick
+//               which source file to mutate and which regex pattern
+//               to feed it.
+//   version   — numeric. Bump on incompatible payload changes; the
+//               apply-script bails out hard on unknown versions
+//               instead of writing garbage.
+//   generated — ISO 8601. Timestamp + tool name go into the source
+//               diff log so we can trace which lab session produced
+//               which change.
+//   data      — tool-specific payload. Each tool defines its own
+//               structure; the discriminated union below documents
+//               the contracts.
+//
+// All payloads are sparse: only the entries the user actually edited
+// in the lab are emitted. The apply-script merges in-place — entries
+// not in `data` are left untouched in the source file.
+
+export type ToolName = 'calibrate' | 'anim-lab' | 'decor-editor';
+
+export interface ToolPatchBase {
+  tool: ToolName;
+  version: number;
+  generated: string;
+}
+
+/**
+ * `calibrate` patch: per-critter visual transform tweaks.
+ *
+ * Maps to `RosterEntry` fields in src/roster.ts. The apply-script
+ * locates each entry by `id: '<critterId>'` and rewrites only the
+ * fields present in the patch. Fields that look the same as the code
+ * default (within epsilon) are kept in the patch so the diff still
+ * shows what was reviewed.
+ */
+export interface CalibratePatch extends ToolPatchBase {
+  tool: 'calibrate';
+  version: 1;
+  data: Record<string, {
+    scale?: number;
+    pivotY?: number;
+    rotation?: number;
+  }>;
+}
+
+/**
+ * `anim-lab` patch: per-critter clip-name overrides for skeletal states.
+ *
+ * Maps to `ANIMATION_OVERRIDES` in src/animation-overrides.ts. The
+ * apply-script merges per `critterId`, replacing the entire inner
+ * object so removed states actually get removed (not silently kept).
+ */
+export interface AnimLabPatch extends ToolPatchBase {
+  tool: 'anim-lab';
+  version: 1;
+  data: Record<string, Record<string, string>>;
+}
+
+/**
+ * `decor-editor` patch: full layout per pack.
+ *
+ * Maps to `DECOR_LAYOUTS` in src/arena-decor-layouts.ts. Each pack's
+ * placement array is replaced wholesale (placements are positional —
+ * partial merges don't make sense).
+ */
+export interface DecorEditorPatch extends ToolPatchBase {
+  tool: 'decor-editor';
+  version: 1;
+  data: Record<string, Array<{
+    r: number;
+    angle: number;
+    rotY: number;
+    scale: number;
+    type: string;
+  }>>;
+}
+
+export type ToolPatch = CalibratePatch | AnimLabPatch | DecorEditorPatch;
+
+/** Build a fresh ToolPatch envelope with `generated` set to now. The
+ *  caller fills `data`. */
+export function makeToolPatch<T extends ToolPatch>(
+  tool: T['tool'],
+  data: T['data'],
+): T {
+  return {
+    tool,
+    version: 1,
+    generated: new Date().toISOString(),
+    data,
+  } as T;
+}
+
+/** Best-effort copy a ToolPatch to the clipboard as pretty-printed
+ *  JSON. Returns true on success, false if the API is unavailable
+ *  (browser quirk, file:// origin, etc.) so the UI can fall back to
+ *  showing the JSON inline. */
+export async function copyPatchToClipboard(patch: ToolPatch): Promise<boolean> {
+  const json = JSON.stringify(patch, null, 2);
+  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(json);
+      return true;
+    } catch { /* fall through */ }
+  }
+  return false;
+}
+
+/** Trigger a browser file download for a ToolPatch (filename =
+ *  `tool-patch-<tool>-<timestamp>.json`). Useful when clipboard is
+ *  blocked or the user wants to keep multiple patches around for
+ *  later batch apply. */
+export function downloadPatch(patch: ToolPatch): void {
+  if (typeof window === 'undefined') return;
+  const json = JSON.stringify(patch, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = patch.generated.replace(/[:.]/g, '-');
+  a.href = url;
+  a.download = `tool-patch-${patch.tool}-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

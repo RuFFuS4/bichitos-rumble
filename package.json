@@ -14,6 +14,7 @@
     "inspect:bounds": "node scripts/inspect-bounds.mjs",
     "og": "node scripts/make-og-image.mjs",
     "favicon": "node scripts/make-favicon-ico.mjs",
+    "apply-tool-patch": "node scripts/apply-tool-patch.mjs",
     "compress:audio": "node scripts/compress-audio.mjs",
     "test:smoke": "playwright test",
     "check": "tsc --noEmit && node scripts/verify-critter-glbs.mjs && vite build",
