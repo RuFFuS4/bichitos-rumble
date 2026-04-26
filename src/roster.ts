@@ -59,7 +59,7 @@ const ROSTER: RosterEntry[] = [
     // their origin at the feet (minY=0 in GLB space), so pivotY=0 lands
     // feet on floor regardless of scale — different from Sergei whose
     // mesh is centered (pivotY=1.335).
-    scale: 3.3, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    scale: 2.84, rotation: -Math.PI / 2, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Bruiser',
@@ -78,7 +78,7 @@ const ROSTER: RosterEntry[] = [
     // in three.js), so no rotation needed to line up with game forward.
     // If playtest shows Kurama facing away from the camera in
     // character-select, flip to Math.PI.
-    scale: 0.54, rotation: 0, offset: [0, 0, 0],
+    scale: 0.81, rotation: 0, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Trickster',
@@ -101,7 +101,7 @@ const ROSTER: RosterEntry[] = [
     // to 0 (previous 1.335 was for the old Tripo centered mesh).
     // rotation 0: Mixamo characters face -Z, same as every other
     // Meshy import in the roster.
-    scale: 0.66, rotation: 0, offset: [0, 0, 0],
+    scale: 1.09, rotation: 0, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Balanced',
@@ -115,7 +115,7 @@ const ROSTER: RosterEntry[] = [
     // Tank turtle (mass 1.5) — second largest silhouette after Trunk.
     // New Tripo Animate rig aligns her forward axis with the others.
     // Tripo mesh origin at feet, pivotY=0.
-    scale: 3.1, rotation: -Math.PI / 2, offset: [0, 0, 0],
+    scale: 2.6, rotation: -Math.PI / 2, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Tank',
@@ -152,7 +152,7 @@ const ROSTER: RosterEntry[] = [
     // Source bounds Y [0, 1.044], feet-at-origin (Mixamo convention).
     // scale 1.53 matches the in-game ~1.6u chibi target (was 2.7 for
     // the Tripo mesh at ~0.6u tall). rotation 0 (Mixamo faces -Z).
-    scale: 1.53, rotation: 0, offset: [0, 0, 0],
+    scale: 1.44, rotation: 0, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Trapper',
@@ -209,7 +209,7 @@ const ROSTER: RosterEntry[] = [
     // scale 1.40 matches the in-game ~1.6u chibi target (was 2.3 for
     // the Tripo mesh which was ~0.7u tall).
     // rotation 0: Meshy/Mixamo character faces -Z, same as Kurama.
-    scale: 1.40, rotation: 0, offset: [0, 0, 0],
+    scale: 1.17, rotation: 0, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,
     status: 'playable',
     role: 'Glass Cannon',
