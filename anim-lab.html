@@ -449,13 +449,18 @@
       <button id="btn-preview-all" class="secondary">▶ Preview all</button>
     </div>
     <div class="help">
-      <b>Each row owns its own clip + speed + loop.</b> Changing any of them
-      auto-plays for instant feedback. Play replays whatever is currently
-      configured. <b>Apply</b> rebuilds the skeletal animator so the
-      resolver runs again — only useful when you've left a state on
-      <i>Auto</i> and want to confirm what it picks. <b>Reset</b> clears
-      every session edit for the selected critter and reloads its
-      authored baseline.
+      <b>Each row owns its own clip + speed + loop.</b> Changing the
+      <b>clip</b> auto-plays the new selection. Changing <b>speed</b>
+      live-adjusts the running clip without restarting it (no flicker
+      while you type). <b>Loop</b> is the EXPORT setting only — the
+      lab preview always loops so one-shot clips (abilities, victory,
+      defeat, fall) don't freeze at the last frame; the checkbox value
+      ships in the patch for game runtime. <b>Play</b> replays
+      whatever is currently configured. <b>Apply</b> rebuilds the
+      skeletal animator so the resolver runs again — only useful when
+      you've left a state on <i>Auto</i> and want to confirm what it
+      picks. <b>Reset</b> clears every session edit for the selected
+      critter and reloads its authored baseline.
     </div>
 
     <h2>Export</h2>

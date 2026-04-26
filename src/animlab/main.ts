@@ -536,7 +536,14 @@ function onClipChange(state: SkeletalState, v: DropdownChoice, tr: HTMLTableRowE
     }
     return;
   }
-  // Auto-play the new clip immediately for instant feedback.
+  // Skip replay when the resolved clip is unchanged (e.g. picking
+  // "Idle" explicitly when the row was already on Auto-resolves-to-
+  // Idle). Avoids the visible snap-back-to-t=0 when the user is just
+  // confirming the current selection.
+  const newClip = resolveClipForRow(state);
+  if (currentlyPlayingState === state && currentlyPlayingClip === newClip) {
+    return;
+  }
   playRow(state);
 }
 
@@ -544,38 +551,70 @@ function onSpeedChange(state: SkeletalState, v: number, tr: HTMLTableRowElement)
   if (!currentId) return;
   updateRowState(currentId, state, { speed: v });
   syncRowVisualState(tr, state);
-  // If this row is the one playing, replay so the new speed kicks in.
-  if (currentlyPlayingState === state) playRow(state);
+  // Live-update the running action's time scale instead of a full
+  // replay. Each keystroke in the speed input fires `input`, so a
+  // replay-per-keystroke would `action.reset()` + fadeIn the clip
+  // every character — bones flicker back to t=0 visibly. The live
+  // path keeps the clip's playhead and just changes the rate.
+  if (currentlyPlayingState === state && currentlyPlayingClip && critter?.skeletal) {
+    const updated = critter.skeletal.setRunningClipTimeScale(currentlyPlayingClip, v);
+    const rs = getRowState(currentId, state);
+    const exportLoop = rs.loop ?? defaultLoopFor(state);
+    if (updated) {
+      updateNowPlaying(state, currentlyPlayingClip, v, exportLoop);
+    } else {
+      // Action wasn't found (shouldn't happen mid-preview but guard).
+      playRow(state);
+    }
+  }
 }
 
 function onLoopChange(state: SkeletalState, v: boolean, tr: HTMLTableRowElement): void {
   if (!currentId) return;
-  // null means "follow default" — only store an explicit boolean if
-  // the user's choice DIFFERS from the default. Otherwise store the
-  // explicit choice anyway so toggling back to default still records
-  // the user touched it (UI is more honest that way).
+  // The loop checkbox drives the EXPORT (what ships in the patch +
+  // ANIMATION_OVERRIDES) but does NOT affect lab preview — preview
+  // always loops so one-shot states (ability/victory/fall/...) don't
+  // freeze at the last frame and look "broken" while the user is
+  // browsing. See playRow for the preview-always-loops decision.
   updateRowState(currentId, state, { loop: v });
   syncRowVisualState(tr, state);
-  if (currentlyPlayingState === state) playRow(state);
+  // Refresh the now-playing label so the user sees what their
+  // current loop setting will export as.
+  if (currentlyPlayingState === state && currentlyPlayingClip) {
+    const rs = getRowState(currentId, state);
+    updateNowPlaying(state, currentlyPlayingClip, rs.speed, v);
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Playback
 // ---------------------------------------------------------------------------
 
-/** Play whatever clip the LIVE row state resolves to, with that
- *  state's speed + loop. All Play sources funnel through here. */
+/** Play whatever clip the LIVE row state resolves to. Preview ALWAYS
+ *  loops — the row's loop checkbox is the EXPORT setting (what ends
+ *  up in `ANIMATION_OVERRIDES`), not the lab playback flag. Without
+ *  this decoupling, one-shot states (ability_*, victory, defeat,
+ *  fall) clamp at the last frame after one play and look frozen, even
+ *  though the clip itself is fine.
+ *
+ *  Speed honours the row's value so the user can preview at the
+ *  intended playback rate.
+ *
+ *  The "Now playing" banner displays the row's EXPORT loop value, not
+ *  the preview's `true` — so the user can see what their patch will
+ *  contain even though the visualisation cycles. */
 function playRow(state: SkeletalState): void {
   if (!currentId || !critter?.skeletal) return;
   const rs = getRowState(currentId, state);
   const clipName = resolveClipForRow(state);
   if (!clipName) return;
-  const loop = rs.loop ?? defaultLoopFor(state);
-  const ok = critter.skeletal.playClipByName(clipName, loop, rs.speed);
+  const PREVIEW_LOOP = true;
+  const ok = critter.skeletal.playClipByName(clipName, PREVIEW_LOOP, rs.speed);
   if (!ok) return;
   currentlyPlayingState = state;
   currentlyPlayingClip = clipName;
-  updateNowPlaying(state, clipName, rs.speed, loop);
+  const exportLoop = rs.loop ?? defaultLoopFor(state);
+  updateNowPlaying(state, clipName, rs.speed, exportLoop);
 }
 
 btnStop.addEventListener('click', () => {
