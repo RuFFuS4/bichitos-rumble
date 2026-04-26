@@ -80,7 +80,7 @@
     #right-panel {
       position: fixed;
       top: 40px; right: 0; bottom: 0;
-      width: 520px;
+      width: 560px;
       padding: 16px;
       background: rgba(14, 16, 26, 0.95);
       border-left: 1px solid rgba(255,255,255,0.08);
@@ -113,7 +113,7 @@
     }
     #right-panel h2:first-of-type { border-top: none; padding-top: 0; }
 
-    /* "Now playing" indicator */
+    /* "Now playing" indicator — primary feedback surface */
     .np-box {
       display: flex;
       align-items: center;
@@ -131,21 +131,14 @@
     .np-box .np-clip { color: #cdd4e2; }
     .np-box.idle .np-clip { opacity: 0.45; }
 
-    /* Top playback strip — Stop + loop + speed */
+    /* Top strip — only Stop now. Loop/Speed are PER-ROW. */
     .top-pb {
-      display: grid;
-      grid-template-columns: auto auto 1fr 56px;
+      display: flex;
       gap: 10px;
       align-items: center;
-      font-size: 11px;
       margin-bottom: 4px;
     }
-    .top-pb input[type=range] { accent-color: #ffdc5c; }
-    .top-pb .speed-val {
-      text-align: right;
-      font-family: ui-monospace, monospace;
-      color: #ffdc5c;
-    }
+    .top-pb button { width: auto; }
 
     button {
       padding: 7px 10px;
@@ -172,7 +165,7 @@
       cursor: not-allowed;
     }
 
-    /* Mapping table — the centrepiece */
+    /* Mapping table — the centrepiece. Per-row clip + speed + loop. */
     #mapping-table, #aux-mapping-table {
       width: 100%;
       border-collapse: collapse;
@@ -184,12 +177,12 @@
       letter-spacing: 0.15em;
       text-transform: uppercase;
       opacity: 0.5;
-      padding: 6px 8px;
+      padding: 6px 4px;
       border-bottom: 1px solid rgba(255,255,255,0.1);
       font-weight: 700;
     }
     #mapping-table td, #aux-mapping-table td {
-      padding: 6px 8px;
+      padding: 6px 4px;
       border-bottom: 1px solid rgba(255,255,255,0.04);
       font-family: ui-monospace, monospace;
       vertical-align: middle;
@@ -203,10 +196,12 @@
       color: #ffdc5c;
       font-weight: 700;
     }
-    td.state-name { color: #cdd4e2; width: 110px; }
+    td.state-name { color: #cdd4e2; width: 96px; padding-left: 8px; }
     td.clip-cell { width: auto; }
-    td.play-cell { width: 56px; text-align: center; }
-    td.status-cell { width: 90px; }
+    td.speed-cell { width: 60px; }
+    td.loop-cell { width: 32px; text-align: center; }
+    td.play-cell { width: 44px; text-align: center; }
+    td.status-cell { width: 80px; }
     td.tier-cell { width: 70px; font-size: 10px; opacity: 0.7; }
 
     #mapping-table select, #aux-mapping-table select {
@@ -222,6 +217,43 @@
     #aux-mapping-table select.override {
       border-color: rgba(255,220,92,0.6);
       color: #ffdc5c;
+    }
+
+    /* Per-row speed input — small, tight. Yellow tint when non-1.0. */
+    input.speed-input {
+      width: 100%;
+      background: #1a1d29;
+      color: #e0e4ee;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 3px;
+      font: 11px ui-monospace, monospace;
+      padding: 3px 4px;
+      text-align: right;
+      -moz-appearance: textfield;
+    }
+    input.speed-input::-webkit-outer-spin-button,
+    input.speed-input::-webkit-inner-spin-button {
+      -webkit-appearance: none; margin: 0;
+    }
+    input.speed-input:focus {
+      outline: none;
+      border-color: rgba(255,220,92,0.6);
+    }
+    input.speed-input.override {
+      border-color: rgba(255,220,92,0.6);
+      color: #ffdc5c;
+    }
+
+    /* Per-row loop checkbox */
+    input.loop-input {
+      accent-color: #ffdc5c;
+      cursor: pointer;
+      transform: scale(1.1);
+    }
+    input.loop-input.override {
+      outline: 1px solid rgba(255,220,92,0.6);
+      outline-offset: 2px;
+      border-radius: 2px;
     }
 
     .play-cell button {
@@ -392,19 +424,16 @@
 
     <div class="top-pb">
       <button id="btn-stop" class="secondary">⏹ Stop</button>
-      <label style="display:flex;align-items:center;gap:6px;font-size:11px;opacity:0.85;">
-        <input type="checkbox" id="chk-loop" checked /> Loop
-      </label>
-      <input id="ctl-speed" type="range" min="0.1" max="3.0" step="0.05" value="1.0" />
-      <span class="speed-val" id="val-speed">1.00×</span>
     </div>
 
-    <h2>Logical state → clip</h2>
+    <h2>Logical state → clip · speed · loop</h2>
     <table id="mapping-table">
       <thead>
         <tr>
           <th>State</th>
           <th>Clip</th>
+          <th>Speed</th>
+          <th>⤴</th>
           <th>Play</th>
           <th>Status</th>
         </tr>
@@ -420,7 +449,13 @@
       <button id="btn-preview-all" class="secondary">▶ Preview all</button>
     </div>
     <div class="help">
-      <b>Dropdown</b>: changing a clip auto-plays it for instant feedback and saves the override. <b>Play column</b>: replays whatever is currently selected. <b>Apply</b>: rebuilds the skeletal animator so the resolver runs again with your overrides — only needed to verify "what would the resolver pick" if you've changed a state to <i>Auto</i>. <b>Reset</b>: clears all overrides for the selected critter.
+      <b>Each row owns its own clip + speed + loop.</b> Changing any of them
+      auto-plays for instant feedback. Play replays whatever is currently
+      configured. <b>Apply</b> rebuilds the skeletal animator so the
+      resolver runs again — only useful when you've left a state on
+      <i>Auto</i> and want to confirm what it picks. <b>Reset</b> clears
+      every session edit for the selected critter and reloads its
+      authored baseline.
     </div>
 
     <h2>Export</h2>
@@ -431,7 +466,16 @@
     </div>
     <pre class="export-box" id="export-out">(set overrides, then export)</pre>
     <div class="help">
-      <b>TS snippet</b>: paste manually into the <code>ANIMATION_OVERRIDES</code> record in <code>src/animation-overrides.ts</code>. <b>JSON patch</b>: save as <code>tool-patch.json</code> at the repo root and run <code style="color:#ffdc5c">npm run apply-tool-patch</code>.
+      <b>Patch shape</b>: each entry is either a string (clip only) or
+      <code>{ clip, speed?, loop? }</code> when speed/loop differ from
+      defaults. Patch <b>version: 2</b> is auto-emitted when any state
+      ships metadata; otherwise version: 1 keeps back-compat with old
+      patches. Apply via <code style="color:#ffdc5c">npm run apply-tool-patch</code>.
+      <br><br>
+      <b>Speed/loop runtime</b>: tooling metadata until Phase 2 — the
+      lab plays back at your tuning, but the live game currently reads
+      only <code>clip</code>. The resolver fix is one-line in
+      <code>critter-skeletal.ts</code> when you're ready.
     </div>
 
     <details class="advanced">
@@ -443,6 +487,8 @@
           <tr>
             <th>State</th>
             <th>Clip</th>
+            <th>Speed</th>
+            <th>⤴</th>
             <th>Play</th>
             <th>Tier</th>
           </tr>
@@ -458,8 +504,9 @@
       <h3>Clips in GLB (raw list)</h3>
       <div id="clip-list"></div>
       <div class="help" style="margin-top: 4px">
-        Every clip the GLB ships, in source order. Useful when comparing
-        the available pool against the dropdowns above.
+        Every clip the GLB ships, in source order. The Play button here
+        previews at speed 1.0 / loop on regardless of row config — pure
+        clip inspection.
       </div>
     </details>
   </div>

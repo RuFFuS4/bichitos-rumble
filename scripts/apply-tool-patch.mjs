@@ -116,8 +116,24 @@ if (!patch || typeof patch !== 'object' || !patch.tool || patch.version == null 
   process.exit(1);
 }
 
-if (patch.version !== 1) {
-  console.error(c.red(`✗ Unsupported patch version: ${patch.version}. This script handles version 1.`));
+// Version policy:
+//   · calibrate / decor-editor — only version 1.
+//   · anim-lab — versions 1 (string-only values) and 2 (string OR
+//     object form { clip, speed?, loop? }). v2 patches with
+//     speed/loop are accepted by the script and written to source as
+//     object literals; the runtime resolver currently ignores
+//     speed/loop (tooling metadata).
+const SUPPORTED_VERSIONS = {
+  'calibrate':    [1],
+  'anim-lab':     [1, 2],
+  'decor-editor': [1],
+};
+const versionsForTool = SUPPORTED_VERSIONS[patch.tool] ?? [1];
+if (!versionsForTool.includes(patch.version)) {
+  console.error(c.red(
+    `✗ Unsupported patch version: ${patch.version} for tool "${patch.tool}". `
+    + `This script handles version${versionsForTool.length > 1 ? 's' : ''} ${versionsForTool.join(', ')}.`,
+  ));
   process.exit(1);
 }
 
@@ -266,12 +282,43 @@ function applyAnimLab(source, data) {
     if (keys.length === 0) continue;
     lines.push(`  ${id}: {`);
     for (const k of keys.sort()) {
-      lines.push(`    ${k}: ${JSON.stringify(inner[k])},`);
+      lines.push(`    ${k}: ${formatAnimLabValue(inner[k])},`);
     }
     lines.push(`  },`);
   }
   lines.push('}');
   return source.slice(0, openBrace) + lines.join('\n') + source.slice(close + 1);
+}
+
+/**
+ * Render a single anim-lab override value as TypeScript source.
+ *
+ *   · strings → JSON.stringify (back-compat with v1 patches and the
+ *     existing string-shorthand entries already in source).
+ *   · objects with only `clip` → string shorthand (smaller diff).
+ *   · objects with `speed`/`loop` → object literal with TS-friendly
+ *     formatting (single-quoted clip, unquoted keys).
+ *
+ * Examples
+ *   "Idle"                             → 'Idle'
+ *   { clip: "Idle" }                   → 'Idle'
+ *   { clip: "Idle", speed: 1.15 }      → { clip: 'Idle', speed: 1.15 }
+ *   { clip: "Idle", loop: false }      → { clip: 'Idle', loop: false }
+ */
+function formatAnimLabValue(v) {
+  if (typeof v === 'string') return JSON.stringify(v);
+  if (v && typeof v === 'object' && typeof v.clip === 'string') {
+    const hasSpeed = typeof v.speed === 'number' && v.speed !== 1;
+    const hasLoop = typeof v.loop === 'boolean';
+    if (!hasSpeed && !hasLoop) return JSON.stringify(v.clip);
+    const parts = [`clip: ${JSON.stringify(v.clip)}`];
+    if (hasSpeed) parts.push(`speed: ${formatNumber(v.speed)}`);
+    if (hasLoop) parts.push(`loop: ${v.loop}`);
+    return `{ ${parts.join(', ')} }`;
+  }
+  // Defensive: unknown shape — emit as JSON so the source still parses
+  // and the user sees something they can hand-edit.
+  return JSON.stringify(v);
 }
 
 /**

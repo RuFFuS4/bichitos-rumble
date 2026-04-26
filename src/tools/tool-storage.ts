@@ -179,16 +179,48 @@ export interface CalibratePatch extends ToolPatchBase {
 }
 
 /**
- * `anim-lab` patch: per-critter clip-name overrides for skeletal states.
+ * `anim-lab` patch: per-critter clip overrides for skeletal states.
  *
- * Maps to `ANIMATION_OVERRIDES` in src/animation-overrides.ts. The
- * apply-script merges per `critterId`, replacing the entire inner
- * object so removed states actually get removed (not silently kept).
+ * Two value shapes supported (round-tripped by the apply-script):
+ *
+ *   1. **String shorthand** (v1 patches + simple v2 entries) — clip
+ *      name only. Most overrides need just this:
+ *
+ *        "ability_2": "Ability3GroundPound"
+ *
+ *   2. **Object form** (v2) — clip + optional `speed` and `loop`. Used
+ *      when the lab user pinned a non-default playback rate or loop
+ *      flag for that state:
+ *
+ *        "idle": { "clip": "Idle", "speed": 1.15, "loop": true }
+ *
+ * Versioning
+ * ----------
+ *   - `version: 1` — every value is a string. Legacy patches still
+ *     accepted indefinitely; the apply-script writes string shorthand
+ *     when no metadata is present.
+ *   - `version: 2` — values may be string OR object. The lab emits
+ *     this when any state has speed/loop set; the source file ends up
+ *     mixing the two forms (object only where metadata matters).
+ *
+ * Speed/loop are TOOLING METADATA only as of 2026-04-27 — the game's
+ * runtime resolver path reads `clip` and ignores the rest. /anim-lab
+ * uses `playClipByName(clip, loop, speed)` so what the user sees in
+ * the lab matches their tuning intent. Promotion to runtime is a
+ * Phase-2 change in critter-skeletal.ts.
  */
+export interface AnimLabClipMeta {
+  clip: string;
+  speed?: number;
+  loop?: boolean;
+}
+
+export type AnimLabStateValue = string | AnimLabClipMeta;
+
 export interface AnimLabPatch extends ToolPatchBase {
   tool: 'anim-lab';
-  version: 1;
-  data: Record<string, Record<string, string>>;
+  version: 1 | 2;
+  data: Record<string, Record<string, AnimLabStateValue>>;
 }
 
 /**
@@ -213,14 +245,16 @@ export interface DecorEditorPatch extends ToolPatchBase {
 export type ToolPatch = CalibratePatch | AnimLabPatch | DecorEditorPatch;
 
 /** Build a fresh ToolPatch envelope with `generated` set to now. The
- *  caller fills `data`. */
+ *  caller fills `data`. `version` defaults to 1; pass 2 for anim-lab
+ *  when any state ships object-form metadata (speed/loop). */
 export function makeToolPatch<T extends ToolPatch>(
   tool: T['tool'],
   data: T['data'],
+  version: T['version'] = 1 as T['version'],
 ): T {
   return {
     tool,
-    version: 1,
+    version,
     generated: new Date().toISOString(),
     data,
   } as T;

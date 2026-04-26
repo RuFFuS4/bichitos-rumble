@@ -438,7 +438,7 @@ export class SkeletalAnimator {
    *
    * Returns true if the clip was found and started, false otherwise.
    */
-  playClipByName(clipName: string, loop = true): boolean {
+  playClipByName(clipName: string, loop = true, speed = 1): boolean {
     const clip = this.clips.find(c => c.name === clipName);
     if (!clip) return false;
 
@@ -472,7 +472,11 @@ export class SkeletalAnimator {
     action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
     action.clampWhenFinished = !loop;
     action.setEffectiveWeight(1);
-    action.setEffectiveTimeScale(1);
+    // `speed` defaults to 1 so existing callers (game runtime via
+    // resolver, /tools.html, prior anim-lab versions) keep their
+    // current behaviour. /anim-lab.html v2 passes per-state speed for
+    // preview tuning.
+    action.setEffectiveTimeScale(speed);
     action.enabled = true;
     action.fadeIn(DEFAULT_CROSSFADE);
     action.play();
