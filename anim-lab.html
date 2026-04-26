@@ -340,12 +340,18 @@
     </div>
 
     <h2>Export overrides</h2>
-    <button id="btn-export">Copy snippet to clipboard</button>
+    <button id="btn-export">📋 Copy TS snippet</button>
+    <button id="btn-export-json">📦 Copy JSON patch</button>
+    <button id="btn-download-json">💾 Download patch.json</button>
     <pre class="export-box" id="export-out">(pick a critter + set overrides, then Export)</pre>
     <div class="help">
-      Paste the snippet into <code>src/animation-overrides.ts</code> inside
-      the <code>ANIMATION_OVERRIDES</code> record. On next page reload the
-      game engine picks the overrides up as Tier 0 of the resolver.
+      <strong>TS snippet</strong>: paste manually into
+      <code>src/animation-overrides.ts</code> inside the
+      <code>ANIMATION_OVERRIDES</code> record.<br>
+      <strong>JSON patch</strong>: save as <code>tool-patch.json</code> at
+      the repo root and run
+      <code style="color:#ffdc5c">npm run apply-tool-patch</code> — the
+      script rewrites the source file in place.
     </div>
   </div>
 

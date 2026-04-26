@@ -76,26 +76,99 @@
     #selector-info .row .k { opacity: 0.55; }
     #selector-info .row .v { font-family: ui-monospace, monospace; color: #ffdc5c; }
 
+    .local-indicator {
+      margin-top: 8px;
+      padding: 6px 8px;
+      font: 10px/1.4 ui-monospace, monospace;
+      letter-spacing: 0.04em;
+      border-radius: 4px;
+      min-height: 22px;
+    }
+    .local-indicator[data-kind="none"] { display: none; }
+    .local-indicator[data-kind="code"] {
+      color: rgba(180, 220, 180, 0.65);
+      background: rgba(40, 60, 40, 0.25);
+      border: 1px solid rgba(120, 200, 120, 0.18);
+    }
+    .local-indicator[data-kind="local"] {
+      color: #ffdc5c;
+      background: rgba(255, 220, 92, 0.08);
+      border: 1px solid rgba(255, 220, 92, 0.45);
+    }
+    button:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
     .slider-row {
       margin-bottom: 10px;
     }
     .slider-row label {
-      display: flex; justify-content: space-between;
+      display: flex; justify-content: space-between; align-items: center;
       font-size: 11px;
       margin-bottom: 4px;
     }
-    .slider-row label span:first-child {
+    .slider-row label > span {
       text-transform: uppercase;
       letter-spacing: 0.1em;
       opacity: 0.7;
     }
-    .slider-row label span:last-child {
-      font-family: ui-monospace, monospace;
-      color: #ffdc5c;
-    }
     .slider-row input[type=range] {
       width: 100%;
       accent-color: #ffdc5c;
+    }
+    /* Editable numeric value: looks like a label until clicked. */
+    input[type=number].slider-num {
+      width: 70px;
+      text-align: right;
+      background: transparent;
+      color: #ffdc5c;
+      border: 1px solid transparent;
+      font: 11px ui-monospace, monospace;
+      padding: 1px 3px;
+      border-radius: 3px;
+      -moz-appearance: textfield;
+    }
+    input[type=number].slider-num:hover {
+      border-color: rgba(255,220,92,0.25);
+      background: rgba(255,220,92,0.04);
+    }
+    input[type=number].slider-num:focus {
+      outline: none;
+      border-color: rgba(255,220,92,0.6);
+      background: rgba(255,220,92,0.08);
+    }
+    input[type=number].slider-num::-webkit-outer-spin-button,
+    input[type=number].slider-num::-webkit-inner-spin-button {
+      -webkit-appearance: none; margin: 0;
+    }
+
+    .camera-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .camera-row button {
+      width: auto;
+      flex: 1;
+      margin-top: 0;
+      padding: 7px 4px;
+      font-size: 10px;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: rgba(220,220,230,0.85);
+      margin: 4px 0 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .toggle-row input[type=checkbox] {
+      accent-color: #ffdc5c;
+      cursor: pointer;
     }
 
     button {
@@ -149,39 +222,71 @@
     <div id="selector-info">
       <div class="row"><span class="k">Click a critter</span></div>
     </div>
+    <div id="local-indicator" class="local-indicator"></div>
+    <button id="btn-reset-local" disabled>Reset local working copy</button>
 
     <h2>Transform</h2>
     <div class="slider-row">
-      <label><span>Scale</span><span id="val-scale">—</span></label>
+      <label><span>Scale</span><input class="slider-num" id="val-scale" type="number" step="0.001" min="0.1" max="4.0" value="" disabled /></label>
       <input id="ctl-scale" type="range" min="0.1" max="4.0" step="0.01" value="1.0" disabled />
     </div>
     <div class="slider-row">
-      <label><span>PivotY</span><span id="val-pivotY">—</span></label>
+      <label><span>PivotY</span><input class="slider-num" id="val-pivotY" type="number" step="0.001" min="-1.0" max="1.5" value="" disabled /></label>
       <input id="ctl-pivotY" type="range" min="-1.0" max="1.5" step="0.01" value="0" disabled />
     </div>
     <div class="slider-row">
-      <label><span>Rotation Y</span><span id="val-rotation">—</span></label>
+      <label><span>Rotation Y</span><input class="slider-num" id="val-rotation" type="number" step="0.001" min="-3.15" max="3.15" value="" disabled /></label>
       <input id="ctl-rotation" type="range" min="-3.15" max="3.15" step="0.01" value="0" disabled />
     </div>
 
     <h2>Apply target</h2>
     <div class="slider-row">
-      <label><span>In-game target</span><span id="val-target">1.70</span></label>
+      <label><span>In-game target</span><input class="slider-num" id="val-target" type="number" step="0.01" min="1.0" max="2.4" value="1.70" /></label>
       <input id="ctl-target" type="range" min="1.0" max="2.4" step="0.01" value="1.7" />
     </div>
     <button id="btn-refit">Re-fit all to target</button>
 
+    <h2>Stage</h2>
+    <label class="toggle-row">
+      <input type="checkbox" id="chk-animate" />
+      Animate critters (idle bob)
+    </label>
+    <div style="font-size: 10.5px; line-height: 1.4; opacity: 0.6; margin-bottom: 8px;">
+      Off by default: comparing 9 critters with idle motion makes height
+      reads jittery. Toggle on to verify the silhouette under animation.
+    </div>
+
+    <h2>Camera</h2>
+    <div class="camera-row">
+      <button id="btn-cam-front" title="Frontal — orbit reset, looking at the grid">▣ Frontal</button>
+      <button id="btn-cam-top" title="Cenital — top-down ortho-ish">⬒ Cenital</button>
+      <button id="btn-cam-side" title="Lateral — from +X, useful for height profile">⬓ Lateral</button>
+    </div>
+    <div style="font-size: 10.5px; line-height: 1.4; opacity: 0.6;">
+      Vertical ruler at the back-left (ticks every 0.5 u, yellow tick =
+      1.7 u in-game target). Yellow rectangle on the floor marks the
+      same target height across the stage.
+    </div>
+
     <h2>Export</h2>
-    <button id="btn-export">Export roster.ts snippet (clipboard)</button>
-    <pre class="export-box" id="export-out">(export will appear here)</pre>
+    <button id="btn-export-ts">📋 Copy TS snippet (paste in roster.ts)</button>
+    <button id="btn-export-json">📦 Copy JSON patch</button>
+    <button id="btn-download-json">💾 Download patch.json</button>
+    <pre class="export-box" id="export-out">(modify any slider, then export)</pre>
+
+    <h2>Apply patch</h2>
+    <div style="font-size: 10.5px; line-height: 1.5; opacity: 0.7">
+      Save the JSON to <code>tool-patch.json</code> at the repo root, then run:<br>
+      <code style="color:#ffdc5c">npm run apply-tool-patch</code>
+      <br>
+      The script rewrites <code>src/roster.ts</code> in place and prints a diff. Use <code>--dry-run</code> to preview without writing.
+    </div>
 
     <h2>Notes</h2>
     <div style="font-size: 10.5px; line-height: 1.5; opacity: 0.7">
       9 critters rendered at their current roster scale + in-game auto-fit.
-      Drag sliders to tune the selected critter. Scale/pivot/rotation mutate
-      the live mesh so you see the result immediately. "Re-fit all to target"
-      recomputes every critter's visual fit against the slider value. Export
-      dumps the roster.ts-ready diff to console + clipboard.
+      Drag sliders to tune the selected critter. "Re-fit all to target"
+      recomputes every critter's visual fit against the slider value.
     </div>
   </div>
 
