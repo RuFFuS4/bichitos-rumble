@@ -134,27 +134,18 @@ export type ClipOverrideMap = Partial<Record<SkeletalState, ClipOverrideValue>>;
  *   emissive blink + scale punch.
  */
 export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
-  // Trunk — placeholder kit vs final-design clip names mismatch.
-  //
-  // The GLB ships 3 ability clips named after the FINAL design (Ram /
-  // Grip / GroundPound). The current temporary kit in `abilities.ts`
-  // is [charge_rush, ground_pound, frenzy] — so:
-  //   · Slot 0 (J, Trunk Ram, charge_rush)  → ab_1 → Ability1TrunkRam ✓
-  //   · Slot 1 (K, Earthquake, ground_pound) → ab_2 → WOULD PICK
-  //     Ability2TrunkGrip (a grab animation — wrong for a stomp).
-  //   · Slot 2 (L, Stampede, frenzy)        → ab_3 → WOULD PICK
-  //     Ability3GroundPound (a stomp — wrong for a buff).
-  //
-  // Until Trunk's final kit lands (`CHARACTER_DESIGN.md` has
-  // `Trunk Grip` as the real Hab 2 and `Ground Pound with STUN` as
-  // ULTI), override ab_2 to point at the stomp clip. The Stampede
-  // slot stays procedural (frenzy is a pure-buff effect — no clip
-  // needed, the existing emissive pulse in critter.ts does the job).
-  //
-  // Remove this override once the final Trunk Grip ability type
-  // lands and the kit indexing matches the clip numbering.
+  sergei: {
+    ability_1: { clip: "Fall", speed: 1.8 },
+    ability_2: "Ability3Frenzy",
+    ability_3: { clip: "Running", speed: 2 },
+    defeat: "Ability3Frenzy",
+    fall: { clip: "Ability2Shockwave", loop: true },
+    idle: "Run",
+    run: { clip: "Victory", speed: 1.3 },
+    victory: { clip: "Idle", loop: true },
+  },
   trunk: {
-    ability_2: 'Ability3GroundPound',
+    ability_2: "Ability3GroundPound",
   },
 };
 
