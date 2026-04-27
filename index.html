@@ -1269,6 +1269,46 @@
       opacity: 0.7;
       margin-bottom: 24px;
     }
+    /* Online belt reward slot — placeholder structural element added
+       2026-04-27. Hidden by default; revealed by JS when an online
+       match unlocks a belt for the player. Keep the styling self-
+       contained so future changes (sprite + label content) don't ripple
+       into other end-screen rules. */
+    .belt-slot-reward {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 18px;
+      animation: belt-slot-fade-in 480ms ease-out;
+    }
+    .belt-slot-reward.hidden {
+      display: none;
+    }
+    .belt-slot-reward .belt-slot-medallion {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: radial-gradient(circle,
+        rgba(255, 220, 92, 0.85) 0%,
+        rgba(255, 160, 60, 0.75) 55%,
+        rgba(120, 50, 20, 0.65) 100%);
+      border: 2px solid rgba(255, 220, 92, 0.85);
+      box-shadow:
+        0 0 16px rgba(255, 220, 92, 0.55),
+        inset 0 0 8px rgba(0, 0, 0, 0.35);
+    }
+    .belt-slot-reward .belt-slot-label {
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #ffdc5c;
+      opacity: 0.85;
+    }
+    @keyframes belt-slot-fade-in {
+      0%   { opacity: 0; transform: translateY(8px) scale(0.9); }
+      100% { opacity: 1; transform: translateY(0)   scale(1.0); }
+    }
     /* Portal prompt on end screen — separated from match prompt */
     /* Per-match stats block under the subtitle — counters for the local
        player's match. Empty (display:none) if no match data available
@@ -2712,6 +2752,15 @@
   <div id="end-screen" class="full-overlay hidden">
     <div class="end-result" id="end-result">Result</div>
     <div class="end-subtitle" id="end-subtitle"></div>
+    <!-- Online belt reward slot — structural placeholder. Hidden until
+         the online "belt unlocked" event is wired (Phase later this
+         jam). Keep this div in source so the layout doesn't reflow on
+         first reveal. Populate via JS by adding the relevant
+         sprite-belt class + removing `hidden`. -->
+    <div id="belt-slot-reward" class="belt-slot-reward hidden" aria-hidden="true">
+      <div class="belt-slot-medallion"></div>
+      <div class="belt-slot-label">Belt earned</div>
+    </div>
     <div id="end-stats" class="end-stats" style="display:none;"></div>
     <div class="prompt desktop-only"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
     <div class="prompt touch-only">Tap to play again</div>
