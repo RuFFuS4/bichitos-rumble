@@ -140,118 +140,72 @@ export type ClipOverrideMap = Partial<Record<SkeletalState, ClipOverrideValue>>;
  */
 export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
   sergei: {
-    ability_1: { clip: "Fall", speed: 1.8 },
-    ability_2: { clip: "Defeat", speed: 1.5 },
-    ability_3: { clip: "Running", speed: 2 },
-    defeat: "Ability3Frenzy",
-    fall: { clip: "Ability2Shockwave", loop: true },
-    idle: "Run",
-    run: { clip: "Victory", speed: 1.3 },
-    victory: { clip: "Idle", loop: true },
+    ability_1: { clip: "Ability1", speed: 1.8 },
+    ability_2: { clip: "Ability2", speed: 1.5 },
+    ability_3: { clip: "Ability3", speed: 2 },
+    fall: { clip: "Fall", loop: true },
+    run: { clip: "Run", speed: 1.3 },
+    victory: { clip: "Victory", loop: true },
   },
+
   trunk: {
-    ability_1: { clip: "Ability1TrunkRam", speed: 3 },
-    // ability_2 stays at Ability3GroundPound (placeholder for the
-    // current temporary kit); user is parking it until the rest of
-    // Trunk's animations are stable. See CHARACTER_DESIGN.md for the
-    // final design intent.
+    ability_1: { clip: "Ability1", speed: 3 },
     ability_2: "Ability3GroundPound",
     ability_3: { clip: "Ability3GroundPound", speed: 3 },
     fall: { clip: "Fall", speed: 2, loop: true },
     victory: { clip: "Victory", loop: true },
   },
-  // Kurama — clip names in this GLB are crossed against their
-  // semantic state (the rig was authored against an in-progress
-  // taxonomy). Mappings reflect what the user picked visually in
-  // /anim-lab, not what the clip names suggest. Naming cleanup is
-  // tracked as deuda técnica — fix the GLB rather than the
-  // overrides when there's time.
+
   kurama: {
-    ability_1: { clip: "Idle", speed: 1.9 },
-    ability_2: { clip: "Victory", speed: 1.3 },
-    ability_3: { clip: "Ability2MirrorTrick", speed: 1.5 },
-    defeat: "Walking",
-    fall: { clip: "Ability3Copycat", loop: true },
-    idle: "Fall",
-    run: "Defeat",
-    victory: { clip: "Run", loop: true },
+    ability_1: { clip: "Ability1", speed: 1.9 },
+    ability_2: { clip: "Ability2", speed: 1.3 },
+    ability_3: { clip: "Ability3", speed: 1.5 },
+    fall: { clip: "Fall", loop: true },
+    victory: { clip: "Victory", loop: true },
   },
-  // Shelly — partial mapping. Only entries the user adjusted in
-  // /anim-lab; the rest fall through to the auto-resolver. The Mega
-  // Shell ulti is intentionally cranked to speed 10 so the spin
-  // reads "frenetic" — that's the design intent, not a typo.
+
   shelly: {
-    ability_3: { clip: "Ability3MegaShell", speed: 10, loop: true },
+    ability_3: { clip: "Ability3", speed: 10, loop: true },
     fall: { clip: "Fall", speed: 0.5 },
     victory: { clip: "Victory", loop: true },
   },
-  // Sihans — clip names crossed (similar issue to Kurama). User
-  // selected by visual match in /anim-lab.
+
   sihans: {
-    ability_1: { clip: "Defeat", speed: 3 },
-    ability_3: { clip: "Walking", speed: 1.5 },
-    defeat: "Fall",
-    fall: { clip: "Idle", loop: true },
-    idle: "Victory",
-    run: "Ability1BurrowRush",
-    victory: { clip: "Run", loop: true },
+    ability_1: { clip: "Ability1", speed: 3 },
+    ability_3: { clip: "Ability3", speed: 1.5 },
+    fall: { clip: "Fall", loop: true },
+    victory: { clip: "Victory", loop: true },
   },
-  // Cheeto — clean naming + speed bumps to match the predator-fast
-  // identity. All three abilities have dedicated clips in the GLB
-  // and resolve cleanly; the speed bumps reinforce the "lightning
-  // strike" feel above the resolver default of 1.0.
+
   cheeto: {
-    ability_1: { clip: "Ability1Pounce", speed: 2.3 },
-    ability_2: { clip: "Ability2ShadowStep", speed: 2 },
-    ability_3: { clip: "Ability3TigerRoar", speed: 1.7 },
+    ability_1: { clip: "Ability1", speed: 2.3 },
+    ability_2: { clip: "Ability2", speed: 2 },
+    ability_3: { clip: "Ability3", speed: 1.7 },
     fall: { clip: "Fall", loop: true },
     run: { clip: "Run", speed: 1.3 },
     victory: { clip: "Victory", loop: true },
   },
-  // Kowalski — Mage identity with fast slide + looping ulti. Ice Age
-  // (ability_3) explicitly loops so the freeze-aura reads as a
-  // sustained area-control beat rather than a one-shot animation.
+
   kowalski: {
-    ability_1: { clip: "Ability1IceSlide", speed: 3.5 },
-    ability_2: { clip: "Ability2Snowball", speed: 2 },
-    ability_3: { clip: "Ability3IceAge", speed: 1.8, loop: true },
+    ability_1: { clip: "Ability1", speed: 3.5 },
+    ability_2: { clip: "Ability2", speed: 2 },
+    ability_3: { clip: "Ability3", speed: 1.8, loop: true },
     fall: { clip: "Fall", speed: 1.8, loop: true },
     run: { clip: "Run", speed: 1.4 },
     victory: { clip: "Victory", loop: true },
   },
-  // Sebastian — partial mapping. The GLB only ships `Ability2ClawSweep`
-  // for abilities (no ability_1 or ability_3 clips), so those slots
-  // intentionally fall through to procedural-only feedback (dash
-  // squash + frenzy emissive). Only the states the user could
-  // visually verify in /anim-lab are mapped here. Note `idle` and
-  // `run` are intentionally crossed against their semantic clip
-  // names — the rig was authored with mismatched naming.
+
   sebastian: {
-    ability_2: { clip: "Walking", speed: 1.3 },
-    defeat: { clip: "Idle", loop: true },
-    fall: { clip: "Defeat", loop: true },
-    idle: "Run",
-    run: "Victory",
-    victory: "Ability2ClawSweep",
+    ability_2: { clip: "Ability2", speed: 1.3 },
+    defeat: { clip: "Defeat", loop: true },
+    fall: { clip: "Fall", loop: true },
   },
-  // Kermit — re-imported GLB (2026-04-27). Blender's NLA export named
-  // every clip `NlaTrack`/`NlaTrack.NNN` instead of preserving the
-  // semantic Action names. The duration-to-state mapping below is
-  // NOT speculation: each NlaTrack.NNN duration matches 1:1 with the
-  // previous GLB's named clip durations (verified via inspect-clips
-  // diff before swap), so the assignment is mechanical, not creative.
-  // Plan: when the cross-roster rename pass runs, this whole block
-  // disappears (GLB clip names become semantic) and Kermit's auto-
-  // resolver matches by exact name like the simpler critters do.
+
   kermit: {
-    idle: "NlaTrack.004",                                     // 15.38s
-    run: "NlaTrack.006",                                      //  1.29s
-    victory: { clip: "NlaTrack.002", loop: true },            //  2.88s
-    defeat: "NlaTrack",                                       //  3.50s
-    fall: { clip: "NlaTrack.003", loop: true },               //  3.67s
-    ability_1: { clip: "NlaTrack.001", speed: 2 },            //  3.71s — LeapForward
-    ability_2: { clip: "NlaTrack.005", loop: true },          //  0.79s — PoisonCloud
-    // ability_3 (Hypnosapo) is procedural in critter.ts — no clip.
+    victory: { clip: "Victory", loop: true },
+    fall: { clip: "Fall", loop: true },
+    ability_1: { clip: "Ability1", speed: 2 },
+    ability_2: { clip: "Ability2", loop: true },
   },
 };
 

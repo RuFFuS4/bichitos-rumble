@@ -51,6 +51,16 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
+
+// Several roster GLBs (kurama / sebastian / kowalski etc.) ship the
+// `EXT_meshopt_compression` extension. gltf-transform's `NodeIO`
+// requires the meshopt decoder/encoder explicitly registered, or it
+// throws on read with "Please install extension dependency,
+// meshopt.decoder.". Wait for both promises before any IO so the
+// async loaders are ready.
+await MeshoptDecoder.ready;
+await MeshoptEncoder.ready;
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -138,7 +148,12 @@ const overrides = new Function('return ' + literal)();
 // Build the rename plan per critter
 // ---------------------------------------------------------------------------
 
-const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+const io = new NodeIO()
+  .registerExtensions(ALL_EXTENSIONS)
+  .registerDependencies({
+    'meshopt.decoder': MeshoptDecoder,
+    'meshopt.encoder': MeshoptEncoder,
+  });
 
 function clipNameOf(value) {
   if (value == null) return null;
