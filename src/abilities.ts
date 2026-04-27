@@ -473,6 +473,20 @@ export function activateAbility(state: AbilityState, _critter: Critter): boolean
  *  0.25–0.45s so a typical dash leaves 5-9 puffs behind. */
 const DASH_TRAIL_INTERVAL = 0.05;
 
+/** World-units the trail spawn point is shifted backward from the
+ *  critter centre along the velocity vector. Keeps the streak visibly
+ *  BEHIND the bichito instead of under its feet — reads as direction
+ *  of travel at a glance. Tuned so the offset doesn't push the puff
+ *  into the previous puff (each puff is ~0.55u radius pre-scale). */
+const DASH_TRAIL_OFFSET = 0.5;
+
+/** Fraction of the critter's velocity magnitude that each trail puff
+ *  inherits as backward drift. 0.20 → puff slides backward at a fifth
+ *  of the dash speed; combined with the puff's own scale-up + fade
+ *  this produces the "motion streak" look without making puffs fly
+ *  too far off the dash line. */
+const DASH_TRAIL_DRIFT_FRACTION = 0.20;
+
 /** Initial entry burst radius for the dash. Smaller than ground-pound's
  *  shockwave so the dash reads as "explosive launch" not "AoE attack". */
 const DASH_ENTRY_BURST_RADIUS = 1.4;
@@ -568,15 +582,37 @@ export function updateAbilities(
         fireEffect(s, critter, allCritters, scene);
         s.effectFired = true;
       }
-      // Dash trail — for charge_rush only, drop a dust-puff every
-      // DASH_TRAIL_INTERVAL seconds at the critter's current position.
-      // Reuses the existing pool from `dust-puff.ts` so cost is bounded
-      // (a typical 0.30s dash drops ~6 puffs). Other ability types
-      // skip this entirely.
+      // Dash trail — for charge_rush only, drop a directional dust-
+      // puff every DASH_TRAIL_INTERVAL seconds. Each puff:
+      //   · Spawns OFFSET behind the critter (opposite to its current
+      //     velocity vector), not under the feet — so the trail reads
+      //     as a streak of receding rings instead of a radial
+      //     explosion at the critter's centre.
+      //   · Carries a backward drift velocity so it slides further
+      //     behind as it expands and fades.
+      // Reuses the existing dust-puff pool — cost is bounded (a
+      // typical 0.30 s dash drops ~6 puffs).
       if (s.def.type === 'charge_rush') {
         s.trailTimer -= dt;
         if (s.trailTimer <= 0) {
-          spawnDustPuff(scene, critter.x, 0, critter.z);
+          const vMag = Math.sqrt(critter.vx * critter.vx + critter.vz * critter.vz);
+          if (vMag > 0.5) {
+            const dirX = critter.vx / vMag;
+            const dirZ = critter.vz / vMag;
+            const spawnX = critter.x - dirX * DASH_TRAIL_OFFSET;
+            const spawnZ = critter.z - dirZ * DASH_TRAIL_OFFSET;
+            const driftMag = vMag * DASH_TRAIL_DRIFT_FRACTION;
+            spawnDustPuff(scene, spawnX, 0, spawnZ, {
+              x: -dirX * driftMag,
+              z: -dirZ * driftMag,
+            });
+          } else {
+            // Critter is mostly stationary (rare during a dash but
+            // possible at the very tail of the duration). Fall back
+            // to a centred radial puff so we don't show a stuck
+            // streak in a wrong direction.
+            spawnDustPuff(scene, critter.x, 0, critter.z);
+          }
           s.trailTimer = DASH_TRAIL_INTERVAL;
         }
       }
