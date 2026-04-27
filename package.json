@@ -16,6 +16,7 @@
     "favicon": "node scripts/make-favicon-ico.mjs",
     "apply-tool-patch": "node scripts/apply-tool-patch.mjs",
     "rename-glb-clips": "node scripts/rename-glb-clips.mjs",
+    "realign-ability-icons": "node scripts/realign-ability-icons.mjs",
     "compress:audio": "node scripts/compress-audio.mjs",
     "test:smoke": "playwright test",
     "check": "tsc --noEmit && node scripts/verify-critter-glbs.mjs && vite build",
