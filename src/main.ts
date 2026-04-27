@@ -260,11 +260,12 @@ const baseCamY = camera.position.y;
 const baseCamZ = camera.position.z;
 
 // Base lookAt — must mirror what `createCamera()` set (currently
-// `(0, -3, 0)` from src/camera.ts). Used to reset the camera's
-// rotation when leaving the end-screen phase, since the end-pose
-// pipeline calls `camera.lookAt(...)` and Three.js's quaternion
-// state persists across phase changes unless explicitly reset.
-const BASE_CAM_LOOKAT = new THREE.Vector3(0, -3, 0);
+// `(0, 5, 0)` from src/camera.ts after the 2026-04-27 horizon tilt
+// pass). Used to reset the camera's rotation when leaving the
+// end-screen phase, since the end-pose pipeline calls
+// `camera.lookAt(...)` and Three.js's quaternion state persists
+// across phase changes unless explicitly reset.
+const BASE_CAM_LOOKAT = new THREE.Vector3(0, 5, 0);
 
 // Edge-detector flag — true while a `getEndScreenCameraPose()` is
 // driving the camera. Goes back to false the frame the phase exits
