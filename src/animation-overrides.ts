@@ -244,13 +244,13 @@ export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
   // disappears (GLB clip names become semantic) and Kermit's auto-
   // resolver matches by exact name like the simpler critters do.
   kermit: {
-    idle: "NlaTrack.004",         // 15.38s
-    run: "NlaTrack.006",          //  1.29s
-    victory: "NlaTrack.002",      //  2.88s
-    defeat: "NlaTrack",           //  3.50s
-    fall: "NlaTrack.003",         //  3.67s
-    ability_1: "NlaTrack.001",    //  3.71s — LeapForward
-    ability_2: "NlaTrack.005",    //  0.79s — PoisonCloud
+    idle: "NlaTrack.004",                                     // 15.38s
+    run: "NlaTrack.006",                                      //  1.29s
+    victory: { clip: "NlaTrack.002", loop: true },            //  2.88s
+    defeat: "NlaTrack",                                       //  3.50s
+    fall: { clip: "NlaTrack.003", loop: true },               //  3.67s
+    ability_1: { clip: "NlaTrack.001", speed: 2 },            //  3.71s — LeapForward
+    ability_2: { clip: "NlaTrack.005", loop: true },          //  0.79s — PoisonCloud
     // ability_3 (Hypnosapo) is procedural in critter.ts — no clip.
   },
 };
