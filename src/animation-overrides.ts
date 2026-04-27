@@ -176,6 +176,26 @@ export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
     run: "Defeat",
     victory: { clip: "Run", loop: true },
   },
+  // Shelly — partial mapping. Only entries the user adjusted in
+  // /anim-lab; the rest fall through to the auto-resolver. The Mega
+  // Shell ulti is intentionally cranked to speed 10 so the spin
+  // reads "frenetic" — that's the design intent, not a typo.
+  shelly: {
+    ability_3: { clip: "Ability3MegaShell", speed: 10, loop: true },
+    fall: { clip: "Fall", speed: 0.5 },
+    victory: { clip: "Victory", loop: true },
+  },
+  // Sihans — clip names crossed (similar issue to Kurama). User
+  // selected by visual match in /anim-lab.
+  sihans: {
+    ability_1: { clip: "Defeat", speed: 3 },
+    ability_3: { clip: "Walking", speed: 1.5 },
+    defeat: "Fall",
+    fall: { clip: "Idle", loop: true },
+    idle: "Victory",
+    run: "Ability1BurrowRush",
+    victory: { clip: "Run", loop: true },
+  },
 };
 
 /**
