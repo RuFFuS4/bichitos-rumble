@@ -234,6 +234,25 @@ export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
     run: "Victory",
     victory: "Ability2ClawSweep",
   },
+  // Kermit — re-imported GLB (2026-04-27). Blender's NLA export named
+  // every clip `NlaTrack`/`NlaTrack.NNN` instead of preserving the
+  // semantic Action names. The duration-to-state mapping below is
+  // NOT speculation: each NlaTrack.NNN duration matches 1:1 with the
+  // previous GLB's named clip durations (verified via inspect-clips
+  // diff before swap), so the assignment is mechanical, not creative.
+  // Plan: when the cross-roster rename pass runs, this whole block
+  // disappears (GLB clip names become semantic) and Kermit's auto-
+  // resolver matches by exact name like the simpler critters do.
+  kermit: {
+    idle: "NlaTrack.004",         // 15.38s
+    run: "NlaTrack.006",          //  1.29s
+    victory: "NlaTrack.002",      //  2.88s
+    defeat: "NlaTrack",           //  3.50s
+    fall: "NlaTrack.003",         //  3.67s
+    ability_1: "NlaTrack.001",    //  3.71s — LeapForward
+    ability_2: "NlaTrack.005",    //  0.79s — PoisonCloud
+    // ability_3 (Hypnosapo) is procedural in critter.ts — no clip.
+  },
 };
 
 /**
