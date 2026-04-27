@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Critter } from './critter';
 import { triggerHitStop, triggerCameraShake, applyDashFeedback, applyLandingFeedback, applyImpactFeedback, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
+import { spawnDustPuff } from './dust-puff';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,6 +66,11 @@ export interface AbilityState {
   windUpLeft: number;
   active: boolean;
   effectFired: boolean;
+  /** Per-frame accumulator that drives the dust-puff trail spawned
+   *  during a charge_rush dash. Counts seconds since the last puff;
+   *  the tick spawns a new one each `DASH_TRAIL_INTERVAL` and resets.
+   *  Untouched for non-mobility ability types. */
+  trailTimer: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +153,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Azul: [
     makeChargeRush({
       name: 'Quick Dash',
-      impulse: 22,
+      impulse: 28,
       duration: 0.25,
       cooldown: 3.0,
       speedMultiplier: 2.7,
@@ -169,7 +175,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Verde: [
     makeChargeRush({
       name: 'Heavy Charge',
-      impulse: 13,
+      impulse: 16,
       duration: 0.40,
       cooldown: 5.0,
       speedMultiplier: 2.0,
@@ -191,7 +197,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Morado: [
     makeChargeRush({
       name: 'Blitz',
-      impulse: 22,
+      impulse: 28,
       duration: 0.28,
       cooldown: 3.0,
       speedMultiplier: 2.8,
@@ -227,7 +233,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     makeChargeRush({
       name: 'Gorilla Rush',
       description: 'Heavy palm strike charge',
-      impulse: 20,
+      impulse: 25,
       duration: 0.28,
       cooldown: 4.0,
       windUp: 0.04,
@@ -276,7 +282,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     makeChargeRush({
       name: 'Trunk Ram',
       description: 'Unstoppable forward dash with tusks',
-      impulse: 16,
+      impulse: 20,
       duration: 0.35,
       cooldown: 4.5,
       windUp: 0.08,
@@ -311,7 +317,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Kurama: [
     makeChargeRush({
       name: 'Fox Dash', description: 'Blink-fast feint forward',
-      impulse: 23, duration: 0.26, cooldown: 3.2, windUp: 0.05,
+      impulse: 29, duration: 0.26, cooldown: 3.2, windUp: 0.05,
       speedMultiplier: 2.8, massMultiplier: 1.3,
     }),
     makeGroundPound({
@@ -324,7 +330,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Shelly: [
     makeChargeRush({
       name: 'Shell Charge', description: 'Slow rolling ram',
-      impulse: 12, duration: 0.45, cooldown: 5.5, windUp: 0.08,
+      impulse: 15, duration: 0.45, cooldown: 5.5, windUp: 0.08,
       speedMultiplier: 1.8, massMultiplier: 3.2,
     }),
     makeGroundPound({
@@ -337,7 +343,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Kermit: [
     makeChargeRush({
       name: 'Leap Forward', description: 'Tongue-propelled lunge',
-      impulse: 16, duration: 0.30, cooldown: 4.0,
+      impulse: 20, duration: 0.30, cooldown: 4.0,
       speedMultiplier: 2.3, massMultiplier: 1.7,
     }),
     makeGroundPound({
@@ -350,7 +356,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Sihans: [
     makeChargeRush({
       name: 'Burrow Rush', description: 'Underground charge resurfacing ahead',
-      impulse: 15, duration: 0.35, cooldown: 4.5, windUp: 0.08,
+      impulse: 19, duration: 0.35, cooldown: 4.5, windUp: 0.08,
       speedMultiplier: 2.1, massMultiplier: 2.0,
     }),
     makeGroundPound({
@@ -363,7 +369,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Kowalski: [
     makeChargeRush({
       name: 'Ice Slide', description: 'Slides forward on an ice trail',
-      impulse: 15, duration: 0.30, cooldown: 4.2,
+      impulse: 19, duration: 0.30, cooldown: 4.2,
       speedMultiplier: 2.4, massMultiplier: 1.5,
     }),
     makeGroundPound({
@@ -376,7 +382,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Cheeto: [
     makeChargeRush({
       name: 'Pounce', description: 'Lightning-fast predator lunge',
-      impulse: 26, duration: 0.24, cooldown: 2.8, windUp: 0.04,
+      impulse: 33, duration: 0.24, cooldown: 2.8, windUp: 0.04,
       speedMultiplier: 3.0, massMultiplier: 1.2,
     }),
     makeGroundPound({
@@ -389,7 +395,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   Sebastian: [
     makeChargeRush({
       name: 'Claw Rush', description: 'Sideways scuttle charge',
-      impulse: 22, duration: 0.28, cooldown: 3.5,
+      impulse: 28, duration: 0.28, cooldown: 3.5,
       speedMultiplier: 2.6, massMultiplier: 1.4,
     }),
     makeGroundPound({
@@ -405,7 +411,15 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
 // ---------------------------------------------------------------------------
 
 function stateFromDef(def: AbilityDef): AbilityState {
-  return { def, cooldownLeft: 0, durationLeft: 0, windUpLeft: 0, active: false, effectFired: false };
+  return {
+    def,
+    cooldownLeft: 0,
+    durationLeft: 0,
+    windUpLeft: 0,
+    active: false,
+    effectFired: false,
+    trailTimer: 0,
+  };
 }
 
 export function createAbilityStates(critterName: string): AbilityState[] {
@@ -444,6 +458,7 @@ export function activateAbility(state: AbilityState, _critter: Critter): boolean
   state.effectFired = false;
   state.windUpLeft = state.def.windUp;
   state.durationLeft = state.def.duration;
+  state.trailTimer = 0;
   // Effect is fired from updateAbilities, which always has access to scene.
   // This avoids needing a null-scene placeholder and keeps the firing path unified.
   return true;
@@ -453,11 +468,25 @@ export function activateAbility(state: AbilityState, _critter: Critter): boolean
 // Per-type effect helpers
 // ---------------------------------------------------------------------------
 
-function fireChargeRush(def: AbilityDef, critter: Critter): void {
+/** Seconds between consecutive dust-puffs in a charge_rush trail.
+ *  ~50 ms feels punchy without flooding the pool — most dashes last
+ *  0.25–0.45s so a typical dash leaves 5-9 puffs behind. */
+const DASH_TRAIL_INTERVAL = 0.05;
+
+/** Initial entry burst radius for the dash. Smaller than ground-pound's
+ *  shockwave so the dash reads as "explosive launch" not "AoE attack". */
+const DASH_ENTRY_BURST_RADIUS = 1.4;
+
+function fireChargeRush(def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
   const angle = critter.mesh.rotation.y;
   critter.vx += Math.sin(angle) * def.impulse;
   critter.vz += Math.cos(angle) * def.impulse;
   applyDashFeedback(critter);
+  // Entry burst — a small shockwave-style ring at the launch point so
+  // the dash starts with a visible "explosive go" beat. Reuses the
+  // existing shockwave VFX with a smaller radius to stay distinct from
+  // ground-pound which uses the full def.radius.
+  spawnShockwaveRing(scene, critter.x, critter.z, DASH_ENTRY_BURST_RADIUS);
   playSound('abilityFire');
 }
 
@@ -538,6 +567,18 @@ export function updateAbilities(
       if (!s.effectFired) {
         fireEffect(s, critter, allCritters, scene);
         s.effectFired = true;
+      }
+      // Dash trail — for charge_rush only, drop a dust-puff every
+      // DASH_TRAIL_INTERVAL seconds at the critter's current position.
+      // Reuses the existing pool from `dust-puff.ts` so cost is bounded
+      // (a typical 0.30s dash drops ~6 puffs). Other ability types
+      // skip this entirely.
+      if (s.def.type === 'charge_rush') {
+        s.trailTimer -= dt;
+        if (s.trailTimer <= 0) {
+          spawnDustPuff(scene, critter.x, 0, critter.z);
+          s.trailTimer = DASH_TRAIL_INTERVAL;
+        }
       }
       // Drain active duration
       s.durationLeft -= dt;

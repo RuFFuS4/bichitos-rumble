@@ -39,7 +39,7 @@ export const FEEL = {
 
   // --- Charge Rush ---
   chargeRush: {
-    impulse: 16,              // directional velocity burst
+    impulse: 20,              // directional velocity burst (+25% 2026-04-27 — dash needed more reach across the roster)
     speedMultiplier: 2.5,     // speed during charge
     massMultiplier: 2.0,      // weight during charge (freight train)
     duration: 0.30,           // shorter but intense
