@@ -74,9 +74,14 @@ document.body.prepend(renderer.domElement);
 // Scene
 const scene = new THREE.Scene();
 // Fog keyed to the horizon colour so the skydome blends smoothly with
-// distant geometry instead of clipping to a hard edge. Lower density so
-// the sky stays visible past the combat radius.
-scene.fog = new THREE.FogExp2(0xb6d1e8, 0.012);
+// distant geometry instead of clipping to a hard edge. Density 0.008
+// (was 0.012 until 2026-04-27): with the gameplay camera looking down
+// at (0, -3, 0) we never see the upper sky directly, so the only way
+// the warm sky tint reads is THROUGH the fog haze covering distant
+// arena/decor. The previous density (0.012) hid most of that
+// transmission. 0.008 keeps the void feeling moody while letting the
+// horizon colour bleed into the far frustum.
+scene.fog = new THREE.FogExp2(0xb6d1e8, 0.008);
 
 // Skydome — vertical gradient sphere painted from the inside. Sits
 // behind every game object, creating the "floating platform in the sky"
@@ -120,14 +125,21 @@ const skyMat = new THREE.ShaderMaterial({
       float h = clamp(vWorldPos.y / 150.0, -1.0, 1.0);
       vec3 color;
       if (h > 0.2) {
-        // Upper sky: middle → top
+        // Upper sky: middle → top.
         color = mix(middleColor, topColor, (h - 0.2) / 0.8);
       } else if (h > -0.05) {
-        // Horizon band: warm transition
+        // Narrow horizon band centred on the dome equator.
         color = mix(horizonColor, middleColor, (h + 0.05) / 0.25);
       } else {
-        // Below horizon: horizon → bottom (void reference)
-        color = mix(bottomColor, horizonColor, (h + 1.0) / 0.95);
+        // Below horizon: horizon → bottom. Curve biased toward
+        // horizonColor in the mid-band (sqrt instead of linear) so the
+        // gameplay camera — which only ever sees h ∈ [-0.94, -0.38] —
+        // still gets a strong warm tint at its upper edge while
+        // keeping the deep-blue void at the lower edge as the
+        // silhouette anchor for the arena floor.
+        float t = clamp((h + 1.0) / 0.95, 0.0, 1.0);
+        t = sqrt(t);
+        color = mix(bottomColor, horizonColor, t);
       }
       gl_FragColor = vec4(color, 1.0);
     }
@@ -260,12 +272,11 @@ const baseCamY = camera.position.y;
 const baseCamZ = camera.position.z;
 
 // Base lookAt — must mirror what `createCamera()` set (currently
-// `(0, 5, 0)` from src/camera.ts after the 2026-04-27 horizon tilt
-// pass). Used to reset the camera's rotation when leaving the
-// end-screen phase, since the end-pose pipeline calls
-// `camera.lookAt(...)` and Three.js's quaternion state persists
-// across phase changes unless explicitly reset.
-const BASE_CAM_LOOKAT = new THREE.Vector3(0, 5, 0);
+// `(0, -3, 0)` from src/camera.ts). Used to reset the camera's
+// rotation when leaving the end-screen phase, since the end-pose
+// pipeline calls `camera.lookAt(...)` and Three.js's quaternion
+// state persists across phase changes unless explicitly reset.
+const BASE_CAM_LOOKAT = new THREE.Vector3(0, -3, 0);
 
 // Edge-detector flag — true while a `getEndScreenCameraPose()` is
 // driving the camera. Goes back to false the frame the phase exits
