@@ -1184,6 +1184,12 @@ export class Game {
   private enterEnded(result: EndResult, title: string, subtitle: string): void {
     clearMenuActions();
     this.phase = 'ended';
+    // Record the result for the camera framing pipeline — win/lose/
+    // draw drives different end-screen camera poses (see
+    // getEndScreenCameraPose). Reset implicit on next enterEnded
+    // call; explicit reset on phase exit is unnecessary because
+    // the public getter gates on `phase === 'ended'` first.
+    this.lastEndResult = result;
     document.body.classList.remove('match-active');
     hideOverlay();
     showEndScreen(result, title, subtitle, isFromPortal());
@@ -1260,47 +1266,95 @@ export class Game {
 
   /**
    * Camera pose to lerp the main camera toward when the match has
-   * ended — frames the local player critter close-up so the
-   * Victory/Defeat overlay reads with the bichito as the visual
-   * protagonist instead of a tiny figure stuck in the arena.
+   * ended. Branches on `lastEndResult`:
    *
-   * Returns null in any phase other than 'ended' (caller falls back to
-   * the normal base + shake pipeline). Also returns null when there's
-   * no local player (e.g. spectator path that didn't pick a critter).
+   *   · win   → close-up half-shot on the local player critter
+   *             (winners read with their celebration anim front and
+   *             centre).
+   *   · lose  → wide 3/4 shot framing the surviving critter (the
+   *             "winner" the local player just lost to). Fallback
+   *             to arena-centre wide if no survivor is on the surface
+   *             (timeout / mass elimination edge cases).
+   *   · draw  → arena-centre wide. Nobody owns the victory beat.
    *
-   * Edge case — player fell through the void: when the critter is
-   * either eliminated AND below ground (y<0) OR not on the surface
-   * any more, we snap the focus point to the arena origin instead
-   * of chasing the corpse downward (which would put the camera
-   * below the world and look broken).
+   * Returns null in any phase other than 'ended' or when no result
+   * has been recorded yet (defensive — should always have a value
+   * after enterEnded but the gate keeps invariants tight).
+   *
+   * Edge case — focus target fell through the void: any candidate
+   * critter with `y < 0` or `!alive` is treated as ineligible, the
+   * pose falls through to the arena-centre wide. Avoids the camera
+   * chasing a corpse below the world or staring at a dead pose.
    */
   public getEndScreenCameraPose(): { position: THREE.Vector3; lookAt: THREE.Vector3 } | null {
     if (this.phase !== 'ended') return null;
+    switch (this.lastEndResult) {
+      case 'win':  return this.poseVictoryCloseUp() ?? this.poseWideArena();
+      case 'lose': return this.poseDefeatWide()    ?? this.poseWideArena();
+      case 'draw': return this.poseWideArena();
+      default:     return this.poseWideArena();
+    }
+  }
+
+  /** Close-up half-shot on the local player. Returns null if the
+   *  player isn't on the arena surface (use a wider fallback). */
+  private poseVictoryCloseUp(): { position: THREE.Vector3; lookAt: THREE.Vector3 } | null {
     if (!this.player) return null;
     const p = this.player;
-    const onSurface = p.alive && p.mesh.position.y >= 0;
-    const focusX = onSurface ? p.x : 0;
-    const focusZ = onSurface ? p.z : 0;
+    if (!p.alive || p.mesh.position.y < 0) return null;
     // Camera approaches from the critter's FRONT (so we see its face,
-    // not its back). For dead/fell players, fall back to looking from
-    // arena +Z toward origin — gives a generic but composed frame.
-    const facingY = onSurface ? p.mesh.rotation.y : 0;
-    const fwdX = Math.sin(facingY);
-    const fwdZ = Math.cos(facingY);
-    const dist = 4.5;     // metres back from the critter — half-shot
-    const camHeight = 2.5; // slightly above critter's chest line
+    // not its back). 4.5 m back, 2.5 m elevated, lookAt at chest
+    // height — keeps head in upper-mid frame so the DOM title block
+    // doesn't overlap the face.
+    const fwdX = Math.sin(p.mesh.rotation.y);
+    const fwdZ = Math.cos(p.mesh.rotation.y);
     return {
-      position: new THREE.Vector3(
-        focusX + fwdX * dist,
-        camHeight,
-        focusZ + fwdZ * dist,
-      ),
-      // LookAt slightly above the base — keeps the head in upper-mid
-      // of frame so the DOM overlay (title block at top) doesn't
-      // overlap the face awkwardly.
-      lookAt: new THREE.Vector3(focusX, 1.2, focusZ),
+      position: new THREE.Vector3(p.x + fwdX * 4.5, 2.5, p.z + fwdZ * 4.5),
+      lookAt: new THREE.Vector3(p.x, 1.2, p.z),
     };
   }
+
+  /** Wide 3/4 shot on the surviving critter (the de-facto "winner"
+   *  the player lost to). Returns null when no eligible survivor
+   *  exists — timeout / multi-elimination edge cases — so the caller
+   *  falls back to the centred wide shot. */
+  private poseDefeatWide(): { position: THREE.Vector3; lookAt: THREE.Vector3 } | null {
+    const survivor = this.critters.find(
+      (c) => c !== this.player && c.alive && c.mesh.position.y >= 0,
+    );
+    if (!survivor) return null;
+    // Diagonal wide — 7 m back along the survivor's facing, 5 m up.
+    // No close-up; we want the arena context (surrounding fragments
+    // collapsed, etc.) to read in the same frame for the loss beat.
+    const fwdX = Math.sin(survivor.mesh.rotation.y);
+    const fwdZ = Math.cos(survivor.mesh.rotation.y);
+    return {
+      position: new THREE.Vector3(
+        survivor.x + fwdX * 7,
+        5,
+        survivor.z + fwdZ * 7,
+      ),
+      lookAt: new THREE.Vector3(survivor.x, 1, survivor.z),
+    };
+  }
+
+  /** Generic wide centred shot. Used for draws, defeats with no
+   *  surviving critter, and as the "we couldn't compose anything
+   *  better" fallback for victory. Diagonal frame so the arena
+   *  fragments + skybox both read. */
+  private poseWideArena(): { position: THREE.Vector3; lookAt: THREE.Vector3 } {
+    return {
+      position: new THREE.Vector3(8, 7, 12),
+      lookAt: new THREE.Vector3(0, 1, 0),
+    };
+  }
+
+  /** Last enterEnded `result`, used by `getEndScreenCameraPose` to
+   *  pick win/lose/draw framing. Set in `enterEnded`; gates on
+   *  `phase === 'ended'` so a stale value from a previous match
+   *  can't leak into a new pose computation (see early return at
+   *  the top of `getEndScreenCameraPose`). */
+  private lastEndResult: EndResult | null = null;
 
   /** Show the correct preview model for a roster entry (playable or WIP). */
   private swapPreviewForEntry(entry: RosterEntry | undefined): void {

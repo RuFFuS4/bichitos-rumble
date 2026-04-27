@@ -259,6 +259,20 @@ const baseCamX = camera.position.x;
 const baseCamY = camera.position.y;
 const baseCamZ = camera.position.z;
 
+// Base lookAt — must mirror what `createCamera()` set (currently
+// `(0, -3, 0)` from src/camera.ts). Used to reset the camera's
+// rotation when leaving the end-screen phase, since the end-pose
+// pipeline calls `camera.lookAt(...)` and Three.js's quaternion
+// state persists across phase changes unless explicitly reset.
+const BASE_CAM_LOOKAT = new THREE.Vector3(0, -3, 0);
+
+// Edge-detector flag — true while a `getEndScreenCameraPose()` is
+// driving the camera. Goes back to false the frame the phase exits
+// 'ended' (caused by restart / title / next match). The transition
+// itself triggers a one-shot `camera.lookAt(BASE_CAM_LOOKAT)` so the
+// next gameplay frame opens with the correct framing.
+let wasEndPhase = false;
+
 // Preview (second renderer for menu 3D — character select, future winner pose)
 const previewCanvas = document.getElementById('preview-canvas') as HTMLCanvasElement | null;
 if (previewCanvas) {
@@ -432,24 +446,36 @@ function loop(now: number) {
   if (!game.isPaused()) updateDustPuffs(dt);
   // Camera ownership per phase:
   //   · paused          → freeze (no shake, no lerp).
-  //   · ended           → swoop to a close-up on the player critter so
-  //                       the Victory/Defeat overlay reads with the
-  //                       bichito as visual protagonist instead of a
-  //                       tiny figure stuck where it died on the arena.
-  //                       Shake is silenced too — celebratory framing
-  //                       wants a steady camera, not a wobble.
+  //   · ended           → game.getEndScreenCameraPose() returns a
+  //                       win/lose/draw-specific pose (close-up,
+  //                       wide-on-survivor, or wide-on-arena). Shake
+  //                       silenced — celebratory framing wants a
+  //                       steady camera, not a wobble.
   //   · everything else → base position + camera shake stack (the
   //                       normal gameplay pipeline).
-  // Lerp factor `dt * 2.5` clamped to 1 so low-framerate sessions don't
-  // overshoot; at 60 FPS this converges to the target in ~1 second
-  // which feels cinematic without being slow.
+  //
+  // Restart reset: when the phase leaves 'ended' (e.g. user hits R
+  // to restart), we have to actively reset the camera's `lookAt`
+  // back to the gameplay base. Three.js stores rotation internally;
+  // a previous `camera.lookAt(endPose.lookAt)` persists across phase
+  // changes if not explicitly overwritten. Without this, post-restart
+  // matches play with the camera staring at wherever the end-screen
+  // was focused (the player's last position, or arena origin for
+  // wide poses) — looks like the camera is broken. The
+  // `wasEndPhase` edge detector calls `lookAt(BASE_CAM_LOOKAT)` ONCE
+  // on the transition out, not every frame.
   const endPose = game.getEndScreenCameraPose();
   if (game.isPaused()) {
-    // No-op
+    // No-op — camera frozen at whatever it was last frame.
   } else if (endPose) {
     camera.position.lerp(endPose.position, Math.min(dt * 2.5, 1));
     camera.lookAt(endPose.lookAt);
+    wasEndPhase = true;
   } else {
+    if (wasEndPhase) {
+      camera.lookAt(BASE_CAM_LOOKAT);
+      wasEndPhase = false;
+    }
     updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
   }
   renderer.render(scene, camera);
