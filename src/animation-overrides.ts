@@ -145,7 +145,15 @@ export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
     victory: { clip: "Idle", loop: true },
   },
   trunk: {
+    ability_1: { clip: "Ability1TrunkRam", speed: 3 },
+    // ability_2 stays at Ability3GroundPound (placeholder for the
+    // current temporary kit); user is parking it until the rest of
+    // Trunk's animations are stable. See CHARACTER_DESIGN.md for the
+    // final design intent.
     ability_2: "Ability3GroundPound",
+    ability_3: { clip: "Ability3GroundPound", speed: 3 },
+    fall: { clip: "Fall", speed: 2, loop: true },
+    victory: { clip: "Victory", loop: true },
   },
 };
 
