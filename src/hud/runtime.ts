@@ -209,7 +209,22 @@ export function hideOverlay(): void {
 
 // ---- Ability cooldown HUD -----------------------------------------------
 
-let slotEls: { root: HTMLElement; fill: HTMLElement; unavailable: boolean }[] = [];
+let slotEls: {
+  root: HTMLElement;
+  fill: HTMLElement;
+  /** The 48px sprite medallion. Used as the host for the conic-gradient
+   *  cooldown overlay (`::after`) and the ready-flash pop animation
+   *  (added 2026-04-27). May be null when running without a sprite
+   *  sheet (early dev / sprite still loading) — in that case the slot
+   *  has no icon-based cooldown indicator. */
+  iconEl: HTMLElement | null;
+  unavailable: boolean;
+}[] = [];
+
+/** Per-slot edge detector for the cooldown→ready transition. We only
+ *  fire the flash on the FRAME the cooldown actually hits zero, not
+ *  every frame the slot is ready. Indexed by slot position; lazy. */
+const prevCooldown: boolean[] = [];
 
 const ABILITY_SLOT_SUFFIX = ['j', 'k', 'l'] as const;
 
@@ -240,11 +255,12 @@ export function initAbilityHUD(
     // AI-generated per-ability icon. Appears only when the sprite sheet
     // actually loaded (body.has-ability-sprites); otherwise the slot
     // keeps its original key+name+bar layout clean.
+    let iconEl: HTMLElement | null = null;
     if (critterSlug) {
       const slotSuffix = ABILITY_SLOT_SUFFIX[i] ?? 'j';
-      const icon = document.createElement('span');
-      icon.className = `sprite-ability sprite-ability-${critterSlug}-${slotSuffix} ability-slot-icon`;
-      slot.appendChild(icon);
+      iconEl = document.createElement('span');
+      iconEl.className = `sprite-ability sprite-ability-${critterSlug}-${slotSuffix} ability-slot-icon`;
+      slot.appendChild(iconEl);
     }
 
     const keyLabel = document.createElement('div');
@@ -275,8 +291,11 @@ export function initAbilityHUD(
     }
 
     abilityContainer.appendChild(slot);
-    slotEls.push({ root: slot, fill, unavailable: isUnavailable });
+    slotEls.push({ root: slot, fill, iconEl, unavailable: isUnavailable });
   }
+  // Reset edge-detector state — a fresh roster build means there is
+  // nothing to "remember" about the previous match's slots.
+  prevCooldown.length = 0;
 }
 
 export function updateAbilityHUD(states: AbilityState[]): void {
@@ -287,17 +306,47 @@ export function updateAbilityHUD(states: AbilityState[]): void {
     // Unavailable slots stay visually disabled — skip live updates.
     if (el.unavailable) continue;
 
+    const isCooldown = !s.active && s.cooldownLeft > 0;
+    const wasCool = prevCooldown[i] ?? false;
+
+    // Slot-level state classes. Use classList toggles so the
+    // ready-flash class can ride independently without being clobbered
+    // by a className reassignment on the next frame.
+    el.root.classList.toggle('active', s.active);
+    el.root.classList.toggle('on-cooldown', isCooldown);
+
+    // Conic-gradient cooldown overlay drives off `--cd-progress` on
+    // the icon (or the slot itself as fallback). 1 = full dim arc,
+    // 0 = no arc / fully revealed icon.
+    const progress = isCooldown ? s.cooldownLeft / s.def.cooldown : 0;
+    const overlayHost = el.iconEl ?? el.root;
+    overlayHost.style.setProperty('--cd-progress', String(progress));
+
+    // Edge: cooldown finished THIS frame (and we're not in active
+    // dash) → fire the pop animation on the icon. Listener removes
+    // the class on animationend so the next cooldown finish can
+    // re-trigger it cleanly.
+    if (wasCool && !isCooldown && !s.active && el.iconEl) {
+      const icon = el.iconEl;
+      icon.classList.add('ready-flash');
+      icon.addEventListener('animationend', () => {
+        icon.classList.remove('ready-flash');
+      }, { once: true });
+    }
+
+    // Legacy fill-bar width — kept up to date even though the bar is
+    // hidden by CSS now, so any future site that re-shows it (e.g.
+    // a debug skin) doesn't show stale data.
     if (s.active) {
-      el.root.className = 'ability-slot active';
       el.fill.style.width = '100%';
-    } else if (s.cooldownLeft > 0) {
-      el.root.className = 'ability-slot on-cooldown';
+    } else if (isCooldown) {
       const pct = ((s.def.cooldown - s.cooldownLeft) / s.def.cooldown) * 100;
       el.fill.style.width = `${pct}%`;
     } else {
-      el.root.className = 'ability-slot';
       el.fill.style.width = '100%';
     }
+
+    prevCooldown[i] = isCooldown;
   }
 }
 

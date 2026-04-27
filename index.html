@@ -267,9 +267,14 @@
     }
     /* Per-ability AI icon (only visible when body.has-ability-sprites).
        Same circular-medallion treatment as the character-select info
-       pane — keeps the visual language consistent between menu and HUD. */
+       pane — keeps the visual language consistent between menu and HUD.
+       The `--cd-progress` custom property drives the conic-gradient
+       cooldown overlay (1 = full dim arc, 0 = ready). Updated by
+       `src/hud/runtime.ts:updateAbilityHUD` every frame. */
     .ability-slot-icon {
       --icon-size: 48px;
+      --cd-progress: 0;
+      position: relative;
       margin-bottom: 5px;
       border-radius: 50%;
       background-color: rgba(22, 18, 8, 0.65);
@@ -279,6 +284,37 @@
         0 0 10px rgba(255, 220, 92, 0.3),
         inset 0 0 0 1px rgba(0, 0, 0, 0.3);
     }
+    /* Cooldown overlay — sweeps clockwise from 12 o'clock. As progress
+       drops from 1 → 0 the dim arc shrinks, revealing the icon. */
+    .ability-slot-icon::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      pointer-events: none;
+      background: conic-gradient(
+        rgba(0, 0, 0, 0.65) 0deg,
+        rgba(0, 0, 0, 0.65) calc(var(--cd-progress) * 360deg),
+        transparent calc(var(--cd-progress) * 360deg)
+      );
+      transition: background 0.06s linear;
+    }
+    /* Ready-flash glow halo. Hidden until the .ready-flash class
+       triggers the keyframes. Sits BEHIND the icon so the medallion
+       is never obscured during the flash. */
+    .ability-slot-icon::before {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      pointer-events: none;
+      background: radial-gradient(circle,
+        rgba(255, 220, 92, 0.85) 0%,
+        rgba(255, 220, 92, 0.40) 40%,
+        transparent 75%);
+      opacity: 0;
+      z-index: -1;
+    }
     .ability-slot.active .ability-slot-icon {
       border-color: #ff8800;
       box-shadow:
@@ -286,11 +322,29 @@
         inset 0 0 0 1px rgba(0, 0, 0, 0.3);
     }
     .ability-slot.on-cooldown .ability-slot-icon {
-      opacity: 0.55;
-      filter: saturate(0.6);
+      opacity: 0.85;
+      filter: saturate(0.7);
     }
     .ability-slot.unavailable .ability-slot-icon {
       filter: grayscale(1) brightness(0.6);
+    }
+    /* Pop + glow when the cooldown finishes. Class added once on
+       transition and self-removed on animationend by runtime.ts. */
+    .ability-slot-icon.ready-flash {
+      animation: ability-ready-pop 280ms ease-out;
+    }
+    .ability-slot-icon.ready-flash::before {
+      animation: ability-ready-glow 280ms ease-out;
+    }
+    @keyframes ability-ready-pop {
+      0%   { transform: scale(1); }
+      45%  { transform: scale(1.18); }
+      100% { transform: scale(1); }
+    }
+    @keyframes ability-ready-glow {
+      0%   { opacity: 0;    transform: scale(0.7); }
+      45%  { opacity: 1;    transform: scale(1.05); }
+      100% { opacity: 0;    transform: scale(1.40); }
     }
     .ability-key {
       font-size: 14px;
@@ -303,28 +357,14 @@
       opacity: 0.7;
       margin-bottom: 4px;
     }
-    .ability-fill-bg {
-      width: 100%;
-      height: 6px;
-      background: rgba(255,255,255,0.12);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-    .ability-fill {
-      height: 100%;
-      border-radius: 3px;
-      transition: width 0.1s linear;
-      background: #4ade80;
-    }
-    .ability-slot.active .ability-fill {
-      background: #ff8800;
-      box-shadow: 0 0 6px #ff8800;
-    }
+    /* Legacy horizontal fill — replaced by the conic-gradient on the
+       icon's `::after` (2026-04-27). Kept in the DOM for back-compat
+       (`runtime.ts` still updates `style.width`) but hidden visually
+       so it doesn't compete with the radial cooldown indicator. */
+    .ability-fill-bg, .ability-fill { display: none; }
+
     .ability-slot.active .ability-key {
       color: #ff8800;
-    }
-    .ability-slot.on-cooldown .ability-fill {
-      background: #666;
     }
     .ability-slot.on-cooldown .ability-key {
       opacity: 0.5;
@@ -333,9 +373,6 @@
     .ability-slot.unavailable {
       opacity: 0.35;
       position: relative;
-    }
-    .ability-slot.unavailable .ability-fill {
-      background: #555;
     }
     .ability-soon-badge {
       margin-top: 2px;
