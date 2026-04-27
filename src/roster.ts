@@ -134,7 +134,14 @@ const ROSTER: RosterEntry[] = [
     // Controller frog (mass 1.0) — medium size. Tripo mesh origin at feet.
     scale: 2.6, rotation: -Math.PI / 2, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,
-    status: 'playable',
+    // 2026-04-28 marked WIP: the GLB is ~75 MB and was being eagerly
+    // pulled by `scheduleIdlePreload` (every visitor, in-background)
+    // before any chance to balance / re-export it. WIP status keeps
+    // the slot visible in the grid (player can preview by clicking,
+    // which still fetches on-demand) but excludes Kermit from
+    // `getPlayableNames()` → not preloaded, not confirmable. Flip
+    // back to 'playable' once the asset is optimised.
+    status: 'wip',
     role: 'Controller',
     tagline: 'Venomous area denial.',
     plannedAbilities: [
