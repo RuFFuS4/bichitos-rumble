@@ -1258,6 +1258,50 @@ export class Game {
     return this.critters.filter((c) => c.alive).length;
   }
 
+  /**
+   * Camera pose to lerp the main camera toward when the match has
+   * ended — frames the local player critter close-up so the
+   * Victory/Defeat overlay reads with the bichito as the visual
+   * protagonist instead of a tiny figure stuck in the arena.
+   *
+   * Returns null in any phase other than 'ended' (caller falls back to
+   * the normal base + shake pipeline). Also returns null when there's
+   * no local player (e.g. spectator path that didn't pick a critter).
+   *
+   * Edge case — player fell through the void: when the critter is
+   * either eliminated AND below ground (y<0) OR not on the surface
+   * any more, we snap the focus point to the arena origin instead
+   * of chasing the corpse downward (which would put the camera
+   * below the world and look broken).
+   */
+  public getEndScreenCameraPose(): { position: THREE.Vector3; lookAt: THREE.Vector3 } | null {
+    if (this.phase !== 'ended') return null;
+    if (!this.player) return null;
+    const p = this.player;
+    const onSurface = p.alive && p.mesh.position.y >= 0;
+    const focusX = onSurface ? p.x : 0;
+    const focusZ = onSurface ? p.z : 0;
+    // Camera approaches from the critter's FRONT (so we see its face,
+    // not its back). For dead/fell players, fall back to looking from
+    // arena +Z toward origin — gives a generic but composed frame.
+    const facingY = onSurface ? p.mesh.rotation.y : 0;
+    const fwdX = Math.sin(facingY);
+    const fwdZ = Math.cos(facingY);
+    const dist = 4.5;     // metres back from the critter — half-shot
+    const camHeight = 2.5; // slightly above critter's chest line
+    return {
+      position: new THREE.Vector3(
+        focusX + fwdX * dist,
+        camHeight,
+        focusZ + fwdZ * dist,
+      ),
+      // LookAt slightly above the base — keeps the head in upper-mid
+      // of frame so the DOM overlay (title block at top) doesn't
+      // overlap the face awkwardly.
+      lookAt: new THREE.Vector3(focusX, 1.2, focusZ),
+    };
+  }
+
   /** Show the correct preview model for a roster entry (playable or WIP). */
   private swapPreviewForEntry(entry: RosterEntry | undefined): void {
     if (!entry) return;

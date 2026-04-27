@@ -430,10 +430,28 @@ function loop(now: number) {
   // puff lifetimes, an in-flight ring would keep expanding behind the
   // menu and look like gameplay never actually froze.
   if (!game.isPaused()) updateDustPuffs(dt);
-  // Apply camera shake on top of the base position (no accumulation drift).
-  // Also silenced during offline pause so a lingering shake doesn't
-  // tremble the frozen frame after ESC.
-  if (!game.isPaused()) updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
+  // Camera ownership per phase:
+  //   · paused          → freeze (no shake, no lerp).
+  //   · ended           → swoop to a close-up on the player critter so
+  //                       the Victory/Defeat overlay reads with the
+  //                       bichito as visual protagonist instead of a
+  //                       tiny figure stuck where it died on the arena.
+  //                       Shake is silenced too — celebratory framing
+  //                       wants a steady camera, not a wobble.
+  //   · everything else → base position + camera shake stack (the
+  //                       normal gameplay pipeline).
+  // Lerp factor `dt * 2.5` clamped to 1 so low-framerate sessions don't
+  // overshoot; at 60 FPS this converges to the target in ~1 second
+  // which feels cinematic without being slow.
+  const endPose = game.getEndScreenCameraPose();
+  if (game.isPaused()) {
+    // No-op
+  } else if (endPose) {
+    camera.position.lerp(endPose.position, Math.min(dt * 2.5, 1));
+    camera.lookAt(endPose.lookAt);
+  } else {
+    updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
+  }
   renderer.render(scene, camera);
   // Preview renders only when visible; cheap no-op otherwise
   tickPreview(dt);
