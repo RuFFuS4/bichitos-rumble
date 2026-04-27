@@ -134,14 +134,13 @@ const ROSTER: RosterEntry[] = [
     // Controller frog (mass 1.0) — medium size. Tripo mesh origin at feet.
     scale: 2.6, rotation: -Math.PI / 2, offset: [0, 0, 0],
     physicsRadius: R, pivotY: 0,
-    // 2026-04-28 marked WIP: the GLB is ~75 MB and was being eagerly
-    // pulled by `scheduleIdlePreload` (every visitor, in-background)
-    // before any chance to balance / re-export it. WIP status keeps
-    // the slot visible in the grid (player can preview by clicking,
-    // which still fetches on-demand) but excludes Kermit from
-    // `getPlayableNames()` → not preloaded, not confirmable. Flip
-    // back to 'playable' once the asset is optimised.
-    status: 'wip',
+    // 2026-04-28 back to 'playable' after the GLB was re-encoded
+    // with EXT_meshopt_compression in 419d038 — file dropped from
+    // 75.9 MB → 14.2 MB, putting Kermit in the same weight class
+    // as Kurama (14 MB) and Sebastian (16 MB). Idle preload via
+    // `scheduleIdlePreload` is now safe again; no special-casing
+    // needed.
+    status: 'playable',
     role: 'Controller',
     tagline: 'Venomous area denial.',
     plannedAbilities: [
