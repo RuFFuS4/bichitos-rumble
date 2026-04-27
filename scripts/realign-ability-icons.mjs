@@ -19,8 +19,10 @@
 // icon sits ~2 px low. Visible to the eye even if subtle.
 //
 // What this script does
-//   1. Backs up the source asset to .original.png if no backup
+//   1. Backs up the source asset to scripts/backups/ if no backup
 //      exists (idempotent — won't overwrite an existing backup).
+//      The backup lives OUTSIDE public/ so it is not shipped to
+//      production. Git history at f9d9fb8^ also has the original.
 //   2. For each (col, row) cell, measures the alpha-weighted
 //      centroid of the visible content within the source cell.
 //   3. Crops a square region centred on that centroid at the
@@ -41,7 +43,12 @@ import sharp from 'sharp';
 import { existsSync } from 'node:fs';
 
 const SRC_PATH = 'public/images/ability-icons.png';
-const BACKUP_PATH = 'public/images/ability-icons.original.png';
+// Backup lives outside public/ so it is NOT bundled into dist/ on
+// build (Vite copies all of public/ verbatim). The first run after
+// pulling this script will create the backup; subsequent runs skip
+// (idempotent). To recover the pre-realign asset on a fresh checkout
+// the backup is also recoverable from git history at f9d9fb8^.
+const BACKUP_PATH = 'scripts/backups/ability-icons.original.png';
 
 // ---------------------------------------------------------------------------
 // 1. Read source + back it up
