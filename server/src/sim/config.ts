@@ -38,7 +38,7 @@ export const SIM = {
   },
 
   chargeRush: {
-    impulse: 16,
+    impulse: 20, // +25% sync with FEEL.chargeRush.impulse 2026-04-27 (dash reach pass)
     speedMultiplier: 2.5,
     massMultiplier: 2.0,
     duration: 0.30,

@@ -49,7 +49,7 @@ export interface AbilityDef {
 const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Sergei: [
     { type: 'charge_rush',  cooldown: 4.0, duration: 0.28, windUp: 0.04,
-      impulse: 20, speedMultiplier: 2.6, massMultiplier: 2.2 },
+      impulse: 25, speedMultiplier: 2.6, massMultiplier: 2.2 },
     { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.30,
       radius: 3.5, force: 34 },
     { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.35,
@@ -57,7 +57,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   ],
   Trunk: [
     { type: 'charge_rush',  cooldown: 4.5, duration: 0.35, windUp: 0.08,
-      impulse: 16, speedMultiplier: 2.1, massMultiplier: 3.5 },
+      impulse: 20, speedMultiplier: 2.1, massMultiplier: 3.5 },
     { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.60,
       radius: 4.5, force: 40 },
     { type: 'frenzy',       cooldown: 18.0, duration: 3.0, windUp: 0.45,
@@ -69,7 +69,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   // Kurama — Trickster: very fast, flighty, Frenzy ult fits the "sly" fantasy
   Kurama: [
     { type: 'charge_rush',  cooldown: 3.2, duration: 0.26, windUp: 0.05,
-      impulse: 23, speedMultiplier: 2.8, massMultiplier: 1.3 },
+      impulse: 29, speedMultiplier: 2.8, massMultiplier: 1.3 },
     { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.25,
       radius: 3.0, force: 22 },
     { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
@@ -78,7 +78,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   // Shelly — Tank: slow heavy charger, wide slam, Frenzy for berserk
   Shelly: [
     { type: 'charge_rush',  cooldown: 5.5, duration: 0.45, windUp: 0.08,
-      impulse: 12, speedMultiplier: 1.8, massMultiplier: 3.2 },
+      impulse: 15, speedMultiplier: 1.8, massMultiplier: 3.2 },
     { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.45,
       radius: 4.5, force: 28 },
     { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
@@ -87,7 +87,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   // Kermit — Controller: standard mobility, biggest AoE radius
   Kermit: [
     { type: 'charge_rush',  cooldown: 4.0, duration: 0.30, windUp: 0.06,
-      impulse: 16, speedMultiplier: 2.3, massMultiplier: 1.7 },
+      impulse: 20, speedMultiplier: 2.3, massMultiplier: 1.7 },
     { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.35,
       radius: 4.6, force: 24 },
     { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
@@ -96,7 +96,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   // Sihans — Trapper: slow stomping specialist, long windUp, high force
   Sihans: [
     { type: 'charge_rush',  cooldown: 4.5, duration: 0.35, windUp: 0.08,
-      impulse: 15, speedMultiplier: 2.1, massMultiplier: 2.0 },
+      impulse: 19, speedMultiplier: 2.1, massMultiplier: 2.0 },
     { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.6,
       radius: 3.5, force: 38 },
     { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
@@ -105,7 +105,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   // Kowalski — Mage: widest AoE, lowest force, ranged identity via area
   Kowalski: [
     { type: 'charge_rush',  cooldown: 4.2, duration: 0.30, windUp: 0.06,
-      impulse: 15, speedMultiplier: 2.4, massMultiplier: 1.5 },
+      impulse: 19, speedMultiplier: 2.4, massMultiplier: 1.5 },
     { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.4,
       radius: 5.0, force: 20 },
     { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
@@ -114,7 +114,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   // Cheeto — Assassin: fastest dash, mini AoE but dense
   Cheeto: [
     { type: 'charge_rush',  cooldown: 2.8, duration: 0.24, windUp: 0.04,
-      impulse: 26, speedMultiplier: 3.0, massMultiplier: 1.2 },
+      impulse: 33, speedMultiplier: 3.0, massMultiplier: 1.2 },
     { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.22,
       radius: 2.5, force: 30 },
     { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
@@ -123,7 +123,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   // Sebastian — Glass Cannon: small AoE, massive force, vicious charge
   Sebastian: [
     { type: 'charge_rush',  cooldown: 3.5, duration: 0.28, windUp: 0.06,
-      impulse: 22, speedMultiplier: 2.6, massMultiplier: 1.4 },
+      impulse: 28, speedMultiplier: 2.6, massMultiplier: 1.4 },
     { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.3,
       radius: 2.8, force: 40 },
     { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
