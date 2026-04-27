@@ -155,6 +155,22 @@ export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
     fall: { clip: "Fall", speed: 2, loop: true },
     victory: { clip: "Victory", loop: true },
   },
+  // Kurama — clip names in this GLB are crossed against their
+  // semantic state (the rig was authored against an in-progress
+  // taxonomy). Mappings reflect what the user picked visually in
+  // /anim-lab, not what the clip names suggest. Naming cleanup is
+  // tracked as deuda técnica — fix the GLB rather than the
+  // overrides when there's time.
+  kurama: {
+    ability_1: { clip: "Idle", speed: 1.9 },
+    ability_2: { clip: "Victory", speed: 1.3 },
+    ability_3: { clip: "Ability2MirrorTrick", speed: 1.5 },
+    defeat: "Walking",
+    fall: { clip: "Ability3Copycat", loop: true },
+    idle: "Fall",
+    run: "Defeat",
+    victory: { clip: "Run", loop: true },
+  },
 };
 
 /**
