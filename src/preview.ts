@@ -49,6 +49,17 @@ let visible = false;
 // before the mixer ever runs), so idle-clip wiggle never re-triggers it.
 let fitApplied = false;
 
+// Real post-fit silhouette dimensions. Computed once when `fitApplied`
+// flips true (cheap one-shot Box3 from the wrapper subtree). Used by
+// `applyCameraToFit` to push the camera back / re-aim its lookAt so
+// the FULL silhouette reads on screen instead of getting clipped at
+// the top (Trunk ears, Kermit antennae) or sides (wide builds like
+// the turtle / elephant / crab profile-on). `null` between critter
+// swaps so the camera doesn't try to fit the previous critter's box
+// while the next GLB is mid-load.
+let fitBoxSize: THREE.Vector3 | null = null;
+let fitBoxCenter: THREE.Vector3 | null = null;
+
 // Rotation state
 let targetRotationY = 0;
 let currentRotationY = 0;
@@ -167,6 +178,21 @@ export function tickPreview(dt: number): void {
     const k = TARGET_HEIGHT / critter.bindPoseHeight;
     fitWrapper.scale.setScalar(k);
     fitApplied = true;
+    // Now measure the REAL post-fit silhouette and re-aim the camera
+    // so the whole bichito reads on screen. `bindPoseHeight` only
+    // captures the body's main bbox height — extras like elephant
+    // ears, fox ears, frog antennae or wide turtle shells push the
+    // visible volume past the height envelope and got cropped under
+    // the previous fixed camera distance.
+    fitWrapper.updateMatrixWorld(true);
+    const bbox = new THREE.Box3().setFromObject(fitWrapper);
+    if (!bbox.isEmpty()) {
+      fitBoxSize = new THREE.Vector3();
+      fitBoxCenter = new THREE.Vector3();
+      bbox.getSize(fitBoxSize);
+      bbox.getCenter(fitBoxCenter);
+      applyCameraToFit();
+    }
   }
 
   // Ease current rotation toward target
@@ -178,6 +204,41 @@ export function tickPreview(dt: number): void {
   critter.update(dt);
 
   renderer.render(scene, camera);
+}
+
+/**
+ * Pull the camera back / re-aim its lookAt so the stored fit bbox
+ * fits the current canvas aspect with margin. Called:
+ *   · once after `fitApplied` flips true (initial frame).
+ *   · on resize (canvas aspect changed → horizontal half-FOV
+ *     changed → required distance changed).
+ *
+ * Math: required distance is `halfExtent / tan(halfFov)`. We compute
+ * separate values for the vertical and horizontal axes (horizontal
+ * uses `atan(tan(halfFovV) * aspect)` for the converted half-FOV)
+ * and take the larger. The result is multiplied by `PADDING` for
+ * breathing room and clamped to a `MIN_DISTANCE` floor so small
+ * critters don't push the camera so close that perspective skews
+ * the silhouette.
+ */
+function applyCameraToFit(): void {
+  if (!camera || !fitBoxSize || !fitBoxCenter) return;
+  // Use max of x and z so the camera fits the wider profile when the
+  // user spins the critter — drag rotation can expose either axis.
+  const halfWidth = Math.max(fitBoxSize.x, fitBoxSize.z) / 2;
+  const halfHeight = fitBoxSize.y / 2;
+  const halfFovV = (camera.fov * Math.PI / 180) / 2;
+  const halfFovH = Math.atan(Math.tan(halfFovV) * camera.aspect);
+  const distForH = halfWidth / Math.tan(halfFovH);
+  const distForV = halfHeight / Math.tan(halfFovV);
+  const PADDING = 1.18;
+  const MIN_DISTANCE = 5.6;
+  const dist = Math.max(MIN_DISTANCE, Math.max(distForV, distForH) * PADDING);
+  camera.position.set(0, 2.15, dist);
+  // Aim at the bbox vertical centre instead of a fixed y so critters
+  // with non-uniform vertical mass distribution (heavy turtle shell
+  // bottom vs. tall fox ears top) frame symmetrically.
+  camera.lookAt(0, fitBoxCenter.y, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +340,11 @@ function swapCritter(config: CritterConfig): void {
   // spheres are already hand-sized.
   fitWrapper.scale.setScalar(1);
   fitApplied = false;
+  // Drop stale silhouette dimensions from the previous critter so
+  // resize() during the load gap doesn't try to fit the OLD bbox
+  // (would briefly aim the camera at the wrong critter's centre).
+  fitBoxSize = null;
+  fitBoxCenter = null;
 }
 
 /** Recursively dispose all geometries and materials in a mesh tree. */
@@ -305,6 +371,10 @@ function resize(): void {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  // Re-fit the camera distance for the new aspect — a narrow window
+  // needs the camera further back to keep the silhouette inside the
+  // horizontal frustum. No-op when no critter has loaded yet.
+  applyCameraToFit();
 }
 
 // ---------------------------------------------------------------------------
