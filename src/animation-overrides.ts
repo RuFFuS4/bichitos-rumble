@@ -55,22 +55,27 @@ import type { SkeletalState } from './critter-skeletal';
  * migration. Resolver helpers below normalise on read so callers don't
  * need to switch on the shape.
  *
- * Runtime status of `speed` / `loop` (2026-04-27): currently TOOLING-
- * ONLY metadata. The game's resolver path
- * (`Critter.attachGlbMesh` → `SkeletalAnimator.play(state)`) reads
- * `clip` only. The lab uses speed/loop for preview via
- * `playClipByName(name, loop, speed)` so what you see in /anim-lab is
- * what your tuning intent is — NOT yet what the live match will play
- * back at. Promoting these fields to runtime is a Phase-2 change in
- * `critter-skeletal.ts` (apply `setEffectiveTimeScale` / `setLoop`
- * inside `play()` based on `getClipOverrideMeta`).
+ * Runtime behaviour (2026-04-27 promotion): speed and loop are now
+ * applied IN GAME, not just in /anim-lab. The resolver in
+ * `SkeletalAnimator`:
+ *   · honours `meta.loop` at action setup time (overrides the
+ *     `LOOPING_STATES.has(state)` default for idle/walk/run vs the
+ *     rest);
+ *   · applies `meta.speed` on every `play(state)` call as a fallback
+ *     when the caller didn't pass `opts.timeScale` (so a per-ability
+ *     `clipPlaybackRate` still wins over a global override speed).
+ * Tools still use `playClipByName(name, loop, speed)` directly for
+ * preview — same numbers reach the runtime path now.
  */
 export interface ClipOverrideEntry {
   clip: string;
-  /** Playback speed multiplier (1 = real-time). Tooling metadata. */
+  /** Playback speed multiplier (1 = real-time). Applied in-game via
+   *  `SkeletalAnimator.play(state)` and in /anim-lab preview via
+   *  `playClipByName(name, loop, speed)`. */
   speed?: number;
   /** Loop flag. If omitted the resolver's per-state default applies
-   *  (idle/walk/run loop, others are one-shot). Tooling metadata. */
+   *  (idle/walk/run loop, others are one-shot). Applied in-game at
+   *  action setup time and in /anim-lab preview. */
   loop?: boolean;
 }
 

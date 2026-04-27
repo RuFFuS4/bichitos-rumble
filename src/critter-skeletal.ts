@@ -34,7 +34,7 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { getClipOverride } from './animation-overrides';
+import { getClipOverrideMeta, type ClipOverrideEntry } from './animation-overrides';
 
 /**
  * Logical animation states the game can request. Not every GLB needs every
@@ -122,6 +122,16 @@ export class SkeletalAnimator {
   /** Map from logical state → how the clip was resolved. Exposed for the
    *  anim lab so we can show "override vs auto" per row. */
   private readonly resolveSources: Partial<Record<SkeletalState, ResolveSource>> = {};
+  /** Per-state override metadata (clip + optional speed/loop) captured at
+   *  construction time when an authored override is in effect. The
+   *  resolver uses this to:
+   *    - apply `meta.loop` at action setup (overriding the default
+   *      `LOOPING_STATES.has(state)` policy); and
+   *    - apply `meta.speed` on every `play(state)` invocation as a
+   *      fallback when the caller didn't pass `opts.timeScale`.
+   *  Empty entries (auto-resolved states) leave behaviour at the
+   *  resolver defaults. */
+  private readonly resolveMeta: Partial<Record<SkeletalState, ClipOverrideEntry>> = {};
   /** Which state is currently the "dominant" one being played. */
   private currentState: SkeletalState | null = null;
   /** If the current state is a one-shot, what to fall back to when it finishes. */
@@ -224,17 +234,23 @@ export class SkeletalAnimator {
     for (const state of states) {
       let clip: THREE.AnimationClip | null = null;
       let source: ResolveSource = 'missing';
+      // `meta` carries the FULL override entry (clip + optional speed/
+      // loop). We need it both at action-setup time (to honour
+      // meta.loop) and later in `play(state)` (to honour meta.speed),
+      // so we cache it in `this.resolveMeta` when the override hits.
+      let meta: ClipOverrideEntry | null = null;
 
-      const overrideName = getClipOverride(this.critterId, state);
-      if (overrideName) {
-        const found = liveClips.find(c => c.name === overrideName);
+      const overrideMeta = getClipOverrideMeta(this.critterId, state);
+      if (overrideMeta) {
+        const found = liveClips.find(c => c.name === overrideMeta.clip);
         if (found) {
           clip = found;
           source = 'override';
+          meta = overrideMeta;
         } else {
           console.debug(
             `[SkeletalAnimator] override for ${this.critterId}.${state} points to`,
-            `"${overrideName}" which is not in the GLB clip list — falling back to resolver.`,
+            `"${overrideMeta.clip}" which is not in the GLB clip list — falling back to resolver.`,
           );
         }
       }
@@ -251,12 +267,23 @@ export class SkeletalAnimator {
       }
 
       const action = this.mixer.clipAction(clip);
-      if (!LOOPING_STATES.has(state)) {
+      // Loop policy: explicit `meta.loop` from the override wins; else
+      // the per-state default from `LOOPING_STATES` (idle/walk/run loop,
+      // everything else is one-shot + clamps at end). The explicit
+      // `setLoop(LoopRepeat, Infinity)` for looping cases is needed
+      // because a SHARED clip between two states could have been set
+      // to LoopOnce by an earlier iteration — we must reset it.
+      const shouldLoop = meta?.loop !== undefined ? meta.loop : LOOPING_STATES.has(state);
+      if (shouldLoop) {
+        action.setLoop(THREE.LoopRepeat, Infinity);
+        action.clampWhenFinished = false;
+      } else {
         action.setLoop(THREE.LoopOnce, 1);
         action.clampWhenFinished = true;
       }
       this.actions[state] = action;
       this.resolveSources[state] = source;
+      if (meta) this.resolveMeta[state] = meta;
     }
 
     // Fire a fallback when one-shot actions end, so the critter doesn't
@@ -341,7 +368,17 @@ export class SkeletalAnimator {
     action.reset();
     action.enabled = true;
     action.setEffectiveWeight(1);
-    action.setEffectiveTimeScale(opts.timeScale ?? 1);
+    // Speed resolution priority (most-specific first):
+    //   1. opts.timeScale     — caller-provided per-play override (used by
+    //                           ability `clipPlaybackRate` in critter.ts).
+    //   2. meta.speed         — authored override in ANIMATION_OVERRIDES.
+    //   3. 1.0                — real-time default.
+    // The override's loop flag is applied at action SETUP time (see
+    // constructor), not here — re-running setLoop on every play would
+    // step on Three.js's internal looping/clamp state mid-action.
+    const meta = this.resolveMeta[state];
+    const speed = opts.timeScale ?? meta?.speed ?? 1;
+    action.setEffectiveTimeScale(speed);
     action.play();
 
     if (prevAction && prevAction !== action) {
