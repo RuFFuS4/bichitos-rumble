@@ -30,7 +30,7 @@ import {
 } from './stats';
 import { checkBadgeUnlocks } from './badges';
 import { maybeShowBadgeToast } from './badge-toast';
-import { getDisplayRoster, getRosterEntry, getPlayableNames, type RosterEntry } from './roster';
+import { getDisplayRoster, getRosterEntry, getPlayableNames, getIdlePreloadNames, type RosterEntry } from './roster';
 import { preloadModels } from './model-loader';
 import {
   isFromPortal, resolvePortalCharacter, setPortalPlayerInfo,
@@ -260,21 +260,29 @@ export class Game {
 
     // Warm the model cache in browser idle time so character-select
     // swaps are instant and `enterCountdown`'s preload is a cache hit.
-    // Only the 9 playable critters (internal Rojo/Azul/Verde/Morado
-    // don't ship GLBs). Scheduled AFTER enterTitle() so the title
-    // paints first — the user never sees this blocking.
+    // Only the playable critters (internal Rojo/Azul/Verde/Morado
+    // don't ship GLBs) AND not flagged `heavyAsset` (Kermit) — heavy
+    // assets stay on-demand to avoid background traffic on every
+    // visitor. Scheduled AFTER enterTitle() so the title paints
+    // first — the user never sees this blocking.
     this.scheduleIdlePreload();
   }
 
   /**
-   * Kick off a background fetch of every playable critter's GLB during
-   * browser idle time. Uses `requestIdleCallback` where available,
-   * falls back to `setTimeout`. Failures are swallowed by
-   * `preloadModels` (Promise.allSettled). Cache hits on subsequent
+   * Kick off a background fetch of every preload-eligible critter's
+   * GLB during browser idle time. Uses `requestIdleCallback` where
+   * available, falls back to `setTimeout`. Failures are swallowed
+   * by `preloadModels` (Promise.allSettled). Cache hits on subsequent
    * loads eliminate the character-select → countdown fetch spike.
+   *
+   * The list comes from `getIdlePreloadNames()` (playable AND not
+   * `heavyAsset`). Kermit is currently the only heavy entry; he is
+   * still fully playable but his GLB is fetched on-demand the first
+   * time the player previews / confirms his slot, not in the
+   * background for every visitor.
    */
   private scheduleIdlePreload(): void {
-    const paths = getPlayableNames()
+    const paths = getIdlePreloadNames()
       .map((n) => getRosterEntry(n)?.glbPath)
       .filter((p): p is string => typeof p === 'string' && p.length > 0);
     if (paths.length === 0) return;

@@ -36,6 +36,13 @@ export interface RosterEntry {
   role: string;                          // info pane label
   tagline: string;                       // info pane one-liner
   plannedAbilities?: AbilityPreview[];   // for WIP characters without gameplay
+  /** Opt-out of background idle preload (`scheduleIdlePreload`).
+   *  The critter stays fully playable — preview / countdown / per-
+   *  match preload still fetch the GLB on demand when the player
+   *  picks the slot. Use for assets we don't want to ship to every
+   *  visitor in the background regardless of whether they ever
+   *  open character select. Defaults to false. */
+  heavyAsset?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,11 +143,13 @@ const ROSTER: RosterEntry[] = [
     physicsRadius: R, pivotY: 0,
     // 2026-04-28 back to 'playable' after the GLB was re-encoded
     // with EXT_meshopt_compression in 419d038 — file dropped from
-    // 75.9 MB → 14.2 MB, putting Kermit in the same weight class
-    // as Kurama (14 MB) and Sebastian (16 MB). Idle preload via
-    // `scheduleIdlePreload` is now safe again; no special-casing
-    // needed.
+    // 75.9 MB → 14.2 MB. Kept out of the idle preload via
+    // `heavyAsset` so any future regrowth of the asset doesn't
+    // silently re-introduce the background-download problem; the
+    // GLB still loads on-demand when the player previews / picks /
+    // confirms Kermit, so playability is unaffected.
     status: 'playable',
+    heavyAsset: true,
     role: 'Controller',
     tagline: 'Venomous area denial.',
     plannedAbilities: [
@@ -278,5 +287,21 @@ export function getDisplayRoster(): RosterEntry[] {
 export function getPlayableNames(): string[] {
   return ROSTER
     .filter(e => e.status === 'playable')
+    .map(e => e.displayName);
+}
+
+/**
+ * Names of characters whose GLB should be fetched in browser idle
+ * time on app start (`scheduleIdlePreload`). Subset of
+ * `getPlayableNames()` that excludes entries flagged `heavyAsset`.
+ *
+ * The excluded ones still load on-demand: character-select preview
+ * (`swapPreviewCritter`) and per-match preload (`enterCountdown`)
+ * both fetch the GLB the first time the player engages with that
+ * critter — the cache makes subsequent uses instant.
+ */
+export function getIdlePreloadNames(): string[] {
+  return ROSTER
+    .filter(e => e.status === 'playable' && !e.heavyAsset)
     .map(e => e.displayName);
 }
