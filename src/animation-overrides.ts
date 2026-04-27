@@ -196,6 +196,44 @@ export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
     run: "Ability1BurrowRush",
     victory: { clip: "Run", loop: true },
   },
+  // Cheeto — clean naming + speed bumps to match the predator-fast
+  // identity. All three abilities have dedicated clips in the GLB
+  // and resolve cleanly; the speed bumps reinforce the "lightning
+  // strike" feel above the resolver default of 1.0.
+  cheeto: {
+    ability_1: { clip: "Ability1Pounce", speed: 2.3 },
+    ability_2: { clip: "Ability2ShadowStep", speed: 2 },
+    ability_3: { clip: "Ability3TigerRoar", speed: 1.7 },
+    fall: { clip: "Fall", loop: true },
+    run: { clip: "Run", speed: 1.3 },
+    victory: { clip: "Victory", loop: true },
+  },
+  // Kowalski — Mage identity with fast slide + looping ulti. Ice Age
+  // (ability_3) explicitly loops so the freeze-aura reads as a
+  // sustained area-control beat rather than a one-shot animation.
+  kowalski: {
+    ability_1: { clip: "Ability1IceSlide", speed: 3.5 },
+    ability_2: { clip: "Ability2Snowball", speed: 2 },
+    ability_3: { clip: "Ability3IceAge", speed: 1.8, loop: true },
+    fall: { clip: "Fall", speed: 1.8, loop: true },
+    run: { clip: "Run", speed: 1.4 },
+    victory: { clip: "Victory", loop: true },
+  },
+  // Sebastian — partial mapping. The GLB only ships `Ability2ClawSweep`
+  // for abilities (no ability_1 or ability_3 clips), so those slots
+  // intentionally fall through to procedural-only feedback (dash
+  // squash + frenzy emissive). Only the states the user could
+  // visually verify in /anim-lab are mapped here. Note `idle` and
+  // `run` are intentionally crossed against their semantic clip
+  // names — the rig was authored with mismatched naming.
+  sebastian: {
+    ability_2: { clip: "Walking", speed: 1.3 },
+    defeat: { clip: "Idle", loop: true },
+    fall: { clip: "Defeat", loop: true },
+    idle: "Run",
+    run: "Victory",
+    victory: "Ability2ClawSweep",
+  },
 };
 
 /**
