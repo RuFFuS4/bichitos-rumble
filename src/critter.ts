@@ -679,7 +679,17 @@ export class Critter {
     group.position.y += entry.pivotY;
 
     // Normalise GLB materials for our shading pipeline:
-    //   - transparent: true → needed for the immunity blink pass
+    //   - transparent: FALSE at attach time (was `true` until 2026-04-29) —
+    //     keeping it `true` permanently kept the alpha-sort path active for
+    //     every skinned submesh forever, which on multi-mesh GLBs (Sergei
+    //     is the worst case: gorilla body + arms + face split across
+    //     submeshes) produced "patches becoming see-through" because alpha
+    //     sort can't reliably order intersecting skinned-mesh triangles.
+    //     `updateVisuals` flips `transparent: true` ONLY for the few frames
+    //     of immunity blink / invisibility — outside those windows the
+    //     material stays fully opaque with depth-write enabled, so the
+    //     skinned mesh sorts via the depth buffer like every other solid
+    //     mesh.
     //   - metalness/roughness neutralised when the source exported a
     //     full-PBR rig (Meshy does `metalness: 1`), which reads as dark
     //     matte without an envMap and kills the saturated colours the
@@ -695,8 +705,9 @@ export class Critter {
       for (const mat of mats) {
         const std = mat as THREE.MeshStandardMaterial;
         if (!std.isMeshStandardMaterial) continue;
-        std.transparent = true;
+        std.transparent = false;
         std.opacity = 1.0;
+        std.depthWrite = true;
         if (std.metalness > 0.5) {
           std.metalness = 0;
           std.roughness = 0.7;

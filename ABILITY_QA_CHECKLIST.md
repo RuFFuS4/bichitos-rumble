@@ -7,8 +7,11 @@ Status legend:
 - `[!]` problema detectado / requiere ajuste / NO se cierra antes de la entrega
 - `[~⚠]` implementado con simplificación documentada (versión fiel al espíritu, no idéntica al diseño)
 
-Last updated: v0.11 implementation pass.
+Last updated: v0.11 implementation pass + 2026-04-29 skybox close-out + Sergei mesh-bug real fix.
 Use `git log --grep abilities` to see the commit trail behind each item.
+
+> **Out-of-scope but cerrado entre tomas (no es habilidad pero estaba bloqueando QA visual):**
+> - **Skybox 360 final** (`b054e96`). Cuatro iteraciones (camera-parented sphere → world-anchored sphere PBR → backdrop toggle hacks → cortes verticales en bordes) fallaron por interacciones entre depth/transparency/grazing-angle. Solución definitiva: `scene.background = equirectTexture` con `EquirectangularReflectionMapping` — pre-pass built-in de Three.js, full-screen guaranteed, sin meshes ni z-buffer involucrado. Eliminados: skydome esférico, backdrop screen-space, cloudsBelow plano. Las 5 panorámicas en `public/images/skyboxes/<id>.png` se enchufan vía `setSceneSkyboxTexture`.
 
 ---
 
@@ -16,7 +19,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 
 - [~] **J/dash anim sync**: `cancelAnimOnEnd: true` añadido a TODAS las charge_rush. La animación se corta a idle/run cuando el dash termina. Cubre Trunk, Sergei, Kurama, Shelly, Kermit, Sihans, Kowalski, Cheeto, Sebastian.
 - [~] **Headbutt feedback per-critter**: nuevo campo `headbuttBoost` en `CritterConfig` (multiplicador local del impulso de cabezazo + shake escalado). Aplicado a Sergei (1.15×), Kowalski (1.20×), Cheeto (1.30×), Sebastian (1.45×). Trunk/Kurama/Shelly/Kermit/Sihans se quedan en 1.0× (Rafa los marcó OK o decentes).
-- [!] **Sergei mesh bug**: investigado. Causa probable: `transparent: true` aplicado por defecto al cargar el GLB (en `attachGlbMesh`) combinado con render order ambiguo cuando el frenzy emisivo está activo. Aplicado fix mínimo (forzar `depthWrite: true` en materiales de Sergei sin opacidad < 1) — pendiente validación visual de Rafa porque puede haber casos que el repro sea distinto. Si reaparece, marcar como [!] persistente.
+- [~] **Sergei mesh bug — fix real (2026-04-29)**: la causa era que `attachGlbMesh` forzaba `transparent: true` permanentemente sobre cada material del GLB (para soportar el blink de inmunidad). Eso dejaba el alpha-sort path activo siempre — y en GLBs skinned multi-submesh (Sergei es el peor caso) el alpha-sort no puede ordenar consistentemente triángulos skinned que se intersectan, así que parches de gorila se renderizaban detrás de otros parches del mismo mesh ("becoming see-through"). Fix: arrancar con `transparent: false` + `depthWrite: true`, dejar que `updateVisuals` flippee a `transparent: true` SOLO durante los frames de blink/invisibility, y vuelva a opaco al terminar. Pendiente validación de Rafa.
 
 ---
 
@@ -26,7 +29,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 - [~] **J Gorilla Rush** — sin cambios (Rafa: perfecta) + cancelAnimOnEnd
 - [~] **K Shockwave** — sin cambios (Rafa: perfecta)
 - [~] **L Frenzy buffada** — `frenzySpeedMult 1.45 → 1.55`, `frenzyMassMult 1.50 → 1.75`. Más empuje y velocidad sin tocar identidad gorila.
-- [!] **Mesh bug** — fix preventivo aplicado (depthWrite forzado), pendiente validación. Si persiste, abrir issue separado y desactivar transparency en Sergei únicamente.
+- [~] **Mesh bug — fix real aplicado (2026-04-29)**: cambio root-cause en `attachGlbMesh` para arrancar con `transparent: false`. Detalle en sección "Arreglos transversales". Pendiente validación.
 
 ---
 
