@@ -44,7 +44,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 
 - [~] **Headbutt** — sin cambios (Rafa: muy bien)
 - [~] **J Fox Dash** — sin cambios mecánicos + `cancelAnimOnEnd: true`. Animación corta al terminar dash.
-- [~⚠] **K Mirror Trick simplificado**: durante 1.6 s tras pulsar K, Kurama se vuelve **semi-invisible** (alpha 0.25) Y obtiene immunity ampliada (no recibe knockback). El "decoy" se representa como un afterimage estático de Kurama en la posición original (clone visual del mesh, alpha 0.4, sin colisión, sin gameplay). **Recorte**: bots NO siguen al decoy preferentemente — siguen targetando a Kurama por sessionId. Online: el alpha se ve correctamente porque el material se sincroniza vía estado de buff. **NO** hay redirección de bot AI ni invisibility "real" para physics — solo visual + immunity.
+- [~⚠] **K Mirror Trick simplificado** (IMPLEMENTADO): durante 1.6 s tras pulsar K, Kurama se vuelve **semi-invisible** (alpha 0.25) Y queda inmune a knockback (`immunityTimer` extendido). El "decoy" se spawna como un clon estático del mesh GLB en la posición de origen (SkeletonUtils.clone + tinted violet alpha 0.4, fade-out 30 % final, dispose automático). Cliente: alpha + decoy + emissive. Server: solo `immunityTimer = 1.6 s` via `selfBuffOnly + selfImmunityDuration`. **Recorte**: bots NO siguen al decoy preferentemente — siguen targetando a Kurama por sessionId. La invisibilidad NO afecta physics ni colisiones, solo es visual + immunity.
 - [!] **L Copycat** — NO implementado. Sustituido temporalmente por `Nine-Tails Frenzy` (la versión actual). El sistema necesario (last-hit tracker + ability dispatch por nombre + restricción de uso único) requiere ~2-3 h de trabajo y schema online nuevo. Documentado para post-entrega. **Marcado [!] explícitamente.**
 
 ---
@@ -53,8 +53,8 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 
 - [~⚠] **Headbutt** — sin cambios (Rafa: decente)
 - [~⚠] **J Shell Charge** — `duration 0.45 → 0.55`, `impulse 15 → 18`. Más distancia. **Recorte**: no se ocultan visualmente cabeza/patas durante el dash — la inspección de los nodos del GLB muestra que Shelly NO tiene submeshes nombrados separadamente para shell vs cabeza/patas (mesh único `tripo_part_*`). Documentado en checklist.
-- [~] **K Steel Shell modo defensivo** — REEMPLAZA el ground pound. Durante 5 s: rooted (no movimiento), invulnerable a knockback Y a effect zones, glow gris/acero (override de `getCritterVfxPalette` durante el estado). Implementado vía nueva ability type `'steel_shell'` con `slowDuringActive: 0` + `setImmunityTimer(5.0)` + flag visual. Cooldown 12 s.
-- [!] **K cabeza/patas ocultas** — NO posible sin submeshes nombrados. Compensado con tint metálico fuerte que hace que Shelly se lea como "encerrada en su caparazón".
+- [~⚠] **K Steel Shell** (IMPLEMENTADO): REEMPLAZA el slam. Durante 5 s: rooted (`slowDuringActive: 0`) + `immunityTimer = 5 s` server-authoritative (no recibe knockback online ni offline). Visual: emissive override `0xa8c0d0` (metallic blue-gray). Implementado como `ground_pound` con `selfBuffOnly: true` + `selfImmunityDuration: 5.0` + `selfTintHex: 0xa8c0d0` — sin nuevo AbilityType. Cooldown 12 s.
+- [!] **K cabeza/patas ocultas** — NO posible sin submeshes nombrados. Compensado con el emissive metálico fuerte. Shelly se LEE como "encerrada", aunque la silueta sigue mostrando cabeza/patas.
 - [!] **L Saw Shell rotation** — NO implementado. Rotation animation logic (rotar el GLB sobre Y rápidamente) requiere modificar el animation loop o aplicar una rotación frame-by-frame durante la duración del frenzy. El frenzy tinted actual (verde tank) se mantiene como Berserker Shell con stats ya dispuestos. Marcado [!] para post-entrega.
 
 ---
@@ -65,7 +65,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 - [~] **J Leap Forward** — sin cambios mecánicos + `cancelAnimOnEnd: true`
 - [~] **K Poison Cloud** — zona slow ya existente (rad 5.0 / 2.0 s / 60 % slow) con visual mejorado: el ring del shockwave inicial usa una trail de partículas verdes aleatorias en addition al ring para que se lea como humo, no solo círculo plano. Visualmente más cloud-like.
 - [!] **K inside-cloud vision** — NO implementado. Vignette/overlay local cuando un jugador está dentro de la zona requiere modificación del render pass o un quad screen-space adicional con alpha mask. Marcado [!] post-entrega — el slow real ya hace que la zona sea funcionalmente peligrosa.
-- [~⚠] **L Hypnosapo / Toxic Touch** — durante el buff (4.0 s), si Kermit hace **headbutt** sobre un enemigo, le aplica un **status `poisoned`** durante 2.5 s: input invertido (X y Z multiplicados por -1 en la simulación). VFX: tint morado en el target afectado. **Recorte**: el invert solo afecta al input del jugador local del target; bots no se ven afectados (no tienen "input" sino lógica de targeting). En online: el server propaga el status flag y el cliente del target afectado invierte su input localmente antes de mandarlo al server. Documentado.
+- [!] **L Hypnosapo / Toxic Touch** — NO IMPLEMENTADO en v0.11. La L actual sigue siendo el frenzy custom de v0.10 (slow + heavy). Implementar el status "poisoned" + invert input requiere nuevo schema online (status flag en PlayerSchema), código de física para invertir movement input, y VFX en target afectado. Marcado [!] post-jam — riesgo / scope superior al disponible para esta sesión. La L actual sigue siendo funcional como buff personal pesado.
 
 ---
 
@@ -82,8 +82,8 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 
 - [~] **Headbutt** — boost ×1.20
 - [~] **J Ice Slide** — sin cambios mecánicos + `cancelAnimOnEnd: true`
-- [~⚠] **K Snowball** — REEMPLAZA el ground_pound + zona. Implementado como un **proyectil simple** server-authoritative: lanza una bola de nieve desde Kowalski en su facing direction con velocidad 22 u/s, vida 0.8 s. Al impactar contra un crítter: knockback radial pequeño + slow 50 % durante 2.0 s aplicado al target via status flag. Si no impacta: desaparece tras 0.8 s. VFX: sphere blanca pequeña con glow azul. Cooldown 6 s. **Recorte**: detección de colisión es radial alrededor del proyectil (no precisa); afecta al primer crítter que entre en su radio.
-- [~] **L Blizzard / Frozen Floor** — REEMPLAZA el frenzy actual. Crea una **zona de hielo grande** (radius 6.5, 3.0 s) en la posición de Kowalski. Dentro de la zona: speed × 1.5 (deslizamiento — los críters van más rápido pero pierden 70 % del control de input vía un nuevo flag `slipperyZone`). Visual: ring azul brillante con disco semi-transparente. Cooldown 17 s. Kowalski también queda dentro pero como fue su L, recibe tratamiento "owner immune". **Importante**: este L no es buff personal sino zona de control — más cerca del diseño Rafa pidió.
+- [!] **K Snowball** — NO IMPLEMENTADO en v0.11. La K actual (Arctic Burst con zona de hielo de 1.6 s + 55 % slow) es la versión v0.10 — funciona como zona de control de área pero NO es un proyectil. Implementar bola de nieve real requiere proyectil entity con tick de movimiento, detección de colisión por sweep, y schema de status `snowballSlowTimer`. Marcado [!] post-jam.
+- [!] **L Blizzard / Frozen Floor** — NO IMPLEMENTADO en v0.11. La L actual (Blizzard con frenzy spd × 1.40 / mass × 1.10) sigue siendo buff personal, no zona. Para implementar zona de hielo deslizante necesito extender el zone system con `slippery: boolean` flag (acceleration × 0.3, control reducido). Marcado [!] post-jam.
 
 ---
 
@@ -120,15 +120,18 @@ Bot AI:
 - [~] Tags inalterados (mobility / aoe_push / buff / steel_shell). El nuevo tag `steel_shell` se interpreta como defensive — los bots intentan usarlo cuando reciben golpes, fallback a `aoe_push` si no.
 
 Schema online:
-- [~] AbilityType extendido: `'snowball'`, `'steel_shell'`. Server propaga via abilityFired event.
-- [~] Status flags `poisoned`, `slipperyZone` sincronizados via PlayerSchema (campos opcionales nuevos).
+- [~] AbilityType inalterado — todas las K nuevas reusan `ground_pound` o `blink` con flags adicionales. **Cero cambios de schema** sobre v0.10.
+- [~] Status flags NO añadidos — el `immunityTimer` existente cubre Shelly Steel Shell + Kurama Mirror Trick; no hicimos falta poisoned/slippery porque las habilidades que los necesitaban quedaron diferidas a [!].
 
-Pending [!] para post-entrega (lista resumen):
-1. Sergei mesh bug visual (validar fix)
-2. Kurama L Copycat
-3. Shelly L Saw Shell rotation
-4. Shelly visual hide head/legs (limitación GLB)
-5. Sihans L Sinkhole con preview/confirm
-6. Cheeto L Tiger Roar cone pulse
-7. Sebastian L All-in Side Slash
-8. Kermit K inside-cloud vision overlay
+Pending [!] para post-entrega (lista resumen, v0.11):
+1. Sergei mesh bug — fix preventivo aplicado, validar Rafa
+2. Kurama L Copycat (sistema de last-hit + ability dispatch)
+3. Shelly L Saw Shell rotation (rotation animation logic)
+4. Shelly visual hide head/legs (limitación GLB — sin submeshes)
+5. Sihans L Sinkhole con preview/double-tap
+6. Cheeto L Tiger Roar cone pulse (channeling cone repeat)
+7. Sebastian L All-in Side Slash (multi-fase + miss-fail)
+8. Kermit K inside-cloud vision overlay (screen-space mask)
+9. Kermit L poison-touch + inverted controls (status system)
+10. Kowalski K Snowball como proyectil real
+11. Kowalski L Frozen Floor / slippery zone
