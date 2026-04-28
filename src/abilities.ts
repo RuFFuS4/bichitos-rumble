@@ -378,11 +378,13 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 2.8, massMultiplier: 1.3,
     }),
     makeGroundPound({
-      name: 'Mirror Burst', description: 'Quick shockwave from a feint',
+      name: 'Phantom Step',
+      description: 'Quick illusion burst with light knockback',
       radius: 3.5, force: 16, windUp: 0.10, cooldown: 5.5,
     }),
     makeFrenzy({
-      description: 'Tails blaze: +speed, +presence',
+      name: 'Nine-Tails Frenzy',
+      description: 'A short agile frenzy with high speed',
       duration: 3.5, cooldown: 16.0, windUp: 0.30,
       speedMultiplier: 1.50, massMultiplier: 1.20,
     }),
@@ -397,11 +399,13 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 1.8, massMultiplier: 3.2,
     }),
     makeGroundPound({
-      name: 'Shell Slam', description: 'Heavy body drop, wide ring',
+      name: 'Shell Slam',
+      description: 'Compact body drop, harder hit',
       radius: 4.0, force: 32, windUp: 0.45, cooldown: 7.5,
     }),
     makeFrenzy({
-      description: 'Berserk shell: +speed, +mass',
+      name: 'Berserker Shell',
+      description: 'Become heavier and harder to push',
       duration: 3.5, cooldown: 18.0, windUp: 0.4,
       speedMultiplier: 1.20, massMultiplier: 1.65,
     }),
@@ -418,11 +422,13 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 2.3, massMultiplier: 1.7,
     }),
     makeGroundPound({
-      name: 'Poison Cloud', description: 'Wide toxic burst, area control',
+      name: 'Poison Cloud',
+      description: 'A wide toxic burst with low knockback',
       radius: 5.0, force: 14, windUp: 0.15, cooldown: 7.0,
     }),
     makeFrenzy({
-      name: 'Hypnosapo', description: 'Venom rush: +speed, +power',
+      name: 'Hypnosapo',
+      description: 'Become slow, heavy and hard to move',
       duration: 4.0, cooldown: 18.0, windUp: 0.4,
       speedMultiplier: 1.10, massMultiplier: 1.80,
     }),
@@ -441,7 +447,8 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       radius: 3.5, force: 38, windUp: 0.6, cooldown: 7.5,
     }),
     makeFrenzy({
-      name: 'Diggy Rush', description: 'Tunnel frenzy: +speed, +power',
+      name: 'Diggy Rush',
+      description: 'Long earthy frenzy with extra mass',
       duration: 4.5, cooldown: 20.0, windUp: 0.4,
       speedMultiplier: 1.15, massMultiplier: 1.50,
     }),
@@ -461,7 +468,8 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       radius: 5.0, force: 20, windUp: 0.4, cooldown: 7.0,
     }),
     makeFrenzy({
-      name: 'Blizzard', description: 'Arctic fury: +speed, +power',
+      name: 'Blizzard',
+      description: 'Fast icy frenzy with light mass',
       duration: 3.0, cooldown: 17.0, windUp: 0.4,
       speedMultiplier: 1.40, massMultiplier: 1.10,
     }),
@@ -480,7 +488,8 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       radius: 2.5, force: 30, windUp: 0.22, cooldown: 6.0,
     }),
     makeFrenzy({
-      name: 'Tiger Rage', description: 'Predator instinct: +speed, +power',
+      name: 'Tiger Rage',
+      description: 'Very short burst of extreme speed',
       duration: 2.0, cooldown: 14.0, windUp: 0.35,
       speedMultiplier: 1.55, massMultiplier: 1.05,
     }),
@@ -500,7 +509,8 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       radius: 2.8, force: 40, windUp: 0.3, cooldown: 6.5,
     }),
     makeFrenzy({
-      name: 'Red Claw', description: 'Glass-cannon rage: +speed, +power',
+      name: 'Red Claw',
+      description: 'Short aggressive frenzy for finishing blows',
       duration: 2.5, cooldown: 15.0, windUp: 0.4,
       speedMultiplier: 1.20, massMultiplier: 1.20,
     }),
