@@ -39,6 +39,17 @@ const ZERO: BotInput = {
  *   - Fire ability1 (mobility / charge rush) at mid-range (3..6 units).
  *   - Fire ability2 (AoE / ground pound) when ≥2 enemies are within 4u.
  *   - Small per-tick probability so it doesn't spam — scales with tickRate.
+ *
+ * Kurama Mirror Trick (v0.11 authorial K, 2026-04-29): while a critter
+ * has `immunityTimer > 0` AND its critterName === 'Kurama' AND the
+ * timer was just bumped by a self-buff K (selfImmunityDuration) we can't
+ * tell from the bot's view, BUT we approximate: bots simply skip the
+ * Kurama target if it's currently in an immunity window — the immunity
+ * timer is the same flag that Mirror Trick writes to. That makes bots
+ * "lose track" of Kurama for the 1.6 s of the trick because every other
+ * source of immunity is shorter (post-respawn 1.5 s) and overlaps the
+ * same drop-target behaviour anyway. If the only enemy alive is Kurama
+ * during their immunity window, the bot falls back to standing still.
  */
 export function computeBotInput(bot: PlayerSchema, allPlayers: PlayerSchema[]): BotInput {
   if (!bot.alive || bot.falling) return ZERO;
@@ -49,6 +60,12 @@ export function computeBotInput(bot: PlayerSchema, allPlayers: PlayerSchema[]): 
 
   for (const p of allPlayers) {
     if (p === bot || !p.alive) continue;
+    // v0.11 — Kurama Mirror Trick bot confuse: bots stop targeting a
+    // Kurama who is in an immunity window. Other critters with
+    // immunity (post-respawn) are still considered targets — only
+    // Kurama gets the "lost the scent" treatment because the trick
+    // ghost is hers alone.
+    if (p.critterName === 'Kurama' && p.immunityTimer > 0) continue;
     const dx = p.x - bot.x;
     const dz = p.z - bot.z;
     const d = Math.sqrt(dx * dx + dz * dz);

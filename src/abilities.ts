@@ -703,14 +703,18 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // v0.11 (Rafa: "al aparecer debe provocar empuje fuerte"):
       // se mantiene blink + se añade impact knockback radial en
       // destino para los enemigos cercanos a donde aparece Cheeto.
+      // 2026-04-29 K-session bump (Rafa: "ajustar force/radius si
+      // ya existe pero se siente débil"): radius 2.2 → 2.6, force
+      // 28 → 36. Lectura "el aterrizaje empuja fuerte" sin entrar
+      // en zona de Sergei Shockwave (3.5 / 34).
       name: 'Shadow Step',
       description: 'Blink forward — burst pushes nearby enemies',
       blinkDistance: 4.5,
       cooldown: 5.5,
       windUp: 0.06,
       duration: 0.10,
-      blinkImpactRadius: 2.2,
-      blinkImpactForce: 28,
+      blinkImpactRadius: 2.6,
+      blinkImpactForce: 36,
     }),
     makeFrenzy({
       name: 'Tiger Rage',
@@ -1069,6 +1073,30 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
       ttl: def.zone.duration,
     });
     spawnZoneRing(scene, zx, zz, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary);
+  }
+  // 2026-04-29 K-session — Burrow visual (Sihans). When the blink
+  // is configured with `zoneAtOrigin: true` we treat it as the
+  // Burrow Rush K (only Sihans uses that flag) and:
+  //   · ghost the critter for 0.30 s (handled in critter.updateVisuals,
+  //     where Sihans' invisibilityTimer collapses opacity to 0 instead
+  //     of the 0.25 ghost used by Kurama Mirror Trick),
+  //   · spawn an extra ring of dust-puffs at both origin and
+  //     destination so the read is "tierra explota, desaparece,
+  //     reaparece en una nube de arena".
+  // The blink itself is unchanged — gameplay-wise Sihans still
+  // teleports instantly. The visual layer just sells the burrow.
+  if (def.zoneAtOrigin) {
+    critter.invisibilityTimer = Math.max(critter.invisibilityTimer, 0.30);
+    // Origin dust burst (8 puffs in a ring around the leave point)
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      spawnDustPuff(scene, originX + Math.cos(a) * 0.5, 0, originZ + Math.sin(a) * 0.5);
+    }
+    // Destination dust burst (8 puffs as he resurfaces)
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+      spawnDustPuff(scene, targetX + Math.cos(a) * 0.5, 0, targetZ + Math.sin(a) * 0.5);
+    }
   }
   applyDashFeedback(critter);
   playSound('abilityFire');

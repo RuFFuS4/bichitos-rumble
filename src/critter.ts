@@ -621,11 +621,15 @@ export class Critter {
       }
     } else if (this.invisibilityTimer > 0) {
       // v0.11 — Kurama Mirror Trick. Mesh ghosted to alpha 0.25.
-      // The dim-frame transparency path is reused so the same
-      // depth-write toggle keeps the skinned-mesh sort safe.
+      // 2026-04-29 K-session — Sihans Burrow Rush reuses the same
+      // timer but collapses to alpha 0 (totally underground) for
+      // its short 0.30 s window. Distinguishing per-critter keeps
+      // both abilities authorial without adding a second timer
+      // field to Critter.
+      const ghostAlpha = this.config.name === 'Sihans' ? 0.0 : 0.25;
       for (const mat of mats) {
         mat.transparent = true;
-        mat.opacity = 0.25;
+        mat.opacity = ghostAlpha;
         mat.depthWrite = false;
       }
     } else {

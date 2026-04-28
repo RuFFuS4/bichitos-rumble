@@ -59,8 +59,9 @@ const expected = {
   },
   Cheeto:    {
     // v0.11: Shadow Step gains impact knockback at destination.
+    // 2026-04-29 K-session bump: radius 2.2→2.6, force 28→36.
     K: { kind: 'blink', blinkDistance: 4.5, wU: 0.06, CD: 5.5,
-         impact: { rad: 2.2, frc: 28 } },
+         impact: { rad: 2.6, frc: 36 } },
     L: { dur: 2.0, CD: 14.0, wU: 0.35, spd: 1.55, mass: 1.05 },
   },
   Sebastian: {

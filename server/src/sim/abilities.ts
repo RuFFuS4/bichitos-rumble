@@ -170,9 +170,11 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'charge_rush',  cooldown: 2.8, duration: 0.24, windUp: 0.04,
       impulse: 33, speedMultiplier: 3.0, massMultiplier: 1.2 },
     // v0.11 — Shadow Step gains impact knockback at destination.
+    // 2026-04-29 K-session bump: radius 2.2→2.6, force 28→36 so the
+    // landing reads as a real assassin entry instead of a soft tap.
     { type: 'blink',        cooldown: 5.5, duration: 0.10, windUp: 0.06,
       blinkDistance: 4.5, ...ROOTED_K,
-      blinkImpactRadius: 2.2, blinkImpactForce: 28 },
+      blinkImpactRadius: 2.6, blinkImpactForce: 36 },
     { type: 'frenzy',       cooldown: 14.0, duration: 2.0, windUp: 0.35,
       frenzySpeedMult: 1.55, frenzyMassMult: 1.05 },
   ],

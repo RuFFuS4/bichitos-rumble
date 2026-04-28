@@ -1213,6 +1213,23 @@ export class Game {
       spawnShockwaveRing(this.scene, ev.x, ev.z, 1.4, palette?.pound);
       applyDashFeedback(c);
       playSoundEffect('abilityFire');
+      // 2026-04-29 K-session — Sihans Burrow Rush online lectura.
+      // The server doesn't carry an "isBurrow" flag in the event,
+      // but the broadcast position (ev.x, ev.z) is the ORIGIN of
+      // the blink, and only Sihans uses a blink with zone-at-origin.
+      // We mirror the offline path: ghost the critter for 0.30 s
+      // and spawn extra dust at the broadcast origin so the
+      // online viewer sees the same "se hundió aquí" beat. The
+      // destination dust is implicit — `spawnShockwaveRing`
+      // already paints a ring at the origin; the next state patch
+      // teleports the visible mesh to the new position.
+      if (c.config.name === 'Sihans') {
+        c.invisibilityTimer = Math.max(c.invisibilityTimer, 0.30);
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          spawnDustPuff(this.scene, ev.x + Math.cos(a) * 0.5, 0, ev.z + Math.sin(a) * 0.5);
+        }
+      }
     } else if (ev.type === 'ground_pound') {
       // Shockwave ring at the caster's position + shake + hit stop + sound.
       // Victims' knockback comes via state sync (server applied velocity).
