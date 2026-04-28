@@ -253,14 +253,6 @@ function skyboxTexturePath(packId: ArenaPackId): string {
   return `./images/skyboxes/${packId}.png`;
 }
 
-/** v0.11 — Far silhouette PNG (cordillera lejana) per arena pack.
- *  Single 2048×768 alpha PNG with the pack's identity (palm trees,
- *  ice peaks, dunes, coastal cliffs, pagodas). Painted onto a flat
- *  plane far behind the arena via `setSceneFarSilhouette` in main.ts. */
-function farSilhouettePath(packId: ArenaPackId): string {
-  return `./textures/skybox-far/${packId}.png`;
-}
-
 function propGlbPath(packId: ArenaPackId, glbName: string): string {
   return `./models/arenas/${packId}/${glbName}`;
 }
@@ -274,7 +266,7 @@ function propGlbPath(packId: ArenaPackId, glbName: string): string {
 const textureLoader = new THREE.TextureLoader();
 const textureCache = new Map<string, THREE.Texture>();
 
-function loadTexture(path: string, mode: 'ground' | 'skybox' | 'far'): Promise<THREE.Texture> {
+function loadTexture(path: string, mode: 'ground' | 'skybox'): Promise<THREE.Texture> {
   const cached = textureCache.get(path);
   if (cached) return Promise.resolve(cached);
   return new Promise((resolve, reject) => {
@@ -289,7 +281,7 @@ function loadTexture(path: string, mode: 'ground' | 'skybox' | 'far'): Promise<T
           tex.wrapT = THREE.RepeatWrapping;
           tex.repeat.set(4, 4);
           tex.colorSpace = THREE.SRGBColorSpace;
-        } else if (mode === 'skybox') {
+        } else {
           // Equirect skybox painted on the inside of a sphere (MeshBasic +
           // BackSide in main.ts). The sphere's built-in UVs already map a
           // 2:1 equirect texture correctly (u = longitude, v = latitude),
@@ -302,18 +294,6 @@ function loadTexture(path: string, mode: 'ground' | 'skybox' | 'far'): Promise<T
           tex.colorSpace = THREE.SRGBColorSpace;
           tex.wrapS = THREE.ClampToEdgeWrapping;
           tex.wrapT = THREE.ClampToEdgeWrapping;
-        } else {
-          // Far silhouette (cordillera lejana). Single PNG painted on a
-          // flat plane in main.ts. Alpha must survive the upload — use
-          // sRGB for the colour channel and clamp wrapping (the plane
-          // shows the texture exactly once with no tiling).
-          tex.mapping = THREE.UVMapping;
-          tex.colorSpace = THREE.SRGBColorSpace;
-          tex.wrapS = THREE.ClampToEdgeWrapping;
-          tex.wrapT = THREE.ClampToEdgeWrapping;
-          // Slight aniso filtering so the silhouette stays crisp at the
-          // grazing angle the gameplay camera shows it from.
-          tex.anisotropy = 4;
         }
         textureCache.set(path, tex);
         resolve(tex);
@@ -338,12 +318,6 @@ export function loadPackGroundTexture(packId: ArenaPackId): Promise<THREE.Textur
 /** Equirectangular skybox texture for the pack. */
 export function loadPackSkyboxTexture(packId: ArenaPackId): Promise<THREE.Texture> {
   return loadTexture(skyboxTexturePath(packId), 'skybox');
-}
-
-/** v0.11 — Far silhouette PNG (cordillera/horizonte lejano) per pack.
- *  Resolves to the shared cached Texture on subsequent calls. */
-export function loadPackFarSilhouette(packId: ArenaPackId): Promise<THREE.Texture> {
-  return loadTexture(farSilhouettePath(packId), 'far');
 }
 
 /**
