@@ -48,3 +48,4 @@ Thumbs.db
 *.swo
 .idea/
 .vscode/*.log
+.claude/scheduled_tasks.lock
