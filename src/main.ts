@@ -75,17 +75,15 @@ document.body.prepend(renderer.domElement);
 const scene = new THREE.Scene();
 // Fog keyed to the horizon colour so the skydome blends smoothly with
 // distant geometry instead of clipping to a hard edge. Density 0.008
-// (was 0.012 until 2026-04-27): with the gameplay camera looking down
-// at (0, -3, 0) we never see the upper sky directly, so the only way
-// the warm sky tint reads is THROUGH the fog haze covering distant
-// arena/decor. The previous density (0.012) hid most of that
-// transmission. 0.008 keeps the void feeling moody while letting the
-// horizon colour bleed into the far frustum.
+// (was 0.012 until 2026-04-27): keeps the void feeling moody while
+// letting the horizon colour bleed into the far frustum.
 scene.fog = new THREE.FogExp2(0xb6d1e8, 0.008);
 
-// Skydome — vertical gradient sphere painted from the inside. Sits
-// behind every game object, creating the "floating platform in the sky"
-// look the game design is after. Pure shader, no texture assets.
+// Cartoon backdrop — sky colours used by both the camera-attached
+// screen-space backdrop (default menu/play state) and the legacy
+// skydome shader (still in the scene as a fallback for arena packs
+// that haven't been wired through yet). Keeping the palette in one
+// place means a designer-driven colour tweak only edits this block.
 const SKY_COLORS = {
   top:     new THREE.Color(0x5c9fd9), // brighter blue high up
   middle:  new THREE.Color(0x8ac1e8), // mid sky (matches clear color)
@@ -98,6 +96,102 @@ const skyUniforms = {
   horizonColor: { value: SKY_COLORS.horizon },
   bottomColor:  { value: SKY_COLORS.bottom },
 };
+
+// ---------------------------------------------------------------------------
+// Camera-attached screen-space backdrop
+// ---------------------------------------------------------------------------
+//
+// Replaces the previous physical skydome gradient. The skydome was
+// rendered at radius 150 around world origin, but the gameplay camera
+// (FOV 40°, position (0, 23, 25), looking down at (0, -3, 0)) only
+// ever saw the dome's lower hemisphere through a narrow ~50° vertical
+// slice — so the warm horizon band and the bright upper sky never
+// made it into the gameplay frame. Lifting `lookAt` to expose more
+// dome ruined the gameplay framing (b8c1a7e); densifying the fog
+// muddied the foreground.
+//
+// This backdrop sidesteps the geometry entirely by drawing a
+// fullscreen quad whose vertical UV maps to a hand-tuned bottom →
+// horizon → middle → top gradient. Because the quad is parented to
+// the camera and uses fixed clip-space coordinates in its vertex
+// shader, the gradient ALWAYS fills the screen exactly the same way
+// regardless of camera position, lookAt, FOV or aspect. The gameplay
+// frame can stay locked to its proven framing while the backdrop
+// gives a real cartoon-sky reading.
+//
+// Render details:
+//   · `frustumCulled = false` because the quad sits at clip-space z
+//     ≈ 0.999 — three.js's CPU culling sees a degenerate world AABB
+//     and would skip the draw on some camera angles otherwise.
+//   · `depthTest: false` + `depthWrite: false` lets the backdrop
+//     paint first and then every subsequent draw (skydome, props,
+//     critters) composites on top.
+//   · `renderOrder: -2` keeps it behind the skydome (renderOrder -1)
+//     in case an arena pack swaps `skyDome`'s material to a textured
+//     equirect — the backdrop is a no-op when it sits behind a fully
+//     opaque sphere, so we don't even bother to hide it on pack
+//     swaps.
+const backdropMat = new THREE.ShaderMaterial({
+  uniforms: skyUniforms,
+  depthWrite: false,
+  depthTest: false,
+  fog: false,
+  side: THREE.DoubleSide,
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      // Place the quad at clip-space z = 0.999 (just inside the far
+      // plane) so depth-aware sort doesn't push it forward of any
+      // gameplay geometry on cards that ignore depthTest=false.
+      gl_Position = vec4(position.xy, 0.999, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform vec3 topColor;
+    uniform vec3 middleColor;
+    uniform vec3 horizonColor;
+    uniform vec3 bottomColor;
+    void main() {
+      // vUv.y: 0 at the bottom of the screen → 1 at the top.
+      // Gradient bands chosen so the warm horizon dominates the
+      // middle of the frame (where the gameplay camera looks),
+      // the bright upper sky reads at the top edge, and the deep
+      // blue grounds the bottom edge — matching the cartoon
+      // skybox the artists are after.
+      float h = vUv.y;
+      vec3 color;
+      if (h > 0.62) {
+        // Upper sky: middle → top.
+        color = mix(middleColor, topColor, (h - 0.62) / 0.38);
+      } else if (h > 0.38) {
+        // Mid: horizon → middle. Wider horizon band than the
+        // legacy skydome so warm tones span more of the frame.
+        color = mix(horizonColor, middleColor, (h - 0.38) / 0.24);
+      } else {
+        // Lower: bottom → horizon, sqrt-curve so horizon warmth
+        // creeps up into the frame instead of dropping abruptly
+        // into the deep blue void.
+        float t = clamp(h / 0.38, 0.0, 1.0);
+        t = sqrt(t);
+        color = mix(bottomColor, horizonColor, t);
+      }
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `,
+});
+const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), backdropMat);
+backdrop.frustumCulled = false;
+backdrop.renderOrder = -2;
+
+// Legacy skydome — kept ONLY so arena packs that ship a textured
+// equirect (`setSceneSkyboxTexture`) still have a sphere mesh to
+// paint that texture onto. The default gradient shader is still
+// here in case any future code path needs it, but in normal play
+// the backdrop above completely covers it before this dome ever
+// renders. Once every arena pack uses the camera-attached backdrop
+// for its sky, this block can go.
 const skyMat = new THREE.ShaderMaterial({
   uniforms: skyUniforms,
   side: THREE.BackSide,
@@ -118,25 +212,11 @@ const skyMat = new THREE.ShaderMaterial({
     uniform vec3 bottomColor;
     varying vec3 vWorldPos;
     void main() {
-      // h in [-1..+1] over the skydome's vertical extent. Hardcoded to
-      // match SKYDOME_RADIUS (150) — keep these in sync if the radius
-      // ever changes again. We don't pass a uniform for this because
-      // the value is set once at boot and never animates.
       float h = clamp(vWorldPos.y / 150.0, -1.0, 1.0);
       vec3 color;
-      if (h > 0.2) {
-        // Upper sky: middle → top.
-        color = mix(middleColor, topColor, (h - 0.2) / 0.8);
-      } else if (h > -0.05) {
-        // Narrow horizon band centred on the dome equator.
-        color = mix(horizonColor, middleColor, (h + 0.05) / 0.25);
-      } else {
-        // Below horizon: horizon → bottom. Curve biased toward
-        // horizonColor in the mid-band (sqrt instead of linear) so the
-        // gameplay camera — which only ever sees h ∈ [-0.94, -0.38] —
-        // still gets a strong warm tint at its upper edge while
-        // keeping the deep-blue void at the lower edge as the
-        // silhouette anchor for the arena floor.
+      if (h > 0.2)        color = mix(middleColor, topColor, (h - 0.2) / 0.8);
+      else if (h > -0.05) color = mix(horizonColor, middleColor, (h + 0.05) / 0.25);
+      else {
         float t = clamp((h + 1.0) / 0.95, 0.0, 1.0);
         t = sqrt(t);
         color = mix(bottomColor, horizonColor, t);
@@ -265,6 +345,14 @@ scene.add(rimLight);
 const camera = createCamera();
 syncSize(camera, renderer);
 handleResize(camera, renderer);
+
+// Parent the screen-space backdrop to the camera and add the camera
+// to the scene so the backdrop participates in the standard render
+// pass. The backdrop's vertex shader uses fixed clip-space coordinates,
+// so no actual transform is read from the camera; we only need it in
+// the scene graph for three.js to traverse + draw it.
+camera.add(backdrop);
+scene.add(camera);
 
 // Snapshot the base camera position for shake offset calculations
 const baseCamX = camera.position.x;
