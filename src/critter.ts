@@ -162,6 +162,16 @@ export class Critter {
   hasInput = false;
   lives = FEEL.lives.default;
   immunityTimer = 0;
+  /** v0.11 — Kurama Mirror Trick: while > 0 the GLB mesh is
+   *  rendered at alpha 0.25 ("ghost"). Independent of immunityTimer
+   *  so the immunity blink and the invisibility don't collide
+   *  visually. Decremented per update(dt). */
+  invisibilityTimer = 0;
+  /** v0.11 — Shelly Steel Shell: while > 0 the GLB materials get
+   *  emissive tinted to `selfTintHex`. Provides a "metallic mode"
+   *  read for the defensive K. */
+  selfTintTimer = 0;
+  selfTintHex: number | null = null;
   falling = false;            // true while falling off arena (waiting to respawn)
   private respawnTimer = 0;
   headbuttCooldown = 0;
@@ -404,6 +414,15 @@ export class Critter {
 
     // Immunity countdown
     if (this.immunityTimer > 0) this.immunityTimer -= dt;
+    // v0.11 — invisibility (Kurama Mirror Trick) + self-tint (Shelly
+    // Steel Shell) timers. Both decrement on the same path; the
+    // visual layer in `updateVisuals` reads the timers each frame
+    // to decide alpha + emissive tint.
+    if (this.invisibilityTimer > 0) this.invisibilityTimer -= dt;
+    if (this.selfTintTimer > 0) {
+      this.selfTintTimer -= dt;
+      if (this.selfTintTimer <= 0) this.selfTintHex = null;
+    }
 
     // Headbutt cooldown
     if (this.headbuttCooldown > 0) this.headbuttCooldown -= dt;
@@ -600,11 +619,31 @@ export class Critter {
           mat.emissiveIntensity = 0.8;
         }
       }
+    } else if (this.invisibilityTimer > 0) {
+      // v0.11 — Kurama Mirror Trick. Mesh ghosted to alpha 0.25.
+      // The dim-frame transparency path is reused so the same
+      // depth-write toggle keeps the skinned-mesh sort safe.
+      for (const mat of mats) {
+        mat.transparent = true;
+        mat.opacity = 0.25;
+        mat.depthWrite = false;
+      }
     } else {
       for (const mat of mats) {
         mat.transparent = false;
         mat.opacity = 1.0;
         mat.depthWrite = true;
+      }
+    }
+    // v0.11 — Shelly Steel Shell self-tint. Independent of immunity
+    // blink: while `selfTintTimer > 0`, override emissive on every
+    // material to read as "metallic mode". Cleared on next update
+    // when the timer expires.
+    if (this.selfTintTimer > 0 && this.selfTintHex !== null) {
+      const tint = this.selfTintHex;
+      for (const mat of mats) {
+        mat.emissive.setHex(tint);
+        mat.emissiveIntensity = 0.85;
       }
     }
   }

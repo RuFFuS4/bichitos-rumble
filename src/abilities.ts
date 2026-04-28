@@ -128,6 +128,29 @@ export interface AbilityDef {
     color?: number;
     secondary?: number;
   };
+
+  /** Self-buff K (v0.11): when true, the ground_pound skips its
+   *  outward knockback and instead grants the caster a rooted
+   *  immunity window. Used by Shelly Steel Shell — she doesn't
+   *  slam, she becomes invulnerable. Pairs with `selfImmunityDuration`. */
+  selfBuffOnly?: boolean;
+  /** Seconds of immunity granted to the caster on activation. Used
+   *  with `selfBuffOnly` for Shelly's defensive K (5.0 s steel
+   *  mode) and `invisibilityDuration` for Kurama. The server
+   *  writes `player.immunityTimer` so all clients see the buff. */
+  selfImmunityDuration?: number;
+  /** Cliente-only visual override on the caster while the immunity
+   *  window from `selfImmunityDuration` is active. The mesh's
+   *  emissive is tinted to this hex so the state reads (Shelly
+   *  Steel Shell glows metallic gray). Default undefined = no
+   *  visual override. */
+  selfTintHex?: number;
+  /** Seconds the caster becomes semi-transparent (alpha 0.25) and
+   *  knockback-immune. Used by Kurama Mirror Trick. Server treats
+   *  this as a regular `selfImmunityDuration`; cliente layers an
+   *  alpha override on the mesh + spawns a static decoy clone at
+   *  the origin position. */
+  invisibilityDuration?: number;
 }
 
 export interface AbilityState {
@@ -508,11 +531,21 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       impulse: 29, duration: 0.26, cooldown: 3.2, windUp: 0.05,
       speedMultiplier: 2.8, massMultiplier: 1.3,
     }),
+    // v0.11 — Mirror Trick: drops a static decoy clone where Kurama
+    // is, ghosts her own mesh (alpha 0.25) for 1.6 s, and grants
+    // immunity to knockback during that window. NO outward damage —
+    // selfBuffOnly: true. Bot AI keeps targeting her by sessionId
+    // (we don't redirect targeting to the decoy; documented in
+    // ABILITY_QA_CHECKLIST.md as a recorte).
     makeGroundPound({
-      name: 'Phantom Burst',
-      description: 'Quick illusion burst with light knockback',
-      radius: 3.5, force: 16, windUp: 0.10, cooldown: 5.5,
+      name: 'Mirror Trick',
+      description: 'Leave a decoy and ghost step for 1.6 s',
+      radius: 0, force: 0,
+      windUp: 0.10, cooldown: 7.0, duration: 1.6,
       slowDuringActive: 0, cancelAnimOnEnd: true,
+      selfBuffOnly: true,
+      selfImmunityDuration: 1.6,
+      invisibilityDuration: 1.6,
     }),
     makeFrenzy({
       name: 'Nine-Tails Frenzy',
@@ -530,11 +563,19 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       impulse: 15, duration: 0.45, cooldown: 5.5, windUp: 0.08,
       speedMultiplier: 1.8, massMultiplier: 3.2,
     }),
+    // v0.11 — Shell Slam REPLACED by Steel Shell. Defensive K:
+    // skips the outward knockback, grants Shelly 5 s of immunity
+    // (rooted via slowDuringActive: 0), tints her metallic gray.
+    // Reads as "she's in her shell, you can't push her".
     makeGroundPound({
-      name: 'Shell Slam',
-      description: 'Compact body drop, harder hit',
-      radius: 4.0, force: 32, windUp: 0.45, cooldown: 7.5,
+      name: 'Steel Shell',
+      description: 'Lock into the shell — invulnerable for 5 s',
+      radius: 0, force: 0,
+      windUp: 0.20, cooldown: 12.0, duration: 5.0,
       slowDuringActive: 0, cancelAnimOnEnd: true,
+      selfBuffOnly: true,
+      selfImmunityDuration: 5.0,
+      selfTintHex: 0xa8c0d0, // metallic blue-gray
     }),
     makeFrenzy({
       name: 'Berserker Shell',
@@ -811,6 +852,41 @@ function fireChargeRush(def: AbilityDef, critter: Critter, _all: Critter[], scen
 }
 
 function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
+  // v0.11 — self-buff K (Shelly Steel Shell, Kurama Mirror Trick).
+  // The K skips the outward knockback and instead grants immunity +
+  // an optional invisibility/visual flag on the caster. The cooldown
+  // and rooted-during-active behaviour come from the existing
+  // ROOTED_K spread.
+  if (def.selfBuffOnly) {
+    const dur = def.selfImmunityDuration ?? 0;
+    const invisDur = def.invisibilityDuration ?? 0;
+    const total = Math.max(dur, invisDur);
+    if (total > 0) {
+      // Extend the existing immunity window so the caster can't be
+      // pushed during the buff. Bumping critter.immunityTimer is the
+      // simplest path — the immunity blink renderer already handles
+      // the visual feedback for the duration.
+      critter.immunityTimer = Math.max(critter.immunityTimer, total);
+    }
+    if (invisDur > 0) {
+      // Cliente-only: spawn a static decoy clone at the current
+      // position, then kick the caster's invisibility timer so the
+      // visual layer (in updateVisuals / vfx) drops her alpha.
+      spawnDecoyAt(scene, critter, invisDur);
+      critter.invisibilityTimer = invisDur;
+    }
+    if (def.selfTintHex !== undefined) {
+      critter.selfTintHex = def.selfTintHex;
+      critter.selfTintTimer = total;
+    }
+    // Soft burst at the caster's feet so the activation reads, but
+    // no force is applied to anyone.
+    const palette = CRITTER_VFX_PALETTE[critter.config.name]?.pound;
+    spawnShockwaveRing(scene, critter.x, critter.z, 1.6, palette);
+    triggerCameraShake(FEEL.shake.groundPound * 0.4);
+    playSound('abilityFire');
+    return;
+  }
   let hitCount = 0;
   // v0.11 — Sebastian Claw Wave: when `def.coneAngleDeg` is set, the
   // slam only pushes enemies whose direction from the caster falls
@@ -1244,6 +1320,76 @@ export interface ShockwaveRingOpts {
    *  values keep the ring on screen longer — used for Kermit's Poison
    *  Cloud (800 ms) so the wide AoE reads as a hanging toxic puff. */
   holdMs?: number;
+}
+
+/**
+ * v0.11 — Static decoy clone of a critter at the current position.
+ * Used by Kurama Mirror Trick: the visual ghost stays where she
+ * was while she's semi-invisible elsewhere. Fire-and-forget clone
+ * of her GLB scene graph (skeleton-cloned so it doesn't keep
+ * tracking the live skeleton), tinted to alpha 0.4 + violet
+ * emissive. No physics, no collision, no AI redirect — purely
+ * visual.
+ *
+ * Lifecycle: ttl seconds, then dispose. Fade-out in the last 30 %.
+ */
+function spawnDecoyAt(scene: THREE.Scene, critter: Critter, ttl: number): void {
+  if (!critter.glbMesh) return; // procedural-only critters: skip
+  // SkeletonUtils.clone gives an independent skeleton so the clone
+  // doesn't keep retargeting Kurama's live bones. Imported lazily
+  // to avoid a top-level cycle.
+  void (async () => {
+    const SkeletonUtils = await import('three/examples/jsm/utils/SkeletonUtils.js');
+    const decoy = SkeletonUtils.clone(critter.glbMesh!);
+    decoy.position.copy(critter.glbMesh!.getWorldPosition(new THREE.Vector3()));
+    decoy.quaternion.copy(critter.glbMesh!.getWorldQuaternion(new THREE.Quaternion()));
+    decoy.scale.copy(critter.glbMesh!.getWorldScale(new THREE.Vector3()));
+    const decoyMats: THREE.MeshStandardMaterial[] = [];
+    decoy.traverse((node) => {
+      const m = node as THREE.Mesh;
+      if (!m.isMesh || !m.material) return;
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      const clonedList: THREE.Material[] = [];
+      for (const raw of mats) {
+        const std = raw as THREE.MeshStandardMaterial;
+        if (!std.isMeshStandardMaterial) {
+          clonedList.push(raw as THREE.Material);
+          continue;
+        }
+        const cloned = std.clone();
+        cloned.transparent = true;
+        cloned.opacity = 0.4;
+        cloned.depthWrite = false;
+        cloned.emissive.setHex(0xc83cff);
+        cloned.emissiveIntensity = 0.6;
+        decoyMats.push(cloned);
+        clonedList.push(cloned);
+      }
+      m.material = Array.isArray(m.material) ? clonedList as THREE.Material[] : clonedList[0];
+    });
+    scene.add(decoy);
+    const startTime = performance.now();
+    const total = ttl * 1000;
+    const fadeStart = total * 0.7;
+    const tick = () => {
+      const elapsed = performance.now() - startTime;
+      if (elapsed >= total) {
+        scene.remove(decoy);
+        decoy.traverse((n) => {
+          const m = n as THREE.Mesh;
+          if (m.isMesh) m.geometry?.dispose();
+        });
+        for (const mat of decoyMats) mat.dispose();
+        return;
+      }
+      if (elapsed > fadeStart) {
+        const t = (elapsed - fadeStart) / (total - fadeStart);
+        for (const mat of decoyMats) mat.opacity = 0.4 * (1 - t);
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  })();
 }
 
 /**

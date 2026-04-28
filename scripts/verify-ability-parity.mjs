@@ -30,11 +30,15 @@ const srv = await readFile('server/src/sim/abilities.ts', 'utf-8');
 //   'blink' (blinkDistance/wU/CD).
 const expected = {
   Kurama:    {
-    K: { kind: 'pound', rad: 3.5, frc: 16, wU: 0.10, CD: 5.5 },
+    // v0.11 — Mirror Trick: self-buff K (decoy + ghost). No slam.
+    K: { kind: 'pound', rad: 0, frc: 0, wU: 0.10, CD: 7.0,
+         selfBuff: { immunity: 1.6 } },
     L: { dur: 3.5, CD: 16.0, wU: 0.30, spd: 1.50, mass: 1.20 },
   },
   Shelly:    {
-    K: { kind: 'pound', rad: 4.0, frc: 32, wU: 0.45, CD: 7.5 },
+    // v0.11 — Steel Shell: self-buff K (5 s invulnerable). No slam.
+    K: { kind: 'pound', rad: 0, frc: 0, wU: 0.20, CD: 12.0,
+         selfBuff: { immunity: 5.0 } },
     L: { dur: 3.5, CD: 18.0, wU: 0.40, spd: 1.20, mass: 1.65 },
   },
   Kermit:    {
@@ -127,6 +131,16 @@ for (const [name, e] of Object.entries(expected)) {
       const zTag = zSame && zMatches ? 'OK' : 'FAIL';
       if (zTag === 'FAIL') ok = false;
       console.log(`${name.padEnd(10)} K  zone  rad/dur/slow      cli ${cZr}/${cZd}/${cZs}  srv ${sZr}/${sZd}/${sZs}  ${zTag}`);
+    }
+    // v0.11 — selfBuff (Shelly Steel Shell, Kurama Mirror Trick).
+    // Cliente uses `selfImmunityDuration: <num>`, server mirrors it.
+    if (e.K.selfBuff) {
+      const cliImm = pickFirst(cliBlock, /selfImmunityDuration:\s*([\d.]+)/);
+      const srvImm = pickFirst(srvBlock, /selfImmunityDuration:\s*([\d.]+)/);
+      const same = cliImm === srvImm && cliImm === e.K.selfBuff.immunity;
+      const tag = same ? 'OK' : 'FAIL';
+      if (tag === 'FAIL') ok = false;
+      console.log(`${name.padEnd(10)} K  selfBuff immunity      cli ${cliImm}  srv ${srvImm}  ${tag}`);
     }
   } else if (e.K.kind === 'blink') {
     // Cliente: blinkDistance can appear before or after cooldown — match field-by-field.

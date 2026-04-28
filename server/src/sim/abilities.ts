@@ -46,18 +46,22 @@ export interface AbilityDef {
   slowDuringWindUp?: number;
   slowDuringActive?: number;
   blinkDistance?: number;
-  /** Blink-specific impact (v0.11): radial knockback at destination. */
   blinkImpactRadius?: number;
   blinkImpactForce?: number;
-  /** Cone-restricted ground_pound (v0.11): see client AbilityDef. */
   coneAngleDeg?: number;
-  /** Drop the slow zone at the BLINK ORIGIN, not destination. */
   zoneAtOrigin?: boolean;
   zone?: {
     radius: number;
     duration: number;
     slowMultiplier: number;
   };
+  /** v0.11 — self-buff K (Shelly Steel Shell, Kurama Mirror Trick).
+   *  Skips the outward knockback; instead writes
+   *  `player.immunityTimer` for the duration so `physics.resolveCollisions`
+   *  blocks knockback from any source. */
+  selfBuffOnly?: boolean;
+  /** Seconds of immunity to grant the caster on activation. */
+  selfImmunityDuration?: number;
 }
 
 // Per-critter ability kits. MUST stay in sync with client's CRITTER_ABILITIES.
@@ -101,8 +105,12 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Kurama: [
     { type: 'charge_rush',  cooldown: 3.2, duration: 0.26, windUp: 0.05,
       impulse: 29, speedMultiplier: 2.8, massMultiplier: 1.3 },
-    { type: 'ground_pound', cooldown: 5.5, duration: 0.05, windUp: 0.10,
-      radius: 3.5, force: 16, ...ROOTED_K },
+    // v0.11 — Mirror Trick: self-buff K, ghosts Kurama for 1.6 s
+    // and grants knockback immunity. No outward force. Cliente
+    // spawns the static decoy.
+    { type: 'ground_pound', cooldown: 7.0, duration: 1.6, windUp: 0.10,
+      radius: 0, force: 0, ...ROOTED_K,
+      selfBuffOnly: true, selfImmunityDuration: 1.6 },
     { type: 'frenzy',       cooldown: 16.0, duration: 3.5, windUp: 0.30,
       frenzySpeedMult: 1.50, frenzyMassMult: 1.20 },
   ],
@@ -110,8 +118,11 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Shelly: [
     { type: 'charge_rush',  cooldown: 5.5, duration: 0.45, windUp: 0.08,
       impulse: 15, speedMultiplier: 1.8, massMultiplier: 3.2 },
-    { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.45,
-      radius: 4.0, force: 32, ...ROOTED_K },
+    // v0.11 — Steel Shell: 5 s rooted invulnerability, no slam.
+    // Defensive K — Shelly cannot be pushed during this window.
+    { type: 'ground_pound', cooldown: 12.0, duration: 5.0, windUp: 0.20,
+      radius: 0, force: 0, ...ROOTED_K,
+      selfBuffOnly: true, selfImmunityDuration: 5.0 },
     { type: 'frenzy',       cooldown: 18.0, duration: 3.5, windUp: 0.40,
       frenzySpeedMult: 1.20, frenzyMassMult: 1.65 },
   ],
@@ -454,6 +465,15 @@ function fireBlink(def: AbilityDef, player: PlayerSchema, allPlayers: PlayerSche
  * global SIM defaults so each critter's AoE can feel different online.
  */
 function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: PlayerSchema[]): void {
+  // v0.11 — self-buff K (Shelly Steel Shell, Kurama Mirror Trick).
+  // No outward force; just write the caster's immunity. The cliente
+  // adds the visual layer (tint / decoy / alpha).
+  if (def.selfBuffOnly) {
+    if (def.selfImmunityDuration && def.selfImmunityDuration > 0) {
+      caster.immunityTimer = Math.max(caster.immunityTimer, def.selfImmunityDuration);
+    }
+    return;
+  }
   const radius = def.radius ?? SIM.groundPound.radius;
   const force = def.force ?? SIM.groundPound.force;
   // v0.11 — cone gate (Sebastian Claw Wave). Pre-compute cos(angle)
