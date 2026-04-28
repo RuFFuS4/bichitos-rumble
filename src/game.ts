@@ -47,7 +47,7 @@ import { type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
-import { spawnShockwaveRing, spawnFrenzyBurst, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing } from './abilities';
+import { spawnShockwaveRing, spawnFrenzyBurst, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing, deriveZoneVfxKind } from './abilities';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
 import { getPreviewPackId } from './arena-decor-layouts';
@@ -796,15 +796,21 @@ export class Game {
     // when the player's input drives them into a zone they "see"
     // before the next position patch arrives.
     onZoneSpawned(room, (ev) => {
-      pushNetworkZone({
-        x: ev.x, z: ev.z, radius: ev.radius,
-        slowMultiplier: ev.slowMultiplier,
-        ttl: ev.duration,
-      });
       // Render — colour comes from the caster's pound palette so
       // online and offline match visually.
       const caster = this.onlineCritters.get(ev.ownerSid);
       const palette = caster ? getCritterVfxPalette(caster.config.name) : undefined;
+      // 2026-04-29 K-session — derive vfxKind from the caster so
+      // local-side overlays (Kermit Poison Cloud screen-space mask)
+      // can light up while the player stands inside a zone of the
+      // matching kind. Same lookup table as the offline path.
+      const vfxKind = caster ? deriveZoneVfxKind(caster.config.name) : 'generic';
+      pushNetworkZone({
+        x: ev.x, z: ev.z, radius: ev.radius,
+        slowMultiplier: ev.slowMultiplier,
+        ttl: ev.duration,
+        vfxKind,
+      });
       spawnZoneRing(this.scene, ev.x, ev.z, ev.radius, ev.duration,
         palette?.pound?.color, palette?.pound?.secondary);
     });

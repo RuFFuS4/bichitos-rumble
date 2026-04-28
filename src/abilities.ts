@@ -946,6 +946,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       radius: def.zone.radius,
       slowMultiplier: def.zone.slowMultiplier,
       ttl: def.zone.duration,
+      vfxKind: deriveZoneVfxKind(critter.config.name),
     });
     spawnZoneRing(scene, critter.x, critter.z, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary);
   }
@@ -966,15 +967,40 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
 // `clearActiveZones()` is called on phase transitions so zones from a
 // previous match never leak into the next one.
 
+/**
+ * Cosmetic kind for a slow zone. Lets per-zone visual layers — like
+ * the local Kermit Poison Cloud overlay — distinguish the K-source
+ * without re-deriving from radius/slowMultiplier (which is fragile).
+ *   · 'poison' — Kermit Poison Cloud (triggers screen-space toxic
+ *                vignette overlay when the local critter is inside)
+ *   · 'sand'   — Sihans Burrow quicksand
+ *   · 'ice'    — Kowalski Arctic Burst
+ *   · 'generic' — fallback for any other critter that drops a zone
+ */
+export type ZoneVfxKind = 'poison' | 'sand' | 'ice' | 'generic';
+
 interface ActiveZone {
   x: number;
   z: number;
   radius: number;
   slowMultiplier: number;
   ttl: number;
+  vfxKind?: ZoneVfxKind;
 }
 
 const activeZones: ActiveZone[] = [];
+
+/** Map a critter name to the zone visual kind they spawn. Centralised
+ *  so offline (`fireGroundPound`/`fireBlink`) and online
+ *  (`pushNetworkZone` from server `zoneSpawned`) classify the same
+ *  way. New K zones with their own visual layer get a new branch
+ *  here + a new screen-space hook on the consumer side. */
+export function deriveZoneVfxKind(critterName: string): ZoneVfxKind {
+  if (critterName === 'Kermit') return 'poison';
+  if (critterName === 'Sihans') return 'sand';
+  if (critterName === 'Kowalski') return 'ice';
+  return 'generic';
+}
 
 /** Tick all live zones forward, removing expired entries. Called from
  *  the offline gameplay loop after physics update. */
@@ -995,6 +1021,20 @@ export function clearActiveZones(): void {
  *  lookup path serves both modes. */
 export function pushNetworkZone(z: ActiveZone): void {
   activeZones.push({ ...z });
+}
+
+/** True if the given world point is inside any active zone of the
+ *  given vfxKind. Used by game.ts each frame to drive the local
+ *  Kermit Poison Cloud screen-space overlay (`vfxKind: 'poison'`).
+ *  Cheap O(zones) — typically <= 4 zones alive at once. */
+export function isInsideZoneOfKind(x: number, z: number, kind: ZoneVfxKind): boolean {
+  for (const zone of activeZones) {
+    if (zone.vfxKind !== kind) continue;
+    const dx = x - zone.x;
+    const dz = z - zone.z;
+    if (dx * dx + dz * dz <= zone.radius * zone.radius) return true;
+  }
+  return false;
 }
 
 /** Compound slow multiplier from every active zone the point is inside.
@@ -1071,6 +1111,7 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
       radius: def.zone.radius,
       slowMultiplier: def.zone.slowMultiplier,
       ttl: def.zone.duration,
+      vfxKind: deriveZoneVfxKind(critter.config.name),
     });
     spawnZoneRing(scene, zx, zz, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary);
   }
