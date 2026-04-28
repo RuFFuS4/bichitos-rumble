@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCamera, handleResize, syncSize } from './camera';
+import { createCamera, handleResize, syncSize, applyGameplayCameraPose } from './camera';
 import { Game } from './game';
 import { updateCameraShake } from './gamefeel';
 import { initPreview, tickPreview } from './preview';
@@ -354,23 +354,21 @@ handleResize(camera, renderer);
 camera.add(backdrop);
 scene.add(camera);
 
-// Snapshot the base camera position for shake offset calculations
+// Snapshot the base camera position for shake offset calculations.
+// `applyGameplayCameraPose` is the single source of truth — these
+// constants just cache it in the form `updateCameraShake` expects
+// (it writes absolute positions, not deltas).
 const baseCamX = camera.position.x;
 const baseCamY = camera.position.y;
 const baseCamZ = camera.position.z;
 
-// Base lookAt — must mirror what `createCamera()` set (currently
-// `(0, -3, 0)` from src/camera.ts). Used to reset the camera's
-// rotation when leaving the end-screen phase, since the end-pose
-// pipeline calls `camera.lookAt(...)` and Three.js's quaternion
-// state persists across phase changes unless explicitly reset.
-const BASE_CAM_LOOKAT = new THREE.Vector3(0, -3, 0);
-
 // Edge-detector flag — true while a `getEndScreenCameraPose()` is
 // driving the camera. Goes back to false the frame the phase exits
 // 'ended' (caused by restart / title / next match). The transition
-// itself triggers a one-shot `camera.lookAt(BASE_CAM_LOOKAT)` so the
-// next gameplay frame opens with the correct framing.
+// itself triggers `applyGameplayCameraPose(camera)` so the next
+// gameplay frame opens with both the correct position AND the
+// correct rotation quaternion (Three.js's quaternion is persistent
+// across phase changes — clearing it requires an explicit re-lookAt).
 let wasEndPhase = false;
 
 // Preview (second renderer for menu 3D — character select, future winner pose)
@@ -573,7 +571,13 @@ function loop(now: number) {
     wasEndPhase = true;
   } else {
     if (wasEndPhase) {
-      camera.lookAt(BASE_CAM_LOOKAT);
+      // Explicit full pose reset on the transition out of 'ended':
+      // position, lookAt and the up-vector all snap back to the
+      // canonical gameplay framing in one call. updateCameraShake
+      // below writes absolute position values relative to the
+      // cached base, so the snap is locked in even if a residual
+      // shake was still decaying when the match ended.
+      applyGameplayCameraPose(camera);
       wasEndPhase = false;
     }
     updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
