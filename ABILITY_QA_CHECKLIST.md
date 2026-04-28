@@ -7,11 +7,21 @@ Status legend:
 - `[!]` problema detectado / requiere ajuste / NO se cierra antes de la entrega
 - `[~⚠]` implementado con simplificación documentada (versión fiel al espíritu, no idéntica al diseño)
 
-Last updated: v0.11 implementation pass + 2026-04-29 skybox close-out + Sergei mesh-bug real fix.
+Last updated: v0.11 implementation pass + 2026-04-29 skybox close-out + Sergei mesh-bug real fix
++ K-session 1 (authorial K abilities for Kowalski / Kermit / Sihans / Cheeto / Sebastian / Shelly / Kurama).
 Use `git log --grep abilities` to see the commit trail behind each item.
 
 > **Out-of-scope but cerrado entre tomas (no es habilidad pero estaba bloqueando QA visual):**
 > - **Skybox 360 final** (`b054e96`). Cuatro iteraciones (camera-parented sphere → world-anchored sphere PBR → backdrop toggle hacks → cortes verticales en bordes) fallaron por interacciones entre depth/transparency/grazing-angle. Solución definitiva: `scene.background = equirectTexture` con `EquirectangularReflectionMapping` — pre-pass built-in de Three.js, full-screen guaranteed, sin meshes ni z-buffer involucrado. Eliminados: skydome esférico, backdrop screen-space, cloudsBelow plano. Las 5 panorámicas en `public/images/skyboxes/<id>.png` se enchufan vía `setSceneSkyboxTexture`.
+
+> **K-session 1 (2026-04-29) — autorial K por personaje. Todo `[~]` pendiente de validación de Rafa.**
+> - **Kowalski K Snowball PROYECTIL** — sistema de proyectiles real (cliente + server + parity). Server-authoritative: `BrawlRoom.activeProjectiles` integra posición, hace sweep collision contra críters no-owner, aplica knockback + `slowTimer = 2 s` + 50 % move-speed slow. Eventos `projectileSpawned` / `projectileHit` / `projectileExpired` broadcasted al cliente. Nuevo `AbilityType: 'projectile'`, nuevo módulo `src/projectiles.ts` con `spawnLocalProjectile` / `pushNetworkProjectile` / `removeProjectile` / `tickProjectiles`. Schema online: `PlayerSchema.slowTimer` añadido. Bot AI: tag `'ranged'` con condición 4..14 u y 0.022 prob/tick.
+> - **Kermit K Poison Cloud + visión local** — overlay screen-space CSS (no shader, evita issues de z-fighting que tuvo el skybox). `ZoneVfxKind` discriminator (`poison`/`sand`/`ice`/`generic`) en `ActiveZone`. `setPoisonOverlayIntensity(t)` en main.ts gestiona un `<div>` radial-gradient toxic-green con `mixBlendMode: multiply` y CSS `transition: 200ms`. main.ts loop comprueba `isInsideZoneOfKind(localX, localZ, 'poison')` cada frame.
+> - **Sihans K Burrow visual** — fade total (alpha 0) durante 0.30 s + 8 dust-puffs en origen + 8 en destino. Cliente only — server gameplay (blink + zone-at-origin) no cambia. Online viewers reciben mismo beat desde `abilityFired` event filtrado por `c.config.name === 'Sihans'`.
+> - **Cheeto K bump** — `blinkImpactRadius 2.2 → 2.6`, `blinkImpactForce 28 → 36` (Rafa: "ajustar si se siente débil").
+> - **Sebastian K Claw Wave** — validado: el cone (`coneAngleDeg: 60`) filtra knockback a ±60° del facing en cliente y server. Lectura visual sigue como ring radial — VFX semicircular es scope creep documentado en versión `[~⚠]`.
+> - **Shelly K Steel Shell** — invulnerabilidad 5 s ya en su sitio desde v0.11. **GLB inspeccionado**: 11 submeshes nombrados `Mesh_0.001` … `Mesh_10.001` (genéricos), joints sí semánticos (`Head`, `L_Hand`, etc.). Ocultar cabeza/patas selectivamente requiere mapping bone→mesh (no trivial; weight inspection offline) — sigue `[!]` con causa demostrada.
+> - **Kurama K Mirror Trick + bot confuse** — bots offline + server ahora **skipean a Kurama como target** mientras `immunityTimer > 0` (la misma flag que escribe Mirror Trick via `selfImmunityDuration: 1.6`). Otros críters mantienen targeting normal en su immunity post-respawn — solo Kurama tiene la "lost-the-scent" treatment.
 
 ---
 
@@ -47,7 +57,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 
 - [~] **Headbutt** — sin cambios (Rafa: muy bien)
 - [~] **J Fox Dash** — sin cambios mecánicos + `cancelAnimOnEnd: true`. Animación corta al terminar dash.
-- [~⚠] **K Mirror Trick simplificado** (IMPLEMENTADO): durante 1.6 s tras pulsar K, Kurama se vuelve **semi-invisible** (alpha 0.25) Y queda inmune a knockback (`immunityTimer` extendido). El "decoy" se spawna como un clon estático del mesh GLB en la posición de origen (SkeletonUtils.clone + tinted violet alpha 0.4, fade-out 30 % final, dispose automático). Cliente: alpha + decoy + emissive. Server: solo `immunityTimer = 1.6 s` via `selfBuffOnly + selfImmunityDuration`. **Recorte**: bots NO siguen al decoy preferentemente — siguen targetando a Kurama por sessionId. La invisibilidad NO afecta physics ni colisiones, solo es visual + immunity.
+- [~] **K Mirror Trick** (IMPLEMENTADO 2026-04-29): durante 1.6 s tras pulsar K, Kurama se vuelve **semi-invisible** (alpha 0.25) Y queda inmune a knockback (`immunityTimer` extendido). El "decoy" se spawna como un clon estático del mesh GLB en la posición de origen (SkeletonUtils.clone + tinted violet alpha 0.4, fade-out 30 % final, dispose automático). Cliente: alpha + decoy + emissive. Server: `immunityTimer = 1.6 s` via `selfBuffOnly + selfImmunityDuration`. **Bot confuse (K-session 1)**: bots offline (`src/bot.ts`) y server (`server/src/sim/bot.ts`) **skipean a Kurama como target** mientras `immunityTimer > 0` — mismo flag que el trick escribe. Otros críters mantienen targeting normal en su immunity post-respawn. Lectura "lost the scent" exacta como Rafa pidió.
 - [!] **L Copycat** — NO implementado. Sustituido temporalmente por `Nine-Tails Frenzy` (la versión actual). El sistema necesario (last-hit tracker + ability dispatch por nombre + restricción de uso único) requiere ~2-3 h de trabajo y schema online nuevo. Documentado para post-entrega. **Marcado [!] explícitamente.**
 
 ---
@@ -66,9 +76,9 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 
 - [~] **Headbutt** — sin cambios (Rafa: bueno)
 - [~] **J Leap Forward** — sin cambios mecánicos + `cancelAnimOnEnd: true`
-- [~] **K Poison Cloud** — zona slow ya existente (rad 5.0 / 2.0 s / 60 % slow) con visual mejorado: el ring del shockwave inicial usa una trail de partículas verdes aleatorias en addition al ring para que se lea como humo, no solo círculo plano. Visualmente más cloud-like.
-- [!] **K inside-cloud vision** — NO implementado. Vignette/overlay local cuando un jugador está dentro de la zona requiere modificación del render pass o un quad screen-space adicional con alpha mask. Marcado [!] post-entrega — el slow real ya hace que la zona sea funcionalmente peligrosa.
-- [!] **L Hypnosapo / Toxic Touch** — NO IMPLEMENTADO en v0.11. La L actual sigue siendo el frenzy custom de v0.10 (slow + heavy). Implementar el status "poisoned" + invert input requiere nuevo schema online (status flag en PlayerSchema), código de física para invertir movement input, y VFX en target afectado. Marcado [!] post-jam — riesgo / scope superior al disponible para esta sesión. La L actual sigue siendo funcional como buff personal pesado.
+- [~] **K Poison Cloud** — zona slow (rad 5.0 / 2.0 s / 60 % slow) clasificada como `vfxKind: 'poison'` para que el overlay local se active.
+- [~] **K inside-cloud vision (2026-04-29)** — overlay screen-space CSS implementado: `<div id="poison-overlay">` zIndex 15, radial-gradient transparente al centro → toxic-green denso al borde, `mixBlendMode: multiply`, `transition: opacity 0.20s`. main.ts loop comprueba el local critter contra `isInsideZoneOfKind('poison')` cada frame y feed 0/0.85. CSS evita los issues de z-fighting que el skybox tuvo con shader quads.
+- [!] **L Hypnosapo / Toxic Touch** — NO IMPLEMENTADO en v0.11. La L actual sigue siendo el frenzy custom de v0.10 (slow + heavy). Implementar el status "poisoned" + invert input requiere nuevo schema online (status flag en PlayerSchema), código de física para invertir movement input, y VFX en target afectado. Marcado [!] para sesión L dedicada.
 
 ---
 
@@ -76,7 +86,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 
 - [~] **Headbutt** — sin cambios (Rafa: perfecto)
 - [~] **J Burrow Rush** — sin cambios mecánicos + `cancelAnimOnEnd: true`
-- [~⚠] **K Burrow + Quicksand** — REEMPLAZA el pound. Sihans hace blink (3.5 u en facing) Y suelta una zona de slow en su POSICIÓN ORIGINAL (radius 3.5, 2.5 s, 50 % slow). Visual: ring marrón/arena en el origen. **Recorte**: no hay "underground tunnel" 3D real (Sihans no se hunde literalmente — desaparece como Cheeto blink), pero el efecto + VFX da la lectura de "se hundió aquí, salió allá, y dejó arenas movedizas atrás". Server clamp asegura no aparecer en void.
+- [~] **K Burrow + Quicksand (2026-04-29 visual layer)** — REEMPLAZA el pound. Sihans hace blink (3.5 u en facing) Y suelta una zona de slow en su POSICIÓN ORIGINAL (radius 3.5, 2.5 s, 50 % slow). Visual mejorado en K-session 1: cuando se dispara el blink con `zoneAtOrigin: true`, Sihans **se vuelve totalmente invisible** durante 0.30 s (alpha 0, distinto del 0.25 ghost de Kurama) + 8 dust-puffs en origen + 8 en destino. Lectura "se hundió en una nube de tierra, sale en otra nube de tierra". Server clamp asegura no aparecer en void.
 - [!] **L Sinkhole con preview / double-tap** — NO implementado. El sistema de targeting con preview + confirmación de doble pulsación requiere un modo de input nuevo y UI de preview. Marcado [!]. La L actual sigue siendo Diggy Rush (frenzy tank earth-tinted) hasta post-entrega.
 
 ---
@@ -85,8 +95,13 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 
 - [~] **Headbutt** — boost ×1.20
 - [~] **J Ice Slide** — sin cambios mecánicos + `cancelAnimOnEnd: true`
-- [!] **K Snowball** — NO IMPLEMENTADO en v0.11. La K actual (Arctic Burst con zona de hielo de 1.6 s + 55 % slow) es la versión v0.10 — funciona como zona de control de área pero NO es un proyectil. Implementar bola de nieve real requiere proyectil entity con tick de movimiento, detección de colisión por sweep, y schema de status `snowballSlowTimer`. Marcado [!] post-jam.
-- [!] **L Blizzard / Frozen Floor** — NO IMPLEMENTADO en v0.11. La L actual (Blizzard con frenzy spd × 1.40 / mass × 1.10) sigue siendo buff personal, no zona. Para implementar zona de hielo deslizante necesito extender el zone system con `slippery: boolean` flag (acceleration × 0.3, control reducido). Marcado [!] post-jam.
+- [~] **K Snowball PROYECTIL (2026-04-29)** — IMPLEMENTADO autorial. Nuevo `AbilityType: 'projectile'`. Server-authoritative end-to-end:
+  - **Server**: `BrawlRoom.activeProjectiles` Array, `tickPlayerAbilities` devuelve `projectileSpawns`, BrawlRoom integra cada tick (vx/vz fixed at fire), sweep collision contra todos los players alive non-owner non-immune con reach `pr.radius + 0.55`, on hit: knockback impulse + `victim.slowTimer = max(slowTimer, 2.0)`, broadcast `projectileHit`. TTL 1.2 s o salida del arena → `projectileExpired`.
+  - **Cliente**: `src/projectiles.ts` nuevo módulo con sphere geometry shared + per-instance ice-blue emissive material. Offline: `spawnLocalProjectile` + `tickProjectiles` hace mismo sweep. Online: `pushNetworkProjectile` registra para mirror visual, `removeProjectile` despawn on server hit/expired.
+  - **Schema**: `PlayerSchema.slowTimer: number` añadido. `effectiveSpeed` (cliente + server) multiplica por 0.5 cuando > 0.
+  - **Bot**: tag `'ranged'` en `AbilityTag`. Bots offline + online evalúan condición 4..14 u y disparan con 0.022 prob/tick.
+  - **Parity**: nuevo branch `kind: 'projectile'` en `verify-ability-parity.mjs` valida speed/ttl/radius/impulse/slowDur/wU/CD bit-for-bit.
+- [!] **L Blizzard / Frozen Floor** — NO IMPLEMENTADO. La L actual (Blizzard frenzy) sigue siendo buff personal. Para zona de hielo deslizante necesito extender el zone system con `slippery: boolean` flag (acceleration × 0.3, control reducido). Marcado [!] para sesión L dedicada.
 
 ---
 
@@ -94,7 +109,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 
 - [~] **Headbutt** — boost ×1.30 (más rápido + más shake)
 - [~] **J Pounce** — sin cambios mecánicos + `cancelAnimOnEnd: true`
-- [~] **K Shadow Step + impact** — el blink ya implementado en v0.10 ahora aplica un **knockback radial** en la posición de DESTINO (radius 2.0, force 28) — los enemigos cerca del punto de aterrizaje salen disparados. VFX: shockwave naranja en el destino + afterimage en origen. Cheeto NO recibe self-pushback. Mantiene el rooting durante el blink window.
+- [~] **K Shadow Step + impact** — blink (v0.10) + knockback radial en destino. **K-session 1 bump (2026-04-29)**: `blinkImpactRadius 2.2 → 2.6`, `blinkImpactForce 28 → 36` (Rafa: "ajustar si se siente débil"). Cheeto NO recibe self-pushback. Mantiene rooting durante blink window.
 - [!] **L Tiger Roar / Cone Pulse** — NO implementado. Cone-shaped repeating knockback durante channeling es una mecánica nueva. La L actual sigue siendo Tiger Rage (frenzy corto y rápido). Marcado [!] post-entrega.
 
 ---
