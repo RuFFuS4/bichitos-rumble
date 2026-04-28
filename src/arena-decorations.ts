@@ -282,15 +282,14 @@ function loadTexture(path: string, mode: 'ground' | 'skybox'): Promise<THREE.Tex
           tex.repeat.set(4, 4);
           tex.colorSpace = THREE.SRGBColorSpace;
         } else {
-          // Equirect skybox painted on the inside of a sphere (MeshBasic +
-          // BackSide in main.ts). The sphere's built-in UVs already map a
-          // 2:1 equirect texture correctly (u = longitude, v = latitude),
-          // so we leave `mapping` at its default (UVMapping) — the
-          // EquirectangularReflectionMapping flag is for environment
-          // reflection lookups on PBR materials, NOT for flat "paint the
-          // inside of a sphere" skyboxes. Using it here was the cause of
-          // the flat-colour skyboxes reported after first pack integration.
-          tex.mapping = THREE.UVMapping;
+          // Equirect skybox bound directly to `scene.background` via
+          // setSceneSkyboxTexture. Three.js renders scene.background in
+          // a built-in pre-pass that REQUIRES
+          // `EquirectangularReflectionMapping` for 2:1 panoramic PNGs
+          // (despite the "Reflection" name — the same mapping is used
+          // for both envmaps and skybox backgrounds; Three.js dispatches
+          // on the texture's role, not on the mapping flag).
+          tex.mapping = THREE.EquirectangularReflectionMapping;
           tex.colorSpace = THREE.SRGBColorSpace;
           tex.wrapS = THREE.ClampToEdgeWrapping;
           tex.wrapT = THREE.ClampToEdgeWrapping;

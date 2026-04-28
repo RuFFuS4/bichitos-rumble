@@ -80,244 +80,58 @@ const scene = new THREE.Scene();
 // letting the horizon colour bleed into the far frustum.
 scene.fog = new THREE.FogExp2(0xb6d1e8, 0.008);
 
-// Cartoon backdrop — sky colours used by both the camera-attached
-// screen-space backdrop (default menu/play state) and the legacy
-// skydome shader (still in the scene as a fallback for arena packs
-// that haven't been wired through yet). Keeping the palette in one
-// place means a designer-driven colour tweak only edits this block.
-const SKY_COLORS = {
-  top:     new THREE.Color(0x5c9fd9), // brighter blue high up
-  middle:  new THREE.Color(0x8ac1e8), // mid sky (matches clear color)
-  horizon: new THREE.Color(0xf5c792), // warm horizon band
-  bottom:  new THREE.Color(0x2a3b52), // deeper blue toward the void
-};
-const skyUniforms = {
-  topColor:     { value: SKY_COLORS.top },
-  middleColor:  { value: SKY_COLORS.middle },
-  horizonColor: { value: SKY_COLORS.horizon },
-  bottomColor:  { value: SKY_COLORS.bottom },
-};
-
 // ---------------------------------------------------------------------------
-// Camera-attached screen-space backdrop
+// Sky / pack background
 // ---------------------------------------------------------------------------
 //
-// Replaces the previous physical skydome gradient. The skydome was
-// rendered at radius 150 around world origin, but the gameplay camera
-// (FOV 40°, position (0, 23, 25), looking down at (0, -3, 0)) only
-// ever saw the dome's lower hemisphere through a narrow ~50° vertical
-// slice — so the warm horizon band and the bright upper sky never
-// made it into the gameplay frame. Lifting `lookAt` to expose more
-// dome ruined the gameplay framing (b8c1a7e); densifying the fog
-// muddied the foreground.
+// Final approach (post 4-iteration debug): use Three.js's built-in
+// `scene.background = equirectTexture` skybox path. Three.js renders
+// `scene.background` in a dedicated pre-pass before any geometry, with
+// a built-in shader that maps the equirect onto a virtual cube around
+// the camera. That pre-pass:
+//   · ALWAYS fills 100 % of the framebuffer (no edge leaks, no
+//     grazing-angle seams)
+//   · Has no depth/transparency interactions with scene meshes
+//   · Doesn't need a sphere mesh, doesn't need a screen-space quad,
+//     doesn't need lighting
 //
-// This backdrop sidesteps the geometry entirely by drawing a
-// fullscreen quad whose vertical UV maps to a hand-tuned bottom →
-// horizon → middle → top gradient. Because the quad is parented to
-// the camera and uses fixed clip-space coordinates in its vertex
-// shader, the gradient ALWAYS fills the screen exactly the same way
-// regardless of camera position, lookAt, FOV or aspect. The gameplay
-// frame can stay locked to its proven framing while the backdrop
-// gives a real cartoon-sky reading.
+// We tried both before:
+//   1. Camera-parented skydome sphere → equirect read as "south-pole
+//      band only" because camera offset.
+//   2. World-anchored sphere + MeshStandardMaterial + emissiveMap →
+//      vertical seams at frame edges where the backdrop quad's
+//      gradient bled through the BackSide sphere at grazing angles.
+// Both are now retired.
 //
-// Render details:
-//   · `frustumCulled = false` because the quad sits at clip-space z
-//     ≈ 0.999 — three.js's CPU culling sees a degenerate world AABB
-//     and would skip the draw on some camera angles otherwise.
-//   · `depthTest: false` + `depthWrite: false` lets the backdrop
-//     paint first and then every subsequent draw (skydome, props,
-//     critters) composites on top.
-//   · `renderOrder: -2` keeps it behind the skydome (renderOrder -1)
-//     in case an arena pack swaps `skyDome`'s material to a textured
-//     equirect — the backdrop is a no-op when it sits behind a fully
-//     opaque sphere, so we don't even bother to hide it on pack
-//     swaps.
-const backdropMat = new THREE.ShaderMaterial({
-  uniforms: skyUniforms,
-  depthWrite: false,
-  depthTest: false,
-  fog: false,
-  side: THREE.DoubleSide,
-  vertexShader: `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      // Place the quad at clip-space z = 0.999 (just inside the far
-      // plane) so depth-aware sort doesn't push it forward of any
-      // gameplay geometry on cards that ignore depthTest=false.
-      gl_Position = vec4(position.xy, 0.999, 1.0);
-    }
-  `,
-  fragmentShader: `
-    varying vec2 vUv;
-    uniform vec3 topColor;
-    uniform vec3 middleColor;
-    uniform vec3 horizonColor;
-    uniform vec3 bottomColor;
-    void main() {
-      // vUv.y: 0 at the bottom of the screen → 1 at the top.
-      // Gradient bands chosen so the warm horizon dominates the
-      // middle of the frame (where the gameplay camera looks),
-      // the bright upper sky reads at the top edge, and the deep
-      // blue grounds the bottom edge — matching the cartoon
-      // skybox the artists are after.
-      float h = vUv.y;
-      vec3 color;
-      if (h > 0.62) {
-        // Upper sky: middle → top.
-        color = mix(middleColor, topColor, (h - 0.62) / 0.38);
-      } else if (h > 0.38) {
-        // Mid: horizon → middle. Wider horizon band than the
-        // legacy skydome so warm tones span more of the frame.
-        color = mix(horizonColor, middleColor, (h - 0.38) / 0.24);
-      } else {
-        // Lower: bottom → horizon, sqrt-curve so horizon warmth
-        // creeps up into the frame instead of dropping abruptly
-        // into the deep blue void.
-        float t = clamp(h / 0.38, 0.0, 1.0);
-        t = sqrt(t);
-        color = mix(bottomColor, horizonColor, t);
-      }
-      gl_FragColor = vec4(color, 1.0);
-    }
-  `,
-});
-const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), backdropMat);
-backdrop.frustumCulled = false;
-backdrop.renderOrder = -2;
-
-// Legacy skydome — kept ONLY so arena packs that ship a textured
-// equirect (`setSceneSkyboxTexture`) still have a sphere mesh to
-// paint that texture onto. The default gradient shader is still
-// here in case any future code path needs it, but in normal play
-// the backdrop above completely covers it before this dome ever
-// renders. Once every arena pack uses the camera-attached backdrop
-// for its sky, this block can go.
-const skyMat = new THREE.ShaderMaterial({
-  uniforms: skyUniforms,
-  side: THREE.BackSide,
-  depthWrite: false,
-  fog: false,
-  vertexShader: `
-    varying vec3 vWorldPos;
-    void main() {
-      vec4 worldPos = modelMatrix * vec4(position, 1.0);
-      vWorldPos = worldPos.xyz;
-      gl_Position = projectionMatrix * viewMatrix * worldPos;
-    }
-  `,
-  fragmentShader: `
-    uniform vec3 topColor;
-    uniform vec3 middleColor;
-    uniform vec3 horizonColor;
-    uniform vec3 bottomColor;
-    varying vec3 vWorldPos;
-    void main() {
-      float h = clamp(vWorldPos.y / 100.0, -1.0, 1.0);
-      vec3 color;
-      if (h > 0.2)        color = mix(middleColor, topColor, (h - 0.2) / 0.8);
-      else if (h > -0.05) color = mix(horizonColor, middleColor, (h + 0.05) / 0.25);
-      else {
-        float t = clamp((h + 1.0) / 0.95, 0.0, 1.0);
-        t = sqrt(t);
-        color = mix(bottomColor, horizonColor, t);
-      }
-      gl_FragColor = vec4(color, 1.0);
-    }
-  `,
-});
-// Explicit generic so later reassignments to MeshBasicMaterial (pack
-// skybox swap) don't fight TS's narrow ShaderMaterial inference.
-//
-// Radius 100: tightens the dome around the playable area so the
-// equirectangular pack texture reads punchy instead of haze-faded by
-// the FogExp2 (density 0.008 → ~55% transmittance at 100 u). All
-// gameplay objects stay safely inside: arena radius ≤ 12 u, props
-// ≤ 12.5 u, void at y = −30, cloudsBelow now 80×80 (corner ≤ 57 u
-// from arena centre). The skydome is parented to the camera below
-// (`camera.add(skyDome)`) so the viewer always sits at the dome's
-// centre — without that, a fixed-origin dome leaves the camera
-// offset by ~25 u and the panoramic equirect's horizon line reads
-// off-frame, leaving only the texture's south-pole band visible
-// (which looks like a flat coloured haze instead of a skyline).
-// World-anchored hollow sphere wrapping the entire scene (arena, props,
-// critters, camera). Radius 80 — comfortably envelops every gameplay
-// object (arena radius 12 u, props ≤ 12.5 u, void at y = −30, camera
-// at world distance ~34 u from origin) and stays well inside the
-// camera.far = 200 frustum.
-//
-// The sphere is centred on the world origin (NOT parented to the
-// camera): the equirect texture stays fixed in world space, so as
-// gameplay objects move around — and especially as we add lights —
-// the panorama reads as "the sky around the arena" instead of "a
-// dome glued to the viewer's head".
-const SKYDOME_RADIUS = 80;
-const skyDome: THREE.Mesh<THREE.SphereGeometry, THREE.Material> =
-  new THREE.Mesh(new THREE.SphereGeometry(SKYDOME_RADIUS, 32, 24), skyMat);
-skyDome.renderOrder = -1;
-scene.add(skyDome);
-
-// --- Pack-aware skybox / fog setters ------------------------------------
-//
-// Exported so arena-decorations.ts can swap the shader sky for a textured
-// equirect sky when an arena pack is active, and revert when leaving the
-// match (back to menu). Fog colour follows the same path — scene.fog is
-// FogExp2, so we just retune its .color in-place.
+// What stays from the old setup:
+//   · DEFAULT_FOG_COLOR / DEFAULT_CLEAR_COLOR for the renderer clear
+//     colour and FogExp2 colour. Without a textured pack the menu
+//     keeps the original cartoon-blue sky read.
+//   · setSceneFogColor / setSceneSkyboxTexture stay as the public API
+//     so arena.ts doesn't need to change.
 
 const DEFAULT_FOG_COLOR = 0xb6d1e8;
 const DEFAULT_CLEAR_COLOR = 0x87b0d8;
 
 /**
- * Swap the sky dome to a textured equirect sphere for an arena pack, or
- * pass `null` to restore the procedural shader gradient used in menus.
- * Safe to call repeatedly — the skydome mesh is reused, only its material
- * and clear-color change.
+ * Bind the pack's equirect panorama as the scene background, or pass
+ * `null` to drop it (menu / no-pack state). Three.js renders this in
+ * its built-in skybox pass — guaranteed full-screen coverage, no
+ * mesh / depth / transparency stack to worry about.
  *
- * Material design: MeshStandardMaterial with the equirect bound to BOTH
- * `map` (diffuse — receives scene lighting) and `emissiveMap`
- * (self-emission). With `emissiveIntensity ≈ 0.85` the panorama always
- * reads at ~85% of its intrinsic brightness even where no light reaches
- * the BackSide, while the remaining ~15% comes from the standard PBR
- * lighting — so the side of the sky facing the DirectionalLight warms
- * up and the opposite side cools, giving the sky volume + time-of-day
- * mood instead of reading as a flat HDRI plate.
- *
- * `roughness: 1, metalness: 0` keeps it matte (no specular highlights).
- *
- * Backdrop toggle: hide the screen-space backdrop while a pack texture
- * is active. Both backdrop (renderOrder −2) and skydome (renderOrder
- * −1) write 0 to depth, and on some GPUs the backdrop's gradient
- * leaks through the skydome's BackSide sphere along the steepest
- * grazing-angle pixels (frame edges, near the projected silhouette of
- * the sphere from off-centre camera). That leak shows up as a dark
- * vertical seam between "skybox in centre of frame" and "void colour
- * at edges". Hiding the backdrop while a textured skybox is up
- * eliminates the seam — and since the world-anchored sphere fully
- * wraps the camera, the backdrop has no useful job during a match
- * anyway.
+ * Caller is responsible for ensuring `tex.mapping ===
+ * THREE.EquirectangularReflectionMapping` (set in
+ * `loadPackSkyboxTexture` so we never have to think about it here).
  */
 export function setSceneSkyboxTexture(tex: THREE.Texture | null): void {
   if (tex) {
-    const texMat = new THREE.MeshStandardMaterial({
-      map: tex,
-      emissive: 0xffffff,
-      emissiveMap: tex,
-      emissiveIntensity: 0.85,
-      side: THREE.BackSide,
-      depthWrite: false,
-      fog: false,
-      roughness: 1,
-      metalness: 0,
-    });
-    const prev = skyDome.material;
-    skyDome.material = texMat;
-    if (prev !== skyMat && prev instanceof THREE.Material) prev.dispose();
-    backdrop.visible = false;
+    if (tex.mapping !== THREE.EquirectangularReflectionMapping) {
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      tex.needsUpdate = true;
+    }
+    scene.background = tex;
   } else {
-    const prev = skyDome.material;
-    skyDome.material = skyMat;
-    if (prev !== skyMat && prev instanceof THREE.Material) prev.dispose();
-    backdrop.visible = true;
+    scene.background = null;
   }
 }
 
@@ -331,28 +145,10 @@ export function setSceneFogColor(color: number | null): void {
   if (scene.fog && 'color' in scene.fog) {
     (scene.fog as THREE.FogExp2).color.setHex(target);
   }
-  // Also tint the clear colour so the 1-frame gap before the skydome
+  // Also tint the clear colour so the 1-frame gap before the skybox
   // paints isn't jarring (the old default was a fixed sky blue).
   renderer.setClearColor(color ?? DEFAULT_CLEAR_COLOR);
 }
-
-// Distant cloud band — a flat disc at altitude + below the arena, hinting
-// that the platform is floating very high above terrain. Single plane,
-// tinted additive for that "soft painted fog" look. Sized 80×80 (corner
-// at ~57 u from origin) so it stays well inside the camera-parented
-// skydome (radius 100) regardless of where the gameplay camera sits.
-const cloudsGeo = new THREE.PlaneGeometry(80, 80);
-const cloudsMat = new THREE.MeshBasicMaterial({
-  color: 0xffffff,
-  transparent: true,
-  opacity: 0.35,
-  depthWrite: false,
-});
-const cloudsBelow = new THREE.Mesh(cloudsGeo, cloudsMat);
-cloudsBelow.rotation.x = -Math.PI / 2;
-cloudsBelow.position.y = -18;
-cloudsBelow.renderOrder = -1;
-scene.add(cloudsBelow);
 
 // Lighting — three-point rig + hemisphere ambient.
 // Sky/ground hemisphere replaces the flat AmbientLight: the top of every
@@ -387,12 +183,10 @@ const camera = createCamera();
 syncSize(camera, renderer);
 handleResize(camera, renderer);
 
-// Parent the screen-space backdrop to the camera and add the camera
-// to the scene so the backdrop participates in the standard render
-// pass. The backdrop's vertex shader uses fixed clip-space coordinates,
-// so no actual transform is read from the camera; we only need it in
-// the scene graph for three.js to traverse + draw it.
-camera.add(backdrop);
+// Add the camera to the scene graph. With the skybox now rendered via
+// `scene.background = equirectTexture` (Three.js built-in pre-pass)
+// there's no camera-attached backdrop to wire up — the camera just
+// needs to live in the scene so transforms apply.
 scene.add(camera);
 
 // Snapshot the base camera position for shake offset calculations.
