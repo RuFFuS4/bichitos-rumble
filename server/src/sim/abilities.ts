@@ -66,67 +66,83 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
 
   // --- Bloque C: 7 remaining playables ---
 
-  // Kurama — Trickster: very fast, flighty, Frenzy ult fits the "sly" fantasy
+  // Kurama — Trickster: trades raw knockback for very fast K and an
+  // agile, short-windowed Frenzy that rewards mobility plays.
   Kurama: [
     { type: 'charge_rush',  cooldown: 3.2, duration: 0.26, windUp: 0.05,
       impulse: 29, speedMultiplier: 2.8, massMultiplier: 1.3 },
-    { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.25,
-      radius: 3.0, force: 22 },
-    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+    { type: 'ground_pound', cooldown: 5.5, duration: 0.05, windUp: 0.10,
+      radius: 3.5, force: 16 },
+    { type: 'frenzy',       cooldown: 16.0, duration: 3.5, windUp: 0.30,
+      frenzySpeedMult: 1.50, frenzyMassMult: 1.20 },
   ],
 
-  // Shelly — Tank: slow heavy charger, wide slam, Frenzy for berserk
+  // Shelly — Tank: slow heavy charger; K tighter than Trunk's Earthquake;
+  // L leans hard on mass so the player reads "harder to push" not "faster".
   Shelly: [
     { type: 'charge_rush',  cooldown: 5.5, duration: 0.45, windUp: 0.08,
       impulse: 15, speedMultiplier: 1.8, massMultiplier: 3.2 },
     { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.45,
-      radius: 4.5, force: 28 },
-    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+      radius: 4.0, force: 32 },
+    { type: 'frenzy',       cooldown: 18.0, duration: 3.5, windUp: 0.40,
+      frenzySpeedMult: 1.20, frenzyMassMult: 1.65 },
   ],
 
-  // Kermit — Controller: standard mobility, biggest AoE radius
+  // Kermit — Controller: K is the WIDEST AoE (rad 5.0) with the
+  // LOWEST knockback (frc 14) and FASTEST windup (0.15) — toxic puff
+  // that nudges everyone. L is the tankiest frenzy of all.
   Kermit: [
     { type: 'charge_rush',  cooldown: 4.0, duration: 0.30, windUp: 0.06,
       impulse: 20, speedMultiplier: 2.3, massMultiplier: 1.7 },
-    { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.35,
-      radius: 4.6, force: 24 },
-    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+    { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.15,
+      radius: 5.0, force: 14 },
+    { type: 'frenzy',       cooldown: 18.0, duration: 4.0, windUp: 0.40,
+      frenzySpeedMult: 1.10, frenzyMassMult: 1.80 },
   ],
 
-  // Sihans — Trapper: slow stomping specialist, long windUp, high force
+  // Sihans — Trapper: slow stomping specialist + longest L window in
+  // the roster — signature is "sustained ground control" over burst.
   Sihans: [
     { type: 'charge_rush',  cooldown: 4.5, duration: 0.35, windUp: 0.08,
       impulse: 19, speedMultiplier: 2.1, massMultiplier: 2.0 },
     { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.6,
       radius: 3.5, force: 38 },
-    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+    { type: 'frenzy',       cooldown: 20.0, duration: 4.5, windUp: 0.40,
+      frenzySpeedMult: 1.15, frenzyMassMult: 1.50 },
   ],
 
-  // Kowalski — Mage: widest AoE, lowest force, ranged identity via area
+  // Kowalski — Mage: widest AoE / lowest force on K (ranged identity).
+  // L pushes speed high, mass light — buff reads "ranged blitzer".
   Kowalski: [
     { type: 'charge_rush',  cooldown: 4.2, duration: 0.30, windUp: 0.06,
       impulse: 19, speedMultiplier: 2.4, massMultiplier: 1.5 },
     { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.4,
       radius: 5.0, force: 20 },
-    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+    { type: 'frenzy',       cooldown: 17.0, duration: 3.0, windUp: 0.40,
+      frenzySpeedMult: 1.40, frenzyMassMult: 1.10 },
   ],
 
-  // Cheeto — Assassin: fastest dash, mini AoE but dense
+  // Cheeto — Assassin: fastest dash, mini AoE but dense.
+  // L is the SHORTEST window (2.0 s) + FASTEST speed× (1.55) on the
+  // lowest cooldown (14 s). Burst-window identity.
   Cheeto: [
     { type: 'charge_rush',  cooldown: 2.8, duration: 0.24, windUp: 0.04,
       impulse: 33, speedMultiplier: 3.0, massMultiplier: 1.2 },
     { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.22,
       radius: 2.5, force: 30 },
-    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+    { type: 'frenzy',       cooldown: 14.0, duration: 2.0, windUp: 0.35,
+      frenzySpeedMult: 1.55, frenzyMassMult: 1.05 },
   ],
 
-  // Sebastian — Glass Cannon: small AoE, massive force, vicious charge
+  // Sebastian — Glass Cannon: small AoE, massive force, vicious charge.
+  // L is a finisher window, not a tank mode.
   Sebastian: [
     { type: 'charge_rush',  cooldown: 3.5, duration: 0.28, windUp: 0.06,
       impulse: 28, speedMultiplier: 2.6, massMultiplier: 1.4 },
     { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.3,
       radius: 2.8, force: 40 },
-    { type: 'frenzy',       cooldown: SIM.frenzy.cooldown, duration: SIM.frenzy.duration, windUp: SIM.frenzy.windUp },
+    { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.40,
+      frenzySpeedMult: 1.20, frenzyMassMult: 1.20 },
   ],
 };
 

@@ -314,6 +314,8 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   // Each kit mirrors server/src/sim/abilities.ts CRITTER_ABILITY_KITS
   // (same impulse/radius/force/cooldown) so offline == online.
 
+  // Kurama — Trickster: trades raw knockback for very fast K and an
+  // agile, short-windowed Frenzy that rewards mobility plays.
   Kurama: [
     makeChargeRush({
       name: 'Fox Dash', description: 'Blink-fast feint forward',
@@ -322,11 +324,17 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     }),
     makeGroundPound({
       name: 'Mirror Burst', description: 'Quick shockwave from a feint',
-      radius: 3.0, force: 22, windUp: 0.25, cooldown: 7.0,
+      radius: 3.5, force: 16, windUp: 0.10, cooldown: 5.5,
     }),
-    makeFrenzy({ description: 'Tails blaze: +speed, +presence' }),
+    makeFrenzy({
+      description: 'Tails blaze: +speed, +presence',
+      duration: 3.5, cooldown: 16.0, windUp: 0.30,
+      speedMultiplier: 1.50, massMultiplier: 1.20,
+    }),
   ],
 
+  // Shelly — Tank: K still wide-ish but tighter than Trunk's Earthquake;
+  // L leans hard on mass so the player reads "harder to push" not "faster".
   Shelly: [
     makeChargeRush({
       name: 'Shell Charge', description: 'Slow rolling ram',
@@ -335,11 +343,19 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     }),
     makeGroundPound({
       name: 'Shell Slam', description: 'Heavy body drop, wide ring',
-      radius: 4.5, force: 28, windUp: 0.45, cooldown: 7.5,
+      radius: 4.0, force: 32, windUp: 0.45, cooldown: 7.5,
     }),
-    makeFrenzy({ description: 'Berserk shell: +speed, +mass' }),
+    makeFrenzy({
+      description: 'Berserk shell: +speed, +mass',
+      duration: 3.5, cooldown: 18.0, windUp: 0.4,
+      speedMultiplier: 1.20, massMultiplier: 1.65,
+    }),
   ],
 
+  // Kermit — Controller: K is the WIDEST AoE in the roster (rad 5.0)
+  // with the LOWEST knockback (frc 14) and the FASTEST windup (0.15) —
+  // reads as a giant toxic puff that nudges everyone, not a slam. L is
+  // the tankiest frenzy of all (mass × 1.80, slowest speed×).
   Kermit: [
     makeChargeRush({
       name: 'Leap Forward', description: 'Tongue-propelled lunge',
@@ -348,11 +364,17 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     }),
     makeGroundPound({
       name: 'Poison Cloud', description: 'Wide toxic burst, area control',
-      radius: 4.6, force: 24, windUp: 0.35, cooldown: 7.0,
+      radius: 5.0, force: 14, windUp: 0.15, cooldown: 7.0,
     }),
-    makeFrenzy({ name: 'Hypnosapo', description: 'Venom rush: +speed, +power' }),
+    makeFrenzy({
+      name: 'Hypnosapo', description: 'Venom rush: +speed, +power',
+      duration: 4.0, cooldown: 18.0, windUp: 0.4,
+      speedMultiplier: 1.10, massMultiplier: 1.80,
+    }),
   ],
 
+  // Sihans — Trapper: longest L window in the roster + heavy mass —
+  // signature is "sustained ground control" over burst speed.
   Sihans: [
     makeChargeRush({
       name: 'Burrow Rush', description: 'Underground charge resurfacing ahead',
@@ -363,9 +385,16 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Tremor', description: 'Long windup, devastating stomp',
       radius: 3.5, force: 38, windUp: 0.6, cooldown: 7.5,
     }),
-    makeFrenzy({ name: 'Diggy Rush', description: 'Tunnel frenzy: +speed, +power' }),
+    makeFrenzy({
+      name: 'Diggy Rush', description: 'Tunnel frenzy: +speed, +power',
+      duration: 4.5, cooldown: 20.0, windUp: 0.4,
+      speedMultiplier: 1.15, massMultiplier: 1.50,
+    }),
   ],
 
+  // Kowalski — Mage: L pushes the speed dial high while leaving mass
+  // light, so the buff reads "ranged blitzer" not "tank". K (Arctic
+  // Burst) keeps the widest-ring/lowest-force profile from before.
   Kowalski: [
     makeChargeRush({
       name: 'Ice Slide', description: 'Slides forward on an ice trail',
@@ -376,9 +405,15 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Arctic Burst', description: 'Massive area blast, low force',
       radius: 5.0, force: 20, windUp: 0.4, cooldown: 7.0,
     }),
-    makeFrenzy({ name: 'Blizzard', description: 'Arctic fury: +speed, +power' }),
+    makeFrenzy({
+      name: 'Blizzard', description: 'Arctic fury: +speed, +power',
+      duration: 3.0, cooldown: 17.0, windUp: 0.4,
+      speedMultiplier: 1.40, massMultiplier: 1.10,
+    }),
   ],
 
+  // Cheeto — Assassin: L is the SHORTEST window (2.0 s) and FASTEST
+  // speed× (1.55) on the lowest cooldown (14 s). Burst-window identity.
   Cheeto: [
     makeChargeRush({
       name: 'Pounce', description: 'Lightning-fast predator lunge',
@@ -389,9 +424,16 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Paw Stomp', description: 'Tight dense impact',
       radius: 2.5, force: 30, windUp: 0.22, cooldown: 6.0,
     }),
-    makeFrenzy({ name: 'Tiger Rage', description: 'Predator instinct: +speed, +power' }),
+    makeFrenzy({
+      name: 'Tiger Rage', description: 'Predator instinct: +speed, +power',
+      duration: 2.0, cooldown: 14.0, windUp: 0.35,
+      speedMultiplier: 1.55, massMultiplier: 1.05,
+    }),
   ],
 
+  // Sebastian — Glass Cannon: L stays short and balanced — the real
+  // identity is on J/K (vicious dash + brutal small slam). The buff
+  // is a finisher window, not a tank mode.
   Sebastian: [
     makeChargeRush({
       name: 'Claw Rush', description: 'Sideways scuttle charge',
@@ -402,7 +444,11 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Big Claw Slam', description: 'Small radius, brutal force',
       radius: 2.8, force: 40, windUp: 0.3, cooldown: 6.5,
     }),
-    makeFrenzy({ name: 'Red Claw', description: 'Glass-cannon rage: +speed, +power' }),
+    makeFrenzy({
+      name: 'Red Claw', description: 'Glass-cannon rage: +speed, +power',
+      duration: 2.5, cooldown: 15.0, windUp: 0.4,
+      speedMultiplier: 1.20, massMultiplier: 1.20,
+    }),
   ],
 };
 
