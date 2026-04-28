@@ -15,7 +15,8 @@ import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 import { initOnlineBeltToast } from './online-belt-toast';
 import { updateDustPuffs } from './dust-puff';
-import { tickAbilityZones } from './abilities';
+import { tickAbilityZones, isInsideZoneOfKind } from './abilities';
+import { tickProjectiles } from './projectiles';
 import { getPreviewPackId } from './arena-decor-layouts';
 
 // ---------------------------------------------------------------------------
@@ -148,6 +149,50 @@ export function setSceneFogColor(color: number | null): void {
   // Also tint the clear colour so the 1-frame gap before the skybox
   // paints isn't jarring (the old default was a fixed sky blue).
   renderer.setClearColor(color ?? DEFAULT_CLEAR_COLOR);
+}
+
+// ---------------------------------------------------------------------------
+// Kermit Poison Cloud — local screen-space overlay
+// ---------------------------------------------------------------------------
+//
+// 2026-04-29 K-session — Rafa: "desde dentro, el jugador afectado debe
+// ver peor: overlay/fog/máscara screen-space, sensación de visión
+// limitada".
+//
+// Implementation: a CSS overlay <div> stacked above the canvas at
+// zIndex 15. The radial gradient fades from a transparent centre to a
+// dense toxic-green outer ring, exactly the "I can see right in front
+// of me but the edges of my vision are clouded" feeling Rafa asked
+// for. Opacity fades in/out over 200 ms via a CSS transition so
+// stepping in/out of the cloud reads smoothly. Driven by
+// `setPoisonOverlayIntensity(0..1)` — game.ts checks the local
+// critter against `isInsideZoneOfKind('poison')` each frame.
+//
+// Why CSS instead of a Three.js shader quad: the skybox debacle
+// already showed that screen-space transparent meshes interact in
+// unpleasant ways with depth/transparency at frame edges. CSS
+// composites at the browser level — no Three.js render order, no
+// depth, no transparency stacking. Free.
+const poisonOverlay = document.createElement('div');
+poisonOverlay.id = 'poison-overlay';
+Object.assign(poisonOverlay.style, {
+  position: 'fixed',
+  inset: '0',
+  pointerEvents: 'none',
+  background: 'radial-gradient(ellipse at center, rgba(78,200,70,0) 0%, rgba(78,200,70,0) 25%, rgba(78,200,70,0.35) 65%, rgba(40,90,30,0.85) 100%)',
+  opacity: '0',
+  transition: 'opacity 0.20s ease-in-out',
+  zIndex: '15',
+  mixBlendMode: 'multiply',
+} as CSSStyleDeclaration);
+document.body.appendChild(poisonOverlay);
+
+/** Set the Kermit Poison Cloud overlay opacity (0 hidden, 1 fully
+ *  toxic). Game.ts feeds either 0 or 0.85 each frame depending on
+ *  whether the local critter is standing inside a poison zone; the
+ *  CSS transition smooths the cut. */
+export function setPoisonOverlayIntensity(t: number): void {
+  poisonOverlay.style.opacity = String(Math.max(0, Math.min(1, t)));
 }
 
 // Lighting — three-point rig + hemisphere ambient.
@@ -378,10 +423,27 @@ function loop(now: number) {
   // menu and look like gameplay never actually froze.
   if (!game.isPaused()) {
     updateDustPuffs(dt);
-    // Ability zones (Kermit Poison Cloud, Kowalski Arctic Burst).
-    // Same gating as dust puffs — pause should freeze the slow-zone
-    // timer too so a zone doesn't quietly expire while the menu is up.
+    // Ability zones (Kermit Poison Cloud, Sihans Quicksand, Kowalski
+    // legacy Arctic Burst). Same gating as dust puffs — pause should
+    // freeze the slow-zone timer too so a zone doesn't quietly expire
+    // while the menu is up.
     tickAbilityZones(dt);
+    // 2026-04-29 K-session — Kowalski Snowball projectile tick.
+    // Integrates position + sweeps collision (offline) or just
+    // advances the visual mesh (online; collision is server-driven).
+    // Same pause gating as zones: pause freezes the bullets.
+    tickProjectiles(dt, game.getActiveCritters());
+    // 2026-04-29 K-session — Kermit Poison Cloud screen-space overlay.
+    // The local critter inside any 'poison'-kind zone gets a CSS
+    // toxic-green vignette overlay. CSS handles the fade in/out via
+    // a 200 ms transition; we just feed it a 0/1 each frame.
+    const localPos = game.getLocalPlayerPos();
+    const insidePoison = !!localPos && localPos.alive
+      && isInsideZoneOfKind(localPos.x, localPos.z, 'poison');
+    setPoisonOverlayIntensity(insidePoison ? 0.85 : 0);
+  } else {
+    // Paused: drop the overlay so the pause menu reads cleanly.
+    setPoisonOverlayIntensity(0);
   }
   // Camera ownership per phase:
   //   · paused          → freeze (no shake, no lerp).

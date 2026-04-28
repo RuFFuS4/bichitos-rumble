@@ -18,7 +18,7 @@ import type { PlayerSchema } from '../state/PlayerSchema.js';
 import { AbilityStateSchema } from '../state/AbilityStateSchema.js';
 import { SIM } from './config.js';
 
-export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy' | 'blink';
+export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy' | 'blink' | 'projectile';
 
 /**
  * Per-ability tuning. The simulation falls back to SIM.* defaults when a
@@ -62,6 +62,24 @@ export interface AbilityDef {
   selfBuffOnly?: boolean;
   /** Seconds of immunity to grant the caster on activation. */
   selfImmunityDuration?: number;
+
+  // --- 2026-04-29 K-session: projectile additions (Kowalski Snowball) ---
+  /** World-space speed (units / second) of the projectile when fired. */
+  projectileSpeed?: number;
+  /** Lifetime in seconds before auto-despawn if the projectile hasn't
+   *  hit anything yet. */
+  projectileTtl?: number;
+  /** Sphere radius used for both the visual scale and the sweep test
+   *  against player capsules. */
+  projectileRadius?: number;
+  /** Knockback impulse applied to the victim's velocity along the
+   *  projectile's facing direction at hit time. */
+  projectileImpulse?: number;
+  /** Status-slow duration applied to the victim on hit (seconds).
+   *  The simulation writes `victim.slowTimer = Math.max(slowTimer,
+   *  projectileSlowDuration)` so the slow stacks length-wise but
+   *  doesn't compound multiplicatively. */
+  projectileSlowDuration?: number;
 }
 
 // Per-critter ability kits. MUST stay in sync with client's CRITTER_ABILITIES.
@@ -151,14 +169,20 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       frenzySpeedMult: 1.15, frenzyMassMult: 1.50 },
   ],
 
-  // Kowalski — Mage: K leaves a 1.6 s icy patch (55 % move speed).
-  // Shorter than Kermit's fog but a touch deeper slow.
+  // Kowalski — Mage: K is now a real frontal SNOWBALL projectile
+  // (v0.11 final-K, 2026-04-29). Travels along Kowalski's facing,
+  // applies knockback + 2 s slow on hit, despawns on hit or TTL.
+  // No more radial AoE — Rafa: "debe ser bola de nieve, no AoE".
   Kowalski: [
     { type: 'charge_rush',  cooldown: 4.2, duration: 0.30, windUp: 0.06,
       impulse: 19, speedMultiplier: 2.4, massMultiplier: 1.5 },
-    { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.4,
-      radius: 5.0, force: 20, ...ROOTED_K,
-      zone: { radius: 5.0, duration: 1.6, slowMultiplier: 0.55 } },
+    { type: 'projectile',   cooldown: 5.5, duration: 0.05, windUp: 0.20,
+      ...ROOTED_K,
+      projectileSpeed: 18,
+      projectileTtl: 1.2,
+      projectileRadius: 0.55,
+      projectileImpulse: 22,
+      projectileSlowDuration: 2.0 },
     { type: 'frenzy',       cooldown: 17.0, duration: 3.0, windUp: 0.40,
       frenzySpeedMult: 1.40, frenzyMassMult: 1.10 },
   ],
@@ -170,9 +194,11 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'charge_rush',  cooldown: 2.8, duration: 0.24, windUp: 0.04,
       impulse: 33, speedMultiplier: 3.0, massMultiplier: 1.2 },
     // v0.11 — Shadow Step gains impact knockback at destination.
+    // 2026-04-29 K-session bump: radius 2.2→2.6, force 28→36 so the
+    // landing reads as a real assassin entry instead of a soft tap.
     { type: 'blink',        cooldown: 5.5, duration: 0.10, windUp: 0.06,
       blinkDistance: 4.5, ...ROOTED_K,
-      blinkImpactRadius: 2.2, blinkImpactForce: 28 },
+      blinkImpactRadius: 2.6, blinkImpactForce: 36 },
     { type: 'frenzy',       cooldown: 14.0, duration: 2.0, windUp: 0.35,
       frenzySpeedMult: 1.55, frenzyMassMult: 1.05 },
   ],
@@ -249,10 +275,30 @@ export interface AbilityInputs {
  * abilityFired notifications (broadcast as before for client VFX).
  * `zoneSpawns` are the new lingering slow zones the room should
  * register + broadcast — emptied between ticks.
+ * `projectileSpawns` are the new in-flight projectiles (Kowalski
+ * Snowball) the room should track + broadcast.
  */
 export interface AbilityTickOutput {
   events: AbilityFiredEvent[];
   zoneSpawns: ZoneSpawn[];
+  projectileSpawns: ProjectileSpawn[];
+}
+
+/** Side-channel return value from the projectile dispatcher. The
+ *  room reads these to instantiate authoritative projectile entities
+ *  (position, velocity, ttl) and broadcast `projectileSpawned` to
+ *  clients. */
+export interface ProjectileSpawn {
+  ownerSid: string;
+  ownerCritter: string;
+  x: number;
+  z: number;
+  vx: number;
+  vz: number;
+  ttl: number;
+  radius: number;
+  impulse: number;
+  slowDuration: number;
 }
 
 /**
@@ -268,6 +314,7 @@ export function tickPlayerAbilities(
 ): AbilityTickOutput {
   const events: AbilityFiredEvent[] = [];
   const zoneSpawns: ZoneSpawn[] = [];
+  const projectileSpawns: ProjectileSpawn[] = [];
   const kit = getAbilityKit(player.critterName);
 
   // Activation attempts from input (one-shot: input flag consumed by handler)
@@ -291,7 +338,7 @@ export function tickPlayerAbilities(
       if (state.windUpLeft > 0) {
         state.windUpLeft -= dt;
         if (state.windUpLeft <= 0 && !state.effectFired) {
-          const zone = fireEffect(state, def, player, allPlayers);
+          const out = fireEffect(state, def, player, allPlayers);
           state.effectFired = true;
           events.push({
             sessionId: player.sessionId,
@@ -300,12 +347,13 @@ export function tickPlayerAbilities(
             z: player.z,
             rotationY: player.rotationY,
           });
-          if (zone) zoneSpawns.push(zone);
+          if (out?.zone) zoneSpawns.push(out.zone);
+          if (out?.projectile) projectileSpawns.push(out.projectile);
         }
         continue;
       }
       if (!state.effectFired) {
-        const zone = fireEffect(state, def, player, allPlayers);
+        const out = fireEffect(state, def, player, allPlayers);
         state.effectFired = true;
         events.push({
           sessionId: player.sessionId,
@@ -314,7 +362,8 @@ export function tickPlayerAbilities(
           z: player.z,
           rotationY: player.rotationY,
         });
-        if (zone) zoneSpawns.push(zone);
+        if (out?.zone) zoneSpawns.push(out.zone);
+        if (out?.projectile) projectileSpawns.push(out.projectile);
       }
       state.durationLeft -= dt;
       if (state.durationLeft <= 0) {
@@ -326,7 +375,7 @@ export function tickPlayerAbilities(
     }
   }
 
-  return { events, zoneSpawns };
+  return { events, zoneSpawns, projectileSpawns };
 }
 
 /**
@@ -349,14 +398,19 @@ export interface ZoneSpawn {
 }
 
 /** Dispatch: apply the actual effect of an ability that just fired.
- *  Returns a ZoneSpawn when the ability spawns a slow zone, null
- *  otherwise. */
+ *  Returns the zone / projectile the room should track + broadcast,
+ *  or `null` for abilities that don't spawn lingering entities. */
+interface FireOutput {
+  zone?: ZoneSpawn;
+  projectile?: ProjectileSpawn;
+}
+
 function fireEffect(
   state: AbilityStateSchema,
   def: AbilityDef,
   player: PlayerSchema,
   allPlayers: PlayerSchema[],
-): ZoneSpawn | null {
+): FireOutput | null {
   switch (state.abilityType) {
     case 'charge_rush':
       fireChargeRush(def, player);
@@ -365,11 +419,13 @@ function fireEffect(
       fireGroundPound(def, player, allPlayers);
       if (def.zone) {
         return {
-          x: player.x, z: player.z,
-          radius: def.zone.radius,
-          duration: def.zone.duration,
-          slowMultiplier: def.zone.slowMultiplier,
-          ownerSid: player.sessionId,
+          zone: {
+            x: player.x, z: player.z,
+            radius: def.zone.radius,
+            duration: def.zone.duration,
+            slowMultiplier: def.zone.slowMultiplier,
+            ownerSid: player.sessionId,
+          },
         };
       }
       return null;
@@ -382,14 +438,36 @@ function fireEffect(
         const zx = def.zoneAtOrigin ? result.originX : result.targetX;
         const zz = def.zoneAtOrigin ? result.originZ : result.targetZ;
         return {
-          x: zx, z: zz,
-          radius: def.zone.radius,
-          duration: def.zone.duration,
-          slowMultiplier: def.zone.slowMultiplier,
-          ownerSid: player.sessionId,
+          zone: {
+            x: zx, z: zz,
+            radius: def.zone.radius,
+            duration: def.zone.duration,
+            slowMultiplier: def.zone.slowMultiplier,
+            ownerSid: player.sessionId,
+          },
         };
       }
       return null;
+    }
+    case 'projectile': {
+      // 2026-04-29 K-session — Kowalski Snowball. Spawn a forward
+      // projectile from the caster's facing. Movement, collision,
+      // and damage are tracked authoritatively in BrawlRoom.
+      const speed = def.projectileSpeed ?? 16;
+      return {
+        projectile: {
+          ownerSid: player.sessionId,
+          ownerCritter: player.critterName,
+          x: player.x + Math.sin(player.rotationY) * 0.6, // small offset so it spawns in front of the caster
+          z: player.z + Math.cos(player.rotationY) * 0.6,
+          vx: Math.sin(player.rotationY) * speed,
+          vz: Math.cos(player.rotationY) * speed,
+          ttl: def.projectileTtl ?? 1.2,
+          radius: def.projectileRadius ?? 0.55,
+          impulse: def.projectileImpulse ?? 22,
+          slowDuration: def.projectileSlowDuration ?? 2.0,
+        },
+      };
     }
     case 'frenzy':
       // Buff only — multipliers handled in physics.ts via effectiveSpeed/Mass

@@ -115,6 +115,18 @@ export class BrawlRoom extends Room<GameState> {
    *  which is enough to render the matching VFX with the same
    *  duration — the room doesn't keep streaming updates. */
   private activeZones: Array<ActiveZoneSnapshot & { ttl: number; ownerSid: string }> = [];
+  /** Authoritative projectile tracker (Kowalski Snowball — 2026-04-29
+   *  K-session). Each projectile carries its own velocity, ttl,
+   *  impact radius + status payload. Server integrates position,
+   *  sweeps collision against every alive non-owner player each tick,
+   *  applies knockback + slowTimer on hit, and broadcasts
+   *  spawn/hit/expire events so clients render the same beat. */
+  private activeProjectiles: Array<{
+    id: number; ownerSid: string; ownerCritter: string;
+    x: number; z: number; vx: number; vz: number;
+    ttl: number; radius: number; impulse: number; slowDuration: number;
+  }> = [];
+  private projectileCounter = 0;
 
   onCreate(_options: unknown) {
     this.tickInterval = 1000 / SIM.tickRate;
@@ -657,11 +669,90 @@ export class BrawlRoom extends Room<GameState> {
           ownerSid: z.ownerSid,
         });
       }
+      // 2026-04-29 K-session — Kowalski Snowball projectile spawns.
+      // Same one-shot broadcast pattern as zones: each projectile
+      // gets a unique server-generated id; clients run the same
+      // straight-line integration locally and despawn on `projectileHit`
+      // / `projectileExpired` events.
+      for (const p of out.projectileSpawns) {
+        this.projectileCounter++;
+        const id = this.projectileCounter;
+        this.activeProjectiles.push({
+          id,
+          ownerSid: p.ownerSid,
+          ownerCritter: p.ownerCritter,
+          x: p.x, z: p.z, vx: p.vx, vz: p.vz,
+          ttl: p.ttl, radius: p.radius,
+          impulse: p.impulse, slowDuration: p.slowDuration,
+        });
+        this.broadcast('projectileSpawned', {
+          id,
+          ownerSid: p.ownerSid,
+          ownerCritter: p.ownerCritter,
+          x: p.x, z: p.z, vx: p.vx, vz: p.vz,
+          ttl: p.ttl, radius: p.radius,
+        });
+      }
     }
     // 2.b. Tick zone TTLs — drop expired ones.
     for (let i = this.activeZones.length - 1; i >= 0; i--) {
       this.activeZones[i].ttl -= dt;
       if (this.activeZones[i].ttl <= 0) this.activeZones.splice(i, 1);
+    }
+    // 2.c. Tick projectiles — integrate, sweep collision against
+    // alive non-owner players (skip owner + immune + falling), apply
+    // knockback + slowTimer on hit, despawn on hit OR ttl OR
+    // out-of-arena. Each terminal state emits a single broadcast so
+    // clients can despawn in lockstep.
+    for (let i = this.activeProjectiles.length - 1; i >= 0; i--) {
+      const pr = this.activeProjectiles[i];
+      pr.x += pr.vx * dt;
+      pr.z += pr.vz * dt;
+      pr.ttl -= dt;
+      let consumed = false;
+      let hitVictim: PlayerSchema | null = null;
+      // Sweep
+      for (const target of players) {
+        if (target.sessionId === pr.ownerSid) continue;
+        if (!target.alive || target.falling) continue;
+        if (target.immunityTimer > 0) continue;
+        const dx = target.x - pr.x;
+        const dz = target.z - pr.z;
+        const reach = pr.radius + 0.55; // critter capsule radius is 0.55
+        if (dx * dx + dz * dz <= reach * reach) {
+          hitVictim = target;
+          break;
+        }
+      }
+      if (hitVictim) {
+        const speedMag = Math.sqrt(pr.vx * pr.vx + pr.vz * pr.vz) || 1;
+        hitVictim.vx += (pr.vx / speedMag) * pr.impulse;
+        hitVictim.vz += (pr.vz / speedMag) * pr.impulse;
+        hitVictim.slowTimer = Math.max(hitVictim.slowTimer, pr.slowDuration);
+        this.broadcast('projectileHit', {
+          id: pr.id,
+          victimSid: hitVictim.sessionId,
+          x: pr.x, z: pr.z,
+        });
+        consumed = true;
+      } else if (pr.ttl <= 0) {
+        this.broadcast('projectileExpired', { id: pr.id, x: pr.x, z: pr.z });
+        consumed = true;
+      } else {
+        // Out-of-arena clamp: snowball flies past the lethal radius
+        // → expire silently. Uses arenaRadius approximation; not
+        // perfect for irregular fragments but cheap enough.
+        const r = Math.sqrt(pr.x * pr.x + pr.z * pr.z);
+        if (r > this.arenaSim.currentRadius + 4) {
+          this.broadcast('projectileExpired', { id: pr.id, x: pr.x, z: pr.z });
+          consumed = true;
+        }
+      }
+      if (consumed) this.activeProjectiles.splice(i, 1);
+    }
+    // 2.d. Decrement slowTimer for every player.
+    for (const p of players) {
+      if (p.slowTimer > 0) p.slowTimer = Math.max(0, p.slowTimer - dt);
     }
 
     // 3. Integrate position + friction + dead zone + max speed cap + facing

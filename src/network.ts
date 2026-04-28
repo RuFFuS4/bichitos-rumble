@@ -49,6 +49,49 @@ export function onZoneSpawned(room: Room, cb: (ev: ZoneSpawnedEvent) => void): v
   room.onMessage('zoneSpawned', cb);
 }
 
+/**
+ * 2026-04-29 K-session — projectile broadcast events. Server emits
+ * one `projectileSpawned` per snowball fired, then exactly one of
+ * `projectileHit` (if it found a target) or `projectileExpired`
+ * (if the TTL ran out / it left the arena). Clients run the same
+ * straight-line motion locally so the visual mesh moves smoothly
+ * between state patches; server still owns collision.
+ */
+export interface ProjectileSpawnedEvent {
+  id: number;
+  ownerSid: string;
+  ownerCritter: string;
+  x: number;
+  z: number;
+  vx: number;
+  vz: number;
+  ttl: number;
+  radius: number;
+}
+
+export interface ProjectileHitEvent {
+  id: number;
+  victimSid: string;
+  x: number;
+  z: number;
+}
+
+export interface ProjectileExpiredEvent {
+  id: number;
+  x: number;
+  z: number;
+}
+
+export function onProjectileSpawned(room: Room, cb: (ev: ProjectileSpawnedEvent) => void): void {
+  room.onMessage('projectileSpawned', cb);
+}
+export function onProjectileHit(room: Room, cb: (ev: ProjectileHitEvent) => void): void {
+  room.onMessage('projectileHit', cb);
+}
+export function onProjectileExpired(room: Room, cb: (ev: ProjectileExpiredEvent) => void): void {
+  room.onMessage('projectileExpired', cb);
+}
+
 export interface JoinBrawlOptions {
   critterName?: string;
 }

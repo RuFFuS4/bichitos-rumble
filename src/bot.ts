@@ -29,12 +29,22 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
     return;
   }
 
-  // Find nearest alive enemy + count enemies within 4 units
+  // Find nearest alive enemy + count enemies within 4 units.
+  //
+  // Kurama Mirror Trick (v0.11 authorial K, 2026-04-29): bots skip a
+  // Kurama target who is currently in an immunity window. The trick
+  // writes immunityTimer, and that's the same flag used here as the
+  // proxy for "bot loses the scent". 1.6 s of trick → bots literally
+  // ignore Kurama and target the next nearest critter, exactly the
+  // "decoy + invisibility" read Rafa specified. Other critters in
+  // immunity (post-respawn 1.5 s) stay valid targets — only Kurama
+  // gets the lost-scent treatment.
   let nearest: Critter | null = null;
   let nearestDist = Infinity;
   let nearbyCount = 0;
   for (const other of allCritters) {
     if (other === bot || !other.alive) continue;
+    if (other.config.name === 'Kurama' && other.isImmune) continue;
     const dx = other.x - bot.x;
     const dz = other.z - bot.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
@@ -103,6 +113,22 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
   if (aoeAbility && canActivateAbility(aoeAbility) && nearbyCount >= 2) {
     if (Math.random() < 0.015 * aggroMul) {
       activateAbility(aoeAbility, bot);
+    }
+  }
+
+  // --- Ranged ability (Kowalski Snowball): fire frontally when an
+  //     enemy is in the projectile's effective lane. The snowball
+  //     travels ~21.6 u (1.2 s × 18 u/s) so a 4..14 u target band
+  //     covers the realistic hit window. The bot doesn't lead the
+  //     target — server clamp is short enough that a moving target
+  //     can dodge anyway.
+  const rangedAbility = findAbilityByTag(bot.abilityStates, 'ranged');
+  if (rangedAbility && canActivateAbility(rangedAbility) && nearestDist > 4 && nearestDist < 14) {
+    // Cone gate: only fire if the target is roughly in front of us
+    // (within ±35° of our movement vector). nx,nz already point at
+    // the target, so we just need to face it before firing.
+    if (Math.random() < 0.022 * aggroMul) {
+      activateAbility(rangedAbility, bot);
     }
   }
 

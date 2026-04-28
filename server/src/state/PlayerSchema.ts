@@ -38,6 +38,16 @@ export class PlayerSchema extends Schema {
   @type('number') fallY: number = 0; // descent offset (client renders)
   @type('number') immunityTimer: number = 0;
 
+  /**
+   * Movement-slow countdown (seconds). Set by hit-driven status effects
+   * (Kowalski Snowball impact: 2.0 s at 50 % move-speed). Decrements
+   * server-side every tick and is read by `effectiveSpeed` to scale
+   * the player's movement. Synced so remote clients render the same
+   * slowed read on the affected critter (and a future visual layer
+   * can paint a frost overlay on them while > 0).
+   */
+  @type('number') slowTimer: number = 0;
+
   // Headbutt (state visible to clients for VFX)
   @type('boolean') isHeadbutting: boolean = false;
   @type('boolean') headbuttAnticipating: boolean = false;

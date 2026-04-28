@@ -3,12 +3,13 @@ import type { Critter } from './critter';
 import { triggerHitStop, triggerCameraShake, applyDashFeedback, applyLandingFeedback, applyImpactFeedback, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
 import { spawnDustPuff } from './dust-puff';
+import { spawnLocalProjectile } from './projectiles';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy' | 'blink';
+export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy' | 'blink' | 'projectile';
 
 /**
  * Semantic tags attached to an ability definition. The bot AI (and any
@@ -29,7 +30,8 @@ export type AbilityTag =
   | 'targeted'
   | 'defensive'
   | 'utility'
-  | 'risky';
+  | 'risky'
+  | 'ranged';
 
 export interface AbilityDef {
   type: AbilityType;
@@ -151,6 +153,21 @@ export interface AbilityDef {
    *  alpha override on the mesh + spawns a static decoy clone at
    *  the origin position. */
   invisibilityDuration?: number;
+
+  // --- 2026-04-29 K-session: projectile additions (Kowalski Snowball) ---
+  /** Forward speed of the projectile (units / second). */
+  projectileSpeed?: number;
+  /** Lifetime in seconds before the projectile despawns if it hasn't
+   *  hit anything yet. */
+  projectileTtl?: number;
+  /** Sphere radius for both visual scale and sweep collision against
+   *  critter capsules. */
+  projectileRadius?: number;
+  /** Knockback impulse along the projectile's facing direction at
+   *  impact. */
+  projectileImpulse?: number;
+  /** Status-slow duration applied to the victim on hit. */
+  projectileSlowDuration?: number;
 }
 
 export interface AbilityState {
@@ -244,6 +261,40 @@ function makeBlink(overrides: Partial<AbilityDef> = {}): AbilityDef {
     cancelAnimOnEnd: true,
     tags: ['mobility'],
     description: 'Short blink in facing direction',
+    ...overrides,
+  };
+}
+
+/**
+ * Snowball — frontal projectile (Kowalski K, 2026-04-29).
+ * Server-authoritative: server tracks position, sweeps collision,
+ * applies knockback + slowTimer on hit, and broadcasts spawn / hit /
+ * expired events. Offline mirror lives in `src/projectiles.ts` and
+ * runs the same straight-line + sweep step.
+ */
+function makeProjectile(overrides: Partial<AbilityDef> = {}): AbilityDef {
+  return {
+    type: 'projectile',
+    name: 'Snowball',
+    key: 'K',
+    cooldown: 5.5,
+    duration: 0.05,
+    windUp: 0.20,
+    speedMultiplier: 1.0,
+    massMultiplier: 1.0,
+    impulse: 0,
+    slowDuringWindUp: 0,
+    slowDuringActive: 0,
+    radius: 0,
+    force: 0,
+    projectileSpeed: 18,
+    projectileTtl: 1.2,
+    projectileRadius: 0.55,
+    projectileImpulse: 22,
+    projectileSlowDuration: 2.0,
+    cancelAnimOnEnd: true,
+    tags: ['ranged'],
+    description: 'Throws a snowball that knocks back and slows on hit',
     ...overrides,
   };
 }
@@ -658,30 +709,28 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     }),
   ],
 
-  // Kowalski — Mage: L pushes the speed dial high while leaving mass
-  // light, so the buff reads "ranged blitzer" not "tank". K (Arctic
-  // Burst) keeps the widest-ring/lowest-force profile from before.
+  // Kowalski — Mage: K is a real frontal SNOWBALL projectile (v0.11
+  // final-K, 2026-04-29). Travels along the facing direction, applies
+  // 50 % slow + knockback on hit, despawns on hit or 1.2 s ttl.
+  // Replaces the v0.10 Arctic Burst radial AoE — Rafa: "debe ser
+  // bola de nieve, no AoE radial".
   Kowalski: [
     makeChargeRush({
       name: 'Ice Slide', description: 'Slides forward on an ice trail',
       impulse: 19, duration: 0.30, cooldown: 4.2,
       speedMultiplier: 2.4, massMultiplier: 1.5,
     }),
-    makeGroundPound({
-      name: 'Arctic Burst',
-      description: 'Wide blast — leaves icy ground that slows',
-      radius: 5.0, force: 20, windUp: 0.4, cooldown: 7.0,
-      slowDuringActive: 0, cancelAnimOnEnd: true,
-      // Icy patch: shorter than Kermit's fog (1.6 s vs 2.0 s) but
-      // a touch deeper slow (0.55 vs 0.60). Reads as "ranged zoner"
-      // with ice instead of toxic.
-      zone: {
-        radius: 5.0,
-        duration: 1.6,
-        slowMultiplier: 0.55,
-        color: 0x6cc9ff,
-        secondary: 0xffffff,
-      },
+    makeProjectile({
+      name: 'Snowball',
+      description: 'Frontal snowball — knocks back and freezes the target',
+      cooldown: 5.5,
+      windUp: 0.20,
+      duration: 0.05,
+      projectileSpeed: 18,
+      projectileTtl: 1.2,
+      projectileRadius: 0.55,
+      projectileImpulse: 22,
+      projectileSlowDuration: 2.0,
     }),
     makeFrenzy({
       name: 'Blizzard',
@@ -703,14 +752,18 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // v0.11 (Rafa: "al aparecer debe provocar empuje fuerte"):
       // se mantiene blink + se añade impact knockback radial en
       // destino para los enemigos cercanos a donde aparece Cheeto.
+      // 2026-04-29 K-session bump (Rafa: "ajustar force/radius si
+      // ya existe pero se siente débil"): radius 2.2 → 2.6, force
+      // 28 → 36. Lectura "el aterrizaje empuja fuerte" sin entrar
+      // en zona de Sergei Shockwave (3.5 / 34).
       name: 'Shadow Step',
       description: 'Blink forward — burst pushes nearby enemies',
       blinkDistance: 4.5,
       cooldown: 5.5,
       windUp: 0.06,
       duration: 0.10,
-      blinkImpactRadius: 2.2,
-      blinkImpactForce: 28,
+      blinkImpactRadius: 2.6,
+      blinkImpactForce: 36,
     }),
     makeFrenzy({
       name: 'Tiger Rage',
@@ -942,6 +995,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       radius: def.zone.radius,
       slowMultiplier: def.zone.slowMultiplier,
       ttl: def.zone.duration,
+      vfxKind: deriveZoneVfxKind(critter.config.name),
     });
     spawnZoneRing(scene, critter.x, critter.z, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary);
   }
@@ -962,15 +1016,40 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
 // `clearActiveZones()` is called on phase transitions so zones from a
 // previous match never leak into the next one.
 
+/**
+ * Cosmetic kind for a slow zone. Lets per-zone visual layers — like
+ * the local Kermit Poison Cloud overlay — distinguish the K-source
+ * without re-deriving from radius/slowMultiplier (which is fragile).
+ *   · 'poison' — Kermit Poison Cloud (triggers screen-space toxic
+ *                vignette overlay when the local critter is inside)
+ *   · 'sand'   — Sihans Burrow quicksand
+ *   · 'ice'    — Kowalski Arctic Burst
+ *   · 'generic' — fallback for any other critter that drops a zone
+ */
+export type ZoneVfxKind = 'poison' | 'sand' | 'ice' | 'generic';
+
 interface ActiveZone {
   x: number;
   z: number;
   radius: number;
   slowMultiplier: number;
   ttl: number;
+  vfxKind?: ZoneVfxKind;
 }
 
 const activeZones: ActiveZone[] = [];
+
+/** Map a critter name to the zone visual kind they spawn. Centralised
+ *  so offline (`fireGroundPound`/`fireBlink`) and online
+ *  (`pushNetworkZone` from server `zoneSpawned`) classify the same
+ *  way. New K zones with their own visual layer get a new branch
+ *  here + a new screen-space hook on the consumer side. */
+export function deriveZoneVfxKind(critterName: string): ZoneVfxKind {
+  if (critterName === 'Kermit') return 'poison';
+  if (critterName === 'Sihans') return 'sand';
+  if (critterName === 'Kowalski') return 'ice';
+  return 'generic';
+}
 
 /** Tick all live zones forward, removing expired entries. Called from
  *  the offline gameplay loop after physics update. */
@@ -991,6 +1070,20 @@ export function clearActiveZones(): void {
  *  lookup path serves both modes. */
 export function pushNetworkZone(z: ActiveZone): void {
   activeZones.push({ ...z });
+}
+
+/** True if the given world point is inside any active zone of the
+ *  given vfxKind. Used by game.ts each frame to drive the local
+ *  Kermit Poison Cloud screen-space overlay (`vfxKind: 'poison'`).
+ *  Cheap O(zones) — typically <= 4 zones alive at once. */
+export function isInsideZoneOfKind(x: number, z: number, kind: ZoneVfxKind): boolean {
+  for (const zone of activeZones) {
+    if (zone.vfxKind !== kind) continue;
+    const dx = x - zone.x;
+    const dz = z - zone.z;
+    if (dx * dx + dz * dz <= zone.radius * zone.radius) return true;
+  }
+  return false;
 }
 
 /** Compound slow multiplier from every active zone the point is inside.
@@ -1067,8 +1160,33 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
       radius: def.zone.radius,
       slowMultiplier: def.zone.slowMultiplier,
       ttl: def.zone.duration,
+      vfxKind: deriveZoneVfxKind(critter.config.name),
     });
     spawnZoneRing(scene, zx, zz, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary);
+  }
+  // 2026-04-29 K-session — Burrow visual (Sihans). When the blink
+  // is configured with `zoneAtOrigin: true` we treat it as the
+  // Burrow Rush K (only Sihans uses that flag) and:
+  //   · ghost the critter for 0.30 s (handled in critter.updateVisuals,
+  //     where Sihans' invisibilityTimer collapses opacity to 0 instead
+  //     of the 0.25 ghost used by Kurama Mirror Trick),
+  //   · spawn an extra ring of dust-puffs at both origin and
+  //     destination so the read is "tierra explota, desaparece,
+  //     reaparece en una nube de arena".
+  // The blink itself is unchanged — gameplay-wise Sihans still
+  // teleports instantly. The visual layer just sells the burrow.
+  if (def.zoneAtOrigin) {
+    critter.invisibilityTimer = Math.max(critter.invisibilityTimer, 0.30);
+    // Origin dust burst (8 puffs in a ring around the leave point)
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      spawnDustPuff(scene, originX + Math.cos(a) * 0.5, 0, originZ + Math.sin(a) * 0.5);
+    }
+    // Destination dust burst (8 puffs as he resurfaces)
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+      spawnDustPuff(scene, targetX + Math.cos(a) * 0.5, 0, targetZ + Math.sin(a) * 0.5);
+    }
   }
   applyDashFeedback(critter);
   playSound('abilityFire');
@@ -1090,11 +1208,32 @@ function fireFrenzy(_def: AbilityDef, critter: Critter, _all: Critter[], scene: 
   playSound('abilityFire');
 }
 
+function fireProjectile(def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
+  // 2026-04-29 — Kowalski Snowball offline. Spawn a single forward
+  // projectile from the caster's facing. The projectile module
+  // owns its lifecycle (integration + sweep + despawn).
+  const speed = def.projectileSpeed ?? 16;
+  const angle = critter.mesh.rotation.y;
+  spawnLocalProjectile(scene, {
+    ownerCritterName: critter.config.name,
+    x: critter.x + Math.sin(angle) * 0.6,
+    z: critter.z + Math.cos(angle) * 0.6,
+    vx: Math.sin(angle) * speed,
+    vz: Math.cos(angle) * speed,
+    ttl: def.projectileTtl ?? 1.2,
+    radius: def.projectileRadius ?? 0.55,
+    impulse: def.projectileImpulse ?? 22,
+    slowDuration: def.projectileSlowDuration ?? 2.0,
+  });
+  applyDashFeedback(critter);
+}
+
 const EFFECT_MAP: Record<AbilityType, (def: AbilityDef, critter: Critter, all: Critter[], scene: THREE.Scene) => void> = {
   charge_rush: fireChargeRush,
   ground_pound: fireGroundPound,
   frenzy: fireFrenzy,
   blink: fireBlink,
+  projectile: fireProjectile,
 };
 
 function fireEffect(state: AbilityState, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
