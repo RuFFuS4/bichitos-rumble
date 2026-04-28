@@ -47,7 +47,7 @@ import { type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
-import { spawnShockwaveRing } from './abilities';
+import { spawnShockwaveRing, spawnFrenzyBurst, getCritterVfxPalette } from './abilities';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
 import { getPreviewPackId } from './arena-decor-layouts';
@@ -1173,6 +1173,7 @@ export class Game {
     const c = this.onlineCritters.get(ev.sessionId);
     if (!c) return;
     // Reuse offline VFX primitives for consistency
+    const palette = getCritterVfxPalette(c.config.name);
     if (ev.type === 'charge_rush') {
       applyDashFeedback(c);
       triggerCameraShake(0.15);
@@ -1180,13 +1181,21 @@ export class Game {
     } else if (ev.type === 'ground_pound') {
       // Shockwave ring at the caster's position + shake + hit stop + sound.
       // Victims' knockback comes via state sync (server applied velocity).
-      spawnShockwaveRing(this.scene, ev.x, ev.z, FEEL.groundPound.radius);
+      // Per-critter tint mirrors the offline `fireGroundPound` path so
+      // a Kowalski Arctic Burst reads as ice in BOTH offline and online.
+      spawnShockwaveRing(this.scene, ev.x, ev.z, FEEL.groundPound.radius, palette?.pound);
       triggerCameraShake(FEEL.shake.groundPound);
       triggerHitStop(FEEL.hitStop.groundPound);
       playSoundEffect('groundPound');
+    } else if (ev.type === 'frenzy') {
+      // Frenzy entry burst — server only emits this event when the buff
+      // ACTIVATES, so we get one ring per ult activation, same cadence
+      // as offline. The pulsing emissive glow is still driven by the
+      // synced `c.abilityStates[2].active` flag in updateVisuals().
+      spawnFrenzyBurst(this.scene, ev.x, ev.z, palette?.frenzy);
+      triggerCameraShake(FEEL.shake.groundPound * 0.55);
+      playSoundEffect('abilityFire');
     }
-    // frenzy VFX: the glow already comes from updateVisuals() reading
-    // c.abilityStates[2].active, which is state-synced. No extra event needed.
   }
 
   private enterEnded(result: EndResult, title: string, subtitle: string): void {

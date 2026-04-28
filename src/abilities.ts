@@ -138,6 +138,61 @@ function makeFrenzy(overrides: Partial<AbilityDef> = {}): AbilityDef {
 }
 
 // ---------------------------------------------------------------------------
+// Per-critter VFX palette
+// ---------------------------------------------------------------------------
+//
+// Cosmetic-only tints applied at fire time. None of these values reach the
+// server — gameplay (impulse, radius, force, multipliers) is fully driven
+// by the kit numbers above; this map only colours the rings + bursts so
+// each critter's signature reads at a glance instead of every shockwave
+// looking like the same generic red ring.
+//
+// Each entry can override:
+//   · `pound.color` / `pound.secondary`  — outer + inner ring of the
+//                                           ground-pound shockwave.
+//   · `pound.holdMs`                      — extends the ring's visible
+//                                           lifetime past the default
+//                                           450 ms (Kermit's "toxic
+//                                           cloud" hangs longer on
+//                                           screen).
+//   · `frenzy.color` / `frenzy.secondary` — outer + inner ring on the
+//                                           one-shot Frenzy entry burst.
+//
+// Keys missing from the map (e.g. internal bots Rojo/Azul/Verde/Morado)
+// fall back to the original red shockwave + gold-red frenzy. Adding a
+// new critter without an entry is safe — they just look "default".
+interface CritterVfxPalette {
+  pound?:  { color?: number; secondary?: number; holdMs?: number };
+  frenzy?: { color?: number; secondary?: number };
+}
+
+/**
+ * Palette lookup for a critter by display name. Returns `undefined`
+ * for unknown critters (internal bots etc.); callers must treat that
+ * as "use default colours" — the underlying VFX functions already
+ * fall back gracefully when their `opts` are undefined.
+ *
+ * Exported so the online event handler in `game.ts` can apply the
+ * same tint to the shockwave ring it spawns from server events,
+ * keeping offline and online visually identical.
+ */
+export function getCritterVfxPalette(critterName: string): CritterVfxPalette | undefined {
+  return CRITTER_VFX_PALETTE[critterName];
+}
+
+const CRITTER_VFX_PALETTE: Record<string, CritterVfxPalette> = {
+  Trunk:     { pound: { color: 0xb8762a, secondary: 0xffd089 }, frenzy: { color: 0xffaa44, secondary: 0xff7722 } }, // brown earth
+  Sergei:    { pound: { color: 0xff3322, secondary: 0xffaa44 }, frenzy: { color: 0xff5522, secondary: 0xffcc44 } }, // strong red/orange (close to default)
+  Kurama:    { pound: { color: 0xc83cff, secondary: 0xff66ee }, frenzy: { color: 0xff7733, secondary: 0xffaa66 } }, // violet/magenta — illusion
+  Shelly:    { pound: { color: 0x2dc66b, secondary: 0x6dffe2 }, frenzy: { color: 0x2d8659, secondary: 0x6ddfa9 } }, // green/cyan — shell
+  Kermit:    { pound: { color: 0x66ff44, secondary: 0x9c3cee, holdMs: 800 }, frenzy: { color: 0x9c3cee, secondary: 0x66ff44 } }, // toxic green/violet, held longer
+  Sihans:    { pound: { color: 0x9c7c3c, secondary: 0xd9c089 }, frenzy: { color: 0x8b6914, secondary: 0xc89a3c } }, // brown/sand — tremor
+  Kowalski:  { pound: { color: 0x6cc9ff, secondary: 0xffffff }, frenzy: { color: 0x88c1ff, secondary: 0xeaf6ff } }, // ice blue/white
+  Cheeto:    { pound: { color: 0xff7322, secondary: 0xffd944 }, frenzy: { color: 0xff3322, secondary: 0xffcc44 } }, // orange/red predator
+  Sebastian: { pound: { color: 0x9b1c1c, secondary: 0xff5544 }, frenzy: { color: 0xcc3333, secondary: 0xff5555 } }, // crimson
+};
+
+// ---------------------------------------------------------------------------
 // Per-critter ability sets — each critter has unique names + stats
 // ---------------------------------------------------------------------------
 
@@ -543,9 +598,10 @@ function fireChargeRush(def: AbilityDef, critter: Critter, _all: Critter[], scen
   critter.vz += Math.cos(angle) * def.impulse;
   applyDashFeedback(critter);
   // Entry burst — a small shockwave-style ring at the launch point so
-  // the dash starts with a visible "explosive go" beat. Reuses the
-  // existing shockwave VFX with a smaller radius to stay distinct from
-  // ground-pound which uses the full def.radius.
+  // the dash starts with a visible "explosive go" beat. Stays at
+  // default colours: critter identity already reads through the
+  // dust-puff trail + skeletal animation, an extra tint on the dash
+  // entry would compete with the ground-pound colour signature.
   spawnShockwaveRing(scene, critter.x, critter.z, DASH_ENTRY_BURST_RADIUS);
   playSound('abilityFire');
 }
@@ -573,7 +629,11 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   if (hitCount > 0) {
     triggerHitStop(FEEL.hitStop.groundPound);
   }
-  spawnShockwaveRing(scene, critter.x, critter.z, def.radius);
+  // Per-critter tint: each shockwave reads as the critter's element
+  // (Trunk earth, Kurama violet illusion, Kowalski ice, etc.). When
+  // no entry exists for the critter, `spawnShockwaveRing` falls back
+  // to its original red palette.
+  spawnShockwaveRing(scene, critter.x, critter.z, def.radius, CRITTER_VFX_PALETTE[critter.config.name]?.pound);
   playSound('groundPound');
 }
 
@@ -586,7 +646,9 @@ function fireFrenzy(_def: AbilityDef, critter: Critter, _all: Critter[], scene: 
   // What we DO add here: a one-shot "entry" burst so the activation
   // moment reads clearly. Without it the buff starts silently and the
   // player only realises after observing themselves move faster.
-  spawnFrenzyBurst(scene, critter.x, critter.z);
+  // Per-critter palette tints the burst so the ultimate fanfare feels
+  // owned by each character (orange tiger rage, ice blizzard, etc.).
+  spawnFrenzyBurst(scene, critter.x, critter.z, CRITTER_VFX_PALETTE[critter.config.name]?.frenzy);
   triggerCameraShake(FEEL.shake.groundPound * 0.55);
   playSound('abilityFire');
 }
@@ -706,21 +768,39 @@ export function getMassMultiplier(states: AbilityState[]): number {
 // ---------------------------------------------------------------------------
 
 /**
+ * Optional palette overrides for `spawnFrenzyBurst`. Both colours fall
+ * back to the original gold-red battle-cry palette when omitted, so
+ * existing call sites keep working without changes.
+ */
+export interface FrenzyBurstOpts {
+  /** Outer ring colour. Default `0xffaa22` (warm gold). */
+  color?: number;
+  /** Inner flash colour. Default `0xff2200` (red pop). */
+  secondary?: number;
+}
+
+/**
  * One-shot "battle cry" ring spawned at the moment Frenzy activates.
  * Smaller and more contained than a Shockwave ring — it's a self-centred
- * buff indicator, not an AoE hit. Single golden-red torus that expands
- * ~2.5m over 600ms and fades. Runs in addition to the pulsing emissive
- * glow already handled in critter.ts visual pass.
+ * buff indicator, not an AoE hit. Two concentric tori (outer expanding
+ * + inner fast flash) that scale ~2.5 m over 600 ms and fade. Runs in
+ * addition to the pulsing emissive glow already handled in critter.ts.
+ *
+ * Optional `opts` lets the caller override the palette so each critter's
+ * Frenzy reads as its own colour (Cheeto orange, Kowalski ice, Kurama
+ * violet, etc.). Omitting `opts` keeps the legacy gold-red look.
  */
-export function spawnFrenzyBurst(scene: THREE.Scene, x: number, z: number): void {
+export function spawnFrenzyBurst(scene: THREE.Scene, x: number, z: number, opts?: FrenzyBurstOpts): void {
   const duration = 600; // ms
   const startTime = performance.now();
   const maxRadius = 2.5;
+  const outerColor = opts?.color ?? 0xffaa22;
+  const innerColor = opts?.secondary ?? 0xff2200;
 
-  // Outer ring: warm gold, the "battle cry"
+  // Outer ring: critter palette colour, the "battle cry"
   const ringGeo = new THREE.TorusGeometry(0.2, 0.18, 10, 32);
   const ringMat = new THREE.MeshBasicMaterial({
-    color: 0xffaa22,
+    color: outerColor,
     transparent: true,
     opacity: 0.9,
   });
@@ -729,10 +809,10 @@ export function spawnFrenzyBurst(scene: THREE.Scene, x: number, z: number): void
   ring.position.set(x, 0.6, z);
   scene.add(ring);
 
-  // Inner flash: quick red pop at the origin
+  // Inner flash: critter palette accent — quick pop at the origin
   const flashGeo = new THREE.TorusGeometry(0.2, 0.12, 10, 32);
   const flashMat = new THREE.MeshBasicMaterial({
-    color: 0xff2200,
+    color: innerColor,
     transparent: true,
     opacity: 1.0,
   });
@@ -776,18 +856,47 @@ export function spawnFrenzyBurst(scene: THREE.Scene, x: number, z: number): void
 // ---------------------------------------------------------------------------
 
 /**
- * Spawn a dramatic shockwave at (x, z). Two concentric rings:
- *  - inner white flash that expands fast and fades quickly
- *  - outer red torus that expands to maxRadius with a thicker tube
+ * Optional palette + lifetime overrides for `spawnShockwaveRing`. Every
+ * field falls back to the original red/white shockwave look so existing
+ * callers (dash entry burst, anything that doesn't pass `opts`) keep
+ * working without changes.
  */
-export function spawnShockwaveRing(scene: THREE.Scene, x: number, z: number, maxRadius: number): void {
-  const duration = 450; // ms
-  const startTime = performance.now();
+export interface ShockwaveRingOpts {
+  /** Outer ring colour. Default `0xff3322` (red slam). */
+  color?: number;
+  /** Inner flash colour. Default `0xffffff` (white pop). */
+  secondary?: number;
+  /** Total visible lifetime in milliseconds. Default `450`. Larger
+   *  values keep the ring on screen longer — used for Kermit's Poison
+   *  Cloud (800 ms) so the wide AoE reads as a hanging toxic puff. */
+  holdMs?: number;
+}
 
-  // Outer red torus (the "slam" ring)
+/**
+ * Spawn a dramatic shockwave at (x, z). Two concentric rings:
+ *  - inner flash that expands fast and fades quickly
+ *  - outer torus that expands to maxRadius with a thicker tube
+ *
+ * Optional `opts` lets each critter tint the ring to its element + extend
+ * the lifetime for visually heavier abilities. Omit `opts` for the
+ * legacy red/white slam (still used by the dash entry burst).
+ */
+export function spawnShockwaveRing(
+  scene: THREE.Scene,
+  x: number,
+  z: number,
+  maxRadius: number,
+  opts?: ShockwaveRingOpts,
+): void {
+  const duration = opts?.holdMs ?? 450; // ms
+  const startTime = performance.now();
+  const outerColor = opts?.color ?? 0xff3322;
+  const innerColor = opts?.secondary ?? 0xffffff;
+
+  // Outer torus (the "slam" ring) — tinted per critter when provided
   const outerGeo = new THREE.TorusGeometry(0.3, 0.28, 10, 40);
   const outerMat = new THREE.MeshBasicMaterial({
-    color: 0xff3322,
+    color: outerColor,
     transparent: true,
     opacity: 0.9,
   });
@@ -796,10 +905,10 @@ export function spawnShockwaveRing(scene: THREE.Scene, x: number, z: number, max
   outer.position.set(x, 0.35, z);
   scene.add(outer);
 
-  // Inner white flash (fades faster than the outer ring)
+  // Inner flash (fades faster than the outer ring)
   const innerGeo = new THREE.TorusGeometry(0.3, 0.18, 10, 40);
   const innerMat = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
+    color: innerColor,
     transparent: true,
     opacity: 1.0,
   });
