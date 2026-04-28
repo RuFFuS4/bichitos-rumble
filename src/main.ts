@@ -283,9 +283,18 @@ const DEFAULT_CLEAR_COLOR = 0x87b0d8;
  * mood instead of reading as a flat HDRI plate.
  *
  * `roughness: 1, metalness: 0` keeps it matte (no specular highlights).
- * The world-anchored sphere fully wraps the camera at radius 80, so the
- * screen-space backdrop is never visible during a textured pack — no
- * need to toggle it.
+ *
+ * Backdrop toggle: hide the screen-space backdrop while a pack texture
+ * is active. Both backdrop (renderOrder −2) and skydome (renderOrder
+ * −1) write 0 to depth, and on some GPUs the backdrop's gradient
+ * leaks through the skydome's BackSide sphere along the steepest
+ * grazing-angle pixels (frame edges, near the projected silhouette of
+ * the sphere from off-centre camera). That leak shows up as a dark
+ * vertical seam between "skybox in centre of frame" and "void colour
+ * at edges". Hiding the backdrop while a textured skybox is up
+ * eliminates the seam — and since the world-anchored sphere fully
+ * wraps the camera, the backdrop has no useful job during a match
+ * anyway.
  */
 export function setSceneSkyboxTexture(tex: THREE.Texture | null): void {
   if (tex) {
@@ -303,10 +312,12 @@ export function setSceneSkyboxTexture(tex: THREE.Texture | null): void {
     const prev = skyDome.material;
     skyDome.material = texMat;
     if (prev !== skyMat && prev instanceof THREE.Material) prev.dispose();
+    backdrop.visible = false;
   } else {
     const prev = skyDome.material;
     skyDome.material = skyMat;
     if (prev !== skyMat && prev instanceof THREE.Material) prev.dispose();
+    backdrop.visible = true;
   }
 }
 
