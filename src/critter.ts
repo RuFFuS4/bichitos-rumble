@@ -172,6 +172,12 @@ export class Critter {
    *  read for the defensive K. */
   selfTintTimer = 0;
   selfTintHex: number | null = null;
+  /** 2026-04-29 — Kowalski Snowball hit-status. While > 0 the
+   *  critter moves at 50 % speed. Decremented in update(dt). Mirror
+   *  of `PlayerSchema.slowTimer` so offline + online behave the
+   *  same. Set by `tickProjectiles` on hit (offline) or by the
+   *  online state patch (server is authoritative there). */
+  slowTimer = 0;
   falling = false;            // true while falling off arena (waiting to respawn)
   private respawnTimer = 0;
   headbuttCooldown = 0;
@@ -365,12 +371,13 @@ export class Critter {
   get effectiveSpeed(): number {
     // Active abilities (charge_rush boost, frenzy buff, K root, blink
     // root) × any slow zones the critter is currently standing inside
-    // (Kermit Poison Cloud, Kowalski Arctic Burst). Zones come from
-    // both offline activations (pushed in `fireGroundPound`) and
-    // online server `zoneSpawned` events (`pushNetworkZone`).
-    return this.config.speed *
+    // (Kermit Poison Cloud, Kowalski Arctic Burst — formerly, now Sihans
+    // Quicksand) × the Snowball hit-slow status (50 % while > 0).
+    let s = this.config.speed *
       getSpeedMultiplier(this.abilityStates) *
       getZoneSlowMultiplier(this.x, this.z);
+    if (this.slowTimer > 0) s *= 0.5;
+    return s;
   }
 
   get effectiveMass(): number {
@@ -423,6 +430,8 @@ export class Critter {
       this.selfTintTimer -= dt;
       if (this.selfTintTimer <= 0) this.selfTintHex = null;
     }
+    // 2026-04-29 — Snowball hit-slow status countdown.
+    if (this.slowTimer > 0) this.slowTimer = Math.max(0, this.slowTimer - dt);
 
     // Headbutt cooldown
     if (this.headbuttCooldown > 0) this.headbuttCooldown -= dt;

@@ -275,5 +275,9 @@ export function effectiveSpeed(p: PlayerSchema, activeZones: readonly ActiveZone
       s *= zone.slowMultiplier;
     }
   }
+  // 2026-04-29 — Hit-driven slow status (Kowalski Snowball impact).
+  // Decremented in BrawlRoom each tick. While > 0 the player moves at
+  // 50 % normal speed.
+  if (p.slowTimer > 0) s *= 0.5;
   return s;
 }

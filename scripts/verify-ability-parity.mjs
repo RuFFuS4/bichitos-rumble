@@ -53,8 +53,11 @@ const expected = {
     L: { dur: 4.5, CD: 20.0, wU: 0.40, spd: 1.15, mass: 1.50 },
   },
   Kowalski:  {
-    K: { kind: 'pound', rad: 5.0, frc: 20, wU: 0.4, CD: 7.0,
-         zone: { rad: 5.0, dur: 1.6, slow: 0.55 } },
+    // 2026-04-29 K-session — Kowalski K is now a real frontal
+    // SNOWBALL projectile. Replaces the v0.10 Arctic Burst radial
+    // AoE.
+    K: { kind: 'projectile', wU: 0.20, CD: 5.5,
+         projectile: { speed: 18, ttl: 1.2, radius: 0.55, impulse: 22, slowDur: 2.0 } },
     L: { dur: 3.0, CD: 17.0, wU: 0.40, spd: 1.40, mass: 1.10 },
   },
   Cheeto:    {
@@ -143,6 +146,35 @@ for (const [name, e] of Object.entries(expected)) {
       if (tag === 'FAIL') ok = false;
       console.log(`${name.padEnd(10)} K  selfBuff immunity      cli ${cliImm}  srv ${srvImm}  ${tag}`);
     }
+  } else if (e.K.kind === 'projectile') {
+    // 2026-04-29 — Kowalski Snowball. Cliente uses makeProjectile,
+    // server uses type: 'projectile'. Compare per-field.
+    const cliPS = pickFirst(cliBlock, /makeProjectile\(\{[\s\S]*?projectileSpeed:\s*([\d.]+)/);
+    const cliPT = pickFirst(cliBlock, /makeProjectile\(\{[\s\S]*?projectileTtl:\s*([\d.]+)/);
+    const cliPR = pickFirst(cliBlock, /makeProjectile\(\{[\s\S]*?projectileRadius:\s*([\d.]+)/);
+    const cliPI = pickFirst(cliBlock, /makeProjectile\(\{[\s\S]*?projectileImpulse:\s*([\d.]+)/);
+    const cliPSlow = pickFirst(cliBlock, /makeProjectile\(\{[\s\S]*?projectileSlowDuration:\s*([\d.]+)/);
+    const cliWU = pickFirst(cliBlock, /makeProjectile\(\{[\s\S]*?windUp:\s*([\d.]+)/);
+    const cliCD = pickFirst(cliBlock, /makeProjectile\(\{[\s\S]*?cooldown:\s*([\d.]+)/);
+    const srvPS = pickFirst(srvBlock, /type:\s*'projectile'[\s\S]*?projectileSpeed:\s*([\d.]+)/);
+    const srvPT = pickFirst(srvBlock, /type:\s*'projectile'[\s\S]*?projectileTtl:\s*([\d.]+)/);
+    const srvPR = pickFirst(srvBlock, /type:\s*'projectile'[\s\S]*?projectileRadius:\s*([\d.]+)/);
+    const srvPI = pickFirst(srvBlock, /type:\s*'projectile'[\s\S]*?projectileImpulse:\s*([\d.]+)/);
+    const srvPSlow = pickFirst(srvBlock, /type:\s*'projectile'[\s\S]*?projectileSlowDuration:\s*([\d.]+)/);
+    const srvWU = pickFirst(srvBlock, /type:\s*'projectile'[\s\S]*?windUp:\s*([\d.]+)/);
+    const srvCD = pickFirst(srvBlock, /type:\s*'projectile',\s*cooldown:\s*([\d.]+)/);
+    const same =
+      cliPS === srvPS && cliPT === srvPT && cliPR === srvPR &&
+      cliPI === srvPI && cliPSlow === srvPSlow &&
+      cliWU === srvWU && cliCD === srvCD;
+    const matches =
+      cliPS === e.K.projectile.speed && cliPT === e.K.projectile.ttl &&
+      cliPR === e.K.projectile.radius && cliPI === e.K.projectile.impulse &&
+      cliPSlow === e.K.projectile.slowDur &&
+      cliWU === e.K.wU && cliCD === e.K.CD;
+    const tag = same && matches ? 'OK' : 'FAIL';
+    if (tag === 'FAIL') ok = false;
+    console.log(`${name.padEnd(10)} K  proj spd/ttl/rad/imp/slow/wU/CD  cli ${cliPS}/${cliPT}/${cliPR}/${cliPI}/${cliPSlow}/${cliWU}/${cliCD}  srv ${srvPS}/${srvPT}/${srvPR}/${srvPI}/${srvPSlow}/${srvWU}/${srvCD}  ${tag}`);
   } else if (e.K.kind === 'blink') {
     // Cliente: blinkDistance can appear before or after cooldown — match field-by-field.
     const cliBlinkDist = pickFirst(cliBlock, /makeBlink\(\{[\s\S]*?blinkDistance:\s*([\d.]+)/);

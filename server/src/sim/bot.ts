@@ -93,7 +93,18 @@ export function computeBotInput(bot: PlayerSchema, allPlayers: PlayerSchema[]): 
   // 0.02 per frame ≈ ~40% chance/sec to actually fire while in the window.
   const ability1 =
     nearestDist > 3.0 && nearestDist < 6.0 && Math.random() < 0.02;
-  const ability2 = nearbyCount >= 2 && Math.random() < 0.015;
+  // 2026-04-29 K-session — Kowalski Snowball reuses the ability2
+  // slot (server kit index 1). The bot fires it as a ranged tool
+  // when the target is in the snowball's effective lane (4..14 u).
+  // Other critters' ability2 (ground_pound / blink / steel_shell)
+  // still fire on the surrounded-2-enemies condition. The server
+  // dispatcher resolves the actual type per kit.
+  let ability2: boolean;
+  if (bot.critterName === 'Kowalski') {
+    ability2 = nearestDist > 4.0 && nearestDist < 14.0 && Math.random() < 0.022;
+  } else {
+    ability2 = nearbyCount >= 2 && Math.random() < 0.015;
+  }
   const ultimate = false; // conservative: let bots not spam ultimates online
 
   return { moveX, moveZ, headbutt, ability1, ability2, ultimate };

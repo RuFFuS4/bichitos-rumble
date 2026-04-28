@@ -3,12 +3,13 @@ import type { Critter } from './critter';
 import { triggerHitStop, triggerCameraShake, applyDashFeedback, applyLandingFeedback, applyImpactFeedback, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
 import { spawnDustPuff } from './dust-puff';
+import { spawnLocalProjectile } from './projectiles';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy' | 'blink';
+export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy' | 'blink' | 'projectile';
 
 /**
  * Semantic tags attached to an ability definition. The bot AI (and any
@@ -29,7 +30,8 @@ export type AbilityTag =
   | 'targeted'
   | 'defensive'
   | 'utility'
-  | 'risky';
+  | 'risky'
+  | 'ranged';
 
 export interface AbilityDef {
   type: AbilityType;
@@ -151,6 +153,21 @@ export interface AbilityDef {
    *  alpha override on the mesh + spawns a static decoy clone at
    *  the origin position. */
   invisibilityDuration?: number;
+
+  // --- 2026-04-29 K-session: projectile additions (Kowalski Snowball) ---
+  /** Forward speed of the projectile (units / second). */
+  projectileSpeed?: number;
+  /** Lifetime in seconds before the projectile despawns if it hasn't
+   *  hit anything yet. */
+  projectileTtl?: number;
+  /** Sphere radius for both visual scale and sweep collision against
+   *  critter capsules. */
+  projectileRadius?: number;
+  /** Knockback impulse along the projectile's facing direction at
+   *  impact. */
+  projectileImpulse?: number;
+  /** Status-slow duration applied to the victim on hit. */
+  projectileSlowDuration?: number;
 }
 
 export interface AbilityState {
@@ -244,6 +261,40 @@ function makeBlink(overrides: Partial<AbilityDef> = {}): AbilityDef {
     cancelAnimOnEnd: true,
     tags: ['mobility'],
     description: 'Short blink in facing direction',
+    ...overrides,
+  };
+}
+
+/**
+ * Snowball — frontal projectile (Kowalski K, 2026-04-29).
+ * Server-authoritative: server tracks position, sweeps collision,
+ * applies knockback + slowTimer on hit, and broadcasts spawn / hit /
+ * expired events. Offline mirror lives in `src/projectiles.ts` and
+ * runs the same straight-line + sweep step.
+ */
+function makeProjectile(overrides: Partial<AbilityDef> = {}): AbilityDef {
+  return {
+    type: 'projectile',
+    name: 'Snowball',
+    key: 'K',
+    cooldown: 5.5,
+    duration: 0.05,
+    windUp: 0.20,
+    speedMultiplier: 1.0,
+    massMultiplier: 1.0,
+    impulse: 0,
+    slowDuringWindUp: 0,
+    slowDuringActive: 0,
+    radius: 0,
+    force: 0,
+    projectileSpeed: 18,
+    projectileTtl: 1.2,
+    projectileRadius: 0.55,
+    projectileImpulse: 22,
+    projectileSlowDuration: 2.0,
+    cancelAnimOnEnd: true,
+    tags: ['ranged'],
+    description: 'Throws a snowball that knocks back and slows on hit',
     ...overrides,
   };
 }
@@ -658,30 +709,28 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     }),
   ],
 
-  // Kowalski — Mage: L pushes the speed dial high while leaving mass
-  // light, so the buff reads "ranged blitzer" not "tank". K (Arctic
-  // Burst) keeps the widest-ring/lowest-force profile from before.
+  // Kowalski — Mage: K is a real frontal SNOWBALL projectile (v0.11
+  // final-K, 2026-04-29). Travels along the facing direction, applies
+  // 50 % slow + knockback on hit, despawns on hit or 1.2 s ttl.
+  // Replaces the v0.10 Arctic Burst radial AoE — Rafa: "debe ser
+  // bola de nieve, no AoE radial".
   Kowalski: [
     makeChargeRush({
       name: 'Ice Slide', description: 'Slides forward on an ice trail',
       impulse: 19, duration: 0.30, cooldown: 4.2,
       speedMultiplier: 2.4, massMultiplier: 1.5,
     }),
-    makeGroundPound({
-      name: 'Arctic Burst',
-      description: 'Wide blast — leaves icy ground that slows',
-      radius: 5.0, force: 20, windUp: 0.4, cooldown: 7.0,
-      slowDuringActive: 0, cancelAnimOnEnd: true,
-      // Icy patch: shorter than Kermit's fog (1.6 s vs 2.0 s) but
-      // a touch deeper slow (0.55 vs 0.60). Reads as "ranged zoner"
-      // with ice instead of toxic.
-      zone: {
-        radius: 5.0,
-        duration: 1.6,
-        slowMultiplier: 0.55,
-        color: 0x6cc9ff,
-        secondary: 0xffffff,
-      },
+    makeProjectile({
+      name: 'Snowball',
+      description: 'Frontal snowball — knocks back and freezes the target',
+      cooldown: 5.5,
+      windUp: 0.20,
+      duration: 0.05,
+      projectileSpeed: 18,
+      projectileTtl: 1.2,
+      projectileRadius: 0.55,
+      projectileImpulse: 22,
+      projectileSlowDuration: 2.0,
     }),
     makeFrenzy({
       name: 'Blizzard',
@@ -1159,11 +1208,32 @@ function fireFrenzy(_def: AbilityDef, critter: Critter, _all: Critter[], scene: 
   playSound('abilityFire');
 }
 
+function fireProjectile(def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
+  // 2026-04-29 — Kowalski Snowball offline. Spawn a single forward
+  // projectile from the caster's facing. The projectile module
+  // owns its lifecycle (integration + sweep + despawn).
+  const speed = def.projectileSpeed ?? 16;
+  const angle = critter.mesh.rotation.y;
+  spawnLocalProjectile(scene, {
+    ownerCritterName: critter.config.name,
+    x: critter.x + Math.sin(angle) * 0.6,
+    z: critter.z + Math.cos(angle) * 0.6,
+    vx: Math.sin(angle) * speed,
+    vz: Math.cos(angle) * speed,
+    ttl: def.projectileTtl ?? 1.2,
+    radius: def.projectileRadius ?? 0.55,
+    impulse: def.projectileImpulse ?? 22,
+    slowDuration: def.projectileSlowDuration ?? 2.0,
+  });
+  applyDashFeedback(critter);
+}
+
 const EFFECT_MAP: Record<AbilityType, (def: AbilityDef, critter: Critter, all: Critter[], scene: THREE.Scene) => void> = {
   charge_rush: fireChargeRush,
   ground_pound: fireGroundPound,
   frenzy: fireFrenzy,
   blink: fireBlink,
+  projectile: fireProjectile,
 };
 
 function fireEffect(state: AbilityState, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {

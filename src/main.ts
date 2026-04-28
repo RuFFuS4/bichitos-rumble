@@ -16,6 +16,7 @@ import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 import { initOnlineBeltToast } from './online-belt-toast';
 import { updateDustPuffs } from './dust-puff';
 import { tickAbilityZones, isInsideZoneOfKind } from './abilities';
+import { tickProjectiles } from './projectiles';
 import { getPreviewPackId } from './arena-decor-layouts';
 
 // ---------------------------------------------------------------------------
@@ -422,10 +423,16 @@ function loop(now: number) {
   // menu and look like gameplay never actually froze.
   if (!game.isPaused()) {
     updateDustPuffs(dt);
-    // Ability zones (Kermit Poison Cloud, Kowalski Arctic Burst).
-    // Same gating as dust puffs — pause should freeze the slow-zone
-    // timer too so a zone doesn't quietly expire while the menu is up.
+    // Ability zones (Kermit Poison Cloud, Sihans Quicksand, Kowalski
+    // legacy Arctic Burst). Same gating as dust puffs — pause should
+    // freeze the slow-zone timer too so a zone doesn't quietly expire
+    // while the menu is up.
     tickAbilityZones(dt);
+    // 2026-04-29 K-session — Kowalski Snowball projectile tick.
+    // Integrates position + sweeps collision (offline) or just
+    // advances the visual mesh (online; collision is server-driven).
+    // Same pause gating as zones: pause freezes the bullets.
+    tickProjectiles(dt, game.getActiveCritters());
     // 2026-04-29 K-session — Kermit Poison Cloud screen-space overlay.
     // The local critter inside any 'poison'-kind zone gets a CSS
     // toxic-green vignette overlay. CSS handles the fade in/out via

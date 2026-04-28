@@ -116,6 +116,22 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
     }
   }
 
+  // --- Ranged ability (Kowalski Snowball): fire frontally when an
+  //     enemy is in the projectile's effective lane. The snowball
+  //     travels ~21.6 u (1.2 s × 18 u/s) so a 4..14 u target band
+  //     covers the realistic hit window. The bot doesn't lead the
+  //     target — server clamp is short enough that a moving target
+  //     can dodge anyway.
+  const rangedAbility = findAbilityByTag(bot.abilityStates, 'ranged');
+  if (rangedAbility && canActivateAbility(rangedAbility) && nearestDist > 4 && nearestDist < 14) {
+    // Cone gate: only fire if the target is roughly in front of us
+    // (within ±35° of our movement vector). nx,nz already point at
+    // the target, so we just need to face it before firing.
+    if (Math.random() < 0.022 * aggroMul) {
+      activateAbility(rangedAbility, bot);
+    }
+  }
+
   // --- Buff ability (e.g. Frenzy): activate when close to an enemy
   const buffAbility = findAbilityByTag(bot.abilityStates, 'buff');
   if (buffAbility && canActivateAbility(buffAbility) && nearestDist < 3.5) {

@@ -40,7 +40,8 @@ import {
 } from './portal';
 import type { Room } from 'colyseus.js';
 import { getStateCallbacks } from 'colyseus.js';
-import { sendInput, onAbilityFired, onBeltChanged, onZoneSpawned, type AbilityFiredEvent } from './network';
+import { sendInput, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, type AbilityFiredEvent } from './network';
+import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
 import { type OnlineIdentity } from './online-identity';
@@ -49,6 +50,7 @@ import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefee
 import { play as playSoundEffect } from './audio';
 import { spawnShockwaveRing, spawnFrenzyBurst, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing, deriveZoneVfxKind } from './abilities';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
+import { clearProjectiles } from './projectiles';
 import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
 import { getPreviewPackId } from './arena-decor-layouts';
 
@@ -396,6 +398,7 @@ export class Game {
     this.countdownDrops.clear();
     clearDustPuffs();
     clearActiveZones();
+    clearProjectiles();
     // Rebuild the idle background critters the title expects. enterOnline
     // disposes them, so we must restore them when returning to title.
     if (this.critters.length === 0) {
@@ -795,6 +798,27 @@ export class Game {
     // the authority, but mirroring locally avoids a state-sync wobble
     // when the player's input drives them into a zone they "see"
     // before the next position patch arrives.
+    // 2026-04-29 K-session — Kowalski Snowball projectile broadcasts.
+    // Server is authoritative: spawn on `projectileSpawned`, despawn
+    // (with impact VFX) on `projectileHit`, fade quietly on
+    // `projectileExpired`. Local integration in tickProjectiles is
+    // visual-only — server still owns collision + slowTimer write.
+    onProjectileSpawned(room, (ev) => {
+      pushNetworkProjectile(this.scene, {
+        id: ev.id,
+        ownerSid: ev.ownerSid,
+        ownerCritterName: ev.ownerCritter,
+        x: ev.x, z: ev.z, vx: ev.vx, vz: ev.vz,
+        ttl: ev.ttl, radius: ev.radius,
+      });
+    });
+    onProjectileHit(room, (ev) => {
+      removeProjectile(ev.id, /*withImpact*/ true);
+    });
+    onProjectileExpired(room, (ev) => {
+      removeProjectile(ev.id, /*withImpact*/ false);
+    });
+
     onZoneSpawned(room, (ev) => {
       // Render — colour comes from the caster's pound palette so
       // online and offline match visually.
@@ -986,6 +1010,12 @@ export class Game {
       c.mesh.position.y = p.fallY ?? 0;
       c.mesh.visible = c.alive;
       c.immunityTimer = p.immunityTimer ?? 0;
+      // 2026-04-29 — Snowball hit-slow status. Server writes
+      // `slowTimer` on hit and decrements each tick; mirroring it
+      // here lets `effectiveSpeed` apply the 50 % slow on every
+      // remote critter's prediction path so they don't appear to
+      // move at full speed locally while the server is slowing them.
+      c.slowTimer = p.slowTimer ?? 0;
       c.isHeadbutting = !!p.isHeadbutting;
       (c as any).headbuttAnticipating = !!p.headbuttAnticipating;
       c.lives = p.lives ?? 3;
@@ -1753,6 +1783,18 @@ export class Game {
     const p = this.player;
     if (!p) return null;
     return { x: p.x, z: p.z, alive: !!p.alive, critterName: p.config?.name ?? '?' };
+  }
+
+  /**
+   * Snapshot of every active critter for systems that operate on the
+   * full set independently of who's local (e.g. projectile sweep
+   * collision in `tickProjectiles`). Returns the offline `critters`
+   * array during ingame, or the values of `onlineCritters` while
+   * online. Empty during menu / title.
+   */
+  public getActiveCritters(): Critter[] {
+    if (this.phase === 'online') return [...this.onlineCritters.values()];
+    return this.critters;
   }
 
   // -------------------------------------------------------------------------
