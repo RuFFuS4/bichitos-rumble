@@ -77,10 +77,19 @@ export function resolveCollisions(
         const massA = effectiveMass(a);
         const massB = effectiveMass(b);
 
-        // Knockback force — headbutt multiplies. Use the attacker's config.
+        // Knockback force — headbutt multiplies, plus per-critter
+        // headbuttBoost (v0.11) for the characters Rafa marked
+        // "needs more punch": Sergei 1.15, Kowalski 1.20, Cheeto
+        // 1.30, Sebastian 1.45. Defaults 1.0 (other critters
+        // unchanged).
         let force = SIM.collision.normalPushForce;
-        if (a.isHeadbutting) force = aCfg.headbuttForce * SIM.collision.headbuttMultiplier;
-        else if (b.isHeadbutting) force = bCfg.headbuttForce * SIM.collision.headbuttMultiplier;
+        if (a.isHeadbutting) {
+          const boost = aCfg.headbuttBoost ?? 1.0;
+          force = aCfg.headbuttForce * SIM.collision.headbuttMultiplier * boost;
+        } else if (b.isHeadbutting) {
+          const boost = bCfg.headbuttBoost ?? 1.0;
+          force = bCfg.headbuttForce * SIM.collision.headbuttMultiplier * boost;
+        }
 
         const ratioA = massB / (massA + massB);
         const ratioB = massA / (massA + massB);

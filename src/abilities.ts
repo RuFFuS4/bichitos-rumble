@@ -137,6 +137,12 @@ function makeChargeRush(overrides: Partial<AbilityDef> = {}): AbilityDef {
     force: 0,
     tags: ['mobility'],
     description: 'Frontal dash that pushes enemies',
+    // v0.11: every J slot cuts its skeletal clip back to idle/run
+    // when the dash window closes. Authored clips are usually 1–2 s
+    // long but the gameplay dash is 0.24–0.45 s — without this the
+    // critter kept swinging / leaping / scuttling well after the
+    // physics was done.
+    cancelAnimOnEnd: true,
     ...overrides,
   };
 }

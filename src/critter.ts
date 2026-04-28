@@ -31,6 +31,16 @@ export interface CritterConfig {
   headbuttForce: number;
   /** Seconds between consecutive headbutts. Falls back to FEEL.headbutt.cooldown. */
   headbuttCooldown?: number;
+  /** v0.11: per-critter feedback boost on the headbutt connect. The
+   *  headbuttForce above already governs the raw knockback delta;
+   *  `headbuttBoost` is a secondary modifier that scales the FEEL
+   *  shake amplitude + a small impulse bonus when this critter's
+   *  headbutt LANDS. Default 1.0 (no bonus). Used to differentiate
+   *  characters whose cabezazo Rafa marked as "needs more punch":
+   *  Sebastian gets the loudest bonus, Cheeto a quick-hit bonus,
+   *  Sergei + Kowalski a moderate one. Trunk / Kurama / Shelly /
+   *  Kermit / Sihans stay at 1.0 — Rafa marked them OK or perfect. */
+  headbuttBoost?: number;
   role: string;           // short label for identity (e.g. "Balanced")
   tagline: string;        // one-line description for character select
 }
@@ -69,6 +79,7 @@ export const CRITTER_PRESETS: CritterConfig[] = [
   {
     ...deriveCritterStats('Sergei'),
     name: 'Sergei', color: 0xb5651d,
+    headbuttBoost: 1.15,
     role: 'Balanced',
     tagline: 'Strong and agile. No weakness.',
   },
@@ -105,18 +116,21 @@ export const CRITTER_PRESETS: CritterConfig[] = [
   { // Mage — widest AoE radius, lowest force (area denial, not burst).
     ...deriveCritterStats('Kowalski'),
     name: 'Kowalski', color: 0x1a1a3e,
+    headbuttBoost: 1.20,
     role: 'Mage',
     tagline: 'Calculated ranged threat.',
   },
   { // Assassin — fastest dash, mini AoE, fragile.
     ...deriveCritterStats('Cheeto'),
     name: 'Cheeto', color: 0xffaa22,
+    headbuttBoost: 1.30,
     role: 'Assassin',
     tagline: 'Swift and lethal.',
   },
   { // Glass Cannon — tiny AoE with massive force, high headbutt.
     ...deriveCritterStats('Sebastian'),
     name: 'Sebastian', color: 0xcc3333,
+    headbuttBoost: 1.45,
     role: 'Glass Cannon',
     tagline: 'One giant claw. All in.',
   },
@@ -563,12 +577,24 @@ export class Critter {
     this.head.position.y = BODY_RADIUS * 2 + HEAD_RADIUS * 0.6 + headOffsetY;
 
     // --- Immunity blink ---
+    // v0.11 Sergei mesh-bug fix: toggle `material.transparent`
+    // dynamically. Forcing every GLB material to `transparent: true`
+    // at attach time (so the blink can fade them) leaves the alpha-
+    // sort path active even when opacity == 1.0; on multi-submesh
+    // skinned models like Sergei this caused random parts to render
+    // behind/through each other ("the gorilla becomes see-through in
+    // patches"). Keeping `transparent` opaque except during the
+    // actual blink window avoids the sort entirely the rest of the
+    // time and costs nothing — the blink path still flips it back to
+    // transparent for as long as opacity < 1.
     if (this.immunityTimer > 0) {
       const phase = (Date.now() * 0.001 * FEEL.lives.blinkRate) % 1;
       const visible = phase < 0.5;
       const opacity = visible ? 1.0 : 0.15;
       for (const mat of mats) {
+        mat.transparent = !visible;     // opaque on the bright frame, transparent on the dim frame
         mat.opacity = opacity;
+        mat.depthWrite = visible;       // skinned-mesh sort safety: keep depth writes on for the opaque frame
         if (visible) {
           mat.emissive.setHex(0xffffff);
           mat.emissiveIntensity = 0.8;
@@ -576,7 +602,9 @@ export class Critter {
       }
     } else {
       for (const mat of mats) {
+        mat.transparent = false;
         mat.opacity = 1.0;
+        mat.depthWrite = true;
       }
     }
   }

@@ -34,10 +34,21 @@ export function resolveCollisions(critters: Critter[]): void {
         // No knockback during immunity — only separation
         if (eitherImmune) continue;
 
-        // Knockback force — reads from centralized FEEL config
+        // Knockback force — reads from centralized FEEL config.
+        // v0.11: per-critter `headbuttBoost` multiplies BOTH the
+        // raw force (more knockback on the target) and the camera
+        // shake amplitude (more punch on the screen). Default 1.0 →
+        // unchanged for the critters Rafa marked as OK; >1 for
+        // Sergei / Kowalski / Cheeto / Sebastian.
         let force = FEEL.collision.normalPushForce;
-        if (a.isHeadbutting) force = a.config.headbuttForce * FEEL.collision.headbuttMultiplier;
-        else if (b.isHeadbutting) force = b.config.headbuttForce * FEEL.collision.headbuttMultiplier;
+        let boost = 1.0;
+        if (a.isHeadbutting) {
+          boost = a.config.headbuttBoost ?? 1.0;
+          force = a.config.headbuttForce * FEEL.collision.headbuttMultiplier * boost;
+        } else if (b.isHeadbutting) {
+          boost = b.config.headbuttBoost ?? 1.0;
+          force = b.config.headbuttForce * FEEL.collision.headbuttMultiplier * boost;
+        }
 
         const massRatioA = b.effectiveMass / (a.effectiveMass + b.effectiveMass);
         const massRatioB = a.effectiveMass / (a.effectiveMass + b.effectiveMass);
@@ -48,7 +59,7 @@ export function resolveCollisions(critters: Critter[]): void {
           a.vx -= nx * force * FEEL.headbutt.recoilFactor;
           a.vz -= nz * force * FEEL.headbutt.recoilFactor;
           triggerHitStop(FEEL.hitStop.headbutt);
-          triggerCameraShake(FEEL.shake.headbutt);
+          triggerCameraShake(FEEL.shake.headbutt * boost);
           applyImpactFeedback(b);
           playSound('headbuttHit');
           // Badge aggregation: count the hit on the receiver. Used by
@@ -60,7 +71,7 @@ export function resolveCollisions(critters: Critter[]): void {
           b.vx += nx * force * FEEL.headbutt.recoilFactor;
           b.vz += nz * force * FEEL.headbutt.recoilFactor;
           triggerHitStop(FEEL.hitStop.headbutt);
-          triggerCameraShake(FEEL.shake.headbutt);
+          triggerCameraShake(FEEL.shake.headbutt * boost);
           applyImpactFeedback(a);
           playSound('headbuttHit');
           a.matchStats.hitsReceived++;

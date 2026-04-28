@@ -90,6 +90,12 @@ export interface CritterConfigServer {
   speed: number;
   mass: number;
   headbuttForce: number;
+  /** Per-critter feedback boost on headbutt connect (v0.11). Mirrors
+   *  the client's `CritterConfig.headbuttBoost`. Default 1.0. Server
+   *  reads this in `physics.resolveCollisions` to scale the knockback
+   *  force when this critter's headbutt connects, so online and
+   *  offline match feel identical for the buffed cabezazos. */
+  headbuttBoost?: number;
   radius: number;
 }
 
@@ -97,21 +103,24 @@ export interface CritterConfigServer {
 // edit pws-stats.ts (both client + server copies) — this table just
 // composes the derived speed/mass/headbuttForce with the per-critter
 // collision radius.
-function serverConfig(name: string): CritterConfigServer {
+function serverConfig(name: string, headbuttBoost?: number): CritterConfigServer {
   const d = deriveCritterStats(name);
-  return { name, speed: d.speed, mass: d.mass, headbuttForce: d.headbuttForce, radius: 0.55 };
+  return {
+    name, speed: d.speed, mass: d.mass, headbuttForce: d.headbuttForce,
+    headbuttBoost, radius: 0.55,
+  };
 }
 
 export const CRITTER_CONFIGS: Record<string, CritterConfigServer> = {
-  Sergei:    serverConfig('Sergei'),
+  Sergei:    serverConfig('Sergei',    1.15), // headbutt boosted (Rafa: enfatizar)
   Trunk:     serverConfig('Trunk'),
   Kurama:    serverConfig('Kurama'),     // Trickster
   Shelly:    serverConfig('Shelly'),     // Tank
   Kermit:    serverConfig('Kermit'),     // Controller
   Sihans:    serverConfig('Sihans'),     // Trapper
-  Kowalski:  serverConfig('Kowalski'),   // Mage
-  Cheeto:    serverConfig('Cheeto'),     // Assassin
-  Sebastian: serverConfig('Sebastian'),  // Glass Cannon
+  Kowalski:  serverConfig('Kowalski',  1.20), // headbutt boosted
+  Cheeto:    serverConfig('Cheeto',    1.30), // headbutt boosted (más rápido/evidente)
+  Sebastian: serverConfig('Sebastian', 1.45), // Glass Cannon — headbutt firma
 };
 
 export const DEFAULT_CRITTER = 'Sergei';
