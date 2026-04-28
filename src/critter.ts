@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createAbilityStates, getSpeedMultiplier, getMassMultiplier } from './abilities';
+import { createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier } from './abilities';
 import type { AbilityState } from './abilities';
 import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
@@ -339,7 +339,14 @@ export class Critter {
   }
 
   get effectiveSpeed(): number {
-    return this.config.speed * getSpeedMultiplier(this.abilityStates);
+    // Active abilities (charge_rush boost, frenzy buff, K root, blink
+    // root) × any slow zones the critter is currently standing inside
+    // (Kermit Poison Cloud, Kowalski Arctic Burst). Zones come from
+    // both offline activations (pushed in `fireGroundPound`) and
+    // online server `zoneSpawned` events (`pushNetworkZone`).
+    return this.config.speed *
+      getSpeedMultiplier(this.abilityStates) *
+      getZoneSlowMultiplier(this.x, this.z);
   }
 
   get effectiveMass(): number {
@@ -808,20 +815,29 @@ export class Critter {
   private tickSkeletal(dt: number): void {
     if (!this.skeletal) return;
 
-    // Ability cast edges — play the corresponding clip exactly once.
-    // If the AbilityDef provides a `clipPlaybackRate`, pass it to the
-    // animator so the clip speeds up / slows down to match the intended
-    // ability feel (e.g. Sergei's Gorilla Rush 1.03s clip at 2.3× so the
-    // strike pose lands within the 0.28s active window).
+    // Ability cast edges — play the corresponding clip exactly once
+    // on the rising edge. If `cancelAnimOnEnd` is set on the def, also
+    // detect the FALLING edge (state.active flipped from true to false)
+    // and force-play the appropriate idle/run state so the heavy clip
+    // doesn't tail past the gameplay window. This matters most for K
+    // abilities whose authored clip is much longer than the actual
+    // slam window (Trunk's Earthquake clip is 1.5 s at 2.8×, the
+    // gameplay slam ends after ~0.65 s — without this cancel the
+    // elephant kept swinging in the air for almost a second after
+    // the effect was already done).
     for (let i = 0; i < this.abilityStates.length && i < 3; i++) {
       const state = this.abilityStates[i];
       const active = state.active;
       const prev = this.lastAbilityActive[i];
+      const slotState: SkeletalState = (['ability_1', 'ability_2', 'ability_3'] as const)[i];
       if (active && !prev) {
-        const slotState: SkeletalState = (['ability_1', 'ability_2', 'ability_3'] as const)[i];
         this.skeletal.play(slotState, {
           timeScale: state.def.clipPlaybackRate ?? 1,
         });
+      } else if (!active && prev && state.def.cancelAnimOnEnd) {
+        const vMag = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
+        const moving = vMag > FEEL.movement.velocityDeadZone * 2;
+        this.skeletal.play(moving ? 'run' : 'idle');
       }
       this.lastAbilityActive[i] = active;
     }

@@ -8,7 +8,7 @@ import { spawnDustPuff } from './dust-puff';
 // Types
 // ---------------------------------------------------------------------------
 
-export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy';
+export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy' | 'blink';
 
 /**
  * Semantic tags attached to an ability definition. The bot AI (and any
@@ -57,6 +57,50 @@ export interface AbilityDef {
    * Undefined / 1.0 = clip plays at authored speed.
    */
   clipPlaybackRate?: number;
+
+  /** Movement-speed multiplier applied while the ability is in its
+   *  ACTIVE window (post-windUp, pre-cooldown). Defaults to 1.0 — only
+   *  meaningful for ground_pound and blink, where the player should be
+   *  rooted/slowed during the brief active window so the slam/blink
+   *  reads as a committed action. charge_rush and frenzy ignore this:
+   *  their `speedMultiplier` / `frenzySpeedMult` already governs active
+   *  movement. */
+  slowDuringActive?: number;
+
+  /** When the ability ends (state.active flips false), force the
+   *  skeletal animator back to idle/run. Useful for K abilities whose
+   *  authored clip is much longer than the gameplay window — without
+   *  this, Trunk's 1.5 s slam clip would tail well past his 0.65 s
+   *  ability, leaving the elephant swinging in the air after the
+   *  effect was already done. Defaults false (clip plays out). */
+  cancelAnimOnEnd?: boolean;
+
+  /** Blink-specific: world-units to teleport along the critter's
+   *  facing direction. Server clamps to arena bounds. */
+  blinkDistance?: number;
+
+  /** Ground-pound-specific: when set, the slam ALSO drops a temporary
+   *  slow zone at the impact point. Server is authoritative — it
+   *  tracks the zone, applies the slowMultiplier to anyone inside via
+   *  effectiveSpeed, and broadcasts a single 'zoneSpawned' event so
+   *  clients can render the matching VFX. The zone does NO damage; it
+   *  only debuffs movement. */
+  zone?: {
+    /** World-space radius for both the slow check and the VFX ring. */
+    radius: number;
+    /** Lifetime in seconds. */
+    duration: number;
+    /** Speed multiplier applied to any critter standing inside the
+     *  zone. 0.6 ≈ 40 % slow. Stacks multiplicatively if a critter
+     *  ends up in multiple zones, but no caster ever drops two zones
+     *  at once because the K cooldown is longer than the zone lifetime. */
+    slowMultiplier: number;
+    /** VFX outer/inner colours. Same palette idea as the regular
+     *  shockwave ring — falls back to the critter's pound palette
+     *  when omitted at the call site. */
+    color?: number;
+    secondary?: number;
+  };
 }
 
 export interface AbilityState {
@@ -113,6 +157,37 @@ function makeGroundPound(overrides: Partial<AbilityDef> = {}): AbilityDef {
     force: FEEL.groundPound.force,
     tags: ['aoe_push'],
     description: 'Slams ground, knocking back nearby enemies',
+    ...overrides,
+  };
+}
+
+/**
+ * Blink — short-range teleport along the critter's facing direction.
+ * Server-authoritative: server validates + clamps to arena bounds and
+ * broadcasts an `abilityFired` event of type 'blink' so clients can
+ * spawn the afterimage VFX. During wind-up + active the critter is
+ * fully rooted (slowDuringWindUp/Active = 0). Tag stays `mobility`
+ * so the bot AI uses it the same way it uses charge_rush.
+ */
+function makeBlink(overrides: Partial<AbilityDef> = {}): AbilityDef {
+  return {
+    type: 'blink',
+    name: 'Blink',
+    key: 'K',
+    cooldown: 5.0,
+    duration: 0.10,
+    windUp: 0.04,
+    speedMultiplier: 1.0,
+    massMultiplier: 1.0,
+    impulse: 0,
+    slowDuringWindUp: 0,
+    radius: 0,
+    force: 0,
+    blinkDistance: 4.0,
+    slowDuringActive: 0,
+    cancelAnimOnEnd: true,
+    tags: ['mobility'],
+    description: 'Short blink in facing direction',
     ...overrides,
   };
 }
@@ -303,6 +378,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       force: 34,
       windUp: 0.30,
       cooldown: 6.0,
+      slowDuringActive: 0, cancelAnimOnEnd: true,
     }),
     makeFrenzy({
       description: 'Enters berserk mode: +speed, +power',
@@ -353,6 +429,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       windUp: 0.60,
       cooldown: 7.5,
       clipPlaybackRate: 2.8,
+      slowDuringActive: 0, cancelAnimOnEnd: true,
     }),
     makeFrenzy({
       name: 'Stampede',
@@ -369,8 +446,10 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   // Each kit mirrors server/src/sim/abilities.ts CRITTER_ABILITY_KITS
   // (same impulse/radius/force/cooldown) so offline == online.
 
-  // Kurama — Trickster: trades raw knockback for very fast K and an
-  // agile, short-windowed Frenzy that rewards mobility plays.
+  // Kurama — Trickster: fast feint dash + a quick illusion burst on
+  // K (rebranded "Phantom Burst" — honest about not being a teleport)
+  // and an agile short-windowed frenzy on L. Rooted briefly during
+  // the K windup so the burst still reads as a committed pose.
   Kurama: [
     makeChargeRush({
       name: 'Fox Dash', description: 'Blink-fast feint forward',
@@ -378,9 +457,10 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 2.8, massMultiplier: 1.3,
     }),
     makeGroundPound({
-      name: 'Phantom Step',
+      name: 'Phantom Burst',
       description: 'Quick illusion burst with light knockback',
       radius: 3.5, force: 16, windUp: 0.10, cooldown: 5.5,
+      slowDuringActive: 0, cancelAnimOnEnd: true,
     }),
     makeFrenzy({
       name: 'Nine-Tails Frenzy',
@@ -402,6 +482,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Shell Slam',
       description: 'Compact body drop, harder hit',
       radius: 4.0, force: 32, windUp: 0.45, cooldown: 7.5,
+      slowDuringActive: 0, cancelAnimOnEnd: true,
     }),
     makeFrenzy({
       name: 'Berserker Shell',
@@ -423,8 +504,21 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     }),
     makeGroundPound({
       name: 'Poison Cloud',
-      description: 'A wide toxic burst with low knockback',
+      description: 'Wide toxic burst — leaves a slowing fog',
       radius: 5.0, force: 14, windUp: 0.15, cooldown: 7.0,
+      slowDuringActive: 0, cancelAnimOnEnd: true,
+      // Lingering toxic fog: 2.0 s on the ground, 60 % movement speed
+      // for anyone standing inside. The slam itself still nudges
+      // everyone with the same low force; the zone is the
+      // controller-defining piece — Kermit forces the fight to
+      // happen somewhere ELSE for two seconds.
+      zone: {
+        radius: 5.0,
+        duration: 2.0,
+        slowMultiplier: 0.60,
+        color: 0x66ff44,
+        secondary: 0x9c3cee,
+      },
     }),
     makeFrenzy({
       name: 'Hypnosapo',
@@ -445,6 +539,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     makeGroundPound({
       name: 'Tremor', description: 'Long windup, devastating stomp',
       radius: 3.5, force: 38, windUp: 0.6, cooldown: 7.5,
+      slowDuringActive: 0, cancelAnimOnEnd: true,
     }),
     makeFrenzy({
       name: 'Diggy Rush',
@@ -464,8 +559,20 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 2.4, massMultiplier: 1.5,
     }),
     makeGroundPound({
-      name: 'Arctic Burst', description: 'Massive area blast, low force',
+      name: 'Arctic Burst',
+      description: 'Wide blast — leaves icy ground that slows',
       radius: 5.0, force: 20, windUp: 0.4, cooldown: 7.0,
+      slowDuringActive: 0, cancelAnimOnEnd: true,
+      // Icy patch: shorter than Kermit's fog (1.6 s vs 2.0 s) but
+      // a touch deeper slow (0.55 vs 0.60). Reads as "ranged zoner"
+      // with ice instead of toxic.
+      zone: {
+        radius: 5.0,
+        duration: 1.6,
+        slowMultiplier: 0.55,
+        color: 0x6cc9ff,
+        secondary: 0xffffff,
+      },
     }),
     makeFrenzy({
       name: 'Blizzard',
@@ -483,9 +590,13 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       impulse: 33, duration: 0.24, cooldown: 2.8, windUp: 0.04,
       speedMultiplier: 3.0, massMultiplier: 1.2,
     }),
-    makeGroundPound({
-      name: 'Paw Stomp', description: 'Tight dense impact',
-      radius: 2.5, force: 30, windUp: 0.22, cooldown: 6.0,
+    makeBlink({
+      name: 'Shadow Step',
+      description: 'Short blink in facing direction',
+      blinkDistance: 4.5,
+      cooldown: 5.5,
+      windUp: 0.06,
+      duration: 0.10,
     }),
     makeFrenzy({
       name: 'Tiger Rage',
@@ -507,6 +618,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     makeGroundPound({
       name: 'Big Claw Slam', description: 'Small radius, brutal force',
       radius: 2.8, force: 40, windUp: 0.3, cooldown: 6.5,
+      slowDuringActive: 0, cancelAnimOnEnd: true,
     }),
     makeFrenzy({
       name: 'Red Claw',
@@ -645,6 +757,114 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   // to its original red palette.
   spawnShockwaveRing(scene, critter.x, critter.z, def.radius, CRITTER_VFX_PALETTE[critter.config.name]?.pound);
   playSound('groundPound');
+  // Lingering zone (Kermit Poison Cloud, Kowalski Arctic Burst, …) —
+  // pushes a slow-zone entry into the offline tracker and renders a
+  // persistent ground ring so the area-debuff reads visually for the
+  // full lifetime. Server-side mirror is in BrawlRoom; this branch
+  // covers offline matches.
+  if (def.zone) {
+    activeZones.push({
+      x: critter.x, z: critter.z,
+      radius: def.zone.radius,
+      slowMultiplier: def.zone.slowMultiplier,
+      ttl: def.zone.duration,
+    });
+    spawnZoneRing(scene, critter.x, critter.z, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Slow-zone manager (offline) + arena clamp helper
+// ---------------------------------------------------------------------------
+//
+// Mirror of the server-side slow-zone tracker so offline matches feel
+// identical to online ones. A zone is a circle on the arena floor that
+// debuffs movement speed while a critter stands inside it. Shared module-
+// scope state because there are typically <= 4 zones alive at any moment
+// (one per K cooldown, decaying for ~2 s) — no need for per-Game state.
+//
+// Online matches don't push to this list (they consume the server's
+// `zoneSpawned` events and apply the slow via the same lookup path);
+// `clearActiveZones()` is called on phase transitions so zones from a
+// previous match never leak into the next one.
+
+interface ActiveZone {
+  x: number;
+  z: number;
+  radius: number;
+  slowMultiplier: number;
+  ttl: number;
+}
+
+const activeZones: ActiveZone[] = [];
+
+/** Tick all live zones forward, removing expired entries. Called from
+ *  the offline gameplay loop after physics update. */
+export function tickAbilityZones(dt: number): void {
+  for (let i = activeZones.length - 1; i >= 0; i--) {
+    activeZones[i].ttl -= dt;
+    if (activeZones[i].ttl <= 0) activeZones.splice(i, 1);
+  }
+}
+
+/** Drop ALL active zones — used on match restart / title return so a
+ *  late-spawned slow doesn't survive into the next match. */
+export function clearActiveZones(): void {
+  activeZones.length = 0;
+}
+
+/** Register a zone from the network (online client) so the same slow
+ *  lookup path serves both modes. */
+export function pushNetworkZone(z: ActiveZone): void {
+  activeZones.push({ ...z });
+}
+
+/** Compound slow multiplier from every active zone the point is inside.
+ *  Returns 1.0 when not inside any zone. Multiplicative when overlapping. */
+export function getZoneSlowMultiplier(x: number, z: number): number {
+  let m = 1.0;
+  for (const zone of activeZones) {
+    const dx = x - zone.x;
+    const dz = z - zone.z;
+    if (dx * dx + dz * dz <= zone.radius * zone.radius) {
+      m *= zone.slowMultiplier;
+    }
+  }
+  return m;
+}
+
+/** Arena radius — kept in sync with `Arena.radius` (12 u). The 0.4 u
+ *  margin keeps blink targets clear of the platform edge so the
+ *  destination never lands on a fragment that's about to collapse. */
+const ARENA_BLINK_RADIUS = 11.6;
+
+function fireBlink(def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
+  const angle = critter.mesh.rotation.y;
+  const dist = def.blinkDistance ?? 4.0;
+  let targetX = critter.x + Math.sin(angle) * dist;
+  let targetZ = critter.z + Math.cos(angle) * dist;
+  // Clamp to arena disc — never land outside or in the void band.
+  const r = Math.sqrt(targetX * targetX + targetZ * targetZ);
+  if (r > ARENA_BLINK_RADIUS) {
+    targetX = (targetX / r) * ARENA_BLINK_RADIUS;
+    targetZ = (targetZ / r) * ARENA_BLINK_RADIUS;
+  }
+  // Origin afterimage ring + destination flash — same primitive as the
+  // dash entry burst, tinted to the critter's pound palette so the
+  // blink reads as "the same identity colour" as their other VFX.
+  const palette = CRITTER_VFX_PALETTE[critter.config.name]?.pound;
+  spawnShockwaveRing(scene, critter.x, critter.z, 1.2, palette);
+  // Teleport
+  critter.x = targetX;
+  critter.z = targetZ;
+  critter.mesh.position.x = targetX;
+  critter.mesh.position.z = targetZ;
+  // Velocity zeroed — the blink is a commit, not a slide-into-position.
+  critter.vx = 0;
+  critter.vz = 0;
+  spawnShockwaveRing(scene, targetX, targetZ, 1.4, palette);
+  applyDashFeedback(critter);
+  playSound('abilityFire');
 }
 
 function fireFrenzy(_def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
@@ -667,6 +887,7 @@ const EFFECT_MAP: Record<AbilityType, (def: AbilityDef, critter: Critter, all: C
   charge_rush: fireChargeRush,
   ground_pound: fireGroundPound,
   frenzy: fireFrenzy,
+  blink: fireBlink,
 };
 
 function fireEffect(state: AbilityState, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
@@ -756,6 +977,18 @@ export function getSpeedMultiplier(states: AbilityState[]): number {
     if (!s.active) continue;
     if (s.windUpLeft > 0) {
       m *= s.def.slowDuringWindUp;
+      continue;
+    }
+    // Active phase. charge_rush + frenzy use their full speedMultiplier
+    // (the dash boost / buff). ground_pound + blink keep speedMultiplier
+    // at 1.0 from the factory and instead read `slowDuringActive` (0 by
+    // default for those types — fully rooted during the active window
+    // so the slam/blink reads as a committed pose). Older configs that
+    // never set slowDuringActive still resolve to `speedMultiplier`
+    // (which is 1.0 for those types) → no behavioural change.
+    if (s.def.slowDuringActive !== undefined &&
+        (s.def.type === 'ground_pound' || s.def.type === 'blink')) {
+      m *= s.def.slowDuringActive;
     } else {
       m *= s.def.speedMultiplier;
     }
@@ -880,6 +1113,75 @@ export interface ShockwaveRingOpts {
    *  values keep the ring on screen longer — used for Kermit's Poison
    *  Cloud (800 ms) so the wide AoE reads as a hanging toxic puff. */
   holdMs?: number;
+}
+
+/**
+ * Persistent slow-zone disc — a flat translucent disc + a faint slow-
+ * pulsing torus on top, both alive for the zone's full lifetime. Used
+ * for Kermit's Poison Cloud and Kowalski's Arctic Burst. Differs from
+ * `spawnShockwaveRing` in three ways:
+ *
+ *   1. It STAYS visible for the whole `durationSec`, not 450 ms.
+ *   2. It draws a filled disc on the ground (the actual debuff zone)
+ *      AND a torus boundary (so the player can read its edge).
+ *   3. The pulse animation is gentle (sine-driven) so it reads as
+ *      "this is a hazard that's still here", not "this just happened".
+ *
+ * Cleanup is automatic via the same `requestAnimationFrame` self-loop
+ * used elsewhere — when t reaches 1 we remove + dispose. The mesh has
+ * `depthWrite: false` so it never z-fights with the arena floor or
+ * the critters standing inside it.
+ */
+export function spawnZoneRing(
+  scene: THREE.Scene,
+  x: number, z: number,
+  radius: number,
+  durationSec: number,
+  color: number = 0x66ff44,
+  secondary: number = 0xffffff,
+): void {
+  const duration = durationSec * 1000;
+  const startTime = performance.now();
+  // Filled disc — the actual hazard surface
+  const discGeo = new THREE.CircleGeometry(radius, 36);
+  const discMat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.22,
+    depthWrite: false, side: THREE.DoubleSide,
+  });
+  const disc = new THREE.Mesh(discGeo, discMat);
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.set(x, 0.03, z);
+  scene.add(disc);
+  // Boundary torus — secondary colour, pulses gently
+  const ringGeo = new THREE.TorusGeometry(radius, 0.18, 8, 48);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: secondary, transparent: true, opacity: 0.65,
+    depthWrite: false,
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(x, 0.05, z);
+  scene.add(ring);
+
+  function animate() {
+    const elapsed = performance.now() - startTime;
+    const t = Math.min(elapsed / duration, 1);
+    // Gentle pulse on the torus, slow fade on both during the last 25 %
+    const pulse = 0.85 + 0.15 * Math.sin(elapsed * 0.006);
+    ring.scale.set(pulse, pulse, 1);
+    const fadeIn = Math.min(elapsed / 200, 1);          // ramp in over 200 ms
+    const fadeOut = t > 0.75 ? 1 - (t - 0.75) / 0.25 : 1;
+    discMat.opacity = 0.22 * fadeIn * fadeOut;
+    ringMat.opacity = 0.65 * fadeIn * fadeOut;
+    if (t < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      scene.remove(disc); scene.remove(ring);
+      discGeo.dispose(); discMat.dispose();
+      ringGeo.dispose(); ringMat.dispose();
+    }
+  }
+  requestAnimationFrame(animate);
 }
 
 /**

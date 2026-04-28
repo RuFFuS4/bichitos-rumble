@@ -15,6 +15,7 @@ import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 import { initOnlineBeltToast } from './online-belt-toast';
 import { updateDustPuffs } from './dust-puff';
+import { tickAbilityZones } from './abilities';
 import { getPreviewPackId } from './arena-decor-layouts';
 
 // ---------------------------------------------------------------------------
@@ -541,7 +542,13 @@ function loop(now: number) {
   // EXCEPT when the offline pause menu is up: if we keep advancing
   // puff lifetimes, an in-flight ring would keep expanding behind the
   // menu and look like gameplay never actually froze.
-  if (!game.isPaused()) updateDustPuffs(dt);
+  if (!game.isPaused()) {
+    updateDustPuffs(dt);
+    // Ability zones (Kermit Poison Cloud, Kowalski Arctic Burst).
+    // Same gating as dust puffs — pause should freeze the slow-zone
+    // timer too so a zone doesn't quietly expire while the menu is up.
+    tickAbilityZones(dt);
+  }
   // Camera ownership per phase:
   //   · paused          → freeze (no shake, no lerp).
   //   · ended           → game.getEndScreenCameraPose() returns a

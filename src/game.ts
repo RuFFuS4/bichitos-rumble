@@ -40,14 +40,14 @@ import {
 } from './portal';
 import type { Room } from 'colyseus.js';
 import { getStateCallbacks } from 'colyseus.js';
-import { sendInput, onAbilityFired, onBeltChanged, type AbilityFiredEvent } from './network';
+import { sendInput, onAbilityFired, onBeltChanged, onZoneSpawned, type AbilityFiredEvent } from './network';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
 import { type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
-import { spawnShockwaveRing, spawnFrenzyBurst, getCritterVfxPalette } from './abilities';
+import { spawnShockwaveRing, spawnFrenzyBurst, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing } from './abilities';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
 import { getPreviewPackId } from './arena-decor-layouts';
@@ -395,6 +395,7 @@ export class Game {
     // reason as the arena reset above.
     this.countdownDrops.clear();
     clearDustPuffs();
+    clearActiveZones();
     // Rebuild the idle background critters the title expects. enterOnline
     // disposes them, so we must restore them when returning to title.
     if (this.critters.length === 0) {
@@ -461,6 +462,11 @@ export class Game {
     // props are swapped per match to keep the look varied across
     // consecutive runs without any menu knob.
     this.arena.reset();
+    // Drop every lingering ability slow-zone from the previous match
+    // (Kermit Poison Cloud, Kowalski Arctic Burst). The zone tracker
+    // is module-scoped so without this an end-of-match cloud could
+    // still slow the new match's countdown drops.
+    clearActiveZones();
     // Pack selection in offline matches: random by default, but the
     // /decor-editor.html "Preview in game" button can pin a specific
     // pack via the ?arenaPack=<id>&decorPreview=1 URL params, which
@@ -782,6 +788,26 @@ export class Game {
 
     // Ability fire events → trigger client-side VFX + audio
     onAbilityFired(room, (ev: AbilityFiredEvent) => this.handleAbilityFired(ev));
+
+    // Slow-zone broadcasts → render the persistent ground hazard +
+    // register the zone in the client-side tracker so `effectiveSpeed`
+    // applies the slow on the local prediction path. Server is still
+    // the authority, but mirroring locally avoids a state-sync wobble
+    // when the player's input drives them into a zone they "see"
+    // before the next position patch arrives.
+    onZoneSpawned(room, (ev) => {
+      pushNetworkZone({
+        x: ev.x, z: ev.z, radius: ev.radius,
+        slowMultiplier: ev.slowMultiplier,
+        ttl: ev.duration,
+      });
+      // Render — colour comes from the caster's pound palette so
+      // online and offline match visually.
+      const caster = this.onlineCritters.get(ev.ownerSid);
+      const palette = caster ? getCritterVfxPalette(caster.config.name) : undefined;
+      spawnZoneRing(this.scene, ev.x, ev.z, ev.radius, ev.duration,
+        palette?.pound?.color, palette?.pound?.secondary);
+    });
 
     // Online Belts: if the server detects a belt changed hands after this
     // match, it broadcasts `beltChanged` to the whole room. Toast it so
@@ -1177,6 +1203,15 @@ export class Game {
     if (ev.type === 'charge_rush') {
       applyDashFeedback(c);
       triggerCameraShake(0.15);
+      playSoundEffect('abilityFire');
+    } else if (ev.type === 'blink') {
+      // Cheeto Shadow Step (and any future blink) — origin afterimage
+      // ring at the broadcast position. The server has already moved
+      // the player; the next state patch teleports them visually.
+      // Tinted with the caster's pound palette so the blink reads as
+      // the same identity colour as their other K-slot VFX would.
+      spawnShockwaveRing(this.scene, ev.x, ev.z, 1.4, palette?.pound);
+      applyDashFeedback(c);
       playSoundEffect('abilityFire');
     } else if (ev.type === 'ground_pound') {
       // Shockwave ring at the caster's position + shake + hit stop + sound.

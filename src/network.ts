@@ -22,10 +22,31 @@ export interface NetworkInput {
 
 export interface AbilityFiredEvent {
   sessionId: string;
-  type: 'charge_rush' | 'ground_pound' | 'frenzy';
+  type: 'charge_rush' | 'ground_pound' | 'frenzy' | 'blink';
   x: number;
   z: number;
   rotationY: number;
+}
+
+/**
+ * One-shot broadcast from the server when a slow zone (Kermit Poison
+ * Cloud / Kowalski Arctic Burst) lands. The server is authoritative
+ * for the slow effect itself; this event only carries enough info for
+ * clients to render the matching visible disc + ring with the same
+ * lifetime so everyone sees the hazard. Caster identity is included
+ * for any future "you're standing in your own zone" UI hint.
+ */
+export interface ZoneSpawnedEvent {
+  x: number;
+  z: number;
+  radius: number;
+  duration: number;
+  slowMultiplier: number;
+  ownerSid: string;
+}
+
+export function onZoneSpawned(room: Room, cb: (ev: ZoneSpawnedEvent) => void): void {
+  room.onMessage('zoneSpawned', cb);
 }
 
 export interface JoinBrawlOptions {

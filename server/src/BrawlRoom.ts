@@ -23,7 +23,7 @@ import { Client, Room } from 'colyseus';
 import { GameState } from './state/GameState.js';
 import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
-import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed } from './sim/physics.js';
+import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed, type ActiveZoneSnapshot } from './sim/physics.js';
 import { createAbilityStates, tickPlayerAbilities } from './sim/abilities.js';
 import { ArenaSim } from './sim/arena.js';
 import { computeBotInput } from './sim/bot.js';
@@ -108,6 +108,13 @@ export class BrawlRoom extends Room<GameState> {
    *  the Online Belts recorded stats. Set in transitionFromCountdown and
    *  read once on endMatch. Null until the match actually starts. */
   private playingStartedAtMs: number | null = null;
+  /** Authoritative slow-zone tracker (Kermit Poison Cloud, Kowalski
+   *  Arctic Burst). Each zone is consulted by `effectiveSpeed` for
+   *  every player and its `ttl` decremented once per tick. Zones
+   *  emit a one-shot `zoneSpawned` broadcast to clients on creation,
+   *  which is enough to render the matching VFX with the same
+   *  duration — the room doesn't keep streaming updates. */
+  private activeZones: Array<ActiveZoneSnapshot & { ttl: number; ownerSid: string }> = [];
 
   onCreate(_options: unknown) {
     this.tickInterval = 1000 / SIM.tickRate;
@@ -609,25 +616,52 @@ export class BrawlRoom extends Room<GameState> {
       if (inputMag > 1) { mx /= inputMag; mz /= inputMag; }
       data.hasInput = inputMag > 0.01;
 
-      const speed = effectiveSpeed(p);
+      const speed = effectiveSpeed(p, this.activeZones);
       const accel = speed * SIM.movement.accelerationScale;
       p.vx += mx * accel * dt;
       p.vz += mz * accel * dt;
     }
 
     // 2. Tick abilities (generic dispatcher) and broadcast fire events
+    //    + new lingering slow zones.
     for (const p of players) {
       if (!p.alive || p.falling) continue;
       const data = this.internal.get(p.sessionId);
       if (!data) continue;
-      const events = tickPlayerAbilities(p, players, dt, {
+      const out = tickPlayerAbilities(p, players, dt, {
         ability1: data.inputAbility1,
         ability2: data.inputAbility2,
         ultimate: data.inputUltimate,
       });
-      for (const ev of events) {
+      for (const ev of out.events) {
         this.broadcast('abilityFired', ev);
       }
+      for (const z of out.zoneSpawns) {
+        // Authoritative state: track on the room so effectiveSpeed
+        // applies the slow until the zone expires.
+        this.activeZones.push({
+          x: z.x, z: z.z,
+          radius: z.radius,
+          slowMultiplier: z.slowMultiplier,
+          ttl: z.duration,
+          ownerSid: z.ownerSid,
+        });
+        // Visual mirror: clients render the matching ground ring +
+        // disc with the same duration. Single one-shot — clients
+        // drive their own lifetime locally, no streaming updates.
+        this.broadcast('zoneSpawned', {
+          x: z.x, z: z.z,
+          radius: z.radius,
+          duration: z.duration,
+          slowMultiplier: z.slowMultiplier,
+          ownerSid: z.ownerSid,
+        });
+      }
+    }
+    // 2.b. Tick zone TTLs — drop expired ones.
+    for (let i = this.activeZones.length - 1; i >= 0; i--) {
+      this.activeZones[i].ttl -= dt;
+      if (this.activeZones[i].ttl <= 0) this.activeZones.splice(i, 1);
     }
 
     // 3. Integrate position + friction + dead zone + max speed cap + facing

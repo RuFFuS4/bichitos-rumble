@@ -211,18 +211,59 @@ export function effectiveMass(p: PlayerSchema): number {
   return m;
 }
 
-/** Effective speed = base speed × active buff multipliers (per-kit overrides). */
-export function effectiveSpeed(p: PlayerSchema): number {
+/**
+ * Effective speed = base speed × active ability multipliers × any
+ * lingering slow zones the player is standing inside.
+ *
+ * Phase rules per ability slot:
+ *   · windUp phase: multiplier = `def.slowDuringWindUp` (defaults to
+ *     1.0 — only K/blink set this to 0 for the rooted feel).
+ *   · active phase, charge_rush: `def.speedMultiplier` (the dash
+ *     boost — unchanged behaviour).
+ *   · active phase, frenzy: `def.frenzySpeedMult` (the buff —
+ *     unchanged behaviour).
+ *   · active phase, ground_pound / blink: `def.slowDuringActive`
+ *     (defaults 1.0; K abilities set 0 to root through the slam).
+ *
+ * Zones (Kermit Poison Cloud, Kowalski Arctic Burst) live in
+ * BrawlRoom and are passed in via `activeZones`. They stack
+ * multiplicatively when overlapping.
+ */
+export interface ActiveZoneSnapshot {
+  x: number;
+  z: number;
+  radius: number;
+  slowMultiplier: number;
+}
+
+export function effectiveSpeed(p: PlayerSchema, activeZones: readonly ActiveZoneSnapshot[] = []): number {
   let s = getCritterConfig(p.critterName).speed;
   const kit = getAbilityKit(p.critterName);
   for (let i = 0; i < p.abilities.length; i++) {
     const a = p.abilities[i];
     const def = kit[i];
-    if (!def || !a.active || a.windUpLeft > 0) continue;
+    if (!def || !a.active) continue;
+    if (a.windUpLeft > 0) {
+      // Wind-up phase: slowDuringWindUp (default 1.0 — no slow).
+      if (def.slowDuringWindUp !== undefined) s *= def.slowDuringWindUp;
+      continue;
+    }
+    // Active phase
     if (a.abilityType === 'charge_rush') {
       s *= def.speedMultiplier ?? SIM.chargeRush.speedMultiplier;
     } else if (a.abilityType === 'frenzy') {
       s *= def.frenzySpeedMult ?? SIM.frenzy.speedMultiplier;
+    } else if (def.slowDuringActive !== undefined) {
+      // ground_pound / blink — root or near-root during active window
+      s *= def.slowDuringActive;
+    }
+  }
+  // Lingering slow zones — apply once per zone the point is inside.
+  for (const zone of activeZones) {
+    const dx = p.x - zone.x;
+    const dz = p.z - zone.z;
+    if (dx * dx + dz * dz <= zone.radius * zone.radius) {
+      s *= zone.slowMultiplier;
     }
   }
   return s;
