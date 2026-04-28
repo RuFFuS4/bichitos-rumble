@@ -284,6 +284,26 @@ export function setSceneSkyboxTexture(tex: THREE.Texture | null): void {
 }
 
 /**
+ * v0.11 — Swap the far-silhouette texture for an arena pack, or pass
+ * `null` to hide the mesh (default menu / no-pack state).
+ *
+ * The plane geometry stays the same across packs — only the diffuse
+ * texture changes. This keeps the per-frame draw cost flat and lets
+ * pack swaps be effectively free once the texture is in cache.
+ */
+export function setSceneFarSilhouette(tex: THREE.Texture | null): void {
+  if (tex) {
+    farSilhouetteMat.map = tex;
+    farSilhouetteMat.needsUpdate = true;
+    farSilhouette.visible = true;
+  } else {
+    farSilhouette.visible = false;
+    farSilhouetteMat.map = null;
+    farSilhouetteMat.needsUpdate = true;
+  }
+}
+
+/**
  * Retune the global fog colour. FogExp2 uses a Color, so we mutate it in
  * place (no Scene re-assignment needed). Pass `null` to restore the
  * default menu-time horizon colour.
@@ -298,21 +318,85 @@ export function setSceneFogColor(color: number | null): void {
   renderer.setClearColor(color ?? DEFAULT_CLEAR_COLOR);
 }
 
-// Distant cloud band — a flat disc at altitude + below the arena, hinting
-// that the platform is floating very high above terrain. Single plane,
-// tinted additive for that "soft painted fog" look.
+// Distant cloud band — a flat disc below the arena, hinting that the
+// platform floats high above the terrain. v0.11 upgrade: replaced the
+// solid white plane with a tileable cloud texture so when arena
+// fragments collapse the player sees a real "sea of clouds" through
+// the gap, not a flat translucent void.
+const cloudsTex = new THREE.TextureLoader().load('./textures/clouds.png');
+cloudsTex.colorSpace = THREE.SRGBColorSpace;
+cloudsTex.wrapS = THREE.RepeatWrapping;
+cloudsTex.wrapT = THREE.RepeatWrapping;
+cloudsTex.repeat.set(4, 4); // four tile copies across the disc to avoid pillar-stretch reads
 const cloudsGeo = new THREE.PlaneGeometry(140, 140);
 const cloudsMat = new THREE.MeshBasicMaterial({
-  color: 0xffffff,
+  map: cloudsTex,
+  color: 0xffffff,           // pack-time tinted via .color.setHex
   transparent: true,
-  opacity: 0.35,
+  opacity: 0.85,
   depthWrite: false,
+  fog: false,
 });
 const cloudsBelow = new THREE.Mesh(cloudsGeo, cloudsMat);
 cloudsBelow.rotation.x = -Math.PI / 2;
 cloudsBelow.position.y = -18;
 cloudsBelow.renderOrder = -1;
 scene.add(cloudsBelow);
+
+// ---------------------------------------------------------------------------
+// Far silhouette — pack-specific cartoon horizon
+// ---------------------------------------------------------------------------
+//
+// Single flat plane positioned far in front of the camera (z = -50,
+// y = -10, size 90 × 25 u). The pack's silhouette PNG (jungle palms,
+// frozen peaks, desert mesa, coral cliffs, kitsune pagodas) is mapped
+// to this plane with alpha test so the transparent sky portion lets
+// the screen-space backdrop bleed through.
+//
+// Why a flat plane and not a cylinder section: the gameplay camera is
+// FIXED — it never rotates, only the player critters move. So the
+// silhouette only ever needs to fill the camera's forward arc, never
+// 360°. A flat plane at the right distance / height lands exactly in
+// the upper portion of the frame (where the sky is), reads as "the
+// horizon line behind the arena", and avoids the texture-stretching
+// the cylindrical wrap would force.
+//
+// Geometry math: camera at (0, 23, 25) → lookAt (0, -3, 0). The
+// camera's central forward ray sits at 46° below horizontal; the
+// vertical FOV (40°) puts the visible cone at angle [26°, 66°]
+// below horizontal. To paint the silhouette across the upper-band
+// of the visible cone — where the cartoon sky lives — the plane
+// has to sit much lower than first instinct suggests because the
+// "above the arena" reading in the FRAME corresponds to a
+// world-space patch BELOW the camera, far in front of it (no sky
+// is geometrically reachable from this pitch).
+//
+// Placement: centre at (0, -25, -50), size 90 × 25 u. At that
+// position, the plane's top edge lands ~21° from camera forward
+// (just past the upper FOV edge of 20°), and the bottom lands at
+// ~7° from forward (near the centre of the frame). This puts the
+// silhouette's horizon line a few pixels below the screen-space
+// gradient transition, so the sky bleeds into the silhouette
+// instead of cutting hard.
+//
+// Pack lifecycle: hidden by default (visible: false). The arena
+// `applyPack` path calls `setSceneFarSilhouette(tex)` when a pack's
+// silhouette PNG finishes loading. `setSceneFarSilhouette(null)` on
+// reset hides the mesh again so the menu state stays untouched.
+const farSilhouetteGeo = new THREE.PlaneGeometry(90, 25);
+const farSilhouetteMat = new THREE.MeshBasicMaterial({
+  map: null,
+  transparent: true,
+  alphaTest: 0.04,        // skips fully-transparent PNG pixels — keeps depth clean
+  depthWrite: false,
+  fog: false,
+  side: THREE.DoubleSide, // tolerant of any PlaneGeometry orientation
+});
+const farSilhouette = new THREE.Mesh(farSilhouetteGeo, farSilhouetteMat);
+farSilhouette.position.set(0, -25, -50);
+farSilhouette.renderOrder = -1;
+farSilhouette.visible = false;
+scene.add(farSilhouette);
 
 // Lighting — three-point rig + hemisphere ambient.
 // Sky/ground hemisphere replaces the flat AmbientLight: the top of every

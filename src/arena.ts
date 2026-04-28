@@ -19,12 +19,13 @@ import {
   layoutPackProps,
   loadPackGroundTexture,
   loadPackSkyboxTexture,
+  loadPackFarSilhouette,
   loadPackPropMeshes,
   getPackFogColor,
   loadInArenaDecorations,
 } from './arena-decorations';
 import { getDecorLayout } from './arena-decor-layouts';
-import { setSceneSkyboxTexture, setSceneFogColor } from './main';
+import { setSceneSkyboxTexture, setSceneFogColor, setSceneFarSilhouette } from './main';
 
 // Visual parameters for the pre-collapse shake effect. Applied to
 // `fragmentGroup.position.x/z` ONLY — collisions and `isOnArena` use the
@@ -393,6 +394,19 @@ export class Arena {
         console.debug('[Arena] skybox load failed:', packId, err);
       });
 
+    // v0.11 — Far silhouette (cordillera lejana) per pack. Painted on
+    // a flat plane far in front of the camera (see main.ts). Token
+    // gating mirrors the skybox path so a quick pack swap doesn't
+    // race a stale silhouette onto the new scene.
+    loadPackFarSilhouette(packId)
+      .then((tex) => {
+        if (myToken !== this.packApplyToken) return;
+        setSceneFarSilhouette(tex);
+      })
+      .catch((err) => {
+        console.debug('[Arena] far silhouette load failed:', packId, err);
+      });
+
     // Outer ring props — historically a ring of large GLBs at radius
     // 14.5–18.5 outside the arena. Now empty by design (every PACKS[id]
     // .props is []), so this loop is a no-op for every pack. Kept
@@ -624,6 +638,7 @@ export class Arena {
     this.appliedPackId = null;
     setSceneSkyboxTexture(null);
     setSceneFogColor(null);
+    setSceneFarSilhouette(null);
     this.clearDecorations();
     // Dispose outer ring decorative skirt
     if (this.outerRingMesh) {
