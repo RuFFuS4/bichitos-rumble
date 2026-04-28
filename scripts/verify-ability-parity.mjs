@@ -157,10 +157,10 @@ for (const [name, e] of Object.entries(expected)) {
   }
 }
 
-// Sentinels — Trunk + Sergei stay at known-good v0.9 values
+// Sentinels — v0.11 retuned values for Trunk + Sergei
 const sentinels = {
-  Trunk:  { K: { rad: 4.5, frc: 40 }, L: { spd: 1.25, mass: 1.80 } },
-  Sergei: { K: { rad: 3.5, frc: 34 }, L: { spd: 1.45, mass: 1.50 } },
+  Trunk:  { K: { rad: 4.8, frc: 48 }, L: { spd: 1.35, mass: 2.10 } },
+  Sergei: { K: { rad: 3.5, frc: 34 }, L: { spd: 1.55, mass: 1.75 } },
 };
 for (const [name, e] of Object.entries(sentinels)) {
   const cliBlock = findCriterBlock(cli, name);

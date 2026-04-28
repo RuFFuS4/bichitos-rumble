@@ -88,16 +88,21 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 25, speedMultiplier: 2.6, massMultiplier: 2.2 },
     { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.30,
       radius: 3.5, force: 34, ...ROOTED_K },
+    // v0.11 buff (Rafa: "darle más potencia"): 1.45/1.5 → 1.55/1.75
     { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.35,
-      frenzySpeedMult: 1.45, frenzyMassMult: 1.5 },
+      frenzySpeedMult: 1.55, frenzyMassMult: 1.75 },
   ],
   Trunk: [
-    { type: 'charge_rush',  cooldown: 4.5, duration: 0.35, windUp: 0.08,
-      impulse: 20, speedMultiplier: 2.1, massMultiplier: 3.5 },
+    // v0.11 (Rafa: "más distancia + más potencia"): impulse 20→25,
+    // duration 0.35→0.42, mass 3.5→4.0
+    { type: 'charge_rush',  cooldown: 4.5, duration: 0.42, windUp: 0.08,
+      impulse: 25, speedMultiplier: 2.1, massMultiplier: 4.0 },
+    // v0.11 (Rafa: "Earthquake real"): radius 4.5→4.8, force 40→48
     { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.60,
-      radius: 4.5, force: 40, ...ROOTED_K },
+      radius: 4.8, force: 48, ...ROOTED_K },
+    // v0.11 (Rafa: "bastante más fuerte"): speed 1.25→1.35, mass 1.80→2.10
     { type: 'frenzy',       cooldown: 18.0, duration: 3.0, windUp: 0.45,
-      frenzySpeedMult: 1.25, frenzyMassMult: 1.80 },
+      frenzySpeedMult: 1.35, frenzyMassMult: 2.10 },
   ],
 
   // --- Bloque C: 7 remaining playables ---
@@ -169,8 +174,9 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   ],
 
   Sebastian: [
+    // v0.11 (Rafa: "más potencia y empuje"): impulse 28→33, mass 1.4→1.7
     { type: 'charge_rush',  cooldown: 3.5, duration: 0.28, windUp: 0.06,
-      impulse: 28, speedMultiplier: 2.6, massMultiplier: 1.4 },
+      impulse: 33, speedMultiplier: 2.6, massMultiplier: 1.7 },
     { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.3,
       radius: 2.8, force: 40, ...ROOTED_K },
     { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.40,

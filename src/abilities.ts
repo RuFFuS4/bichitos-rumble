@@ -75,6 +75,13 @@ export interface AbilityDef {
    *  effect was already done. Defaults false (clip plays out). */
   cancelAnimOnEnd?: boolean;
 
+  /** Multiply the camera shake amplitude when the K (ground_pound)
+   *  effect fires. Defaults 1.0. Used by Trunk Earthquake (v0.11)
+   *  to make the slam read as a real "terremoto" — the slam force
+   *  was bumped from 40 → 48 but the shake didn't follow until this
+   *  field landed. Pure feel knob; not synced to server. */
+  shakeBoost?: number;
+
   /** Blink-specific: world-units to teleport along the critter's
    *  facing direction. Server clamps to arena bounds. */
   blinkDistance?: number;
@@ -391,8 +398,11 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       duration: 2.5,
       cooldown: 15.0,
       windUp: 0.35,
-      speedMultiplier: 1.45,
-      massMultiplier: 1.5,
+      // v0.11 buff (Rafa: "darle más potencia"): speed 1.45 → 1.55,
+      // mass 1.50 → 1.75. Sergei stays balanced but the gorilla's
+      // berserk window now genuinely overpowers a mid-fight stalemate.
+      speedMultiplier: 1.55,
+      massMultiplier: 1.75,
     }),
   ],
 
@@ -417,34 +427,50 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   // VFX code (kept out of scope for this pass).
   Trunk: [
     makeChargeRush({
+      // v0.11 (Rafa: "más distancia y más potencia"): impulse 20 → 25,
+      // duration 0.35 → 0.42, mass 3.5 → 4.0. Recorre ~30 % más
+      // distancia y rompe paredes de tanques con más naturalidad.
+      // clipPlaybackRate sube a 6.0 para que el clip sigue cuadrando
+      // con la nueva duración.
       name: 'Trunk Ram',
       description: 'Unstoppable forward dash with tusks',
-      impulse: 20,
-      duration: 0.35,
+      impulse: 25,
+      duration: 0.42,
       cooldown: 4.5,
       windUp: 0.08,
       speedMultiplier: 2.1,
-      massMultiplier: 3.5,
-      clipPlaybackRate: 5.0,
+      massMultiplier: 4.0,
+      clipPlaybackRate: 6.0,
     }),
     makeGroundPound({
+      // v0.11 (Rafa: "no hace lo que debe hacer"): radius 4.5 → 4.8,
+      // force 40 → 48 + shakeBoost: true (camera shake × 1.4 al
+      // disparar). El Earthquake ahora SE LEE como terremoto: ring
+      // mucho más ancho que cualquier otro K, knockback brutal,
+      // sacudida pantalla notable.
       name: 'Earthquake',
       description: 'Foot stomp that shakes the arena',
-      radius: 4.5,
-      force: 40,
+      radius: 4.8,
+      force: 48,
       windUp: 0.60,
       cooldown: 7.5,
       clipPlaybackRate: 2.8,
       slowDuringActive: 0, cancelAnimOnEnd: true,
+      shakeBoost: 1.4,
     }),
     makeFrenzy({
+      // v0.11 (Rafa: "bastante más fuerte" + "anim colgada"):
+      // speed 1.25 → 1.35, mass 1.80 → 2.10, cancelAnimOnEnd: true
+      // para cortar el clip de Ability3GroundPound al terminar el
+      // buff (era el síntoma del "anim colgada").
       name: 'Stampede',
       description: 'Enraged charge: +speed, +mass',
       duration: 3.0,
       cooldown: 18.0,
       windUp: 0.45,
-      speedMultiplier: 1.25,
-      massMultiplier: 1.80,
+      speedMultiplier: 1.35,
+      massMultiplier: 2.10,
+      cancelAnimOnEnd: true,
     }),
   ],
 
@@ -617,9 +643,12 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   // is a finisher window, not a tank mode.
   Sebastian: [
     makeChargeRush({
+      // v0.11 (Rafa: "más potencia y empuje"): impulse 28 → 33,
+      // mass 1.4 → 1.7. Glass Cannon — el dash es ahora una
+      // amenaza real de un solo golpe.
       name: 'Claw Rush', description: 'Sideways scuttle charge',
-      impulse: 28, duration: 0.28, cooldown: 3.5,
-      speedMultiplier: 2.6, massMultiplier: 1.4,
+      impulse: 33, duration: 0.28, cooldown: 3.5,
+      speedMultiplier: 2.6, massMultiplier: 1.7,
     }),
     makeGroundPound({
       name: 'Big Claw Slam', description: 'Small radius, brutal force',
@@ -752,8 +781,10 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
     }
   }
   applyLandingFeedback(critter);
-  // Always shake on ground pound (the slam itself is dramatic)
-  triggerCameraShake(FEEL.shake.groundPound);
+  // Always shake on ground pound (the slam itself is dramatic).
+  // v0.11: per-K `shakeBoost` (e.g. Trunk Earthquake 1.4×) scales
+  // the shake amplitude so the visual matches the bumped force.
+  triggerCameraShake(FEEL.shake.groundPound * (def.shakeBoost ?? 1.0));
   if (hitCount > 0) {
     triggerHitStop(FEEL.hitStop.groundPound);
   }
