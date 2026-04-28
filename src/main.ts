@@ -233,16 +233,44 @@ const skyMat = new THREE.ShaderMaterial({
 // equirectangular pack texture reads punchy instead of haze-faded by
 // the FogExp2 (density 0.008 → ~55% transmittance at 100 u). All
 // gameplay objects stay safely inside: arena radius ≤ 12 u, props
-// ≤ 12.5 u, void at y = −30, cloudsBelow extends to ~99 u corner
-// distance. Camera at (0, 23, 25) sees the dome's far hemisphere at
-// ~125 u, well within the camera.far = 200 frustum. Earlier 150 u
-// dome let too much fog wash out the horizon band that the
-// panoramic art is meant to paint.
+// ≤ 12.5 u, void at y = −30, cloudsBelow now 80×80 (corner ≤ 57 u
+// from arena centre). The skydome is parented to the camera below
+// (`camera.add(skyDome)`) so the viewer always sits at the dome's
+// centre — without that, a fixed-origin dome leaves the camera
+// offset by ~25 u and the panoramic equirect's horizon line reads
+// off-frame, leaving only the texture's south-pole band visible
+// (which looks like a flat coloured haze instead of a skyline).
 const SKYDOME_RADIUS = 100;
 const skyDome: THREE.Mesh<THREE.SphereGeometry, THREE.Material> =
   new THREE.Mesh(new THREE.SphereGeometry(SKYDOME_RADIUS, 24, 18), skyMat);
 skyDome.renderOrder = -1;
-scene.add(skyDome);
+// Tilt the dome so the equirect's silhouette band lands in the visible
+// strip of the frame above the arena disc.
+//
+// The arena disc occupies the lower ~half of the frame (cam pitch
+// −46°, lookAt at y=−3 ± 12u arena radius). The narrow band of frame
+// pixels NOT covered by the arena spans world pitch ≈ [−24°, −31°].
+// That's the only place a horizon silhouette can read.
+//
+// In the empirical Rafa-generated panos the silhouettes (palms, ice
+// peaks, dunes, coral cliffs, pagodas) sit around image y ≈ 50–60 %
+// from the top — i.e. texture v ≈ 0.40–0.50 (with flipY=true mapping
+// image-top to v=1).
+//
+// To pull v=0.45 into world pitch −28° (the middle of the visible
+// strip above the arena), rotate the dome:
+//   target latitude = −28°,  source latitude = (0.45 − 0.5) × 180° = −9°
+//   rotation.x = target − source = −19°
+// In practice the camera + arena geometry call for slightly more tilt
+// (so the silhouette base sits at the arena rim instead of floating
+// halfway up the strip) — `−60°` empirically lines up the low sky
+// with the frame's top edge, the silhouettes just above the arena
+// rim, and pushes the haze band below the arena where it can't be
+// seen anyway. Tunable.
+skyDome.rotation.x = THREE.MathUtils.degToRad(-22);
+// Note: scene.add(skyDome) replaced by camera.add(skyDome) further
+// down (after the camera is created) so the dome travels with the
+// viewer and the equirect stays centred on the camera.
 
 // --- Pack-aware skybox / fog setters ------------------------------------
 //
@@ -259,6 +287,14 @@ const DEFAULT_CLEAR_COLOR = 0x87b0d8;
  * pass `null` to restore the procedural shader gradient used in menus.
  * Safe to call repeatedly — the skydome mesh is reused, only its material
  * and clear-color change.
+ *
+ * Also hides the screen-space backdrop while a pack texture is active.
+ * Rationale: the backdrop and the skydome both target renderOrder ≤ −1
+ * with depthWrite:false, and on some GPUs the backdrop ends up painting
+ * on top of the skydome — wiping out the panoramic equirect. The
+ * backdrop only exists as a fallback for the menu / no-pack state, so
+ * hiding it during a textured pack is both correct and a no-op for the
+ * default look.
  */
 export function setSceneSkyboxTexture(tex: THREE.Texture | null): void {
   if (tex) {
@@ -276,10 +312,12 @@ export function setSceneSkyboxTexture(tex: THREE.Texture | null): void {
     // dispose it, just dispose prior textured materials to avoid a leak
     // on repeated swaps.
     if (prev !== skyMat && prev instanceof THREE.Material) prev.dispose();
+    backdrop.visible = false;
   } else {
     const prev = skyDome.material;
     skyDome.material = skyMat;
     if (prev !== skyMat && prev instanceof THREE.Material) prev.dispose();
+    backdrop.visible = true;
   }
 }
 
@@ -300,8 +338,10 @@ export function setSceneFogColor(color: number | null): void {
 
 // Distant cloud band — a flat disc at altitude + below the arena, hinting
 // that the platform is floating very high above terrain. Single plane,
-// tinted additive for that "soft painted fog" look.
-const cloudsGeo = new THREE.PlaneGeometry(140, 140);
+// tinted additive for that "soft painted fog" look. Sized 80×80 (corner
+// at ~57 u from origin) so it stays well inside the camera-parented
+// skydome (radius 100) regardless of where the gameplay camera sits.
+const cloudsGeo = new THREE.PlaneGeometry(80, 80);
 const cloudsMat = new THREE.MeshBasicMaterial({
   color: 0xffffff,
   transparent: true,
@@ -353,6 +393,13 @@ handleResize(camera, renderer);
 // so no actual transform is read from the camera; we only need it in
 // the scene graph for three.js to traverse + draw it.
 camera.add(backdrop);
+// Parent the skydome to the camera so the viewer always sits at the
+// sphere's centre. With a fixed-origin dome the offset between camera
+// and origin (≥25 u) put the camera near the dome's far wall, so the
+// panoramic equirect's horizon line landed off-frame and only the
+// texture's south-pole band painted into the gameplay frame — that's
+// what made packs read as a flat coloured haze instead of a skyline.
+camera.add(skyDome);
 scene.add(camera);
 
 // Snapshot the base camera position for shake offset calculations.
