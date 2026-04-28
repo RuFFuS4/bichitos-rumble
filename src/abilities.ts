@@ -86,6 +86,26 @@ export interface AbilityDef {
    *  facing direction. Server clamps to arena bounds. */
   blinkDistance?: number;
 
+  /** Blink-specific impact (v0.11): when set, a radial knockback is
+   *  applied at the DESTINATION the moment the blink fires. Used by
+   *  Cheeto Shadow Step so reappearing next to an enemy still
+   *  feels offensive. Server + client compute the same impulse. */
+  blinkImpactRadius?: number;
+  blinkImpactForce?: number;
+
+  /** Cone-restricted ground_pound (v0.11): when set, the slam only
+   *  pushes enemies whose direction from the caster falls within
+   *  ±`coneAngleDeg` of the caster's facing. Used by Sebastian Claw
+   *  Wave to read as a frontal sweep instead of a radial slam.
+   *  Default undefined = full 360° (current behaviour). */
+  coneAngleDeg?: number;
+
+  /** Zone-at-origin override (v0.11): for blink + zone combos like
+   *  Sihans Burrow, the slow zone should drop at the ORIGINAL
+   *  position the critter left from, not the destination. Default
+   *  false (zone follows the new position). */
+  zoneAtOrigin?: boolean;
+
   /** Ground-pound-specific: when set, the slam ALSO drops a temporary
    *  slow zone at the impact point. Server is authoritative — it
    *  tracks the zone, applies the slowMultiplier to anyone inside via
@@ -568,10 +588,26 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       impulse: 19, duration: 0.35, cooldown: 4.5, windUp: 0.08,
       speedMultiplier: 2.1, massMultiplier: 2.0,
     }),
-    makeGroundPound({
-      name: 'Tremor', description: 'Long windup, devastating stomp',
-      radius: 3.5, force: 38, windUp: 0.6, cooldown: 7.5,
-      slowDuringActive: 0, cancelAnimOnEnd: true,
+    // v0.11 — Sihans K REPLACED by Burrow Rush (blink + zone-at-origin).
+    // Sihans desaparece donde estaba (suelta arenas movedizas) y
+    // emerge 3.5 u en su facing. Da la lectura "se hundió aquí, salió
+    // allá". El blink usa la misma mecánica que Cheeto pero con
+    // distancia menor + zoneAtOrigin: true.
+    makeBlink({
+      name: 'Sand Trap',
+      description: 'Burrow under, leave quicksand, surface ahead',
+      blinkDistance: 3.5,
+      cooldown: 7.0,
+      windUp: 0.20,
+      duration: 0.10,
+      zoneAtOrigin: true,
+      zone: {
+        radius: 3.5,
+        duration: 2.5,
+        slowMultiplier: 0.50,
+        color: 0x9c7c3c,
+        secondary: 0xd9c089,
+      },
     }),
     makeFrenzy({
       name: 'Diggy Rush',
@@ -623,12 +659,17 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 3.0, massMultiplier: 1.2,
     }),
     makeBlink({
+      // v0.11 (Rafa: "al aparecer debe provocar empuje fuerte"):
+      // se mantiene blink + se añade impact knockback radial en
+      // destino para los enemigos cercanos a donde aparece Cheeto.
       name: 'Shadow Step',
-      description: 'Short blink in facing direction',
+      description: 'Blink forward — burst pushes nearby enemies',
       blinkDistance: 4.5,
       cooldown: 5.5,
       windUp: 0.06,
       duration: 0.10,
+      blinkImpactRadius: 2.2,
+      blinkImpactForce: 28,
     }),
     makeFrenzy({
       name: 'Tiger Rage',
@@ -651,9 +692,15 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 2.6, massMultiplier: 1.7,
     }),
     makeGroundPound({
-      name: 'Big Claw Slam', description: 'Small radius, brutal force',
-      radius: 2.8, force: 40, windUp: 0.3, cooldown: 6.5,
+      // v0.11 (Rafa: "onda expansiva frontal desde el bichito"):
+      // ground_pound con coneAngleDeg 60° — solo empuja en el
+      // arco frontal de 120°. Mismo radius/force pero direccional.
+      // Identidad "Glass Cannon" se refuerza: Sebastian no protege
+      // espalda con esta K.
+      name: 'Claw Wave', description: 'Frontal claw shockwave',
+      radius: 3.5, force: 38, windUp: 0.30, cooldown: 6.5,
       slowDuringActive: 0, cancelAnimOnEnd: true,
+      coneAngleDeg: 60,
     }),
     makeFrenzy({
       name: 'Red Claw',
@@ -765,6 +812,15 @@ function fireChargeRush(def: AbilityDef, critter: Critter, _all: Critter[], scen
 
 function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
   let hitCount = 0;
+  // v0.11 — Sebastian Claw Wave: when `def.coneAngleDeg` is set, the
+  // slam only pushes enemies whose direction from the caster falls
+  // within ±coneAngleDeg of the caster's facing. Reads as a frontal
+  // sweep instead of a radial slam. coneCos saves a per-target
+  // acos: dot(dir, facing) ≥ cos(angle) iff the angle is within
+  // the cone.
+  const coneCos = def.coneAngleDeg !== undefined ? Math.cos((def.coneAngleDeg * Math.PI) / 180) : null;
+  const facingX = Math.sin(critter.mesh.rotation.y);
+  const facingZ = Math.cos(critter.mesh.rotation.y);
   for (const other of allCritters) {
     if (other === critter || !other.alive) continue;
     const dx = other.x - critter.x;
@@ -773,6 +829,11 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
     if (dist < def.radius && dist > 0.01) {
       const nx = dx / dist;
       const nz = dz / dist;
+      // Cone gate (only when configured) — direction.target dot facing.
+      if (coneCos !== null) {
+        const dotFacing = nx * facingX + nz * facingZ;
+        if (dotFacing < coneCos) continue;
+      }
       const falloff = 1 - dist / def.radius;
       other.vx += nx * def.force * falloff;
       other.vz += nz * def.force * falloff;
@@ -875,9 +936,12 @@ export function getZoneSlowMultiplier(x: number, z: number): number {
  *  destination never lands on a fragment that's about to collapse. */
 const ARENA_BLINK_RADIUS = 11.6;
 
-function fireBlink(def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
+function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
   const angle = critter.mesh.rotation.y;
   const dist = def.blinkDistance ?? 4.0;
+  // Capture origin for VFX + optional zone-at-origin (Sihans Burrow).
+  const originX = critter.x;
+  const originZ = critter.z;
   let targetX = critter.x + Math.sin(angle) * dist;
   let targetZ = critter.z + Math.cos(angle) * dist;
   // Clamp to arena disc — never land outside or in the void band.
@@ -886,20 +950,50 @@ function fireBlink(def: AbilityDef, critter: Critter, _all: Critter[], scene: TH
     targetX = (targetX / r) * ARENA_BLINK_RADIUS;
     targetZ = (targetZ / r) * ARENA_BLINK_RADIUS;
   }
-  // Origin afterimage ring + destination flash — same primitive as the
-  // dash entry burst, tinted to the critter's pound palette so the
-  // blink reads as "the same identity colour" as their other VFX.
   const palette = CRITTER_VFX_PALETTE[critter.config.name]?.pound;
-  spawnShockwaveRing(scene, critter.x, critter.z, 1.2, palette);
+  spawnShockwaveRing(scene, originX, originZ, 1.2, palette);
   // Teleport
   critter.x = targetX;
   critter.z = targetZ;
   critter.mesh.position.x = targetX;
   critter.mesh.position.z = targetZ;
-  // Velocity zeroed — the blink is a commit, not a slide-into-position.
   critter.vx = 0;
   critter.vz = 0;
   spawnShockwaveRing(scene, targetX, targetZ, 1.4, palette);
+  // v0.11 — Cheeto Shadow Step impact: radial knockback at the
+  // destination so reappearing next to an enemy reads as
+  // offensive, not just a dodge. The caster is excluded from the
+  // push (he's the one teleporting in).
+  if (def.blinkImpactRadius && def.blinkImpactForce) {
+    for (const other of allCritters) {
+      if (other === critter || !other.alive) continue;
+      const dx = other.x - targetX;
+      const dz = other.z - targetZ;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < def.blinkImpactRadius && d > 0.01) {
+        const fall = 1 - d / def.blinkImpactRadius;
+        const f = def.blinkImpactForce * fall;
+        other.vx += (dx / d) * f;
+        other.vz += (dz / d) * f;
+        applyImpactFeedback(other);
+      }
+    }
+    triggerCameraShake(FEEL.shake.headbutt * 0.7);
+  }
+  // v0.11 — zone-at-origin (Sihans Burrow): drop the slow zone
+  // where the critter STARTED, not where they appear. Reads as
+  // "se hundió aquí, salió allá, y dejó arenas movedizas atrás".
+  if (def.zone) {
+    const zx = def.zoneAtOrigin ? originX : targetX;
+    const zz = def.zoneAtOrigin ? originZ : targetZ;
+    activeZones.push({
+      x: zx, z: zz,
+      radius: def.zone.radius,
+      slowMultiplier: def.zone.slowMultiplier,
+      ttl: def.zone.duration,
+    });
+    spawnZoneRing(scene, zx, zz, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary);
+  }
   applyDashFeedback(critter);
   playSound('abilityFire');
 }

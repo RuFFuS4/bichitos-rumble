@@ -43,27 +43,16 @@ export interface AbilityDef {
   frenzyMassMult?: number;
 
   // --- 2026-04-29 final-abilities-candidate additions ---
-  /** Speed multiplier applied during the WIND-UP phase. Default 1.0
-   *  (no slow). Mirrors the client's `slowDuringWindUp` so K abilities
-   *  feel committed in online matches too — without this the player
-   *  could move at full speed during a windup server-side while the
-   *  client predicted them rooted, producing a visible state-sync
-   *  snap-back when the windup ended. */
   slowDuringWindUp?: number;
-  /** Speed multiplier during the ACTIVE window (post-windUp, pre-
-   *  cooldown). Only consulted for ground_pound / blink — the speedy
-   *  types (charge_rush, frenzy) keep using their existing
-   *  speedMultiplier / frenzySpeedMult so the boost behaviour is
-   *  unchanged. Default 1.0 → no extra slow. K abilities use 0 here
-   *  to fully root during the slam window. */
   slowDuringActive?: number;
-  /** Blink-specific: world-units to teleport along the player's
-   *  current facing. Server clamps to arena radius. */
   blinkDistance?: number;
-  /** Ground-pound-specific: lingering slow zone left at the slam
-   *  point. Server tracks the zones in BrawlRoom, applies the slow
-   *  via effectiveSpeed, and broadcasts a single 'zoneSpawned' event
-   *  per spawn so clients render the visual. */
+  /** Blink-specific impact (v0.11): radial knockback at destination. */
+  blinkImpactRadius?: number;
+  blinkImpactForce?: number;
+  /** Cone-restricted ground_pound (v0.11): see client AbilityDef. */
+  coneAngleDeg?: number;
+  /** Drop the slow zone at the BLINK ORIGIN, not destination. */
+  zoneAtOrigin?: boolean;
   zone?: {
     radius: number;
     duration: number;
@@ -143,8 +132,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Sihans: [
     { type: 'charge_rush',  cooldown: 4.5, duration: 0.35, windUp: 0.08,
       impulse: 19, speedMultiplier: 2.1, massMultiplier: 2.0 },
-    { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.6,
-      radius: 3.5, force: 38, ...ROOTED_K },
+    // v0.11 — Sand Trap: blink + zone-at-origin (quicksand)
+    { type: 'blink',        cooldown: 7.0, duration: 0.10, windUp: 0.20,
+      blinkDistance: 3.5, ...ROOTED_K, zoneAtOrigin: true,
+      zone: { radius: 3.5, duration: 2.5, slowMultiplier: 0.50 } },
     { type: 'frenzy',       cooldown: 20.0, duration: 4.5, windUp: 0.40,
       frenzySpeedMult: 1.15, frenzyMassMult: 1.50 },
   ],
@@ -167,8 +158,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Cheeto: [
     { type: 'charge_rush',  cooldown: 2.8, duration: 0.24, windUp: 0.04,
       impulse: 33, speedMultiplier: 3.0, massMultiplier: 1.2 },
+    // v0.11 — Shadow Step gains impact knockback at destination.
     { type: 'blink',        cooldown: 5.5, duration: 0.10, windUp: 0.06,
-      blinkDistance: 4.5, ...ROOTED_K },
+      blinkDistance: 4.5, ...ROOTED_K,
+      blinkImpactRadius: 2.2, blinkImpactForce: 28 },
     { type: 'frenzy',       cooldown: 14.0, duration: 2.0, windUp: 0.35,
       frenzySpeedMult: 1.55, frenzyMassMult: 1.05 },
   ],
@@ -177,8 +170,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // v0.11 (Rafa: "más potencia y empuje"): impulse 28→33, mass 1.4→1.7
     { type: 'charge_rush',  cooldown: 3.5, duration: 0.28, windUp: 0.06,
       impulse: 33, speedMultiplier: 2.6, massMultiplier: 1.7 },
-    { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.3,
-      radius: 2.8, force: 40, ...ROOTED_K },
+    // v0.11 — Claw Wave: cone-restricted ground_pound (frontal sweep,
+    // 120° arc). Same radius/force as v0.10 but no longer radial.
+    { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.30,
+      radius: 3.5, force: 38, ...ROOTED_K, coneAngleDeg: 60 },
     { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.40,
       frenzySpeedMult: 1.20, frenzyMassMult: 1.20 },
   ],
@@ -368,9 +363,23 @@ function fireEffect(
       }
       return null;
     }
-    case 'blink':
-      fireBlink(def, player);
+    case 'blink': {
+      const result = fireBlink(def, player, allPlayers);
+      // v0.11 — Sihans Burrow: zone-at-origin. Drop the quicksand
+      // where the player WAS, not where they appeared.
+      if (def.zone) {
+        const zx = def.zoneAtOrigin ? result.originX : result.targetX;
+        const zz = def.zoneAtOrigin ? result.originZ : result.targetZ;
+        return {
+          x: zx, z: zz,
+          radius: def.zone.radius,
+          duration: def.zone.duration,
+          slowMultiplier: def.zone.slowMultiplier,
+          ownerSid: player.sessionId,
+        };
+      }
       return null;
+    }
     case 'frenzy':
       // Buff only — multipliers handled in physics.ts via effectiveSpeed/Mass
       return null;
@@ -391,7 +400,21 @@ function fireChargeRush(def: AbilityDef, player: PlayerSchema): void {
  *  that are about to collapse during late-match. */
 const BLINK_ARENA_RADIUS = 11.6;
 
-function fireBlink(def: AbilityDef, player: PlayerSchema): void {
+/**
+ * Result of `fireBlink` so the dispatcher can read both the
+ * destination (for events broadcast) and the origin (so a
+ * zone-at-origin can be spawned at the right spot).
+ */
+interface BlinkResult {
+  originX: number;
+  originZ: number;
+  targetX: number;
+  targetZ: number;
+}
+
+function fireBlink(def: AbilityDef, player: PlayerSchema, allPlayers: PlayerSchema[]): BlinkResult {
+  const originX = player.x;
+  const originZ = player.z;
   const dist = def.blinkDistance ?? 4.0;
   let nx = player.x + Math.sin(player.rotationY) * dist;
   let nz = player.z + Math.cos(player.rotationY) * dist;
@@ -402,10 +425,27 @@ function fireBlink(def: AbilityDef, player: PlayerSchema): void {
   }
   player.x = nx;
   player.z = nz;
-  // The blink is a commit, not a slide — clear horizontal velocity so
-  // the player doesn't keep drifting after appearing.
   player.vx = 0;
   player.vz = 0;
+  // v0.11 — Cheeto Shadow Step impact. Radial knockback at the
+  // destination so reappearing next to enemies reads offensive,
+  // not just evasive. Caster is excluded.
+  if (def.blinkImpactRadius && def.blinkImpactForce) {
+    for (const other of allPlayers) {
+      if (other === player) continue;
+      if (!other.alive || other.falling || other.immunityTimer > 0) continue;
+      const dx = other.x - nx;
+      const dz = other.z - nz;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < def.blinkImpactRadius && d > 0.01) {
+        const fall = 1 - d / def.blinkImpactRadius;
+        const f = def.blinkImpactForce * fall;
+        other.vx += (dx / d) * f;
+        other.vz += (dz / d) * f;
+      }
+    }
+  }
+  return { originX, originZ, targetX: nx, targetZ: nz };
 }
 
 /**
@@ -416,6 +456,11 @@ function fireBlink(def: AbilityDef, player: PlayerSchema): void {
 function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: PlayerSchema[]): void {
   const radius = def.radius ?? SIM.groundPound.radius;
   const force = def.force ?? SIM.groundPound.force;
+  // v0.11 — cone gate (Sebastian Claw Wave). Pre-compute cos(angle)
+  // so the inner loop is one dot product instead of acos().
+  const coneCos = def.coneAngleDeg !== undefined ? Math.cos((def.coneAngleDeg * Math.PI) / 180) : null;
+  const facingX = Math.sin(caster.rotationY);
+  const facingZ = Math.cos(caster.rotationY);
   for (const other of allPlayers) {
     if (other === caster) continue;
     if (!other.alive || other.falling || other.immunityTimer > 0) continue;
@@ -425,6 +470,10 @@ function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: Play
     if (dist >= radius || dist < 0.01) continue;
     const nx = dx / dist;
     const nz = dz / dist;
+    if (coneCos !== null) {
+      const dot = nx * facingX + nz * facingZ;
+      if (dot < coneCos) continue;
+    }
     const falloff = 1 - dist / radius;
     other.vx += nx * force * falloff;
     other.vz += nz * force * falloff;

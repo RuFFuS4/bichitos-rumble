@@ -43,7 +43,9 @@ const expected = {
     L: { dur: 4.0, CD: 18.0, wU: 0.40, spd: 1.10, mass: 1.80 },
   },
   Sihans:    {
-    K: { kind: 'pound', rad: 3.5, frc: 38, wU: 0.6, CD: 7.5 },
+    // v0.11: Sihans K is now blink + zone-at-origin (Sand Trap).
+    K: { kind: 'blink', blinkDistance: 3.5, wU: 0.20, CD: 7.0,
+         zone: { rad: 3.5, dur: 2.5, slow: 0.50 } },
     L: { dur: 4.5, CD: 20.0, wU: 0.40, spd: 1.15, mass: 1.50 },
   },
   Kowalski:  {
@@ -52,11 +54,14 @@ const expected = {
     L: { dur: 3.0, CD: 17.0, wU: 0.40, spd: 1.40, mass: 1.10 },
   },
   Cheeto:    {
-    K: { kind: 'blink', blinkDistance: 4.5, wU: 0.06, CD: 5.5 },
+    // v0.11: Shadow Step gains impact knockback at destination.
+    K: { kind: 'blink', blinkDistance: 4.5, wU: 0.06, CD: 5.5,
+         impact: { rad: 2.2, frc: 28 } },
     L: { dur: 2.0, CD: 14.0, wU: 0.35, spd: 1.55, mass: 1.05 },
   },
   Sebastian: {
-    K: { kind: 'pound', rad: 2.8, frc: 40, wU: 0.3, CD: 6.5 },
+    // v0.11: Claw Wave — frontal cone (60° half-angle), wider radius.
+    K: { kind: 'pound', rad: 3.5, frc: 38, wU: 0.30, CD: 6.5 },
     L: { dur: 2.5, CD: 15.0, wU: 0.40, spd: 1.20, mass: 1.20 },
   },
 };
@@ -124,19 +129,50 @@ for (const [name, e] of Object.entries(expected)) {
       console.log(`${name.padEnd(10)} K  zone  rad/dur/slow      cli ${cZr}/${cZd}/${cZs}  srv ${sZr}/${sZd}/${sZs}  ${zTag}`);
     }
   } else if (e.K.kind === 'blink') {
-    const cliK = cliBlock.match(/makeBlink\(\{[\s\S]*?blinkDistance:\s*([\d.]+),\s*cooldown:\s*([\d.]+),\s*windUp:\s*([\d.]+)/);
-    const srvK = srvBlock.match(/type:\s*'blink',\s*cooldown:\s*([\d.]+),\s*duration:\s*[\d.]+,\s*windUp:\s*([\d.]+),\s*blinkDistance:\s*([\d.]+)/);
-    if (!cliK || !srvK) {
-      fail(`${name} K (blink) parse fail cli=${!!cliK} srv=${!!srvK}`);
+    // Cliente: blinkDistance can appear before or after cooldown — match field-by-field.
+    const cliBlinkDist = pickFirst(cliBlock, /makeBlink\(\{[\s\S]*?blinkDistance:\s*([\d.]+)/);
+    const cliBlinkCD = pickFirst(cliBlock, /makeBlink\(\{[\s\S]*?cooldown:\s*([\d.]+)/);
+    const cliBlinkWU = pickFirst(cliBlock, /makeBlink\(\{[\s\S]*?windUp:\s*([\d.]+)/);
+    const srvBlinkCD = pickFirst(srvBlock, /type:\s*'blink',\s*cooldown:\s*([\d.]+)/);
+    const srvBlinkWU = pickFirst(srvBlock, /type:\s*'blink'[\s\S]*?windUp:\s*([\d.]+)/);
+    const srvBlinkDist = pickFirst(srvBlock, /type:\s*'blink'[\s\S]*?blinkDistance:\s*([\d.]+)/);
+    if (cliBlinkDist == null || srvBlinkDist == null) {
+      fail(`${name} K (blink) parse fail cli=${cliBlinkDist != null} srv=${srvBlinkDist != null}`);
       continue;
     }
-    const cD = parseFloat(cliK[1]), cC = parseFloat(cliK[2]), cW = parseFloat(cliK[3]);
-    const sC = parseFloat(srvK[1]), sW = parseFloat(srvK[2]), sD = parseFloat(srvK[3]);
-    const same = cD === sD && cC === sC && cW === sW;
-    const matches = cD === e.K.blinkDistance && cC === e.K.CD && cW === e.K.wU;
+    const same = cliBlinkDist === srvBlinkDist && cliBlinkCD === srvBlinkCD && cliBlinkWU === srvBlinkWU;
+    const matches = cliBlinkDist === e.K.blinkDistance && cliBlinkCD === e.K.CD && cliBlinkWU === e.K.wU;
     const tag = same && matches ? 'OK' : 'FAIL';
     if (tag === 'FAIL') ok = false;
-    console.log(`${name.padEnd(10)} K  blink dist/wU/CD       cli ${cD}/${cW}/${cC}  srv ${sD}/${sW}/${sC}  ${tag}`);
+    console.log(`${name.padEnd(10)} K  blink dist/wU/CD       cli ${cliBlinkDist}/${cliBlinkWU}/${cliBlinkCD}  srv ${srvBlinkDist}/${srvBlinkWU}/${srvBlinkCD}  ${tag}`);
+    // Optional zone (Sihans Sand Trap)
+    if (e.K.zone) {
+      const cliZ = cliBlock.match(/makeBlink\(\{[\s\S]*?zone:\s*\{[\s\S]*?radius:\s*([\d.]+),\s*duration:\s*([\d.]+),\s*slowMultiplier:\s*([\d.]+)/);
+      const srvZ = srvBlock.match(/type:\s*'blink'[\s\S]*?zone:\s*\{\s*radius:\s*([\d.]+),\s*duration:\s*([\d.]+),\s*slowMultiplier:\s*([\d.]+)/);
+      if (!cliZ || !srvZ) {
+        fail(`${name} blink-zone parse fail cli=${!!cliZ} srv=${!!srvZ}`);
+        continue;
+      }
+      const cZr = parseFloat(cliZ[1]), cZd = parseFloat(cliZ[2]), cZs = parseFloat(cliZ[3]);
+      const sZr = parseFloat(srvZ[1]), sZd = parseFloat(srvZ[2]), sZs = parseFloat(srvZ[3]);
+      const zSame = cZr === sZr && cZd === sZd && cZs === sZs;
+      const zMatches = cZr === e.K.zone.rad && cZd === e.K.zone.dur && cZs === e.K.zone.slow;
+      const zTag = zSame && zMatches ? 'OK' : 'FAIL';
+      if (zTag === 'FAIL') ok = false;
+      console.log(`${name.padEnd(10)} K  blink-zone rad/dur/slow cli ${cZr}/${cZd}/${cZs}  srv ${sZr}/${sZd}/${sZs}  ${zTag}`);
+    }
+    // Optional impact (Cheeto Shadow Step)
+    if (e.K.impact) {
+      const cliR = pickFirst(cliBlock, /makeBlink\(\{[\s\S]*?blinkImpactRadius:\s*([\d.]+)/);
+      const cliF = pickFirst(cliBlock, /makeBlink\(\{[\s\S]*?blinkImpactForce:\s*([\d.]+)/);
+      const srvR = pickFirst(srvBlock, /type:\s*'blink'[\s\S]*?blinkImpactRadius:\s*([\d.]+)/);
+      const srvF = pickFirst(srvBlock, /type:\s*'blink'[\s\S]*?blinkImpactForce:\s*([\d.]+)/);
+      const same2 = cliR === srvR && cliF === srvF;
+      const matches2 = cliR === e.K.impact.rad && cliF === e.K.impact.frc;
+      const tag2 = same2 && matches2 ? 'OK' : 'FAIL';
+      if (tag2 === 'FAIL') ok = false;
+      console.log(`${name.padEnd(10)} K  blink-impact rad/frc   cli ${cliR}/${cliF}  srv ${srvR}/${srvF}  ${tag2}`);
+    }
   }
 
   // L (always frenzy)
