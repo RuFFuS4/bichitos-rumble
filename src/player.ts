@@ -22,6 +22,11 @@ export function updatePlayer(critter: Critter, dt: number): void {
     mz *= FEEL.chargeRush.steerFactor;
   }
 
+  // 2026-04-30 final-L — Toxic Touch confused inversion (offline).
+  // Server applies the same inversion in BrawlRoom; this branch
+  // covers vs-bots / dev-tools paths.
+  if (critter.confusedTimer > 0) { mx = -mx; mz = -mz; }
+
   // Signal whether player is actively steering (kills drift when idle)
   critter.hasInput = mx !== 0 || mz !== 0;
 

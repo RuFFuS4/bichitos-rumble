@@ -139,6 +139,11 @@ export function resolveCollisions(
             bi.lastAttackerSid = a.sessionId;
             bi.lastAttackTimeMs = Date.now();
           }
+          // 2026-04-30 final-L — Kurama Copycat last-hit tracking.
+          // A's `lastHitTargetCritter` is the critter NAME of the
+          // most recent enemy A connected with via headbutt. Copycat
+          // reads this at fire time to choose which L to mimic.
+          if (a.critterName === 'Kurama') a.lastHitTargetCritter = b.critterName;
         } else if (b.isHeadbutting) {
           a.vx -= nx * force * ratioA * aVulnMul;
           a.vz -= nz * force * ratioA * aVulnMul;
@@ -149,6 +154,7 @@ export function resolveCollisions(
             ai.lastAttackerSid = b.sessionId;
             ai.lastAttackTimeMs = Date.now();
           }
+          if (b.critterName === 'Kurama') b.lastHitTargetCritter = a.critterName;
         } else {
           a.vx -= nx * force * ratioA * aVulnMul;
           a.vz -= nz * force * ratioA * aVulnMul;
@@ -304,6 +310,35 @@ export interface ActiveZoneSnapshot {
    *  through his own Poison Cloud, etc.). Optional — caller can
    *  omit for tests or generic snapshots. */
   ownerSid?: string;
+  /** 2026-04-30 final-L — Kowalski Frozen Floor flag. When true,
+   *  critters inside the zone keep more of their velocity (low
+   *  friction) and move with reduced control authority. Read
+   *  by `simulatePlaying` to scale the friction half-life and
+   *  the input acceleration. */
+  slippery?: boolean;
+  /** 2026-04-30 final-L — Sihans Sinkhole flag. When true, the
+   *  zone applies a continuous inward pull on critters (their
+   *  velocity is nudged toward the zone centre each tick). */
+  sinkhole?: boolean;
+  /** Inward pull magnitude for sinkhole zones (units of accel /
+   *  second). */
+  pullForce?: number;
+}
+
+/**
+ * Returns true if the player is currently standing inside a
+ * slippery zone (Kowalski Frozen Floor) that they don't own.
+ * Used by `simulatePlaying` to branch friction + accel.
+ */
+export function isOnSlipperyZone(p: PlayerSchema, zones: readonly ActiveZoneSnapshot[]): boolean {
+  for (const z of zones) {
+    if (!z.slippery) continue;
+    if (z.ownerSid !== undefined && z.ownerSid === p.sessionId) continue;
+    const dx = p.x - z.x;
+    const dz = p.z - z.z;
+    if (dx * dx + dz * dz <= z.radius * z.radius) return true;
+  }
+  return false;
 }
 
 export function effectiveSpeed(p: PlayerSchema, activeZones: readonly ActiveZoneSnapshot[] = []): number {

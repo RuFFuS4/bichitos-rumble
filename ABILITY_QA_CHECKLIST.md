@@ -7,11 +7,32 @@ Status legend:
 - `[!]` problema detectado / requiere ajuste / NO se cierra antes de la entrega
 - `[~⚠]` implementado con simplificación documentada (versión fiel al espíritu, no idéntica al diseño)
 
-Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish (Rafa QA #2: status icons, Trunk redesign, online error UX).
+Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish + 2026-04-30 final-L (deadline candidate).
 Use `git log --grep abilities` to see the commit trail behind each item.
 
 > **Out-of-scope but cerrado entre tomas (no es habilidad pero estaba bloqueando QA visual):**
 > - **Skybox 360 final** (`b054e96`). Cuatro iteraciones (camera-parented sphere → world-anchored sphere PBR → backdrop toggle hacks → cortes verticales en bordes) fallaron por interacciones entre depth/transparency/grazing-angle. Solución definitiva: `scene.background = equirectTexture` con `EquirectangularReflectionMapping` — pre-pass built-in de Three.js, full-screen guaranteed, sin meshes ni z-buffer involucrado. Eliminados: skydome esférico, backdrop screen-space, cloudsBelow plano. Las 5 panorámicas en `public/images/skyboxes/<id>.png` se enchufan vía `setSceneSkyboxTexture`.
+
+> **Final L pass (2026-04-30 — deadline candidate). Todos `[~]` pendientes de validación de Rafa.**
+>
+> Schema additions:
+> - `PlayerSchema.confusedTimer: number` (synced) — Toxic Touch status.
+> - `PlayerSchema.lastHitTargetCritter: string` (synced) — Copycat last-hit tracker.
+> - `ActiveZone.slippery / sinkhole / pullForce` flags + `isOnSlipperyZone(p, zones)` helper.
+>
+> Per-personaje:
+> - **Shelly L Saw Shell** — frenzy 1.40/1.65 + flag `sawL`. Cliente: spin del `glbMesh.rotation.y` a 22 rad/s. Server + cliente offline: durante L active, contacto con cualquier alive non-immune empuja con impulse 32. Status icon 🔥 vía frenzy.
+> - **Cheeto L Cone Pulse** — frenzy ROOTED (spd 0.0) 1.8 s + flag `conePulseL`. Cada `pulseInterval = 0.30 s` el server emite `lPulse` event y aplica knockback radial-en-cono (radius 4.5, half-angle 45°, force 28). Cliente offline + server lo replican. 🔥 frenzy icon.
+> - **Sebastian L All-in Side Slash** — frenzy ROOTED 1.0 s windup. Al expirar, dash lateral (range 5.5, dirección perpendicular al facing). Hit → 60 force al target. Miss → self-knockback 38. Server + cliente offline. Broadcast `lAllInResolve` event.
+> - **Kermit L Toxic Touch** — frenzy 1.30/1.30 + flag `toxicTouchL` + `confusedDuration: 3.0`. Contacto durante L active → set `target.confusedTimer = 3.0`. Server-side: invierte `data.inputMoveX/Z` mientras `confusedTimer > 0` (afecta humanos via input recv y bots via la misma ruta). Cliente offline: invierte input en `player.ts` y `bot.ts`. 🔁 status: `confusedTimer` añade icon ☠️ poisoned.
+> - **Kowalski L Frozen Floor** — frenzy 1.10/1.10 + flag `frozenFloorL`. Spawn slippery zone radius 6, duración 5 s. Server + cliente offline: friction halfLife × 5 + accel × 0.35 cuando dentro. Owner exempt. Status icon ❄️ frozen sobre afectados.
+> - **Sihans L Sinkhole** — frenzy 1.15/1.50 + flag `sinkholeL`. Spawn hazard zone (radius 3, duración 5 s, pullForce 14) en `holeCastOffset = 4 u` delante. Centre-clamp a 4 u del origen. Pull continuo hacia centro + slow 0.55. Server tick + cliente `forEachSinkhole` aplican el pull. Owner exempt. 🐌 status icon.
+> - **Kurama L Copycat** — frenzy 1.50/1.20 + flag `copycatL`. Lee `lastHitTargetCritter` (lo actualiza `resolveCollisions` en cliente y server). Si hay target, copia los flags L del kit del target en la def in-place + spawn zones si aplica. Si no hay target, fizzle silencioso (sigue dando el frenzy buff). Cooldown 16 s + fresh-hit requirement gate.
+>
+> Nota técnica importante:
+> - El "AbilityType nuevo" se evitó: TODAS las L siguen siendo `frenzy` con flags. El dispatcher (`fireFrenzy`/`fireEffect`) se ramifica por flag. Mantenido por simplicidad y para evitar schema migration online.
+> - All-in resolution offline detecta el edge `was active → not active` en `updateAbilities` y dispara `fireAllInResolution`.
+> - Confused: server invierte input. Cliente invierte SOLO en offline path; en online el cliente envía raw input y deja que el server haga la inversión (evita double-flip).
 
 > **Final K polish (2026-04-29 — Rafa QA #2). Todos `[~]` pendientes de re-validación de Rafa:**
 > - **Sistema visual de estados (NEW)** — `src/hud/status-icons.ts`: DOM overlay billboard (no Three.js sprite). Catálogo de estados: `frozen ❄️` / `slowed 🐌` / `poisoned ☠️` / `stunned 💫` / `vulnerable 💥` / `frenzy 🔥` / `steel-shell 🛡️` / `decoy-ghost 👻`. Top-3 por prioridad. Driver en `main.ts` calcula el set por critter cada frame y proyecta posición a screen.

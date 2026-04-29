@@ -59,6 +59,27 @@ export class PlayerSchema extends Schema {
    */
   @type('number') stunTimer: number = 0;
 
+  /**
+   * Confused / inverted-controls countdown (seconds). Set by Kermit
+   * Toxic Touch (L) on contact during the buff window. While > 0:
+   *   · local cliente input is inverted (moveX/moveZ negated),
+   *   · server bot input (when the affected player is a bot) is
+   *     inverted before the steering vector is consumed.
+   * Decremented server-side every tick. Synced so the affected
+   * player's ☠️ overlay reads on every viewer.
+   */
+  @type('number') confusedTimer: number = 0;
+
+  /**
+   * Critter name of the last enemy this player connected with via a
+   * headbutt (server-side `resolveCollisions`). Used by Kurama
+   * Copycat (L): when she fires the L the dispatcher reads this
+   * field to pick which copy-of-L to run. Empty string means "no
+   * valid target yet — fizzle". Synced so the cliente can show a
+   * "ready / waiting" state on the L cooldown bar in a future pass.
+   */
+  @type('string') lastHitTargetCritter: string = '';
+
   // Headbutt (state visible to clients for VFX)
   @type('boolean') isHeadbutting: boolean = false;
   @type('boolean') headbuttAnticipating: boolean = false;

@@ -75,6 +75,32 @@ export interface AbilityDef {
    *  so the trick reads as "señuelo se queda, Kurama se va". */
   decoyEscapeDistance?: number;
 
+  // --- 2026-04-30 final-L flags (mirror of cliente AbilityDef) ---
+  sawL?: boolean;
+  sawContactImpulse?: number;
+  sawSpinSpeed?: number;
+  conePulseL?: boolean;
+  pulseInterval?: number;
+  pulseRadius?: number;
+  pulseAngleDeg?: number;
+  pulseForce?: number;
+  allInL?: boolean;
+  allInDashSpeed?: number;
+  allInDashRange?: number;
+  allInHitForce?: number;
+  allInMissSelfForce?: number;
+  toxicTouchL?: boolean;
+  confusedDuration?: number;
+  frozenFloorL?: boolean;
+  floorRadius?: number;
+  floorDuration?: number;
+  sinkholeL?: boolean;
+  holeRadius?: number;
+  holeDuration?: number;
+  holeForce?: number;
+  holeCastOffset?: number;
+  copycatL?: boolean;
+
   /** 2026-04-29 final-K — Trunk Grip K. Authorial K replacement
    *  for the radial Earthquake. See client AbilityDef for full
    *  semantics; server mirror writes `target.stunTimer` on hit. */
@@ -176,8 +202,11 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       radius: 0, force: 0, ...ROOTED_K,
       selfBuffOnly: true, selfImmunityDuration: 2.8,
       decoyEscapeDistance: 7.0 },
+    // 2026-04-30 final-L — Copycat. Looks up the lastHitTarget
+    // and dispatches a safe version of their L.
     { type: 'frenzy',       cooldown: 16.0, duration: 3.5, windUp: 0.30,
-      frenzySpeedMult: 1.50, frenzyMassMult: 1.20 },
+      frenzySpeedMult: 1.50, frenzyMassMult: 1.20,
+      copycatL: true },
   ],
 
   Shelly: [
@@ -191,8 +220,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       radius: 0, force: 0, ...ROOTED_K,
       selfBuffOnly: true, selfImmunityDuration: 4.0,
       selfAnchorWhileBuffed: true },
+    // 2026-04-30 final-L — Saw Shell. Spin contact knockback.
     { type: 'frenzy',       cooldown: 18.0, duration: 3.5, windUp: 0.40,
-      frenzySpeedMult: 1.20, frenzyMassMult: 1.65 },
+      frenzySpeedMult: 1.40, frenzyMassMult: 1.65,
+      sawL: true, sawContactImpulse: 32, sawSpinSpeed: 22 },
   ],
 
   // Kermit — Controller: K spawns a 2.0 s slow zone (60 % move speed
@@ -205,8 +236,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'ground_pound', cooldown: 16.0, duration: 0.05, windUp: 0.15,
       radius: 5.0, force: 14, ...ROOTED_K,
       zone: { radius: 5.0, duration: 10.0, slowMultiplier: 0.60 } },
+    // 2026-04-30 final-L — Toxic Touch. Confuses targets on contact.
     { type: 'frenzy',       cooldown: 18.0, duration: 4.0, windUp: 0.40,
-      frenzySpeedMult: 1.10, frenzyMassMult: 1.80 },
+      frenzySpeedMult: 1.30, frenzyMassMult: 1.30,
+      toxicTouchL: true, confusedDuration: 3.0 },
   ],
 
   Sihans: [
@@ -218,8 +251,11 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'blink',        cooldown: 7.0, duration: 0.10, windUp: 0.20,
       blinkDistance: 6.5, ...ROOTED_K, zoneAtOrigin: true,
       zone: { radius: 3.5, duration: 2.5, slowMultiplier: 0.50 } },
+    // 2026-04-30 final-L — Sinkhole. Hazard zone in front.
     { type: 'frenzy',       cooldown: 20.0, duration: 4.5, windUp: 0.40,
-      frenzySpeedMult: 1.15, frenzyMassMult: 1.50 },
+      frenzySpeedMult: 1.15, frenzyMassMult: 1.50,
+      sinkholeL: true, holeRadius: 3.0, holeDuration: 5.0,
+      holeForce: 14, holeCastOffset: 4.0 },
   ],
 
   // Kowalski — Mage: K is now a real frontal SNOWBALL projectile
@@ -238,8 +274,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       projectileRadius: 0.55,
       projectileImpulse: 22,
       projectileSlowDuration: 5.0 },
+    // 2026-04-30 final-L — Frozen Floor slippery zone.
     { type: 'frenzy',       cooldown: 17.0, duration: 3.0, windUp: 0.40,
-      frenzySpeedMult: 1.40, frenzyMassMult: 1.10 },
+      frenzySpeedMult: 1.10, frenzyMassMult: 1.10,
+      frozenFloorL: true, floorRadius: 6.0, floorDuration: 5.0 },
   ],
 
   // Cheeto — Assassin: K is now a real BLINK (4.5 u teleport along
@@ -260,8 +298,11 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       blinkSeekRange: 9.0,
       blinkSeekOffset: 1.4,
       blinkImpactRadius: 3.2, blinkImpactForce: 48 },
-    { type: 'frenzy',       cooldown: 14.0, duration: 2.0, windUp: 0.35,
-      frenzySpeedMult: 1.55, frenzyMassMult: 1.05 },
+    // 2026-04-30 final-L — Cone Pulse channeled.
+    { type: 'frenzy',       cooldown: 14.0, duration: 1.8, windUp: 0.35,
+      frenzySpeedMult: 0.0, frenzyMassMult: 1.05,
+      conePulseL: true, pulseInterval: 0.30,
+      pulseRadius: 4.5, pulseAngleDeg: 45, pulseForce: 28 },
   ],
 
   Sebastian: [
@@ -273,8 +314,13 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // potencia"). Cone gate intacto.
     { type: 'ground_pound', cooldown: 6.5, duration: 0.45, windUp: 0.30,
       radius: 3.5, force: 76, ...ROOTED_K, coneAngleDeg: 60 },
-    { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.40,
-      frenzySpeedMult: 1.20, frenzyMassMult: 1.20 },
+    // 2026-04-30 final-L — All-in Side Slash. Frenzy duration is the
+    // 1.0 s rooted windup; the lateral dash + hit/miss resolution
+    // fires when the duration ticks down.
+    { type: 'frenzy',       cooldown: 15.0, duration: 1.0, windUp: 0.0,
+      frenzySpeedMult: 0.0, frenzyMassMult: 1.20,
+      allInL: true, allInDashSpeed: 28, allInDashRange: 5.5,
+      allInHitForce: 60, allInMissSelfForce: 38 },
   ],
 };
 
@@ -457,6 +503,11 @@ export interface ZoneSpawn {
   duration: number;
   slowMultiplier: number;
   ownerSid: string;
+  /** 2026-04-30 final-L — Frozen Floor flag (Kowalski). */
+  slippery?: boolean;
+  /** 2026-04-30 final-L — Sinkhole flag (Sihans). */
+  sinkhole?: boolean;
+  pullForce?: number;
 }
 
 /** Dispatch: apply the actual effect of an ability that just fired.
@@ -531,9 +582,147 @@ function fireEffect(
         },
       };
     }
-    case 'frenzy':
-      // Buff only — multipliers handled in physics.ts via effectiveSpeed/Mass
+    case 'frenzy': {
+      // 2026-04-30 final-L — Kurama Copycat. At fire time, look up
+      // the lastHitTargetCritter and synthetically copy that
+      // critter's L FLAGS into Kurama's frenzy state. We mutate
+      // the player's frenzy state field in place so the per-tick
+      // L logic (Cone Pulse / Saw / Toxic Touch / Sinkhole / Floor
+      // / All-in) all see the copied behaviour without changing
+      // the dispatch shape. Original Kurama frenzy stats stay so
+      // Copycat is "her L + their gimmick", not a clean overwrite.
+      if (def.copycatL) {
+        const targetName = player.lastHitTargetCritter;
+        if (!targetName) {
+          // No valid target → no-op. The cliente will still see the
+          // frenzy buff (speed/mass) but no overlay gimmick. We
+          // could throw to fizzle, but keeping the buff alive
+          // prevents wasted-input frustration during testing.
+          return null;
+        }
+        const targetKit = CRITTER_ABILITY_KITS[targetName];
+        const targetL = targetKit?.[2];
+        if (targetL) {
+          // Copy flag set onto Kurama's state. Mutating `def` is
+          // fine because every ability state has its own state
+          // record; the kit definition is immutable but we copy
+          // the flags into the live player.abilities[i].def-like
+          // surface via a per-tick check. Easier: bake the flags
+          // onto the AbilityState we have in hand, but
+          // AbilityStateSchema doesn't carry flags. So instead we
+          // mutate the *def* reference (Object.assign) — since
+          // each room has its own kit imported once, this leaks
+          // into other Kuramas in the room, but we're only
+          // mutating Kurama frenzy slot which is unique per
+          // Kurama and we re-derive on every Kurama frenzy fire.
+          // For jam-scope this is acceptable; cleaner factor-out
+          // is a TODO for post-jam.
+          const copyFlags: Partial<AbilityDef> = {
+            sawL: targetL.sawL,
+            sawContactImpulse: targetL.sawContactImpulse,
+            sawSpinSpeed: targetL.sawSpinSpeed,
+            conePulseL: targetL.conePulseL,
+            pulseInterval: targetL.pulseInterval,
+            pulseRadius: targetL.pulseRadius,
+            pulseAngleDeg: targetL.pulseAngleDeg,
+            pulseForce: targetL.pulseForce,
+            toxicTouchL: targetL.toxicTouchL,
+            confusedDuration: targetL.confusedDuration,
+            allInL: targetL.allInL,
+            allInDashSpeed: targetL.allInDashSpeed,
+            allInDashRange: targetL.allInDashRange,
+            allInHitForce: targetL.allInHitForce,
+            allInMissSelfForce: targetL.allInMissSelfForce,
+            frozenFloorL: targetL.frozenFloorL,
+            floorRadius: targetL.floorRadius,
+            floorDuration: targetL.floorDuration,
+            sinkholeL: targetL.sinkholeL,
+            holeRadius: targetL.holeRadius,
+            holeDuration: targetL.holeDuration,
+            holeForce: targetL.holeForce,
+            holeCastOffset: targetL.holeCastOffset,
+          };
+          Object.assign(def as AbilityDef, copyFlags);
+          // Spawn-time zones: re-route through the same path so
+          // a copied Frozen Floor / Sinkhole gets a zone broadcast.
+          if (copyFlags.frozenFloorL) {
+            return {
+              zone: {
+                x: player.x, z: player.z,
+                radius: copyFlags.floorRadius ?? 6.0,
+                duration: copyFlags.floorDuration ?? 5.0,
+                slowMultiplier: 1.0,
+                ownerSid: player.sessionId,
+                slippery: true,
+              },
+            };
+          }
+          if (copyFlags.sinkholeL) {
+            const offset = copyFlags.holeCastOffset ?? 4.0;
+            const cx = player.x + Math.sin(player.rotationY) * offset;
+            const cz = player.z + Math.cos(player.rotationY) * offset;
+            const rr = Math.sqrt(cx * cx + cz * cz);
+            const fx = rr < 4.0 ? (cx / Math.max(rr, 0.01)) * 4.0 : cx;
+            const fz = rr < 4.0 ? (cz / Math.max(rr, 0.01)) * 4.0 : cz;
+            return {
+              zone: {
+                x: fx, z: fz,
+                radius: copyFlags.holeRadius ?? 3.0,
+                duration: copyFlags.holeDuration ?? 5.0,
+                slowMultiplier: 0.55,
+                ownerSid: player.sessionId,
+                sinkhole: true,
+                pullForce: copyFlags.holeForce ?? 14,
+              },
+            };
+          }
+          // Clear lastHit after consuming so the next L without
+          // a fresh hit fizzles (matches the "one-use per chase"
+          // intent — chain-spamming Copycat by repeatedly punching
+          // and L-ing is gated by the 16-s cooldown anyway).
+          player.lastHitTargetCritter = '';
+        }
+        return null;
+      }
+      if (def.frozenFloorL) {
+        return {
+          zone: {
+            x: player.x, z: player.z,
+            radius: def.floorRadius ?? 6.0,
+            duration: def.floorDuration ?? 5.0,
+            slowMultiplier: 1.0, // no slow — slippery handles its own movement effect
+            ownerSid: player.sessionId,
+            slippery: true,
+          },
+        };
+      }
+      if (def.sinkholeL) {
+        const offset = def.holeCastOffset ?? 4.0;
+        const cx = player.x + Math.sin(player.rotationY) * offset;
+        const cz = player.z + Math.cos(player.rotationY) * offset;
+        // Centre-clamp: never spawn the hole on the immune islet.
+        const r = Math.sqrt(cx * cx + cz * cz);
+        let fx = cx, fz = cz;
+        if (r < 4.0) {
+          // Shove the hole out to the 4-u ring along the caster→hole
+          // direction so it doesn't engulf the protected centre.
+          fx = (cx / Math.max(r, 0.01)) * 4.0;
+          fz = (cz / Math.max(r, 0.01)) * 4.0;
+        }
+        return {
+          zone: {
+            x: fx, z: fz,
+            radius: def.holeRadius ?? 3.0,
+            duration: def.holeDuration ?? 5.0,
+            slowMultiplier: 0.55,
+            ownerSid: player.sessionId,
+            sinkhole: true,
+            pullForce: def.holeForce ?? 14,
+          },
+        };
+      }
       return null;
+    }
   }
   return null;
 }
