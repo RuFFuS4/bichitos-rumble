@@ -51,6 +51,7 @@ import { play as playSoundEffect } from './audio';
 import { spawnShockwaveRing, spawnFrenzyBurst, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing, deriveZoneVfxKind } from './abilities';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { clearProjectiles } from './projectiles';
+import { clearAllCritterStatus } from './hud/status-icons';
 import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
 import { getPreviewPackId } from './arena-decor-layouts';
 
@@ -399,6 +400,7 @@ export class Game {
     clearDustPuffs();
     clearActiveZones();
     clearProjectiles();
+    clearAllCritterStatus();
     // Rebuild the idle background critters the title expects. enterOnline
     // disposes them, so we must restore them when returning to title.
     if (this.critters.length === 0) {
@@ -726,9 +728,29 @@ export class Game {
       hideOverlay();
       this.selectForOnline = false;
       this.enterTitle();
-      alert('Could not connect to multiplayer server.\n\n' +
-            'In dev: make sure the server is running (cd server && npm run dev).\n' +
-            'In prod: contact the site owner.');
+      // 2026-04-29 final-K — surface specific reasons. Server
+      // throws Error('nickname_active_in_room') from onJoin when
+      // a second tab tries to join with the same online identity.
+      // Anything else is a real connection failure.
+      const msg = (err as Error)?.message ?? '';
+      if (msg.includes('nickname_active_in_room')) {
+        alert(
+          'This nickname is already active in another tab on this device.\n\n' +
+          'Use a different nickname or close the other tab and try again.',
+        );
+      } else if (msg.includes('nickname_taken')) {
+        alert(
+          'This nickname is already in use by another device.\n\n' +
+          'Pick a different nickname.',
+        );
+      } else {
+        const detail = msg ? `\n\nServer said: ${msg}` : '';
+        alert(
+          'Could not connect to multiplayer server.\n\n' +
+          'In dev: make sure the server is running (cd server && npm run dev).\n' +
+          `In prod: contact the site owner.${detail}`,
+        );
+      }
     } finally {
       this.connectInProgress = false;
     }
@@ -852,32 +874,21 @@ export class Game {
     // everyone sees who just took what.
     onBeltChanged(room, (ev) => showOnlineBeltToast(ev));
 
-    // 2026-04-29 identity refinement — handle structured rejections
-    // from the server (currently: same-nickname-active-in-room when
-    // a second tab tries to join with the same online identity).
-    // Set a flag the onLeave handler will read so we show the right
-    // overlay instead of the generic "Disconnected".
-    let rejectionReason: string | null = null;
-    room.onMessage('joinRejected', (ev: { reason?: string }) => {
-      rejectionReason = ev?.reason ?? 'unknown';
-      console.log('[Game] join rejected by server:', rejectionReason);
-    });
-
     // Attach leave handler — if the server drops us unexpectedly we
     // surface it. Intentional leaves (restartMatch, back-to-title)
     // set this.restartInProgress / this.room=null first, so those
     // paths don't flash the Disconnected overlay.
+    //
+    // 2026-04-29 final-K — `joinRejected` message handler removed.
+    // The server now THROWS during onJoin for in-room nickname
+    // duplicates instead of `client.send + leave`-ing, so the
+    // rejection arrives as an error in `joinOrCreate` (handled in
+    // the catch block of `enterOnlinePhase`) before we ever get
+    // here.
     room.onLeave(() => {
       console.log('[Game] disconnected from room');
       if (this.phase === 'online' && this.room === room && !this.restartInProgress) {
-        if (rejectionReason === 'nickname_active_in_room') {
-          showOverlay(
-            'Nickname already in use',
-            'This nickname is already active in another tab on this device. Use a different nickname or close the other tab.',
-          );
-        } else {
-          showOverlay('Disconnected', 'Press T to return to title');
-        }
+        showOverlay('Disconnected', 'Press T to return to title');
       }
     });
   }
@@ -1042,6 +1053,23 @@ export class Game {
       // remote critter's prediction path so they don't appear to
       // move at full speed locally while the server is slowing them.
       c.slowTimer = p.slowTimer ?? 0;
+      // 2026-04-29 — Trunk Grip stun status (synced from server).
+      c.stunTimer = p.stunTimer ?? 0;
+      // 2026-04-29 final-K bugfix — Sihans Burrow invisibility was
+      // sticking on remote clients when the `abilityFired` event
+      // landed but the clear path didn't run. The visual layer is
+      // SIHANS-ONLY (per-frame check in Critter.updateVisuals via
+      // `invisibilityTimer`); we drop it back to 0 the moment the
+      // synced ability slot stops being active. Kurama keeps her
+      // own Mirror Trick invisibility because immunityTimer is what
+      // drives that one — it gets sync'd via `p.immunityTimer`
+      // every patch.
+      if (c.config.name === 'Sihans') {
+        const blinkSlot = p.abilities?.[1];
+        if (!blinkSlot || !blinkSlot.active) {
+          c.invisibilityTimer = 0;
+        }
+      }
       c.isHeadbutting = !!p.isHeadbutting;
       (c as any).headbuttAnticipating = !!p.headbuttAnticipating;
       c.lives = p.lives ?? 3;
@@ -1286,7 +1314,11 @@ export class Game {
       // already paints a ring at the origin; the next state patch
       // teleports the visible mesh to the new position.
       if (c.config.name === 'Sihans') {
-        c.invisibilityTimer = Math.max(c.invisibilityTimer, 0.30);
+        // Hard cap: even if state-sync drops the cleanup we only
+        // ever ghost for 0.30 s here, never more. The state-loop
+        // `if (!blinkSlot.active) c.invisibilityTimer = 0` belt is
+        // the second guard.
+        c.invisibilityTimer = Math.min(0.30, Math.max(c.invisibilityTimer, 0.30));
         for (let i = 0; i < 8; i++) {
           const a = (i / 8) * Math.PI * 2;
           spawnDustPuff(this.scene, ev.x + Math.cos(a) * 0.5, 0, ev.z + Math.sin(a) * 0.5);

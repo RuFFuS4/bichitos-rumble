@@ -17,6 +17,12 @@ import { initOnlineBeltToast } from './online-belt-toast';
 import { updateDustPuffs } from './dust-puff';
 import { tickAbilityZones, isInsideZoneOfKind } from './abilities';
 import { tickProjectiles } from './projectiles';
+import {
+  setCritterStatus,
+  updateAllStatusPositions,
+  type CritterStatus,
+} from './hud/status-icons';
+import type { Critter } from './critter';
 import { getPreviewPackId } from './arena-decor-layouts';
 
 // ---------------------------------------------------------------------------
@@ -433,6 +439,44 @@ if (btnOnline && !hasServerUrl) {
   console.info('[Main] online mode disabled (no VITE_SERVER_URL)');
 }
 
+/**
+ * Build the status-set for a critter from its instantaneous state.
+ * Pure: takes a Critter, returns a fresh Set<CritterStatus>. The
+ * HUD layer diffs the result against its previous render so the DOM
+ * only mutates when a glyph actually changes.
+ *
+ * Mapping rules (2026-04-29 final-K):
+ *   · stunTimer > 0           → 'stunned' + 'vulnerable'
+ *   · slowTimer > 0           → 'frozen' (Snowball is the only
+ *                                 setter — frost cyan tint already
+ *                                 paired with the icon)
+ *   · selfTintTimer > 0 with Shelly's metallic tint → 'steel-shell'
+ *   · invisibilityTimer > 0 + Kurama → 'decoy-ghost'
+ *   · ability frenzy slot active and out of windup → 'frenzy'
+ *   · standing in a 'poison' zone (and not Kermit himself)
+ *                             → 'poisoned'
+ *   · standing in a 'sand' zone (and not Sihans herself)
+ *                             → 'slowed'
+ */
+const EMPTY_STATUS_SET: ReadonlySet<CritterStatus> = new Set();
+function computeCritterStatuses(c: Critter): Set<CritterStatus> {
+  const out = new Set<CritterStatus>();
+  if (c.stunTimer > 0) {
+    out.add('stunned');
+    out.add('vulnerable');
+  }
+  if (c.slowTimer > 0) out.add('frozen');
+  if (c.config.name === 'Shelly' && c.selfTintTimer > 0) out.add('steel-shell');
+  if (c.config.name === 'Kurama' && c.invisibilityTimer > 0) out.add('decoy-ghost');
+  // Frenzy slot is ability index 2 in our kits.
+  const frenzy = c.abilityStates[2];
+  if (frenzy?.active && frenzy.windUpLeft <= 0) out.add('frenzy');
+  // Zones — only count enemy zones (caster is exempt by name).
+  if (c.config.name !== 'Kermit' && isInsideZoneOfKind(c.x, c.z, 'poison')) out.add('poisoned');
+  if (c.config.name !== 'Sihans' && isInsideZoneOfKind(c.x, c.z, 'sand')) out.add('slowed');
+  return out;
+}
+
 // Game loop
 let lastTime = performance.now();
 function loop(now: number) {
@@ -466,10 +510,44 @@ function loop(now: number) {
     // The local critter inside any 'poison'-kind zone gets a CSS
     // toxic-green vignette overlay. CSS handles the fade in/out via
     // a 200 ms transition; we just feed it a 0/1 each frame.
+    //
+    // 2026-04-29 final-K (Rafa: "estar dentro debe dar sensación
+    // real de cegado por veneno") — when the local critter is
+    // inside, every OTHER critter that's outside the cloud gets
+    // its `fadeAlpha` driven down to 0.10 so the viewer can barely
+    // see them. Critters inside the same cloud stay visible.
     const localPos = game.getLocalPlayerPos();
     const insidePoison = !!localPos && localPos.alive
       && isInsideZoneOfKind(localPos.x, localPos.z, 'poison');
     setPoisonOverlayIntensity(insidePoison ? 1 : 0);
+    const allCritters = game.getActiveCritters();
+    if (insidePoison) {
+      for (const c of allCritters) {
+        if (!c.alive) { c.fadeAlpha = null; continue; }
+        // Skip self — never fade the local viewer.
+        if (localPos && c.x === localPos.x && c.z === localPos.z && c.config.name === localPos.critterName) {
+          c.fadeAlpha = null;
+          continue;
+        }
+        c.fadeAlpha = isInsideZoneOfKind(c.x, c.z, 'poison') ? null : 0.10;
+      }
+    } else {
+      for (const c of allCritters) c.fadeAlpha = null;
+    }
+    // 2026-04-29 final-K — status icons. Recalculate the active
+    // status set per critter each frame and let the HUD layer
+    // diff/render the emoji glyphs above each head.
+    for (const c of allCritters) {
+      if (!c.alive) {
+        setCritterStatus(c, EMPTY_STATUS_SET);
+        continue;
+      }
+      setCritterStatus(c, computeCritterStatuses(c));
+    }
+    updateAllStatusPositions(camera, {
+      width: renderer.domElement.clientWidth,
+      height: renderer.domElement.clientHeight,
+    });
   } else {
     // Paused: drop the overlay so the pause menu reads cleanly.
     setPoisonOverlayIntensity(0);

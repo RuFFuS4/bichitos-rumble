@@ -123,11 +123,15 @@ export function resolveCollisions(
         const ratioA = massB / (massA + massB);
         const ratioB = massA / (massA + massB);
 
+        // 2026-04-29 — Trunk Grip vulnerability ×2 knockback
+        // multiplier on whichever side is currently stunned.
+        const aVulnMul = a.stunTimer > 0 ? 2 : 1;
+        const bVulnMul = b.stunTimer > 0 ? 2 : 1;
         if (a.isHeadbutting) {
-          b.vx += nx * force * ratioB;
-          b.vz += nz * force * ratioB;
-          a.vx -= nx * force * SIM.headbutt.recoilFactor;
-          a.vz -= nz * force * SIM.headbutt.recoilFactor;
+          b.vx += nx * force * ratioB * bVulnMul;
+          b.vz += nz * force * ratioB * bVulnMul;
+          a.vx -= nx * force * SIM.headbutt.recoilFactor * aVulnMul;
+          a.vz -= nz * force * SIM.headbutt.recoilFactor * aVulnMul;
           // Credit: A hit B. If B falls in the next ATTACKER_STALE_MS
           // window, A gets the kill.
           const bi = internal?.get(b.sessionId);
@@ -136,20 +140,20 @@ export function resolveCollisions(
             bi.lastAttackTimeMs = Date.now();
           }
         } else if (b.isHeadbutting) {
-          a.vx -= nx * force * ratioA;
-          a.vz -= nz * force * ratioA;
-          b.vx += nx * force * SIM.headbutt.recoilFactor;
-          b.vz += nz * force * SIM.headbutt.recoilFactor;
+          a.vx -= nx * force * ratioA * aVulnMul;
+          a.vz -= nz * force * ratioA * aVulnMul;
+          b.vx += nx * force * SIM.headbutt.recoilFactor * bVulnMul;
+          b.vz += nz * force * SIM.headbutt.recoilFactor * bVulnMul;
           const ai = internal?.get(a.sessionId);
           if (ai) {
             ai.lastAttackerSid = b.sessionId;
             ai.lastAttackTimeMs = Date.now();
           }
         } else {
-          a.vx -= nx * force * ratioA;
-          a.vz -= nz * force * ratioA;
-          b.vx += nx * force * ratioB;
-          b.vz += nz * force * ratioB;
+          a.vx -= nx * force * ratioA * aVulnMul;
+          a.vz -= nz * force * ratioA * aVulnMul;
+          b.vx += nx * force * ratioB * bVulnMul;
+          b.vz += nz * force * ratioB * bVulnMul;
         }
       }
     }
@@ -303,6 +307,8 @@ export interface ActiveZoneSnapshot {
 }
 
 export function effectiveSpeed(p: PlayerSchema, activeZones: readonly ActiveZoneSnapshot[] = []): number {
+  // 2026-04-29 — Trunk Grip stun overrides everything: rooted.
+  if (p.stunTimer > 0) return 0;
   let s = getCritterConfig(p.critterName).speed;
   const kit = getAbilityKit(p.critterName);
   for (let i = 0; i < p.abilities.length; i++) {
