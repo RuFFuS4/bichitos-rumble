@@ -225,6 +225,16 @@ export class Critter {
   /** Loaded GLB scene graph (null while loading or if procedural-only). */
   glbMesh: THREE.Group | null = null;  // public for debug tuning (make private after)
   /**
+   * Base Y rotation applied to `glbMesh` at attach (mirror of
+   * `rosterEntry.rotation`). Cached so Shelly's Saw Shell L can spin
+   * the mesh and then restore the original facing without snapping
+   * to 0 — which is wrong for Tripo critters (all 5 of them ship
+   * with rotation: -π/2 because the source export faces +X). 0 for
+   * procedural-only critters and for any critter that hasn't loaded
+   * its GLB yet. Set inside attachGlbMesh.
+   */
+  private baseGlbRotationY = 0;
+  /**
    * Per-instance live override of roster visual params. Read by
    * `tickProceduralAnimation` so tooling (the /calibrate.html lab) can
    * mutate `scale` / `pivotY` on the live critter and see the change
@@ -470,13 +480,22 @@ export class Critter {
     // is owned by the movement system (it follows velocity each
     // frame). The glbMesh is a child group so the visual spin
     // composes on top without fighting the facing logic.
-    const lState = this.abilityStates[2];
-    if (lState?.active && lState.windUpLeft <= 0 && lState.def.sawL && this.glbMesh) {
-      const rate = lState.def.sawSpinSpeed ?? 22;
-      this.glbMesh.rotation.y += rate * dt;
-    } else if (this.glbMesh && this.glbMesh.rotation.y !== 0 && (!lState?.active || !lState.def.sawL)) {
-      // Reset spin once the L ends so the GLB doesn't stay askew.
-      this.glbMesh.rotation.y = 0;
+    //
+    // 2026-04-29 hot-fix — gate to Shelly only AND reset to the
+    // cached `baseGlbRotationY` (not 0). Earlier draft of this
+    // block ran for every critter and reset to 0 every frame,
+    // which destroyed the entry.rotation set in attachGlbMesh
+    // (Tripo critters ship with rotation: -π/2) — Sergei, Shelly,
+    // Kermit, Kowalski and Cheeto were all rendering at the wrong
+    // angle as a result.
+    if (this.config.name === 'Shelly' && this.glbMesh) {
+      const lState = this.abilityStates[2];
+      if (lState?.active && lState.windUpLeft <= 0 && lState.def.sawL) {
+        const rate = lState.def.sawSpinSpeed ?? 22;
+        this.glbMesh.rotation.y += rate * dt;
+      } else if (this.glbMesh.rotation.y !== this.baseGlbRotationY) {
+        this.glbMesh.rotation.y = this.baseGlbRotationY;
+      }
     }
 
     // Headbutt cooldown
@@ -787,6 +806,7 @@ export class Critter {
     // Apply roster visual config
     group.scale.setScalar(entry.scale);
     group.rotation.y = entry.rotation;
+    this.baseGlbRotationY = entry.rotation;
     group.position.set(...entry.offset);
     group.position.y += entry.pivotY;
 
