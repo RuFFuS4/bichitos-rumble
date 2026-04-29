@@ -22,6 +22,7 @@ import {
   updateAllStatusPositions,
   type CritterStatus,
 } from './hud/status-icons';
+import { initStatusLegend } from './hud/status-legend';
 import type { Critter } from './critter';
 import { getPreviewPackId } from './arena-decor-layouts';
 
@@ -312,6 +313,10 @@ initOnlineBeltToast();
 // click from character-select opens instantly. The grid is rebuilt each
 // open against the current stats blob.
 initHallOfBelts();
+// Status effects legend — "?" button injected into #hud-settings + a
+// togglable popup with the icon catalogue. Idempotent, lives outside
+// pause flow so it works in online matches too.
+initStatusLegend();
 // Wire the on-screen "🏆 Belts" button (character-select overlay).
 document.getElementById('btn-open-belts')?.addEventListener('click', () => {
   openHallOfBelts();
