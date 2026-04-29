@@ -7,11 +7,29 @@ Status legend:
 - `[!]` problema detectado / requiere ajuste / NO se cierra antes de la entrega
 - `[~⚠]` implementado con simplificación documentada (versión fiel al espíritu, no idéntica al diseño)
 
-Last updated: v0.11 + 2026-04-29 K-session 1 + 2026-04-29 K-refinement (Rafa QA pass) + identity fix.
+Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish (Rafa QA #2: status icons, Trunk redesign, online error UX).
 Use `git log --grep abilities` to see the commit trail behind each item.
 
 > **Out-of-scope but cerrado entre tomas (no es habilidad pero estaba bloqueando QA visual):**
 > - **Skybox 360 final** (`b054e96`). Cuatro iteraciones (camera-parented sphere → world-anchored sphere PBR → backdrop toggle hacks → cortes verticales en bordes) fallaron por interacciones entre depth/transparency/grazing-angle. Solución definitiva: `scene.background = equirectTexture` con `EquirectangularReflectionMapping` — pre-pass built-in de Three.js, full-screen guaranteed, sin meshes ni z-buffer involucrado. Eliminados: skydome esférico, backdrop screen-space, cloudsBelow plano. Las 5 panorámicas en `public/images/skyboxes/<id>.png` se enchufan vía `setSceneSkyboxTexture`.
+
+> **Final K polish (2026-04-29 — Rafa QA #2). Todos `[~]` pendientes de re-validación de Rafa:**
+> - **Sistema visual de estados (NEW)** — `src/hud/status-icons.ts`: DOM overlay billboard (no Three.js sprite). Catálogo de estados: `frozen ❄️` / `slowed 🐌` / `poisoned ☠️` / `stunned 💫` / `vulnerable 💥` / `frenzy 🔥` / `steel-shell 🛡️` / `decoy-ghost 👻`. Top-3 por prioridad. Driver en `main.ts` calcula el set por critter cada frame y proyecta posición a screen.
+> - **Kowalski K**: cast 1.10 → 0.50 s. Slow al impactar 2 → 5 s. Cooldown 6.5 → 6.0. Frozen visual + ❄️ icon synced online via `slowTimer`.
+> - **Sihans K (visual + bug)**: vortex remolino reforzado (3 inner rings ahora: ancho lento, medio counter, núcleo rápido). Bug invisibility online: `invisibilityTimer` se limpia en cada state-sync cuando el blink slot deja de estar activo (cap conservador 0.30 s en el handler también). Iconos slowed sobre afectados via zone detection.
+> - **Kermit K (fog of war local)**: cuando el local critter está dentro de una zona poison, todos los OTROS critters fuera de la nube reciben `fadeAlpha = 0.10` (cliente-only). Critters dentro de la misma nube siguen visibles. Driver reset every frame en main loop.
+> - **Cheeto K**: sin tocar (Rafa: "perfecta").
+> - **Sebastian K**: force `38 → 76` (Rafa: "duplicar potencia"). Cono frontal y VFX intactos.
+> - **Shelly K**: sin tocar (Rafa: "perfecta").
+> - **Kurama K (lógica corregida)**: orden ahora correcto — primero spawnDecoy en posición original, después move backward (rotación + 180°) por `decoyEscapeDistance = 7 u`. NO más facing-forward / nearest-enemy seek. Server mirror.
+> - **Sergei**: K force `34 → 68` (Rafa: "doblar"). Headbutt boost `1.15 → 1.40` cliente + server.
+> - **Trunk K REDESIGN — Trunk Grip** (Rafa: rediseño oficial):
+>   - Nuevo flag `gripK: true` en AbilityDef. Al disparar:
+>     1. busca enemigo más cercano en cono frontal (range 6 u, half-angle 50°)
+>     2. lo arrastra a 1.6 u en frente de Trunk (snap, no lerp)
+>     3. set `target.stunTimer = 2.0`. Mientras stunned: `effectiveSpeed → 0` (rooted, no input) + cualquier knockback recibido se duplica (vía `stunTimer > 0` checks en `resolveCollisions` cliente y server).
+>   - Nombre actualizado en HUD a "Trunk Grip". Description: "Yank a frontal target close — stuns and exposes them".
+>   - Server-authoritative end-to-end. Reusa `ground_pound` AbilityType con flag, sin AbilityType nuevo.
 
 > **K-refinement (2026-04-29 — Rafa QA pass). Todos `[~]` pendientes de re-validación de Rafa:**
 > - **Kowalski K**: cast 0.20 → 1.10 s ("1s más antes de lanzar"), cooldown 5.5 → 6.5. Frozen visual sobre target afectado (cyan emissive pulse en `Critter.updateVisuals` mientras `slowTimer > 0`).

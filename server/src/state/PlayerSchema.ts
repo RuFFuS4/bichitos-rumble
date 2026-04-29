@@ -40,13 +40,24 @@ export class PlayerSchema extends Schema {
 
   /**
    * Movement-slow countdown (seconds). Set by hit-driven status effects
-   * (Kowalski Snowball impact: 2.0 s at 50 % move-speed). Decrements
+   * (Kowalski Snowball impact: 5.0 s at 50 % move-speed). Decrements
    * server-side every tick and is read by `effectiveSpeed` to scale
    * the player's movement. Synced so remote clients render the same
    * slowed read on the affected critter (and a future visual layer
    * can paint a frost overlay on them while > 0).
    */
   @type('number') slowTimer: number = 0;
+
+  /**
+   * Stun + vulnerable countdown (seconds). Set by Trunk Grip K. While
+   * > 0:
+   *   · the player can't move (`effectiveSpeed → 0`),
+   *   · any inbound knockback is multiplied ×2 (`isVulnerable → true`
+   *     in resolveCollisions).
+   * Decremented server-side every tick. Synced so remote clients see
+   * the stunned overlay (💫) on the affected critter.
+   */
+  @type('number') stunTimer: number = 0;
 
   // Headbutt (state visible to clients for VFX)
   @type('boolean') isHeadbutting: boolean = false;

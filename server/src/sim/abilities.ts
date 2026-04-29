@@ -75,6 +75,15 @@ export interface AbilityDef {
    *  so the trick reads as "señuelo se queda, Kurama se va". */
   decoyEscapeDistance?: number;
 
+  /** 2026-04-29 final-K — Trunk Grip K. Authorial K replacement
+   *  for the radial Earthquake. See client AbilityDef for full
+   *  semantics; server mirror writes `target.stunTimer` on hit. */
+  gripK?: boolean;
+  gripFrontalRange?: number;
+  gripFrontalAngleDeg?: number;
+  gripPullDistance?: number;
+  gripStunDuration?: number;
+
   /** Cheeto Shadow Step targeting (2026-04-29 K-refinement). When
    *  true, the blink seeks the nearest valid enemy and lands NEAR
    *  them (offset on the side opposite the caster's facing); when
@@ -123,8 +132,9 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Sergei: [
     { type: 'charge_rush',  cooldown: 4.0, duration: 0.28, windUp: 0.04,
       impulse: 25, speedMultiplier: 2.6, massMultiplier: 2.2 },
+    // 2026-04-29 final-K: force 34 → 68 (doblar potencia).
     { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.30,
-      radius: 3.5, force: 34, ...ROOTED_K },
+      radius: 3.5, force: 68, ...ROOTED_K },
     // v0.11 buff (Rafa: "darle más potencia"): 1.45/1.5 → 1.55/1.75
     { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.35,
       frenzySpeedMult: 1.55, frenzyMassMult: 1.75 },
@@ -134,9 +144,17 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // duration 0.35→0.42, mass 3.5→4.0
     { type: 'charge_rush',  cooldown: 4.5, duration: 0.42, windUp: 0.08,
       impulse: 25, speedMultiplier: 2.1, massMultiplier: 4.0 },
-    // v0.11 (Rafa: "Earthquake real"): radius 4.5→4.8, force 40→48
-    { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.60,
-      radius: 4.8, force: 48, ...ROOTED_K },
+    // 2026-04-29 final-K REDESIGN — Trunk K is now Grip: yank a
+    // frontal target and stun + expose them. See AbilityDef.gripK.
+    // Replaces the previous Earthquake (radial slam — too close
+    // to the L's identity).
+    { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.40,
+      radius: 0, force: 0, ...ROOTED_K,
+      gripK: true,
+      gripFrontalRange: 6.0,
+      gripFrontalAngleDeg: 50,
+      gripPullDistance: 1.6,
+      gripStunDuration: 2.0 },
     // v0.11 (Rafa: "bastante más fuerte"): speed 1.25→1.35, mass 1.80→2.10
     { type: 'frenzy',       cooldown: 18.0, duration: 3.0, windUp: 0.45,
       frenzySpeedMult: 1.35, frenzyMassMult: 2.10 },
@@ -211,16 +229,15 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Kowalski: [
     { type: 'charge_rush',  cooldown: 4.2, duration: 0.30, windUp: 0.06,
       impulse: 19, speedMultiplier: 2.4, massMultiplier: 1.5 },
-    // 2026-04-29 K-refinement: windUp 0.20 → 1.10 (cast feel),
-    // cooldown 5.5 → 6.5 (compensate). ROOTED_K keeps Kowalski
-    // glued to the spot during the cast.
-    { type: 'projectile',   cooldown: 6.5, duration: 0.05, windUp: 1.10,
+    // 2026-04-29 final-K: windUp 1.10 → 0.50 (cast más rápido),
+    // slow 2.0 → 5.0 (frozen 5 s), cooldown 6.5 → 6.0.
+    { type: 'projectile',   cooldown: 6.0, duration: 0.05, windUp: 0.50,
       ...ROOTED_K,
       projectileSpeed: 18,
       projectileTtl: 1.2,
       projectileRadius: 0.55,
       projectileImpulse: 22,
-      projectileSlowDuration: 2.0 },
+      projectileSlowDuration: 5.0 },
     { type: 'frenzy',       cooldown: 17.0, duration: 3.0, windUp: 0.40,
       frenzySpeedMult: 1.40, frenzyMassMult: 1.10 },
   ],
@@ -252,10 +269,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'charge_rush',  cooldown: 3.5, duration: 0.28, windUp: 0.06,
       impulse: 33, speedMultiplier: 2.6, massMultiplier: 1.7 },
     // v0.11 — Claw Wave: cone-restricted ground_pound (frontal sweep,
-    // 120° arc). Same radius/force as v0.10 but no longer radial.
-    // 2026-04-29 K-refinement: duration 0.05 → 0.45 so the clip plays.
+    // 120° arc). 2026-04-29 final-K: force 38 → 76 (Rafa: "duplicar
+    // potencia"). Cone gate intacto.
     { type: 'ground_pound', cooldown: 6.5, duration: 0.45, windUp: 0.30,
-      radius: 3.5, force: 38, ...ROOTED_K, coneAngleDeg: 60 },
+      radius: 3.5, force: 76, ...ROOTED_K, coneAngleDeg: 60 },
     { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.40,
       frenzySpeedMult: 1.20, frenzyMassMult: 1.20 },
   ],
@@ -633,28 +650,16 @@ function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: Play
     if (def.selfImmunityDuration && def.selfImmunityDuration > 0) {
       caster.immunityTimer = Math.max(caster.immunityTimer, def.selfImmunityDuration);
     }
-    // 2026-04-29 K-refinement — Kurama Mirror Trick escape teleport.
-    // Kurama teleports away from the nearest alive enemy by
-    // `decoyEscapeDistance`. Fallback: facing direction.
+    // 2026-04-29 final-K (Rafa: "Kurama debe desplazarse HACIA
+    // ATRÁS, no hacia delante, decoy se queda en posición de
+    // activación"). Server moves Kurama by `decoyEscapeDistance`
+    // along the direction OPPOSITE to her facing. Decoy is a
+    // pure cliente concept (server doesn't track decoy entity).
     const escDist = def.decoyEscapeDistance ?? 0;
     if (escDist > 0) {
-      let nearest: PlayerSchema | null = null;
-      let bestDist = Infinity;
-      for (const other of allPlayers) {
-        if (other === caster || !other.alive || other.falling) continue;
-        const dx = other.x - caster.x;
-        const dz = other.z - caster.z;
-        const d = Math.sqrt(dx * dx + dz * dz);
-        if (d < bestDist) { bestDist = d; nearest = other; }
-      }
-      let escAngle = caster.rotationY;
-      if (nearest) {
-        const dx = caster.x - nearest.x;
-        const dz = caster.z - nearest.z;
-        escAngle = Math.atan2(dx, dz);
-      }
-      let nx = caster.x + Math.sin(escAngle) * escDist;
-      let nz = caster.z + Math.cos(escAngle) * escDist;
+      const backAngle = caster.rotationY + Math.PI;
+      let nx = caster.x + Math.sin(backAngle) * escDist;
+      let nz = caster.z + Math.cos(backAngle) * escDist;
       const r = Math.sqrt(nx * nx + nz * nz);
       if (r > BLINK_ARENA_RADIUS) {
         nx = (nx / r) * BLINK_ARENA_RADIUS;
@@ -664,6 +669,39 @@ function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: Play
       caster.z = nz;
       caster.vx = 0;
       caster.vz = 0;
+    }
+    return;
+  }
+  // 2026-04-29 final-K — Trunk Grip K. Single frontal target,
+  // pulled to `gripPullDistance` u in front of the caster, gets
+  // `stunTimer = gripStunDuration`. No radial knockback.
+  if (def.gripK) {
+    const range = def.gripFrontalRange ?? 6.0;
+    const halfCone = ((def.gripFrontalAngleDeg ?? 50) * Math.PI) / 180;
+    const facingX = Math.sin(caster.rotationY);
+    const facingZ = Math.cos(caster.rotationY);
+    let target: PlayerSchema | null = null;
+    let bestScore = Infinity;
+    for (const other of allPlayers) {
+      if (other === caster || !other.alive || other.falling) continue;
+      if (other.immunityTimer > 0) continue;
+      const dx = other.x - caster.x;
+      const dz = other.z - caster.z;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d > range || d < 0.01) continue;
+      const nx = dx / d;
+      const nz = dz / d;
+      const dot = nx * facingX + nz * facingZ;
+      if (dot < Math.cos(halfCone)) continue;
+      if (d < bestScore) { bestScore = d; target = other; }
+    }
+    if (target) {
+      const pull = def.gripPullDistance ?? 1.6;
+      target.x = caster.x + facingX * pull;
+      target.z = caster.z + facingZ * pull;
+      target.vx = 0;
+      target.vz = 0;
+      target.stunTimer = Math.max(target.stunTimer, def.gripStunDuration ?? 2.0);
     }
     return;
   }

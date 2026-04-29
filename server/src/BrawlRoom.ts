@@ -213,9 +213,16 @@ export class BrawlRoom extends Room<GameState> {
     // both connections counting as the SAME player in the same room
     // (would double-credit match results). If the candidate player
     // is verified AND another connection in this room is already
-    // logged in with the same playerId, reject the second tab with a
-    // structured leave reason. Anonymous (guest) players are NOT
-    // affected — they have no playerId so dedupe is a no-op for them.
+    // logged in with the same playerId, reject the second tab.
+    //
+    // 2026-04-29 final-K — switched from `client.send+leave` to
+    // throwing during onJoin. Throwing is the supported Colyseus
+    // way to reject a candidate: the message bubbles up to
+    // `joinOrCreate` on the client as a real error so the catch
+    // handler can show a meaningful overlay instead of the generic
+    // "Could not connect" alert. The send+leave pattern raced the
+    // socket closing before the typed message arrived, which is
+    // exactly what surfaced as the connection failure Rafa saw.
     const incomingPlayerId = options.playerId && options.playerToken
       && verifyPlayer(options.playerId, options.playerToken)
       ? options.playerId
@@ -224,11 +231,7 @@ export class BrawlRoom extends Room<GameState> {
       for (const data of this.internal.values()) {
         if (data.onlinePlayerId === incomingPlayerId) {
           console.log(`[BrawlRoom] rejected ${client.sessionId}: nickname already active in this room`);
-          // Send a typed message before leave so the client can show a
-          // proper toast instead of a generic disconnect.
-          client.send('joinRejected', { reason: 'nickname_active_in_room' });
-          client.leave();
-          return;
+          throw new Error('nickname_active_in_room');
         }
       }
     }

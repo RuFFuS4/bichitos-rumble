@@ -79,7 +79,8 @@ export const CRITTER_PRESETS: CritterConfig[] = [
   {
     ...deriveCritterStats('Sergei'),
     name: 'Sergei', color: 0xb5651d,
-    headbuttBoost: 1.15,
+    // 2026-04-29 final-K (Rafa: "más potencia headbutt"): 1.15 → 1.40.
+    headbuttBoost: 1.40,
     role: 'Balanced',
     tagline: 'Strong and agile. No weakness.',
   },
@@ -178,6 +179,17 @@ export class Critter {
    *  same. Set by `tickProjectiles` on hit (offline) or by the
    *  online state patch (server is authoritative there). */
   slowTimer = 0;
+  /** 2026-04-29 — Trunk Grip K stun + vulnerable. While > 0 the
+   *  critter cannot move (effectiveSpeed → 0) and any knockback
+   *  received is multiplied ×2. Mirror of `PlayerSchema.stunTimer`. */
+  stunTimer = 0;
+  /** 2026-04-29 — local-only fog-of-war fade. Set by the Kermit
+   *  Poison Cloud overlay driver each frame: when the local critter
+   *  is inside the cloud and THIS critter is outside it, fadeAlpha
+   *  is dialled to a low value (0.10) so the affected viewer can
+   *  barely see them. Reset to null when the local critter exits
+   *  the cloud. */
+  fadeAlpha: number | null = null;
   falling = false;            // true while falling off arena (waiting to respawn)
   private respawnTimer = 0;
   headbuttCooldown = 0;
@@ -369,6 +381,8 @@ export class Critter {
   }
 
   get effectiveSpeed(): number {
+    // Stun (Trunk Grip K) overrides everything: rooted, can't move.
+    if (this.stunTimer > 0) return 0;
     // Active abilities (charge_rush boost, frenzy buff, K root, blink
     // root) × any slow zones the critter is currently standing inside
     // (Kermit Poison Cloud, Sihans Quicksand) × the Snowball hit-slow
@@ -436,6 +450,8 @@ export class Critter {
     }
     // 2026-04-29 — Snowball hit-slow status countdown.
     if (this.slowTimer > 0) this.slowTimer = Math.max(0, this.slowTimer - dt);
+    // 2026-04-29 — Trunk Grip stun + vulnerable countdown.
+    if (this.stunTimer > 0) this.stunTimer = Math.max(0, this.stunTimer - dt);
 
     // Headbutt cooldown
     if (this.headbuttCooldown > 0) this.headbuttCooldown -= dt;
@@ -697,6 +713,19 @@ export class Critter {
       for (const mat of mats) {
         mat.emissive.setHex(0xb98c54);
         mat.emissiveIntensity = pulse;
+      }
+    }
+    // 2026-04-29 final-K — local fog-of-war fade for Kermit
+    // Poison Cloud. When the local viewer is inside the cloud and
+    // THIS critter is outside it, the per-frame driver sets
+    // `fadeAlpha` low (~0.10) so the affected viewer can barely
+    // see them. Pure local visual; doesn't affect other clients
+    // and doesn't interact with knockback/collision.
+    if (this.fadeAlpha !== null) {
+      for (const mat of mats) {
+        mat.transparent = true;
+        mat.opacity = this.fadeAlpha;
+        mat.depthWrite = false;
       }
     }
   }

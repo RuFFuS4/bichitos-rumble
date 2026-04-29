@@ -92,11 +92,14 @@ export function resolveCollisions(critters: Critter[]): void {
         const massRatioA = b.effectiveMass / (a.effectiveMass + b.effectiveMass);
         const massRatioB = a.effectiveMass / (a.effectiveMass + b.effectiveMass);
 
+        // 2026-04-29 — Trunk Grip vulnerability ×2 knockback on the stunned side.
+        const aVuln = a.stunTimer > 0 ? 2 : 1;
+        const bVuln = b.stunTimer > 0 ? 2 : 1;
         if (a.isHeadbutting) {
-          b.vx += nx * force * massRatioB;
-          b.vz += nz * force * massRatioB;
-          a.vx -= nx * force * FEEL.headbutt.recoilFactor;
-          a.vz -= nz * force * FEEL.headbutt.recoilFactor;
+          b.vx += nx * force * massRatioB * bVuln;
+          b.vz += nz * force * massRatioB * bVuln;
+          a.vx -= nx * force * FEEL.headbutt.recoilFactor * aVuln;
+          a.vz -= nz * force * FEEL.headbutt.recoilFactor * aVuln;
           triggerHitStop(FEEL.hitStop.headbutt);
           triggerCameraShake(FEEL.shake.headbutt * boost);
           applyImpactFeedback(b);
@@ -105,10 +108,10 @@ export function resolveCollisions(critters: Critter[]): void {
           // Untouchable / Pain Tolerance evaluation via recordWin().
           b.matchStats.hitsReceived++;
         } else if (b.isHeadbutting) {
-          a.vx -= nx * force * massRatioA;
-          a.vz -= nz * force * massRatioA;
-          b.vx += nx * force * FEEL.headbutt.recoilFactor;
-          b.vz += nz * force * FEEL.headbutt.recoilFactor;
+          a.vx -= nx * force * massRatioA * aVuln;
+          a.vz -= nz * force * massRatioA * aVuln;
+          b.vx += nx * force * FEEL.headbutt.recoilFactor * bVuln;
+          b.vz += nz * force * FEEL.headbutt.recoilFactor * bVuln;
           triggerHitStop(FEEL.hitStop.headbutt);
           triggerCameraShake(FEEL.shake.headbutt * boost);
           applyImpactFeedback(a);
@@ -116,10 +119,10 @@ export function resolveCollisions(critters: Critter[]): void {
           a.matchStats.hitsReceived++;
         } else {
           // Normal collision — gentle nudge
-          a.vx -= nx * force * massRatioA;
-          a.vz -= nz * force * massRatioA;
-          b.vx += nx * force * massRatioB;
-          b.vz += nz * force * massRatioB;
+          a.vx -= nx * force * massRatioA * aVuln;
+          a.vz -= nz * force * massRatioA * aVuln;
+          b.vx += nx * force * massRatioB * bVuln;
+          b.vz += nz * force * massRatioB * bVuln;
         }
       }
     }

@@ -181,6 +181,23 @@ export interface AbilityDef {
    *  as "señuelo se queda, Kurama se va lejos". */
   decoyEscapeDistance?: number;
 
+  /** 2026-04-29 final-K — Trunk Grip K. When true, the
+   *  ground_pound dispatcher takes a single frontal target
+   *  instead of doing radial knockback:
+   *    1. find closest enemy in `gripFrontalRange` within
+   *       ±`gripFrontalAngleDeg` of facing
+   *    2. yank them to `gripPullDistance` units in front of Trunk
+   *    3. write `target.stunTimer = gripStunDuration` (server +
+   *       cliente). Stun roots them and grants ×2 incoming
+   *       knockback via the vulnerability path in
+   *       `resolveCollisions`.
+   */
+  gripK?: boolean;
+  gripFrontalRange?: number;
+  gripFrontalAngleDeg?: number;
+  gripPullDistance?: number;
+  gripStunDuration?: number;
+
   // --- 2026-04-29 K-session: projectile additions (Kowalski Snowball) ---
   /** Forward speed of the projectile (units / second). */
   projectileSpeed?: number;
@@ -506,10 +523,12 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       clipPlaybackRate: 2.3,
     }),
     makeGroundPound({
+      // 2026-04-29 final-K (Rafa: "doblar potencia, apenas
+      // empuja"): force 34 → 68. Sentinel parity also bumped.
       name: 'Shockwave',
-      description: 'Slams ground with both fists',
+      description: 'Slams ground with both fists — heavy radial knockback',
       radius: 3.5,
-      force: 34,
+      force: 68,
       windUp: 0.30,
       cooldown: 6.0,
       slowDuringActive: 0, cancelAnimOnEnd: true,
@@ -566,18 +585,27 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     makeGroundPound({
       // v0.11 (Rafa: "no hace lo que debe hacer"): radius 4.5 → 4.8,
       // force 40 → 48 + shakeBoost: true (camera shake × 1.4 al
-      // disparar). El Earthquake ahora SE LEE como terremoto: ring
-      // mucho más ancho que cualquier otro K, knockback brutal,
-      // sacudida pantalla notable.
-      name: 'Earthquake',
-      description: 'Foot stomp that shakes the arena',
-      radius: 4.8,
-      force: 48,
-      windUp: 0.60,
+      // 2026-04-29 final-K REDESIGN — Trunk K renombrada a
+      // "Trunk Grip": agarra al enemigo frontal más cercano, lo
+      // tira hacia Trunk, y lo deja stuneado/vulnerable durante
+      // 2 s. Mientras está stunned, cualquier knockback recibido
+      // se duplica (vía `stunTimer > 0` en physics). Antes la K
+      // era un Earthquake radial que se solapaba con la L.
+      // Implementada como un ground_pound con `gripK: true` —
+      // reusa el dispatcher existente sin AbilityType nuevo.
+      name: 'Trunk Grip',
+      description: 'Yank a frontal target close — stuns and exposes them',
+      radius: 0, force: 0,
+      windUp: 0.40,
       cooldown: 7.5,
       clipPlaybackRate: 2.8,
       slowDuringActive: 0, cancelAnimOnEnd: true,
-      shakeBoost: 1.4,
+      shakeBoost: 1.0,
+      gripK: true,
+      gripFrontalRange: 6.0,
+      gripFrontalAngleDeg: 50,
+      gripPullDistance: 1.6,
+      gripStunDuration: 2.0,
     }),
     makeFrenzy({
       // v0.11 (Rafa: "bastante más fuerte" + "anim colgada"):
@@ -767,21 +795,20 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 2.4, massMultiplier: 1.5,
     }),
     makeProjectile({
-      // 2026-04-29 K-refinement (Rafa: "1s más antes de lanzar para
-      // que se reproduzca más la animación de cast"): windUp 0.20 →
-      // 1.10. Durante el cast Kowalski queda rooted (slowDuringWindUp
-      // 0). Cooldown sube 5.5 → 6.5 para compensar el cast más largo
-      // sin volverla spammeable.
+      // 2026-04-29 final-K (Rafa: "el cast de 1.10 es demasiado
+      // largo, bájalo a ~0.5"): windUp 1.10 → 0.50.
+      // Slow al impactar 2.0 → 5.0 ("frozen 5 s con icono ❄️").
+      // Cooldown 6.5 → 6.0 para mantener pace.
       name: 'Snowball',
-      description: 'Frontal snowball — knocks back and freezes the target',
-      cooldown: 6.5,
-      windUp: 1.10,
+      description: 'Frontal snowball — knocks back and freezes the target for 5 s',
+      cooldown: 6.0,
+      windUp: 0.50,
       duration: 0.05,
       projectileSpeed: 18,
       projectileTtl: 1.2,
       projectileRadius: 0.55,
       projectileImpulse: 22,
-      projectileSlowDuration: 2.0,
+      projectileSlowDuration: 5.0,
     }),
     makeFrenzy({
       name: 'Blizzard',
@@ -842,12 +869,12 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // arco frontal de 120°. Mismo radius/force pero direccional.
       // Identidad "Glass Cannon" se refuerza: Sebastian no protege
       // espalda con esta K.
-      // 2026-04-29 K-refinement (Rafa: "no parece reproducir
-      // animación"): duration 0.05 → 0.45 para que el clip
-      // Ability2 (al 1.3×) tenga ventana de ~0.55 s antes del
-      // cancelAnimOnEnd. Cooldown se mantiene a 6.5.
-      name: 'Claw Wave', description: 'Frontal claw shockwave',
-      radius: 3.5, force: 38, windUp: 0.30, cooldown: 6.5,
+      // 2026-04-29 final-K (Rafa: "duplicar potencia"): force 38
+      // → 76. Lectura "el alacrán arrasa lo que tiene delante".
+      // Sigue en cono frontal ±60° y solo afecta a quien está
+      // delante; cancelAnimOnEnd intacto.
+      name: 'Claw Wave', description: 'Frontal claw shockwave — heavy frontal knockback',
+      radius: 3.5, force: 76, windUp: 0.30, cooldown: 6.5,
       duration: 0.45,
       slowDuringActive: 0, cancelAnimOnEnd: true,
       coneAngleDeg: 60,
@@ -978,36 +1005,26 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       critter.immunityTimer = Math.max(critter.immunityTimer, total);
     }
     if (invisDur > 0) {
-      // Cliente-only: spawn a static decoy clone at the current
-      // position, then kick the caster's invisibility timer so the
-      // visual layer (in updateVisuals / vfx) drops her alpha.
+      // 2026-04-29 final-K (Rafa: "lógica al revés — primero decoy
+      // en posición original, después mover Kurama HACIA ATRÁS").
+      // Order is now:
+      //   1. snapshot original position
+      //   2. spawn the decoy at that original spot (BEFORE moving)
+      //   3. move Kurama backward (opposite of her facing) by
+      //      `decoyEscapeDistance`, clamped to arena
+      //   4. ghost her mesh + dust burst at the arrival point
+      const originX = critter.x;
+      const originZ = critter.z;
+      // 1+2 — decoy first.
       spawnDecoyAt(scene, critter, invisDur);
-      critter.invisibilityTimer = invisDur;
-      // 2026-04-29 K-refinement — Mirror Trick escape teleport.
-      // Find the closest alive enemy and dash AWAY from them by
-      // `decoyEscapeDistance` units, leaving the decoy at the
-      // original spot. Fallback: facing-direction blink. Clamped to
-      // arena radius so we never land in the void.
       const escDist = def.decoyEscapeDistance ?? 0;
       if (escDist > 0) {
-        let nearest: Critter | null = null;
-        let bestDist = Infinity;
-        for (const other of allCritters) {
-          if (other === critter || !other.alive) continue;
-          const dx = other.x - critter.x;
-          const dz = other.z - critter.z;
-          const d = Math.sqrt(dx * dx + dz * dz);
-          if (d < bestDist) { bestDist = d; nearest = other; }
-        }
-        let escAngle = critter.mesh.rotation.y; // fallback: facing forward
-        if (nearest) {
-          // Direction AWAY from the nearest enemy.
-          const dx = critter.x - nearest.x;
-          const dz = critter.z - nearest.z;
-          escAngle = Math.atan2(dx, dz);
-        }
-        let nx = critter.x + Math.sin(escAngle) * escDist;
-        let nz = critter.z + Math.cos(escAngle) * escDist;
+        // 3 — retreat backward from current facing. Kurama
+        // mesh rotation.y points where she's facing forward;
+        // backward is +PI from that direction.
+        const backAngle = critter.mesh.rotation.y + Math.PI;
+        let nx = originX + Math.sin(backAngle) * escDist;
+        let nz = originZ + Math.cos(backAngle) * escDist;
         const r = Math.sqrt(nx * nx + nz * nz);
         if (r > ARENA_BLINK_RADIUS) {
           nx = (nx / r) * ARENA_BLINK_RADIUS;
@@ -1019,13 +1036,17 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
         critter.mesh.position.z = nz;
         critter.vx = 0;
         critter.vz = 0;
-        // Tiny dust burst at the new position so the reappearance
-        // reads, even though Kurama is alpha 0.25.
+        // 4 — dust at arrival so the reappearance reads even at
+        // alpha 0.25.
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2;
           spawnDustPuff(scene, nx + Math.cos(a) * 0.4, 0, nz + Math.sin(a) * 0.4);
         }
       }
+      // Ghost Kurama AFTER the move so the alpha layer applies to
+      // the new position, not the origin (decoy stays opaque-ish
+      // because the clone owns its own materials).
+      critter.invisibilityTimer = invisDur;
     }
     if (def.selfTintHex !== undefined) {
       critter.selfTintHex = def.selfTintHex;
@@ -1037,6 +1058,55 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
     spawnShockwaveRing(scene, critter.x, critter.z, 1.6, palette);
     triggerCameraShake(FEEL.shake.groundPound * 0.4);
     playSound('abilityFire');
+    return;
+  }
+  // 2026-04-29 final-K — Trunk Grip K branch. When `gripK` is set
+  // we ignore the radial path entirely: pick a single frontal
+  // target, pull them to `gripPullDistance` u in front of Trunk,
+  // and write `target.stunTimer`. Pure offline path; the online
+  // server runs the same logic in `fireGroundPound`.
+  if (def.gripK) {
+    const range = def.gripFrontalRange ?? 6.0;
+    const halfCone = ((def.gripFrontalAngleDeg ?? 50) * Math.PI) / 180;
+    const facingX = Math.sin(critter.mesh.rotation.y);
+    const facingZ = Math.cos(critter.mesh.rotation.y);
+    let target: Critter | null = null;
+    let bestScore = Infinity;
+    for (const other of allCritters) {
+      if (other === critter || !other.alive || other.falling) continue;
+      const dx = other.x - critter.x;
+      const dz = other.z - critter.z;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d > range || d < 0.01) continue;
+      const nx = dx / d;
+      const nz = dz / d;
+      const dot = nx * facingX + nz * facingZ;
+      if (dot < Math.cos(halfCone)) continue;
+      // Score by distance (closest wins).
+      if (d < bestScore) { bestScore = d; target = other; }
+    }
+    const palette = CRITTER_VFX_PALETTE[critter.config.name]?.pound;
+    spawnShockwaveRing(scene, critter.x, critter.z, 1.4, palette);
+    triggerCameraShake(FEEL.shake.groundPound * (def.shakeBoost ?? 1.0));
+    playSound('groundPound');
+    if (target) {
+      const pull = def.gripPullDistance ?? 1.6;
+      const tx = critter.x + facingX * pull;
+      const tz = critter.z + facingZ * pull;
+      // Snap target to the pull point (yank reads as "trunk pulled
+      // them in" not "they slid"). Zero their velocity.
+      target.x = tx;
+      target.z = tz;
+      target.mesh.position.x = tx;
+      target.mesh.position.z = tz;
+      target.vx = 0;
+      target.vz = 0;
+      target.stunTimer = def.gripStunDuration ?? 2.0;
+      // Burst at the target so the yank reads.
+      spawnShockwaveRing(scene, tx, tz, 1.0, palette);
+      applyImpactFeedback(target);
+      triggerHitStop(FEEL.hitStop.groundPound);
+    }
     return;
   }
   let hitCount = 0;
@@ -1815,32 +1885,47 @@ export function spawnZoneRing(
     geo: THREE.BufferGeometry; speed: number; baseOpacity: number;
   }> = [];
   if (vfxKind === 'sand') {
-    // Inner ring 1 — wide, slower
+    // Three stacked rings rotating at very different speeds → reads
+    // as a heavy whirlpool, not a flat circle. 2026-04-29 final-K
+    // (Rafa: "enfatizar más el vórtice/remolino").
+    // Outer wide ring — slow, big arc
     {
-      const geo = new THREE.RingGeometry(radius * 0.35, radius * 0.85, 32, 1);
+      const geo = new THREE.RingGeometry(radius * 0.50, radius * 0.95, 36, 1);
       const mat = new THREE.MeshBasicMaterial({
-        color, transparent: true, opacity: 0.35,
+        color, transparent: true, opacity: 0.45,
         depthWrite: false, side: THREE.DoubleSide,
       });
-      // Stagger the start so the segments don't all line up
       const m = new THREE.Mesh(geo, mat);
       m.rotation.x = -Math.PI / 2;
       m.position.set(x, 0.04, z);
       scene.add(m);
-      sandSwirls.push({ mesh: m, mat, geo, speed: 1.2, baseOpacity: 0.35 });
+      sandSwirls.push({ mesh: m, mat, geo, speed: 1.5, baseOpacity: 0.45 });
     }
-    // Inner ring 2 — narrower, faster, opposite direction
+    // Mid ring — counter-rotation, crisp edges
     {
-      const geo = new THREE.RingGeometry(radius * 0.15, radius * 0.55, 24, 1);
+      const geo = new THREE.RingGeometry(radius * 0.25, radius * 0.65, 32, 1);
       const mat = new THREE.MeshBasicMaterial({
-        color: secondary, transparent: true, opacity: 0.45,
+        color: secondary, transparent: true, opacity: 0.55,
         depthWrite: false, side: THREE.DoubleSide,
       });
       const m = new THREE.Mesh(geo, mat);
       m.rotation.x = -Math.PI / 2;
       m.position.set(x, 0.05, z);
       scene.add(m);
-      sandSwirls.push({ mesh: m, mat, geo, speed: -2.6, baseOpacity: 0.45 });
+      sandSwirls.push({ mesh: m, mat, geo, speed: -3.4, baseOpacity: 0.55 });
+    }
+    // Inner core — fast spin, small, dark sand "throat"
+    {
+      const geo = new THREE.RingGeometry(0.05, radius * 0.30, 24, 1);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x6b4a1f, transparent: true, opacity: 0.70,
+        depthWrite: false, side: THREE.DoubleSide,
+      });
+      const m = new THREE.Mesh(geo, mat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x, 0.06, z);
+      scene.add(m);
+      sandSwirls.push({ mesh: m, mat, geo, speed: 5.5, baseOpacity: 0.70 });
     }
   }
 
