@@ -834,9 +834,17 @@ export class Game {
         slowMultiplier: ev.slowMultiplier,
         ttl: ev.duration,
         vfxKind,
+        // Owner-immunity for the slow check. We normalise to the
+        // critter NAME (not sessionId) so the offline + online
+        // paths share the same key, and the local Critter's
+        // `effectiveSpeed` skips zones whose owner critter name
+        // matches its own. Edge: two humans on the same critter
+        // would both be immune to each other's zones — extremely
+        // rare and matches "you both look the same anyway".
+        ownerKey: caster?.config.name ?? '',
       });
       spawnZoneRing(this.scene, ev.x, ev.z, ev.radius, ev.duration,
-        palette?.pound?.color, palette?.pound?.secondary);
+        palette?.pound?.color, palette?.pound?.secondary, vfxKind);
     });
 
     // Online Belts: if the server detects a belt changed hands after this
