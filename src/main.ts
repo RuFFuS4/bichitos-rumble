@@ -15,7 +15,7 @@ import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 import { initOnlineBeltToast } from './online-belt-toast';
 import { updateDustPuffs } from './dust-puff';
-import { tickAbilityZones, isInsideZoneOfKind } from './abilities';
+import { tickAbilityZones, isInsideZoneOfKind, tickLOffline } from './abilities';
 import { tickProjectiles } from './projectiles';
 import {
   setCritterStatus,
@@ -471,6 +471,8 @@ function computeCritterStatuses(c: Critter): Set<CritterStatus> {
     out.add('vulnerable');
   }
   if (c.slowTimer > 0) out.add('frozen');
+  // 2026-04-30 final-L — Toxic Touch confused → poisoned icon.
+  if (c.confusedTimer > 0) out.add('poisoned');
   if (c.config.name === 'Shelly' && c.selfTintTimer > 0) out.add('steel-shell');
   if (c.config.name === 'Kurama' && c.invisibilityTimer > 0) out.add('decoy-ghost');
   // Frenzy slot is ability index 2 in our kits.
@@ -479,6 +481,8 @@ function computeCritterStatuses(c: Critter): Set<CritterStatus> {
   // Zones — only count enemy zones (caster is exempt by name).
   if (c.config.name !== 'Kermit' && isInsideZoneOfKind(c.x, c.z, 'poison')) out.add('poisoned');
   if (c.config.name !== 'Sihans' && isInsideZoneOfKind(c.x, c.z, 'sand')) out.add('slowed');
+  // 2026-04-30 final-L — Frozen Floor: critters in 'ice' zone show frozen.
+  if (c.config.name !== 'Kowalski' && isInsideZoneOfKind(c.x, c.z, 'ice')) out.add('frozen');
   return out;
 }
 
@@ -506,6 +510,10 @@ function loop(now: number) {
     // freeze the slow-zone timer too so a zone doesn't quietly expire
     // while the menu is up.
     tickAbilityZones(dt);
+    // 2026-04-30 final-L — per-tick L mechanics (Cone Pulse / Saw /
+    // Toxic Touch contact, Sinkhole pull). Server runs the same
+    // logic in `simulatePlaying`; this branch covers offline.
+    tickLOffline(dt, game.getActiveCritters());
     // 2026-04-29 K-session — Kowalski Snowball projectile tick.
     // Integrates position + sweeps collision (offline) or just
     // advances the visual mesh (online; collision is server-driven).

@@ -37,16 +37,16 @@ const expected = {
     L: { dur: 3.5, CD: 16.0, wU: 0.30, spd: 1.50, mass: 1.20 },
   },
   Shelly:    {
-    // 2026-04-29 K-refinement: Steel Shell duration 5 → 4 + anchored.
     K: { kind: 'pound', rad: 0, frc: 0, wU: 0.20, CD: 12.0,
          selfBuff: { immunity: 4.0 } },
-    L: { dur: 3.5, CD: 18.0, wU: 0.40, spd: 1.20, mass: 1.65 },
+    // 2026-04-30 final-L Saw Shell: speed 1.20 → 1.40.
+    L: { dur: 3.5, CD: 18.0, wU: 0.40, spd: 1.40, mass: 1.65 },
   },
   Kermit:    {
-    // 2026-04-29 K-refinement: zone duration 2.0 → 10.0, cooldown 7 → 16.
     K: { kind: 'pound', rad: 5.0, frc: 14, wU: 0.15, CD: 16.0,
          zone: { rad: 5.0, dur: 10.0, slow: 0.60 } },
-    L: { dur: 4.0, CD: 18.0, wU: 0.40, spd: 1.10, mass: 1.80 },
+    // 2026-04-30 final-L Toxic Touch: 1.10/1.80 → 1.30/1.30.
+    L: { dur: 4.0, CD: 18.0, wU: 0.40, spd: 1.30, mass: 1.30 },
   },
   Sihans:    {
     // 2026-04-29 K-refinement: blinkDistance 3.5 → 6.5.
@@ -59,19 +59,19 @@ const expected = {
     // slowDur 2.0 → 5.0.
     K: { kind: 'projectile', wU: 0.50, CD: 6.0,
          projectile: { speed: 18, ttl: 1.2, radius: 0.55, impulse: 22, slowDur: 5.0 } },
-    L: { dur: 3.0, CD: 17.0, wU: 0.40, spd: 1.40, mass: 1.10 },
+    // 2026-04-30 final-L Frozen Floor: 1.40/1.10 → 1.10/1.10.
+    L: { dur: 3.0, CD: 17.0, wU: 0.40, spd: 1.10, mass: 1.10 },
   },
   Cheeto:    {
-    // 2026-04-29 K-refinement: seek-nearest. Impact rad 2.6→3.2,
-    // force 36→48.
     K: { kind: 'blink', blinkDistance: 4.5, wU: 0.06, CD: 5.5,
          impact: { rad: 3.2, frc: 48 } },
-    L: { dur: 2.0, CD: 14.0, wU: 0.35, spd: 1.55, mass: 1.05 },
+    // 2026-04-30 final-L Cone Pulse: rooted (spd 0), dur 2.0 → 1.8.
+    L: { dur: 1.8, CD: 14.0, wU: 0.35, spd: 0.0, mass: 1.05 },
   },
   Sebastian: {
-    // 2026-04-29 final-K: force 38 → 76 (Rafa: "duplicar potencia").
     K: { kind: 'pound', rad: 3.5, frc: 76, wU: 0.30, CD: 6.5 },
-    L: { dur: 2.5, CD: 15.0, wU: 0.40, spd: 1.20, mass: 1.20 },
+    // 2026-04-30 final-L All-in: rooted (spd 0), 1.0 s windup-as-duration.
+    L: { dur: 1.0, CD: 15.0, wU: 0.0, spd: 0.0, mass: 1.20 },
   },
 };
 

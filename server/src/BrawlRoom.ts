@@ -23,8 +23,8 @@ import { Client, Room } from 'colyseus';
 import { GameState } from './state/GameState.js';
 import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
-import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed, type ActiveZoneSnapshot } from './sim/physics.js';
-import { createAbilityStates, tickPlayerAbilities } from './sim/abilities.js';
+import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed, isOnSlipperyZone, type ActiveZoneSnapshot } from './sim/physics.js';
+import { createAbilityStates, tickPlayerAbilities, getAbilityKit } from './sim/abilities.js';
 import { ArenaSim } from './sim/arena.js';
 import { computeBotInput } from './sim/bot.js';
 import {
@@ -82,6 +82,18 @@ interface InternalPlayerData {
    *  headbutt last-hitter tracking to credit the actual slayer. For now
    *  stays at 0 — Slayer Belt will need a follow-up. */
   killsVsHumansThisMatch: number;
+  /** 2026-04-30 final-L — Cheeto Cone Pulse pulse-accumulator.
+   *  Counts elapsed seconds since the last pulse fired so the L
+   *  can drain it in `pulseInterval` chunks regardless of variable
+   *  tick spacing. */
+  pulseAccum?: number;
+  /** 2026-04-30 final-L — Sebastian All-in cached starting facing
+   *  (set on activation, consumed on resolution). The dash uses
+   *  the rotationY at FIRE-TIME so the lateral slide is locked
+   *  even if the pre-resolve frenzy buff happens to reorient. */
+  allInDirX?: number;
+  allInDirZ?: number;
+  allInActive?: boolean;
 }
 
 function newInternal(): InternalPlayerData {
@@ -657,8 +669,19 @@ export class BrawlRoom extends Room<GameState> {
       if (inputMag > 1) { mx /= inputMag; mz /= inputMag; }
       data.hasInput = inputMag > 0.01;
 
+      // 2026-04-30 final-L — Toxic Touch confused: invert the
+      // movement axis on the affected player. Cliente already
+      // sees their own input flipped via Critter.confusedTimer
+      // (mirrored from this schema field). Server-side mirror
+      // here makes sure bots also experience the inversion since
+      // bot input is computed independently of cliente.
+      if (p.confusedTimer > 0) { mx = -mx; mz = -mz; }
+
+      // 2026-04-30 final-L — slippery acceleration penalty.
+      const slipperyHere = isOnSlipperyZone(p, this.activeZones);
+      const accelMul = slipperyHere ? 0.35 : 1.0;
       const speed = effectiveSpeed(p, this.activeZones);
-      const accel = speed * SIM.movement.accelerationScale;
+      const accel = speed * SIM.movement.accelerationScale * accelMul;
       p.vx += mx * accel * dt;
       p.vz += mz * accel * dt;
     }
@@ -686,6 +709,9 @@ export class BrawlRoom extends Room<GameState> {
           slowMultiplier: z.slowMultiplier,
           ttl: z.duration,
           ownerSid: z.ownerSid,
+          slippery: z.slippery,
+          sinkhole: z.sinkhole,
+          pullForce: z.pullForce,
         });
         // Visual mirror: clients render the matching ground ring +
         // disc with the same duration. Single one-shot — clients
@@ -696,6 +722,8 @@ export class BrawlRoom extends Room<GameState> {
           duration: z.duration,
           slowMultiplier: z.slowMultiplier,
           ownerSid: z.ownerSid,
+          slippery: !!z.slippery,
+          sinkhole: !!z.sinkhole,
         });
       }
       // 2026-04-29 K-session — Kowalski Snowball projectile spawns.
@@ -784,6 +812,206 @@ export class BrawlRoom extends Room<GameState> {
       if (p.slowTimer > 0) p.slowTimer = Math.max(0, p.slowTimer - dt);
     }
 
+    // 2.e. 2026-04-30 final-L — per-tick L mechanics (Cone Pulse,
+    // Saw Shell contact, Sinkhole pull, All-in resolution). The
+    // frenzy slot is index 2 by convention; we read its def via
+    // the kit and branch on flags.
+    for (const p of players) {
+      if (!p.alive || p.falling) continue;
+      const kit = getAbilityKit(p.critterName);
+      const lDef = kit[2];
+      const lState = p.abilities[2];
+      if (!lDef || !lState) continue;
+      // Decrement confused/stun timers up here so they expire
+      // exactly once per tick regardless of which L touches them.
+      // (slowTimer / immunityTimer already decremented elsewhere.)
+      if (p.confusedTimer > 0) p.confusedTimer = Math.max(0, p.confusedTimer - dt);
+      if (p.stunTimer > 0) p.stunTimer = Math.max(0, p.stunTimer - dt);
+
+      if (!lState.active || lState.windUpLeft > 0) continue;
+
+      // --- Cone Pulse (Cheeto) ---
+      if (lDef.conePulseL) {
+        // Track per-pulse counter via internalData. The pulseInterval
+        // dictates how often we apply knockback; between pulses the
+        // caster idles in place (his speedMultiplier 0 grounds him).
+        const data = this.internal.get(p.sessionId);
+        if (data) {
+          if (data.pulseAccum === undefined) data.pulseAccum = 0;
+          data.pulseAccum += dt;
+          const interval = lDef.pulseInterval ?? 0.30;
+          while (data.pulseAccum >= interval) {
+            data.pulseAccum -= interval;
+            const halfCone = ((lDef.pulseAngleDeg ?? 45) * Math.PI) / 180;
+            const cosCone = Math.cos(halfCone);
+            const facingX = Math.sin(p.rotationY);
+            const facingZ = Math.cos(p.rotationY);
+            const radius = lDef.pulseRadius ?? 4.5;
+            const force = lDef.pulseForce ?? 28;
+            for (const other of players) {
+              if (other === p || !other.alive || other.falling) continue;
+              if (other.immunityTimer > 0) continue;
+              const dx = other.x - p.x;
+              const dz = other.z - p.z;
+              const d = Math.sqrt(dx * dx + dz * dz);
+              if (d > radius || d < 0.01) continue;
+              const nx = dx / d;
+              const nz = dz / d;
+              if (nx * facingX + nz * facingZ < cosCone) continue;
+              const fall = 1 - d / radius;
+              other.vx += nx * force * fall;
+              other.vz += nz * force * fall;
+            }
+            this.broadcast('lPulse', {
+              sessionId: p.sessionId,
+              x: p.x, z: p.z, rotationY: p.rotationY,
+              radius, angleDeg: lDef.pulseAngleDeg ?? 45,
+            });
+          }
+        }
+      }
+
+      // --- Saw Shell (Shelly) — contact knockback against any
+      //     non-immune non-falling enemy in collision range.
+      if (lDef.sawL) {
+        const reach = 0.55 + 0.55 + 0.10; // both critter radii + small margin
+        const impulse = lDef.sawContactImpulse ?? 32;
+        for (const other of players) {
+          if (other === p || !other.alive || other.falling) continue;
+          if (other.immunityTimer > 0) continue;
+          const dx = other.x - p.x;
+          const dz = other.z - p.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 > reach * reach || d2 < 0.0001) continue;
+          const d = Math.sqrt(d2);
+          other.vx += (dx / d) * impulse;
+          other.vz += (dz / d) * impulse;
+        }
+      }
+
+      // --- Sinkhole (Sihans) — the zone is already broadcast at
+      //     fire time; the per-tick PULL is applied by the zone
+      //     loop in step 2.f below for any sinkhole zone.
+
+      // --- All-in (Sebastian) windup tracking — cache facing on
+      //     the rising edge so the lateral dash uses the direction
+      //     Sebastian was facing AT FIRE TIME, not whatever the
+      //     post-windup orientation happens to be.
+      if (lDef.allInL) {
+        const data = this.internal.get(p.sessionId);
+        if (data && !data.allInActive) {
+          data.allInActive = true;
+          // Lateral = facing rotated +90° (right-hand). The fixed
+          // direction stays cached until resolution.
+          data.allInDirX = Math.cos(p.rotationY);
+          data.allInDirZ = -Math.sin(p.rotationY);
+        }
+      }
+
+      // --- Toxic Touch (Kermit) — apply confused on contact.
+      if (lDef.toxicTouchL) {
+        const reach = 0.55 + 0.55 + 0.10;
+        const dur = lDef.confusedDuration ?? 3.0;
+        for (const other of players) {
+          if (other === p || !other.alive || other.falling) continue;
+          if (other.immunityTimer > 0) continue;
+          const dx = other.x - p.x;
+          const dz = other.z - p.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 > reach * reach || d2 < 0.0001) continue;
+          other.confusedTimer = Math.max(other.confusedTimer, dur);
+        }
+      }
+    }
+
+    // 2.f. 2026-04-30 final-L — sinkhole zone pull. Continuous
+    // inward velocity nudge on every critter inside a sinkhole
+    // zone they don't own.
+    for (const z of this.activeZones) {
+      if (!z.sinkhole) continue;
+      const force = z.pullForce ?? 14;
+      for (const p of players) {
+        if (!p.alive || p.falling) continue;
+        if (z.ownerSid !== undefined && z.ownerSid === p.sessionId) continue;
+        if (p.immunityTimer > 0) continue;
+        const dx = z.x - p.x;
+        const dz = z.z - p.z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (d > z.radius || d < 0.01) continue;
+        // Stronger pull near the centre.
+        const fall = 1 - d / z.radius;
+        p.vx += (dx / d) * force * fall * dt;
+        p.vz += (dz / d) * force * fall * dt;
+      }
+    }
+
+    // 2.g. 2026-04-30 final-L — All-in resolution. Falling-edge
+    // detect: if the player WAS in an all-in windup last tick and
+    // the L just ended this tick, run the lateral dash + hit
+    // check. On hit: huge knockback to target, ability ends. On
+    // miss: Sebastian gets a self-knockback toward the cached
+    // dash direction (high-risk read).
+    for (const p of players) {
+      if (!p.alive || p.falling) continue;
+      const data = this.internal.get(p.sessionId);
+      if (!data || !data.allInActive) continue;
+      const lState = p.abilities[2];
+      if (lState && lState.active) continue; // still windup
+      // Resolution time.
+      const kit = getAbilityKit(p.critterName);
+      const lDef = kit[2];
+      if (!lDef || !lDef.allInL) {
+        data.allInActive = false;
+        continue;
+      }
+      const dx = data.allInDirX ?? Math.cos(p.rotationY);
+      const dz = data.allInDirZ ?? -Math.sin(p.rotationY);
+      const range = lDef.allInDashRange ?? 5.5;
+      // Sweep along the dash line for any enemy capsule the dash
+      // intersects. Discrete: sample 8 points.
+      let hitVictim: PlayerSchema | null = null;
+      const SAMPLES = 8;
+      for (let i = 1; i <= SAMPLES && !hitVictim; i++) {
+        const t = (i / SAMPLES) * range;
+        const sx = p.x + dx * t;
+        const sz = p.z + dz * t;
+        for (const other of players) {
+          if (other === p || !other.alive || other.falling) continue;
+          if (other.immunityTimer > 0) continue;
+          const odx = other.x - sx;
+          const odz = other.z - sz;
+          const reach = 0.55 + 0.55;
+          if (odx * odx + odz * odz <= reach * reach) {
+            hitVictim = other;
+            break;
+          }
+        }
+      }
+      if (hitVictim) {
+        const force = lDef.allInHitForce ?? 60;
+        // Push along the dash direction with a strong bias.
+        hitVictim.vx += dx * force;
+        hitVictim.vz += dz * force;
+        // Snap Sebastian to a position just behind the target so
+        // the hit reads as "I caught you mid-slash". No movement
+        // of the caster otherwise.
+      } else {
+        // Miss → self-knockback in the dash direction.
+        const sf = lDef.allInMissSelfForce ?? 38;
+        p.vx += dx * sf;
+        p.vz += dz * sf;
+      }
+      this.broadcast('lAllInResolve', {
+        sessionId: p.sessionId,
+        x: p.x, z: p.z,
+        dirX: dx, dirZ: dz,
+        hit: !!hitVictim,
+      });
+      data.allInActive = false;
+      data.allInDirX = undefined;
+      data.allInDirZ = undefined;
+    }
+
     // 3. Integrate position + friction + dead zone + max speed cap + facing
     for (const p of players) {
       if (!p.alive || p.falling) continue;
@@ -793,7 +1021,12 @@ export class BrawlRoom extends Room<GameState> {
       p.x += p.vx * dt;
       p.z += p.vz * dt;
 
-      const halfLife = data.hasInput ? SIM.movement.frictionHalfLife : SIM.movement.idleFrictionHalfLife;
+      // 2026-04-30 final-L — slippery zones (Kowalski Frozen Floor)
+      // increase the friction half-life ~5×, so velocity decays MUCH
+      // slower → critters keep sliding even without input.
+      const slippery = isOnSlipperyZone(p, this.activeZones);
+      let halfLife = data.hasInput ? SIM.movement.frictionHalfLife : SIM.movement.idleFrictionHalfLife;
+      if (slippery) halfLife *= 5;
       const friction = Math.pow(0.5, dt / halfLife);
       p.vx *= friction;
       p.vz *= friction;

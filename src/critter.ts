@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind } from './abilities';
+import { createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind, isOnSlipperyZone } from './abilities';
 import type { AbilityState } from './abilities';
 import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
@@ -183,6 +183,15 @@ export class Critter {
    *  critter cannot move (effectiveSpeed → 0) and any knockback
    *  received is multiplied ×2. Mirror of `PlayerSchema.stunTimer`. */
   stunTimer = 0;
+  /** 2026-04-30 — Kermit Toxic Touch confused state. While > 0
+   *  the local cliente inverts the movement input axes for this
+   *  critter. Mirror of `PlayerSchema.confusedTimer`. Decremented
+   *  in update(dt). */
+  confusedTimer = 0;
+  /** 2026-04-30 — Kurama Copycat last-hit target (critter name).
+   *  Set by physics.resolveCollisions on a successful headbutt
+   *  hit; consumed by Kurama L Copycat at fire time. */
+  lastHitTargetCritter = '';
   /** 2026-04-29 — local-only fog-of-war fade. Set by the Kermit
    *  Poison Cloud overlay driver each frame: when the local critter
    *  is inside the cloud and THIS critter is outside it, fadeAlpha
@@ -452,6 +461,23 @@ export class Critter {
     if (this.slowTimer > 0) this.slowTimer = Math.max(0, this.slowTimer - dt);
     // 2026-04-29 — Trunk Grip stun + vulnerable countdown.
     if (this.stunTimer > 0) this.stunTimer = Math.max(0, this.stunTimer - dt);
+    // 2026-04-30 — Kermit Toxic Touch confused countdown.
+    if (this.confusedTimer > 0) this.confusedTimer = Math.max(0, this.confusedTimer - dt);
+    // 2026-04-30 — Shelly Saw Shell spin. While the frenzy slot
+    // (index 2) is active and `sawL` is set, rotate the GLB sub-
+    // group rapidly on its Y axis. We rotate the inner glbMesh
+    // (not the outer this.mesh) because this.mesh's rotation.y
+    // is owned by the movement system (it follows velocity each
+    // frame). The glbMesh is a child group so the visual spin
+    // composes on top without fighting the facing logic.
+    const lState = this.abilityStates[2];
+    if (lState?.active && lState.windUpLeft <= 0 && lState.def.sawL && this.glbMesh) {
+      const rate = lState.def.sawSpinSpeed ?? 22;
+      this.glbMesh.rotation.y += rate * dt;
+    } else if (this.glbMesh && this.glbMesh.rotation.y !== 0 && (!lState?.active || !lState.def.sawL)) {
+      // Reset spin once the L ends so the GLB doesn't stay askew.
+      this.glbMesh.rotation.y = 0;
+    }
 
     // Headbutt cooldown
     if (this.headbuttCooldown > 0) this.headbuttCooldown -= dt;
@@ -492,8 +518,12 @@ export class Critter {
     this.x += this.vx * dt;
     this.z += this.vz * dt;
 
-    // Friction: faster decay when no input (stops drift), normal decay with input
-    const halfLife = this.hasInput ? FEEL.movement.frictionHalfLife : FEEL.movement.idleFrictionHalfLife;
+    // Friction: faster decay when no input (stops drift), normal decay
+    // with input. 2026-04-30 final-L — slippery zones (Kowalski Frozen
+    // Floor) push the half-life ~5× higher, so velocity decays slower
+    // and the critter slides.
+    let halfLife = this.hasInput ? FEEL.movement.frictionHalfLife : FEEL.movement.idleFrictionHalfLife;
+    if (isOnSlipperyZone(this.x, this.z, this.config.name)) halfLife *= 5;
     const friction = Math.pow(0.5, dt / halfLife);
     this.vx *= friction;
     this.vz *= friction;

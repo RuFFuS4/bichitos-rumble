@@ -43,6 +43,10 @@ export interface ZoneSpawnedEvent {
   duration: number;
   slowMultiplier: number;
   ownerSid: string;
+  /** 2026-04-30 — Kowalski Frozen Floor slippery flag. */
+  slippery?: boolean;
+  /** 2026-04-30 — Sihans Sinkhole flag. */
+  sinkhole?: boolean;
 }
 
 export function onZoneSpawned(room: Room, cb: (ev: ZoneSpawnedEvent) => void): void {

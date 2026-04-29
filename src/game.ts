@@ -973,6 +973,10 @@ export class Game {
     const inputsActive = phaseForInput === 'playing' && !!this.player;
     if (inputsActive) {
       const move = getMoveVector();
+      // 2026-04-30 final-L — Toxic Touch confused inversion is
+      // applied SERVER-SIDE in `simulatePlaying` for both humans
+      // and bots, so we send the raw input here. Inverting at the
+      // client too would double-flip and feel normal again.
       sendInput(this.room, {
         moveX: move.x,
         moveZ: move.z,
@@ -1055,6 +1059,10 @@ export class Game {
       c.slowTimer = p.slowTimer ?? 0;
       // 2026-04-29 — Trunk Grip stun status (synced from server).
       c.stunTimer = p.stunTimer ?? 0;
+      // 2026-04-30 — Kermit Toxic Touch confused (synced).
+      c.confusedTimer = p.confusedTimer ?? 0;
+      // 2026-04-30 — Kurama Copycat last-hit (synced).
+      c.lastHitTargetCritter = p.lastHitTargetCritter ?? '';
       // 2026-04-29 final-K bugfix — Sihans Burrow invisibility was
       // sticking on remote clients when the `abilityFired` event
       // landed but the clear path didn't run. The visual layer is

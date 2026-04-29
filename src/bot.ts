@@ -77,6 +77,9 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
       nz *= FEEL.chargeRush.steerFactor;
     }
 
+    // 2026-04-30 final-L — Toxic Touch confused inversion (offline bot).
+    if (bot.confusedTimer > 0) { nx = -nx; nz = -nz; }
+
     const accel = bot.effectiveSpeed * FEEL.movement.accelerationScale * 0.55;
     bot.vx += nx * accel * dt;
     bot.vz += nz * accel * dt;

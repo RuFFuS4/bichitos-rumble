@@ -198,6 +198,84 @@ export interface AbilityDef {
   gripPullDistance?: number;
   gripStunDuration?: number;
 
+  // ---------------------------------------------------------------------
+  // 2026-04-30 final-L flags — added on the frenzy slot to give each L
+  // its authorial behaviour without introducing a new AbilityType per
+  // critter. The frenzy dispatcher checks the flag and runs the matching
+  // per-tick logic in addition to (or instead of) the speed/mass buff.
+  // ---------------------------------------------------------------------
+
+  /** Shelly Saw Shell: during frenzy, any collision with Shelly
+   *  applies a strong outward knockback to the OTHER critter
+   *  regardless of headbutt state. Cliente also spins her mesh
+   *  rapidly for the visual saw read. */
+  sawL?: boolean;
+  sawContactImpulse?: number;
+  sawSpinSpeed?: number;
+
+  /** Cheeto Cone Pulse: during frenzy, the caster is rooted
+   *  (slowDuringActive 0). Every `pulseInterval` seconds the
+   *  server emits a frontal cone knockback (radius
+   *  `pulseRadius`, half-angle `pulseAngleDeg`, force
+   *  `pulseForce`). Each pulse fires a `pulse` event for the
+   *  cliente to render the matching VFX. */
+  conePulseL?: boolean;
+  pulseInterval?: number;
+  pulseRadius?: number;
+  pulseAngleDeg?: number;
+  pulseForce?: number;
+
+  /** Sebastian All-in Side Slash: a multi-phase L. The frenzy
+   *  duration is the WINDUP only (rooted vibrate); when the
+   *  windup ends the dispatcher fires a single fast lateral
+   *  dash that hit-checks against enemies in front of Sebastian.
+   *  On hit: huge knockback to target, frenzy ends. On miss:
+   *  Sebastian receives a large self-knockback toward the
+   *  arena edge as the "high-risk" punishment. */
+  allInL?: boolean;
+  allInDashSpeed?: number;
+  allInDashRange?: number;
+  allInHitForce?: number;
+  allInMissSelfForce?: number;
+
+  /** Kermit Toxic Touch: during frenzy, contact with another
+   *  critter writes `target.confusedTimer = confusedDuration`.
+   *  Confused targets have their movement input inverted on
+   *  the local cliente (and bot steering inverted server-side). */
+  toxicTouchL?: boolean;
+  confusedDuration?: number;
+
+  /** Kowalski Frozen Floor: at frenzy fire time spawn a large
+   *  slippery zone at the caster's position. The zone uses the
+   *  existing zone system but with a `slippery: true` flag —
+   *  critters inside have reduced control + reduced friction
+   *  decay (`effectiveSpeed` and the friction loop both
+   *  branch on the flag). */
+  frozenFloorL?: boolean;
+  floorRadius?: number;
+  floorDuration?: number;
+
+  /** Sihans Sinkhole: at frenzy fire time spawn a hazard zone
+   *  in front of Sihans. Critters inside are continuously
+   *  pulled toward the centre and slowed; Sihans is exempt by
+   *  ownerKey. Zone duration `holeDuration`, radius
+   *  `holeRadius`, pull force `holeForce`. */
+  sinkholeL?: boolean;
+  holeRadius?: number;
+  holeDuration?: number;
+  holeForce?: number;
+  /** Cast offset for Sihans Sinkhole — units in front of the
+   *  caster. Keeps the hole away from the immune islet at the
+   *  arena centre (>= 4 u). */
+  holeCastOffset?: number;
+
+  /** Kurama Copycat: at frenzy fire time, look up the critter
+   *  most recently hit by Kurama and copy a SAFE version of
+   *  their L (the dispatch table maps each kit to a friendly
+   *  reusable behaviour). If no last-hit target is set, the
+   *  ability fizzles with feedback. */
+  copycatL?: boolean;
+
   // --- 2026-04-29 K-session: projectile additions (Kowalski Snowball) ---
   /** Forward speed of the projectile (units / second). */
   projectileSpeed?: number;
@@ -661,10 +739,18 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       decoyEscapeDistance: 7.0,
     }),
     makeFrenzy({
-      name: 'Nine-Tails Frenzy',
-      description: 'A short agile frenzy with high speed',
+      // 2026-04-30 final-L — Copycat. Kurama's frenzy looks for
+      // the critter she most recently hit and copies a SAFE
+      // version of their L. The dispatch table lives in the
+      // frenzy fire path: each entry maps a critter name to a
+      // partial frenzy override (speed/mass tweaks + matching
+      // L-flag). If no last-hit target exists, the L fizzles
+      // with a soft burst + console feedback.
+      name: 'Copycat',
+      description: 'Mimics the L of the last enemy you hit',
       duration: 3.5, cooldown: 16.0, windUp: 0.30,
       speedMultiplier: 1.50, massMultiplier: 1.20,
+      copycatL: true,
     }),
   ],
 
@@ -698,10 +784,19 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       selfAnchorWhileBuffed: true,
     }),
     makeFrenzy({
-      name: 'Berserker Shell',
-      description: 'Become heavier and harder to push',
+      // 2026-04-30 final-L — Saw Shell. During frenzy Shelly's
+      // mesh spins on Y rapidly (visual saw blade), and any
+      // collision with another critter while the buff is up
+      // applies a strong outward knockback regardless of
+      // headbutt state. Speed/mass multipliers stay so she
+      // can chase, but the contact damage is the headline.
+      name: 'Saw Shell',
+      description: 'Spin like a saw — every contact launches enemies',
       duration: 3.5, cooldown: 18.0, windUp: 0.4,
-      speedMultiplier: 1.20, massMultiplier: 1.65,
+      speedMultiplier: 1.40, massMultiplier: 1.65,
+      sawL: true,
+      sawContactImpulse: 32,
+      sawSpinSpeed: 22,
     }),
   ],
 
@@ -734,10 +829,19 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       },
     }),
     makeFrenzy({
-      name: 'Hypnosapo',
-      description: 'Become slow, heavy and hard to move',
+      // 2026-04-30 final-L — Toxic Touch. While the buff is
+      // active, contact with another critter writes their
+      // `confusedTimer = confusedDuration`. Confused critters
+      // have their movement input inverted on the local
+      // cliente (and bot steering inverted server-side) so the
+      // hypno read is real — Rafa: "controles invertidos". 3 s
+      // confusion + 4 s frenzy gives Kermit a real window.
+      name: 'Toxic Touch',
+      description: 'Touch enemies to invert their controls',
       duration: 4.0, cooldown: 18.0, windUp: 0.4,
-      speedMultiplier: 1.10, massMultiplier: 1.80,
+      speedMultiplier: 1.30, massMultiplier: 1.30,
+      toxicTouchL: true,
+      confusedDuration: 3.0,
     }),
   ],
 
@@ -776,10 +880,21 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       },
     }),
     makeFrenzy({
-      name: 'Diggy Rush',
-      description: 'Long earthy frenzy with extra mass',
+      // 2026-04-30 final-L — Sinkhole. At fire time spawn a
+      // hazard zone in front of Sihans (4 u offset along
+      // facing) that lasts 5 s and continuously pulls critters
+      // toward its centre. Sihans is exempt by ownerKey. The
+      // L still grants a small speed/mass buff so the cast
+      // doesn't leave her stuck.
+      name: 'Sinkhole',
+      description: 'Open a hazardous pit ahead — pulls enemies in',
       duration: 4.5, cooldown: 20.0, windUp: 0.4,
       speedMultiplier: 1.15, massMultiplier: 1.50,
+      sinkholeL: true,
+      holeRadius: 3.0,
+      holeDuration: 5.0,
+      holeForce: 14,
+      holeCastOffset: 4.0,
     }),
   ],
 
@@ -811,10 +926,20 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       projectileSlowDuration: 5.0,
     }),
     makeFrenzy({
-      name: 'Blizzard',
-      description: 'Fast icy frenzy with light mass',
+      // 2026-04-30 final-L — Frozen Floor. Spawns a slippery
+      // ice zone at the caster's position. While inside,
+      // critters keep their velocity (low friction) and
+      // their accel input is reduced — they slide a lot
+      // and lose control near the edge. Kowalski herself is
+      // exempt by ownerKey on the zone. Speed/mass buff
+      // dropped to neutral since the zone IS the L.
+      name: 'Frozen Floor',
+      description: 'Coats the ground in ice — enemies slip and slide',
       duration: 3.0, cooldown: 17.0, windUp: 0.4,
-      speedMultiplier: 1.40, massMultiplier: 1.10,
+      speedMultiplier: 1.10, massMultiplier: 1.10,
+      frozenFloorL: true,
+      floorRadius: 6.0,
+      floorDuration: 5.0,
     }),
   ],
 
@@ -844,10 +969,21 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       blinkImpactForce: 48,
     }),
     makeFrenzy({
-      name: 'Tiger Rage',
-      description: 'Very short burst of extreme speed',
-      duration: 2.0, cooldown: 14.0, windUp: 0.35,
-      speedMultiplier: 1.55, massMultiplier: 1.05,
+      // 2026-04-30 final-L — Cone Pulse. Cheeto roots in
+      // place (slowDuringActive 0 / mass 0.0001 ≈ massless so
+      // physics doesn't drag him) and emits a frontal cone
+      // knockback every `pulseInterval` seconds for the L's
+      // duration. Targets in the cone get pushed each pulse;
+      // outside the cone is safe.
+      name: 'Cone Pulse',
+      description: 'Channels a roaring frontal pulse — pushes enemies away',
+      duration: 1.8, cooldown: 14.0, windUp: 0.35,
+      speedMultiplier: 0.0, massMultiplier: 1.05,
+      conePulseL: true,
+      pulseInterval: 0.30,
+      pulseRadius: 4.5,
+      pulseAngleDeg: 45,
+      pulseForce: 28,
     }),
   ],
 
@@ -880,10 +1016,24 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       coneAngleDeg: 60,
     }),
     makeFrenzy({
-      name: 'Red Claw',
-      description: 'Short aggressive frenzy for finishing blows',
-      duration: 2.5, cooldown: 15.0, windUp: 0.4,
-      speedMultiplier: 1.20, massMultiplier: 1.20,
+      // 2026-04-30 final-L — All-in Side Slash. The frenzy
+      // duration is the WINDUP only (1.0 s rooted vibrate).
+      // When duration ticks to ≤ 0 the dispatcher fires a
+      // single fast lateral dash that hit-checks against
+      // enemies in front of Sebastian. On hit: huge knockback
+      // to target, ability ends. On miss: Sebastian receives
+      // a large self-knockback toward the arena edge as the
+      // high-risk punishment. Implemented as a frenzy because
+      // the `active` flag handles the rooted windup naturally.
+      name: 'All-in Side Slash',
+      description: 'Charge then strike — devastating on hit, costly on miss',
+      duration: 1.0, cooldown: 15.0, windUp: 0.0,
+      speedMultiplier: 0.0, massMultiplier: 1.20,
+      allInL: true,
+      allInDashSpeed: 28,
+      allInDashRange: 5.5,
+      allInHitForce: 60,
+      allInMissSelfForce: 38,
     }),
   ],
 };
@@ -1240,6 +1390,14 @@ interface ActiveZone {
    *  name; online path stores the session id. Either matches the
    *  same field passed to `getZoneSlowMultiplier`. */
   ownerKey?: string;
+  /** 2026-04-30 final-L — Kowalski Frozen Floor flag. Read by
+   *  Critter friction loop to multiply the half-life when this
+   *  critter stands inside a slippery zone they don't own. */
+  slippery?: boolean;
+  /** 2026-04-30 final-L — Sihans Sinkhole flag. Per-frame pull
+   *  toward the centre is applied in `tickAbilityZones`. */
+  sinkhole?: boolean;
+  pullForce?: number;
 }
 
 const activeZones: ActiveZone[] = [];
@@ -1254,6 +1412,100 @@ export function deriveZoneVfxKind(critterName: string): ZoneVfxKind {
   if (critterName === 'Sihans') return 'sand';
   if (critterName === 'Kowalski') return 'ice';
   return 'generic';
+}
+
+/**
+ * 2026-04-30 final-L — per-tick L mechanics for offline matches.
+ * Mirrors the server `simulatePlaying` step 2.e+2.f+2.g for the
+ * Cone Pulse / Saw / Toxic / Sinkhole pull paths. Called from
+ * main.ts gameplay loop with the active critter list each frame.
+ *
+ * The All-in resolution edge-case is handled in `updateAbilities`
+ * via `lastAbilityActive` falling-edge detection.
+ */
+const _pulseAccum = new WeakMap<Critter, number>();
+export function tickLOffline(dt: number, critters: Critter[]): void {
+  for (const c of critters) {
+    if (!c.alive || c.falling) continue;
+    const lState = c.abilityStates[2];
+    if (!lState?.active || lState.windUpLeft > 0) continue;
+    const def = lState.def;
+
+    if (def.conePulseL) {
+      let acc = _pulseAccum.get(c) ?? 0;
+      acc += dt;
+      const interval = def.pulseInterval ?? 0.30;
+      const halfCone = ((def.pulseAngleDeg ?? 45) * Math.PI) / 180;
+      const cosCone = Math.cos(halfCone);
+      const radius = def.pulseRadius ?? 4.5;
+      const force = def.pulseForce ?? 28;
+      const facingX = Math.sin(c.mesh.rotation.y);
+      const facingZ = Math.cos(c.mesh.rotation.y);
+      while (acc >= interval) {
+        acc -= interval;
+        for (const other of critters) {
+          if (other === c || !other.alive || other.falling) continue;
+          if (other.isImmune) continue;
+          const dx = other.x - c.x;
+          const dz = other.z - c.z;
+          const d = Math.sqrt(dx * dx + dz * dz);
+          if (d > radius || d < 0.01) continue;
+          const nx = dx / d;
+          const nz = dz / d;
+          if (nx * facingX + nz * facingZ < cosCone) continue;
+          const fall = 1 - d / radius;
+          other.vx += nx * force * fall;
+          other.vz += nz * force * fall;
+        }
+      }
+      _pulseAccum.set(c, acc);
+    }
+
+    if (def.sawL) {
+      const reach = c.radius + 0.55 + 0.10;
+      const impulse = def.sawContactImpulse ?? 32;
+      for (const other of critters) {
+        if (other === c || !other.alive || other.falling) continue;
+        if (other.isImmune) continue;
+        const dx = other.x - c.x;
+        const dz = other.z - c.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 > reach * reach || d2 < 0.0001) continue;
+        const d = Math.sqrt(d2);
+        other.vx += (dx / d) * impulse;
+        other.vz += (dz / d) * impulse;
+      }
+    }
+
+    if (def.toxicTouchL) {
+      const reach = c.radius + 0.55 + 0.10;
+      const dur = def.confusedDuration ?? 3.0;
+      for (const other of critters) {
+        if (other === c || !other.alive || other.falling) continue;
+        if (other.isImmune) continue;
+        const dx = other.x - c.x;
+        const dz = other.z - c.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 > reach * reach || d2 < 0.0001) continue;
+        other.confusedTimer = Math.max(other.confusedTimer, dur);
+      }
+    }
+  }
+
+  // Sinkhole pull — affects every critter inside any sinkhole zone
+  // they don't own.
+  for (const c of critters) {
+    if (!c.alive || c.falling) continue;
+    forEachSinkhole((zone) => {
+      const dx = zone.x - c.x;
+      const dz = zone.z - c.z;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d > zone.radius || d < 0.01) return;
+      const fall = 1 - d / zone.radius;
+      c.vx += (dx / d) * zone.pullForce * fall * dt;
+      c.vz += (dz / d) * zone.pullForce * fall * dt;
+    }, c.config.name);
+  }
 }
 
 /** Tick all live zones forward, removing expired entries. Called from
@@ -1275,6 +1527,30 @@ export function clearActiveZones(): void {
  *  lookup path serves both modes. */
 export function pushNetworkZone(z: ActiveZone): void {
   activeZones.push({ ...z });
+}
+
+/** True if the given critter is currently standing inside a
+ *  slippery zone (Kowalski Frozen Floor) they don't own. */
+export function isOnSlipperyZone(x: number, z: number, ownerKey?: string): boolean {
+  for (const zone of activeZones) {
+    if (!zone.slippery) continue;
+    if (ownerKey !== undefined && zone.ownerKey === ownerKey) continue;
+    const dx = x - zone.x;
+    const dz = z - zone.z;
+    if (dx * dx + dz * dz <= zone.radius * zone.radius) return true;
+  }
+  return false;
+}
+
+/** Iterate over every active sinkhole zone that the given owner
+ *  doesn't own. Lets the caller apply the inward pull force per
+ *  tick on each affected critter. */
+export function forEachSinkhole(cb: (zone: { x: number; z: number; radius: number; pullForce: number }) => void, ownerKey?: string): void {
+  for (const zone of activeZones) {
+    if (!zone.sinkhole) continue;
+    if (ownerKey !== undefined && zone.ownerKey === ownerKey) continue;
+    cb({ x: zone.x, z: zone.z, radius: zone.radius, pullForce: zone.pullForce ?? 14 });
+  }
 }
 
 /** True if the given world point is inside any active zone of the
@@ -1437,7 +1713,7 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
   playSound('abilityFire');
 }
 
-function fireFrenzy(_def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
+function fireFrenzy(def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
   // Frenzy is a pure buff — no positional effect on other critters. The
   // speed/mass multipliers are applied automatically by
   // getSpeedMultiplier/getMassMultiplier while the ability state is
@@ -1451,6 +1727,88 @@ function fireFrenzy(_def: AbilityDef, critter: Critter, _all: Critter[], scene: 
   spawnFrenzyBurst(scene, critter.x, critter.z, CRITTER_VFX_PALETTE[critter.config.name]?.frenzy);
   triggerCameraShake(FEEL.shake.groundPound * 0.55);
   playSound('abilityFire');
+
+  // 2026-04-30 final-L — Copycat dispatch (Kurama). Look up
+  // the lastHitTargetCritter and copy that critter's L FLAGS
+  // into Kurama's def in place. Subsequent flag branches run
+  // exactly like the original critter's L.
+  if (def.copycatL) {
+    const targetName = critter.lastHitTargetCritter;
+    if (targetName) {
+      const targetDef = CRITTER_ABILITIES[targetName]?.[2];
+      if (targetDef) {
+        Object.assign(def, {
+          sawL: targetDef.sawL,
+          sawContactImpulse: targetDef.sawContactImpulse,
+          sawSpinSpeed: targetDef.sawSpinSpeed,
+          conePulseL: targetDef.conePulseL,
+          pulseInterval: targetDef.pulseInterval,
+          pulseRadius: targetDef.pulseRadius,
+          pulseAngleDeg: targetDef.pulseAngleDeg,
+          pulseForce: targetDef.pulseForce,
+          toxicTouchL: targetDef.toxicTouchL,
+          confusedDuration: targetDef.confusedDuration,
+          allInL: targetDef.allInL,
+          allInDashSpeed: targetDef.allInDashSpeed,
+          allInDashRange: targetDef.allInDashRange,
+          allInHitForce: targetDef.allInHitForce,
+          allInMissSelfForce: targetDef.allInMissSelfForce,
+          frozenFloorL: targetDef.frozenFloorL,
+          floorRadius: targetDef.floorRadius,
+          floorDuration: targetDef.floorDuration,
+          sinkholeL: targetDef.sinkholeL,
+          holeRadius: targetDef.holeRadius,
+          holeDuration: targetDef.holeDuration,
+          holeForce: targetDef.holeForce,
+          holeCastOffset: targetDef.holeCastOffset,
+        });
+      }
+      critter.lastHitTargetCritter = '';
+    }
+    // Fall through to the spawn branches so the copied flags
+    // (frozenFloorL, sinkholeL) still spawn their zones.
+  }
+
+  // 2026-04-30 final-L — flag-driven L spawns (offline mirror of
+  // server abilities.ts/fireEffect). Server is authoritative for
+  // online; this branch covers the offline gameplay path.
+  if (def.frozenFloorL) {
+    activeZones.push({
+      x: critter.x, z: critter.z,
+      radius: def.floorRadius ?? 6.0,
+      slowMultiplier: 1.0,
+      ttl: def.floorDuration ?? 5.0,
+      vfxKind: 'ice',
+      ownerKey: critter.config.name,
+      slippery: true,
+    });
+    spawnZoneRing(scene, critter.x, critter.z,
+      def.floorRadius ?? 6.0, def.floorDuration ?? 5.0,
+      0x6cc9ff, 0xffffff, 'ice');
+  }
+  if (def.sinkholeL) {
+    const offset = def.holeCastOffset ?? 4.0;
+    let cx = critter.x + Math.sin(critter.mesh.rotation.y) * offset;
+    let cz = critter.z + Math.cos(critter.mesh.rotation.y) * offset;
+    const r = Math.sqrt(cx * cx + cz * cz);
+    if (r < 4.0) {
+      cx = (cx / Math.max(r, 0.01)) * 4.0;
+      cz = (cz / Math.max(r, 0.01)) * 4.0;
+    }
+    activeZones.push({
+      x: cx, z: cz,
+      radius: def.holeRadius ?? 3.0,
+      slowMultiplier: 0.55,
+      ttl: def.holeDuration ?? 5.0,
+      vfxKind: 'sand',
+      ownerKey: critter.config.name,
+      sinkhole: true,
+      pullForce: def.holeForce ?? 14,
+    });
+    spawnZoneRing(scene, cx, cz,
+      def.holeRadius ?? 3.0, def.holeDuration ?? 5.0,
+      0x4a3a26, 0x8b6914, 'sand');
+  }
 }
 
 function fireProjectile(def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
@@ -1549,12 +1907,67 @@ export function updateAbilities(
       // Drain active duration
       s.durationLeft -= dt;
       if (s.durationLeft <= 0) {
+        // 2026-04-30 final-L — All-in resolution edge. When the
+        // frenzy with `allInL: true` finishes its rooted windup
+        // window, fire the lateral dash + hit/miss path.
+        if (s.def.allInL) {
+          fireAllInResolution(s.def, critter, allCritters, scene);
+        }
         s.active = false;
         s.cooldownLeft = s.def.cooldown;
       }
     } else if (s.cooldownLeft > 0) {
       s.cooldownLeft -= dt;
     }
+  }
+}
+
+/**
+ * 2026-04-30 final-L — Sebastian All-in offline resolution.
+ * Mirror of the server `simulatePlaying` step 2.g resolution
+ * branch: lateral dash from the caster's current position +
+ * orientation, sweep for any enemy capsule, on hit huge
+ * knockback to target / on miss self-knockback toward the
+ * dash direction.
+ */
+function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
+  // Lateral = facing rotated +90° (right side).
+  const dirX = Math.cos(critter.mesh.rotation.y);
+  const dirZ = -Math.sin(critter.mesh.rotation.y);
+  const range = def.allInDashRange ?? 5.5;
+  let hit: Critter | null = null;
+  const SAMPLES = 8;
+  for (let i = 1; i <= SAMPLES && !hit; i++) {
+    const t = (i / SAMPLES) * range;
+    const sx = critter.x + dirX * t;
+    const sz = critter.z + dirZ * t;
+    for (const other of allCritters) {
+      if (other === critter || !other.alive || other.falling) continue;
+      if (other.isImmune) continue;
+      const odx = other.x - sx;
+      const odz = other.z - sz;
+      const reach = critter.radius + other.radius;
+      if (odx * odx + odz * odz <= reach * reach) {
+        hit = other;
+        break;
+      }
+    }
+  }
+  const palette = CRITTER_VFX_PALETTE[critter.config.name]?.frenzy;
+  if (hit) {
+    const force = def.allInHitForce ?? 60;
+    hit.vx += dirX * force;
+    hit.vz += dirZ * force;
+    applyImpactFeedback(hit);
+    triggerHitStop(FEEL.hitStop.headbutt);
+    spawnShockwaveRing(scene, hit.x, hit.z, 1.6, palette);
+    triggerCameraShake(FEEL.shake.headbutt * 1.4);
+  } else {
+    const sf = def.allInMissSelfForce ?? 38;
+    critter.vx += dirX * sf;
+    critter.vz += dirZ * sf;
+    spawnShockwaveRing(scene, critter.x, critter.z, 1.0, palette);
+    triggerCameraShake(FEEL.shake.headbutt * 0.7);
   }
 }
 

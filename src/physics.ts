@@ -107,6 +107,8 @@ export function resolveCollisions(critters: Critter[]): void {
           // Badge aggregation: count the hit on the receiver. Used by
           // Untouchable / Pain Tolerance evaluation via recordWin().
           b.matchStats.hitsReceived++;
+          // 2026-04-30 final-L — Copycat last-hit tracking offline.
+          if (a.config.name === 'Kurama') a.lastHitTargetCritter = b.config.name;
         } else if (b.isHeadbutting) {
           a.vx -= nx * force * massRatioA * aVuln;
           a.vz -= nz * force * massRatioA * aVuln;
@@ -117,6 +119,7 @@ export function resolveCollisions(critters: Critter[]): void {
           applyImpactFeedback(a);
           playSound('headbuttHit');
           a.matchStats.hitsReceived++;
+          if (b.config.name === 'Kurama') b.lastHitTargetCritter = a.config.name;
         } else {
           // Normal collision — gentle nudge
           a.vx -= nx * force * massRatioA * aVuln;
