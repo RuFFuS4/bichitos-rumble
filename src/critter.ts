@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier } from './abilities';
+import { createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind } from './abilities';
 import type { AbilityState } from './abilities';
 import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
@@ -371,11 +371,15 @@ export class Critter {
   get effectiveSpeed(): number {
     // Active abilities (charge_rush boost, frenzy buff, K root, blink
     // root) × any slow zones the critter is currently standing inside
-    // (Kermit Poison Cloud, Kowalski Arctic Burst — formerly, now Sihans
-    // Quicksand) × the Snowball hit-slow status (50 % while > 0).
+    // (Kermit Poison Cloud, Sihans Quicksand) × the Snowball hit-slow
+    // status (50 % while > 0). The zone check passes the critter name
+    // as `ownerKey` so a caster doesn't get slowed by their own zone.
+    // Online matches normalise `ownerKey` to the critter name on the
+    // pushNetworkZone path so a remote Kermit isn't slowed by their
+    // own cloud either.
     let s = this.config.speed *
       getSpeedMultiplier(this.abilityStates) *
-      getZoneSlowMultiplier(this.x, this.z);
+      getZoneSlowMultiplier(this.x, this.z, this.config.name);
     if (this.slowTimer > 0) s *= 0.5;
     return s;
   }
@@ -657,6 +661,42 @@ export class Critter {
       for (const mat of mats) {
         mat.emissive.setHex(tint);
         mat.emissiveIntensity = 0.85;
+      }
+    }
+    // 2026-04-29 K-refinement — Snowball "frozen" visual on the
+    // affected target. When `slowTimer > 0` (set on snowball impact
+    // server-side and synced via PlayerSchema), tint the GLB
+    // materials icy cyan so the read is "this critter is frozen,
+    // not just slow". Pulse every ~0.6 s so it doesn't blend into
+    // the regular silhouette. Bypasses Steel-Shell tint by
+    // running AFTER it — slow status overrides defensive look,
+    // intentionally: a frozen Shelly should still look frozen.
+    if (this.slowTimer > 0) {
+      // Pulse 0..1 with a 1.6 Hz triangle wave so the chill
+      // reads alive without competing with the cooldown blink.
+      const pulse = 0.55 + 0.25 * Math.sin(Date.now() * 0.005);
+      for (const mat of mats) {
+        mat.emissive.setHex(0x88c1ff);
+        mat.emissiveIntensity = pulse;
+      }
+    }
+    // 2026-04-29 K-refinement — Sihans Quicksand "trapped" visual
+    // on enemies standing inside a sand zone. Subtle warm-brown
+    // emissive pulse so a critter caught in the swirl reads as
+    // "ralentizado por arena" without competing with the snowball
+    // freeze (cyan) or shells. Self-skip: Sihans inside her own
+    // quicksand keeps her normal look so the caster stays
+    // distinguishable. Snowball freeze takes priority because slow
+    // is more severe (50 %) than the quicksand 50 %, but both
+    // happen rarely enough simultaneously that the cyan-over-amber
+    // collision is acceptable.
+    if (this.slowTimer === 0 && this.config.name !== 'Sihans' &&
+        getZoneSlowMultiplier(this.x, this.z) < 1 &&
+        isInsideZoneOfKind(this.x, this.z, 'sand')) {
+      const pulse = 0.50 + 0.30 * Math.sin(Date.now() * 0.006);
+      for (const mat of mats) {
+        mat.emissive.setHex(0xb98c54);
+        mat.emissiveIntensity = pulse;
       }
     }
   }

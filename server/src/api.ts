@@ -137,10 +137,17 @@ export async function handleApiRequest(
         sendJson(res, 429, { error: 'rate_limited' });
         return true;
       }
-      const body = (await readJsonBody(req)) as { nickname?: string; token?: string };
+      const body = (await readJsonBody(req)) as {
+        nickname?: string; token?: string; identityId?: string;
+      };
       const nickname = typeof body.nickname === 'string' ? body.nickname : '';
       const token = typeof body.token === 'string' ? body.token : '';
-      const result = registerOrClaimPlayer(nickname, token);
+      // 2026-04-29 identity refinement — second auth key, optional
+      // for backwards compat. Older clients (pre-update) don't send
+      // it; the server falls back to token-only validation in that
+      // case and reclaim still works exactly like before.
+      const identityId = typeof body.identityId === 'string' ? body.identityId : undefined;
+      const result = registerOrClaimPlayer(nickname, token, identityId);
       if ('error' in result) {
         sendJson(res, 400, { error: result.error });
       } else {

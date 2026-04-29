@@ -62,6 +62,32 @@ export interface AbilityDef {
   selfBuffOnly?: boolean;
   /** Seconds of immunity to grant the caster on activation. */
   selfImmunityDuration?: number;
+  /** 2026-04-29 K-refinement — Shelly Steel Shell physical anchor.
+   *  When true + selfBuffOnly true, the caster's `effectiveMass`
+   *  is multiplied by 9999 while the buff is active, so other
+   *  critters running into her are shoved back and Shelly herself
+   *  doesn't budge. */
+  selfAnchorWhileBuffed?: boolean;
+  /** 2026-04-29 K-refinement — Kurama Mirror Trick escape distance.
+   *  When > 0 on a self-buff K, the caster teleports this many
+   *  units AWAY from the closest enemy at activation. Fallback:
+   *  along facing if no enemy. Pairs with `selfImmunityDuration`
+   *  so the trick reads as "señuelo se queda, Kurama se va". */
+  decoyEscapeDistance?: number;
+
+  /** Cheeto Shadow Step targeting (2026-04-29 K-refinement). When
+   *  true, the blink seeks the nearest valid enemy and lands NEAR
+   *  them (offset on the side opposite the caster's facing); when
+   *  false, the blink uses the legacy `blinkDistance` along facing.
+   *  Falls back to the legacy facing path when no target is found. */
+  blinkSeekNearest?: boolean;
+  /** Range cap for the seek-nearest path. Targets farther than this
+   *  fall back to the facing-blink. Avoids cross-arena teleports. */
+  blinkSeekRange?: number;
+  /** When seeking, land this many units short of the target on the
+   *  caster's side so the impact knockback connects but Cheeto
+   *  doesn't overlap the target's capsule. Default 1.4 u. */
+  blinkSeekOffset?: number;
 
   // --- 2026-04-29 K-session: projectile additions (Kowalski Snowball) ---
   /** World-space speed (units / second) of the projectile when fired. */
@@ -123,12 +149,15 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Kurama: [
     { type: 'charge_rush',  cooldown: 3.2, duration: 0.26, windUp: 0.05,
       impulse: 29, speedMultiplier: 2.8, massMultiplier: 1.3 },
-    // v0.11 — Mirror Trick: self-buff K, ghosts Kurama for 1.6 s
-    // and grants knockback immunity. No outward force. Cliente
-    // spawns the static decoy.
-    { type: 'ground_pound', cooldown: 7.0, duration: 1.6, windUp: 0.10,
+    // 2026-04-29 K-refinement — Mirror Trick: duration 1.6 → 2.8,
+    // cooldown 7 → 9, decoyEscapeDistance 7 (server teleports
+    // Kurama away from the nearest enemy at fire time). Decoy
+    // visual lives client-side; server only cares about the
+    // physics teleport.
+    { type: 'ground_pound', cooldown: 9.0, duration: 2.8, windUp: 0.10,
       radius: 0, force: 0, ...ROOTED_K,
-      selfBuffOnly: true, selfImmunityDuration: 1.6 },
+      selfBuffOnly: true, selfImmunityDuration: 2.8,
+      decoyEscapeDistance: 7.0 },
     { type: 'frenzy',       cooldown: 16.0, duration: 3.5, windUp: 0.30,
       frenzySpeedMult: 1.50, frenzyMassMult: 1.20 },
   ],
@@ -136,11 +165,14 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Shelly: [
     { type: 'charge_rush',  cooldown: 5.5, duration: 0.45, windUp: 0.08,
       impulse: 15, speedMultiplier: 1.8, massMultiplier: 3.2 },
-    // v0.11 — Steel Shell: 5 s rooted invulnerability, no slam.
-    // Defensive K — Shelly cannot be pushed during this window.
-    { type: 'ground_pound', cooldown: 12.0, duration: 5.0, windUp: 0.20,
+    // v0.11 — Steel Shell. 2026-04-29 K-refinement: duration 5 → 4,
+    // selfImmunityDuration mirrored, selfAnchorWhileBuffed:true
+    // makes Shelly physically immovable during the buff (other
+    // critters bounce off her).
+    { type: 'ground_pound', cooldown: 12.0, duration: 4.0, windUp: 0.20,
       radius: 0, force: 0, ...ROOTED_K,
-      selfBuffOnly: true, selfImmunityDuration: 5.0 },
+      selfBuffOnly: true, selfImmunityDuration: 4.0,
+      selfAnchorWhileBuffed: true },
     { type: 'frenzy',       cooldown: 18.0, duration: 3.5, windUp: 0.40,
       frenzySpeedMult: 1.20, frenzyMassMult: 1.65 },
   ],
@@ -151,9 +183,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Kermit: [
     { type: 'charge_rush',  cooldown: 4.0, duration: 0.30, windUp: 0.06,
       impulse: 20, speedMultiplier: 2.3, massMultiplier: 1.7 },
-    { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.15,
+    // 2026-04-29 K-refinement: zone duration 2.0 → 10.0, cooldown 7 → 16.
+    { type: 'ground_pound', cooldown: 16.0, duration: 0.05, windUp: 0.15,
       radius: 5.0, force: 14, ...ROOTED_K,
-      zone: { radius: 5.0, duration: 2.0, slowMultiplier: 0.60 } },
+      zone: { radius: 5.0, duration: 10.0, slowMultiplier: 0.60 } },
     { type: 'frenzy',       cooldown: 18.0, duration: 4.0, windUp: 0.40,
       frenzySpeedMult: 1.10, frenzyMassMult: 1.80 },
   ],
@@ -162,8 +195,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'charge_rush',  cooldown: 4.5, duration: 0.35, windUp: 0.08,
       impulse: 19, speedMultiplier: 2.1, massMultiplier: 2.0 },
     // v0.11 — Sand Trap: blink + zone-at-origin (quicksand)
+    // 2026-04-29 K-refinement: blinkDistance 3.5 → 6.5 (más distancia
+    // al emerger).
     { type: 'blink',        cooldown: 7.0, duration: 0.10, windUp: 0.20,
-      blinkDistance: 3.5, ...ROOTED_K, zoneAtOrigin: true,
+      blinkDistance: 6.5, ...ROOTED_K, zoneAtOrigin: true,
       zone: { radius: 3.5, duration: 2.5, slowMultiplier: 0.50 } },
     { type: 'frenzy',       cooldown: 20.0, duration: 4.5, windUp: 0.40,
       frenzySpeedMult: 1.15, frenzyMassMult: 1.50 },
@@ -176,7 +211,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Kowalski: [
     { type: 'charge_rush',  cooldown: 4.2, duration: 0.30, windUp: 0.06,
       impulse: 19, speedMultiplier: 2.4, massMultiplier: 1.5 },
-    { type: 'projectile',   cooldown: 5.5, duration: 0.05, windUp: 0.20,
+    // 2026-04-29 K-refinement: windUp 0.20 → 1.10 (cast feel),
+    // cooldown 5.5 → 6.5 (compensate). ROOTED_K keeps Kowalski
+    // glued to the spot during the cast.
+    { type: 'projectile',   cooldown: 6.5, duration: 0.05, windUp: 1.10,
       ...ROOTED_K,
       projectileSpeed: 18,
       projectileTtl: 1.2,
@@ -193,12 +231,18 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Cheeto: [
     { type: 'charge_rush',  cooldown: 2.8, duration: 0.24, windUp: 0.04,
       impulse: 33, speedMultiplier: 3.0, massMultiplier: 1.2 },
-    // v0.11 — Shadow Step gains impact knockback at destination.
-    // 2026-04-29 K-session bump: radius 2.2→2.6, force 28→36 so the
-    // landing reads as a real assassin entry instead of a soft tap.
+    // v0.11 — Shadow Step. 2026-04-29 K-refinement (Rafa: "se parece
+    // demasiado a J + empuje débil"): blink ahora SEEK al enemigo
+    // válido más cercano dentro de blinkSeekRange y aterriza al
+    // lado del target. Si no hay target, fallback al facing-blink
+    // legacy. Radius/force impact subidos otra vez (2.6→3.2, 36→48)
+    // para que se sienta como entrada de asesino, no soft tap.
     { type: 'blink',        cooldown: 5.5, duration: 0.10, windUp: 0.06,
       blinkDistance: 4.5, ...ROOTED_K,
-      blinkImpactRadius: 2.6, blinkImpactForce: 36 },
+      blinkSeekNearest: true,
+      blinkSeekRange: 9.0,
+      blinkSeekOffset: 1.4,
+      blinkImpactRadius: 3.2, blinkImpactForce: 48 },
     { type: 'frenzy',       cooldown: 14.0, duration: 2.0, windUp: 0.35,
       frenzySpeedMult: 1.55, frenzyMassMult: 1.05 },
   ],
@@ -209,7 +253,8 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       impulse: 33, speedMultiplier: 2.6, massMultiplier: 1.7 },
     // v0.11 — Claw Wave: cone-restricted ground_pound (frontal sweep,
     // 120° arc). Same radius/force as v0.10 but no longer radial.
-    { type: 'ground_pound', cooldown: 6.5, duration: 0.05, windUp: 0.30,
+    // 2026-04-29 K-refinement: duration 0.05 → 0.45 so the clip plays.
+    { type: 'ground_pound', cooldown: 6.5, duration: 0.45, windUp: 0.30,
       radius: 3.5, force: 38, ...ROOTED_K, coneAngleDeg: 60 },
     { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.40,
       frenzySpeedMult: 1.20, frenzyMassMult: 1.20 },
@@ -504,9 +549,47 @@ interface BlinkResult {
 function fireBlink(def: AbilityDef, player: PlayerSchema, allPlayers: PlayerSchema[]): BlinkResult {
   const originX = player.x;
   const originZ = player.z;
-  const dist = def.blinkDistance ?? 4.0;
-  let nx = player.x + Math.sin(player.rotationY) * dist;
-  let nz = player.z + Math.cos(player.rotationY) * dist;
+  let nx: number;
+  let nz: number;
+
+  // 2026-04-29 K-refinement — Cheeto Shadow Step seek-nearest.
+  // Find the closest alive non-falling non-immune enemy within
+  // `blinkSeekRange`. If found, land `blinkSeekOffset` units before
+  // them on the caster→target line so the impact knockback connects.
+  // If no target in range, fall back to the legacy facing-blink.
+  let seekHit: PlayerSchema | null = null;
+  if (def.blinkSeekNearest) {
+    const range = def.blinkSeekRange ?? 9.0;
+    let bestDist = range;
+    for (const other of allPlayers) {
+      if (other === player) continue;
+      if (!other.alive || other.falling || other.immunityTimer > 0) continue;
+      const dx = other.x - player.x;
+      const dz = other.z - player.z;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < bestDist && d > 0.01) {
+        bestDist = d;
+        seekHit = other;
+      }
+    }
+  }
+
+  if (seekHit) {
+    const dx = seekHit.x - player.x;
+    const dz = seekHit.z - player.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    const nxDir = dx / d;
+    const nzDir = dz / d;
+    const offset = def.blinkSeekOffset ?? 1.4;
+    nx = seekHit.x - nxDir * offset;
+    nz = seekHit.z - nzDir * offset;
+    // Face the target so subsequent attacks read correctly.
+    player.rotationY = Math.atan2(dx, dz);
+  } else {
+    const dist = def.blinkDistance ?? 4.0;
+    nx = player.x + Math.sin(player.rotationY) * dist;
+    nz = player.z + Math.cos(player.rotationY) * dist;
+  }
   const r = Math.sqrt(nx * nx + nz * nz);
   if (r > BLINK_ARENA_RADIUS) {
     nx = (nx / r) * BLINK_ARENA_RADIUS;
@@ -549,6 +632,38 @@ function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: Play
   if (def.selfBuffOnly) {
     if (def.selfImmunityDuration && def.selfImmunityDuration > 0) {
       caster.immunityTimer = Math.max(caster.immunityTimer, def.selfImmunityDuration);
+    }
+    // 2026-04-29 K-refinement — Kurama Mirror Trick escape teleport.
+    // Kurama teleports away from the nearest alive enemy by
+    // `decoyEscapeDistance`. Fallback: facing direction.
+    const escDist = def.decoyEscapeDistance ?? 0;
+    if (escDist > 0) {
+      let nearest: PlayerSchema | null = null;
+      let bestDist = Infinity;
+      for (const other of allPlayers) {
+        if (other === caster || !other.alive || other.falling) continue;
+        const dx = other.x - caster.x;
+        const dz = other.z - caster.z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (d < bestDist) { bestDist = d; nearest = other; }
+      }
+      let escAngle = caster.rotationY;
+      if (nearest) {
+        const dx = caster.x - nearest.x;
+        const dz = caster.z - nearest.z;
+        escAngle = Math.atan2(dx, dz);
+      }
+      let nx = caster.x + Math.sin(escAngle) * escDist;
+      let nz = caster.z + Math.cos(escAngle) * escDist;
+      const r = Math.sqrt(nx * nx + nz * nz);
+      if (r > BLINK_ARENA_RADIUS) {
+        nx = (nx / r) * BLINK_ARENA_RADIUS;
+        nz = (nz / r) * BLINK_ARENA_RADIUS;
+      }
+      caster.x = nx;
+      caster.z = nz;
+      caster.vx = 0;
+      caster.vz = 0;
     }
     return;
   }

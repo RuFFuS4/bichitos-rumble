@@ -834,15 +834,34 @@ export class Game {
         slowMultiplier: ev.slowMultiplier,
         ttl: ev.duration,
         vfxKind,
+        // Owner-immunity for the slow check. We normalise to the
+        // critter NAME (not sessionId) so the offline + online
+        // paths share the same key, and the local Critter's
+        // `effectiveSpeed` skips zones whose owner critter name
+        // matches its own. Edge: two humans on the same critter
+        // would both be immune to each other's zones — extremely
+        // rare and matches "you both look the same anyway".
+        ownerKey: caster?.config.name ?? '',
       });
       spawnZoneRing(this.scene, ev.x, ev.z, ev.radius, ev.duration,
-        palette?.pound?.color, palette?.pound?.secondary);
+        palette?.pound?.color, palette?.pound?.secondary, vfxKind);
     });
 
     // Online Belts: if the server detects a belt changed hands after this
     // match, it broadcasts `beltChanged` to the whole room. Toast it so
     // everyone sees who just took what.
     onBeltChanged(room, (ev) => showOnlineBeltToast(ev));
+
+    // 2026-04-29 identity refinement — handle structured rejections
+    // from the server (currently: same-nickname-active-in-room when
+    // a second tab tries to join with the same online identity).
+    // Set a flag the onLeave handler will read so we show the right
+    // overlay instead of the generic "Disconnected".
+    let rejectionReason: string | null = null;
+    room.onMessage('joinRejected', (ev: { reason?: string }) => {
+      rejectionReason = ev?.reason ?? 'unknown';
+      console.log('[Game] join rejected by server:', rejectionReason);
+    });
 
     // Attach leave handler — if the server drops us unexpectedly we
     // surface it. Intentional leaves (restartMatch, back-to-title)
@@ -851,7 +870,14 @@ export class Game {
     room.onLeave(() => {
       console.log('[Game] disconnected from room');
       if (this.phase === 'online' && this.room === room && !this.restartInProgress) {
-        showOverlay('Disconnected', 'Press T to return to title');
+        if (rejectionReason === 'nickname_active_in_room') {
+          showOverlay(
+            'Nickname already in use',
+            'This nickname is already active in another tab on this device. Use a different nickname or close the other tab.',
+          );
+        } else {
+          showOverlay('Disconnected', 'Press T to return to title');
+        }
       }
     });
   }

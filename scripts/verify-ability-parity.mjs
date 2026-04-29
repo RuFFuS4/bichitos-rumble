@@ -30,45 +30,45 @@ const srv = await readFile('server/src/sim/abilities.ts', 'utf-8');
 //   'blink' (blinkDistance/wU/CD).
 const expected = {
   Kurama:    {
-    // v0.11 — Mirror Trick: self-buff K (decoy + ghost). No slam.
-    K: { kind: 'pound', rad: 0, frc: 0, wU: 0.10, CD: 7.0,
-         selfBuff: { immunity: 1.6 } },
+    // 2026-04-29 K-refinement: duration 1.6 → 2.8, cooldown 7 → 9.
+    K: { kind: 'pound', rad: 0, frc: 0, wU: 0.10, CD: 9.0,
+         selfBuff: { immunity: 2.8 } },
     L: { dur: 3.5, CD: 16.0, wU: 0.30, spd: 1.50, mass: 1.20 },
   },
   Shelly:    {
-    // v0.11 — Steel Shell: self-buff K (5 s invulnerable). No slam.
+    // 2026-04-29 K-refinement: Steel Shell duration 5 → 4 + anchored.
     K: { kind: 'pound', rad: 0, frc: 0, wU: 0.20, CD: 12.0,
-         selfBuff: { immunity: 5.0 } },
+         selfBuff: { immunity: 4.0 } },
     L: { dur: 3.5, CD: 18.0, wU: 0.40, spd: 1.20, mass: 1.65 },
   },
   Kermit:    {
-    K: { kind: 'pound', rad: 5.0, frc: 14, wU: 0.15, CD: 7.0,
-         zone: { rad: 5.0, dur: 2.0, slow: 0.60 } },
+    // 2026-04-29 K-refinement: zone duration 2.0 → 10.0, cooldown 7 → 16.
+    K: { kind: 'pound', rad: 5.0, frc: 14, wU: 0.15, CD: 16.0,
+         zone: { rad: 5.0, dur: 10.0, slow: 0.60 } },
     L: { dur: 4.0, CD: 18.0, wU: 0.40, spd: 1.10, mass: 1.80 },
   },
   Sihans:    {
-    // v0.11: Sihans K is now blink + zone-at-origin (Sand Trap).
-    K: { kind: 'blink', blinkDistance: 3.5, wU: 0.20, CD: 7.0,
+    // 2026-04-29 K-refinement: blinkDistance 3.5 → 6.5.
+    K: { kind: 'blink', blinkDistance: 6.5, wU: 0.20, CD: 7.0,
          zone: { rad: 3.5, dur: 2.5, slow: 0.50 } },
     L: { dur: 4.5, CD: 20.0, wU: 0.40, spd: 1.15, mass: 1.50 },
   },
   Kowalski:  {
-    // 2026-04-29 K-session — Kowalski K is now a real frontal
-    // SNOWBALL projectile. Replaces the v0.10 Arctic Burst radial
-    // AoE.
-    K: { kind: 'projectile', wU: 0.20, CD: 5.5,
+    // 2026-04-29 K-refinement: windUp 0.20 → 1.10 (cast feel),
+    // cooldown 5.5 → 6.5.
+    K: { kind: 'projectile', wU: 1.10, CD: 6.5,
          projectile: { speed: 18, ttl: 1.2, radius: 0.55, impulse: 22, slowDur: 2.0 } },
     L: { dur: 3.0, CD: 17.0, wU: 0.40, spd: 1.40, mass: 1.10 },
   },
   Cheeto:    {
-    // v0.11: Shadow Step gains impact knockback at destination.
-    // 2026-04-29 K-session bump: radius 2.2→2.6, force 28→36.
+    // 2026-04-29 K-refinement: seek-nearest. Impact rad 2.6→3.2,
+    // force 36→48.
     K: { kind: 'blink', blinkDistance: 4.5, wU: 0.06, CD: 5.5,
-         impact: { rad: 2.6, frc: 36 } },
+         impact: { rad: 3.2, frc: 48 } },
     L: { dur: 2.0, CD: 14.0, wU: 0.35, spd: 1.55, mass: 1.05 },
   },
   Sebastian: {
-    // v0.11: Claw Wave — frontal cone (60° half-angle), wider radius.
+    // 2026-04-29 K-refinement: duration 0.05 → 0.45 (clip readable).
     K: { kind: 'pound', rad: 3.5, frc: 38, wU: 0.30, CD: 6.5 },
     L: { dur: 2.5, CD: 15.0, wU: 0.40, spd: 1.20, mass: 1.20 },
   },

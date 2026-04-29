@@ -7,12 +7,21 @@ Status legend:
 - `[!]` problema detectado / requiere ajuste / NO se cierra antes de la entrega
 - `[~⚠]` implementado con simplificación documentada (versión fiel al espíritu, no idéntica al diseño)
 
-Last updated: v0.11 implementation pass + 2026-04-29 skybox close-out + Sergei mesh-bug real fix
-+ K-session 1 (authorial K abilities for Kowalski / Kermit / Sihans / Cheeto / Sebastian / Shelly / Kurama).
+Last updated: v0.11 + 2026-04-29 K-session 1 + 2026-04-29 K-refinement (Rafa QA pass) + identity fix.
 Use `git log --grep abilities` to see the commit trail behind each item.
 
 > **Out-of-scope but cerrado entre tomas (no es habilidad pero estaba bloqueando QA visual):**
 > - **Skybox 360 final** (`b054e96`). Cuatro iteraciones (camera-parented sphere → world-anchored sphere PBR → backdrop toggle hacks → cortes verticales en bordes) fallaron por interacciones entre depth/transparency/grazing-angle. Solución definitiva: `scene.background = equirectTexture` con `EquirectangularReflectionMapping` — pre-pass built-in de Three.js, full-screen guaranteed, sin meshes ni z-buffer involucrado. Eliminados: skydome esférico, backdrop screen-space, cloudsBelow plano. Las 5 panorámicas en `public/images/skyboxes/<id>.png` se enchufan vía `setSceneSkyboxTexture`.
+
+> **K-refinement (2026-04-29 — Rafa QA pass). Todos `[~]` pendientes de re-validación de Rafa:**
+> - **Kowalski K**: cast 0.20 → 1.10 s ("1s más antes de lanzar"), cooldown 5.5 → 6.5. Frozen visual sobre target afectado (cyan emissive pulse en `Critter.updateVisuals` mientras `slowTimer > 0`).
+> - **Sihans K**: distancia 3.5 → 6.5. Visual quicksand: 2 inner rings rotando en sentidos opuestos (1.2 / -2.6 rad/s) sobre el disc base. Tint amber sobre enemigos atrapados.
+> - **Kermit K**: zone duration 2 → 10 s, cooldown 7 → 16 s. 14 puff-spheres flotantes en la nube (icospheres transparentes con bobbing). Kermit immune a su propia nube via `ownerKey` en zone (offline + server). Overlay screen-space duplicado: layer interna (tint verde sutil, screen blend) + layer externa (vignette denso multiply blend) → fuera de la nube se oscurece a casi negro.
+> - **Cheeto K**: blink ahora seek nearest enemy en `blinkSeekRange = 9 u`, aterriza `blinkSeekOffset = 1.4 u` antes del target. Fallback al facing-blink si no hay target. Impact rad 2.6 → 3.2, force 36 → 48.
+> - **Sebastian K**: duration 0.05 → 0.45 (clip Ability2 puede reproducirse). VFX frontal nuevo: half-radius palette ring + 9-puff dust fan distribuidos en el cono frontal. No más shockwave 360° cuando hay coneAngleDeg.
+> - **Shelly K**: duration 5 → 4 s. Nuevo `selfAnchorWhileBuffed: true` → `effectiveMass × 9999` cliente y server. `resolveCollisions` cambiado a separar por mass-ratio (Shelly anchored = 0 % displacement, atacante = 100 %). Anchored bounce: incluso con eitherImmune skip, el atacante recibe velocity bounce de `normalPushForce × 1.4` para que rebote.
+> - **Kurama K**: duration 1.6 → 2.8 s, cooldown 7 → 9 s. Nuevo `decoyEscapeDistance: 7.0` → Kurama teleporta 7 u alejándose del enemigo más cercano (fallback facing). Decoy se queda en posición original. 6 puffs en posición de aparición.
+> - **Trunk K + Sergei K**: sin tocar (Rafa OK). Sentinels parity verifican que NO han driftado.
 
 > **K-session 1 (2026-04-29) — autorial K por personaje. Todo `[~]` pendiente de validación de Rafa.**
 > - **Kowalski K Snowball PROYECTIL** — sistema de proyectiles real (cliente + server + parity). Server-authoritative: `BrawlRoom.activeProjectiles` integra posición, hace sweep collision contra críters no-owner, aplica knockback + `slowTimer = 2 s` + 50 % move-speed slow. Eventos `projectileSpawned` / `projectileHit` / `projectileExpired` broadcasted al cliente. Nuevo `AbilityType: 'projectile'`, nuevo módulo `src/projectiles.ts` con `spawnLocalProjectile` / `pushNetworkProjectile` / `removeProjectile` / `tickProjectiles`. Schema online: `PlayerSchema.slowTimer` añadido. Bot AI: tag `'ranged'` con condición 4..14 u y 0.022 prob/tick.

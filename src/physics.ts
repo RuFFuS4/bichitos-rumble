@@ -3,6 +3,20 @@ import { Arena } from './arena';
 import { triggerHitStop, applyImpactFeedback, triggerCameraShake, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
 
+/**
+ * True if the critter has an active K with `selfBuffOnly` AND
+ * `selfAnchorWhileBuffed` set (Shelly Steel Shell only, right now).
+ * Used by `resolveCollisions` to bounce the attacker instead of
+ * skipping the knockback like the immunity path does.
+ */
+function isAnchoredCritter(c: Critter): boolean {
+  for (const s of c.abilityStates) {
+    if (!s.active || s.windUpLeft > 0) continue;
+    if (s.def.selfBuffOnly && s.def.selfAnchorWhileBuffed) return true;
+  }
+  return false;
+}
+
 /** Check and resolve collisions between all critters. */
 export function resolveCollisions(critters: Critter[]): void {
   for (let i = 0; i < critters.length; i++) {
@@ -24,12 +38,37 @@ export function resolveCollisions(critters: Critter[]): void {
         const nx = dx / dist;
         const nz = dz / dist;
 
-        // Separate overlapping critters
-        const overlap = (minDist - dist) / 2;
-        a.x -= nx * overlap;
-        a.z -= nz * overlap;
-        b.x += nx * overlap;
-        b.z += nz * overlap;
+        // 2026-04-29 K-refinement — mass-aware separation so that a
+        // Shelly under Steel Shell (anchor → effectiveMass × 9999)
+        // doesn't budge while the attacker takes the full overlap.
+        const massA = a.effectiveMass;
+        const massB = b.effectiveMass;
+        const totalMass = massA + massB;
+        const aShare = massB / totalMass;
+        const bShare = massA / totalMass;
+        const totalOverlap = minDist - dist;
+        a.x -= nx * totalOverlap * aShare;
+        a.z -= nz * totalOverlap * aShare;
+        b.x += nx * totalOverlap * bShare;
+        b.z += nz * totalOverlap * bShare;
+
+        // 2026-04-29 K-refinement — Steel Shell bounce. If exactly
+        // one critter is anchored (Shelly during Steel Shell), the
+        // OTHER receives a small velocity bounce so running into
+        // her reads as "rebote" instead of "nada pasa".
+        const aAnchored = isAnchoredCritter(a);
+        const bAnchored = isAnchoredCritter(b);
+        const BOUNCE = FEEL.collision.normalPushForce * 1.4;
+        if (aAnchored && !bAnchored) {
+          b.vx += nx * BOUNCE;
+          b.vz += nz * BOUNCE;
+          continue;
+        }
+        if (bAnchored && !aAnchored) {
+          a.vx -= nx * BOUNCE;
+          a.vz -= nz * BOUNCE;
+          continue;
+        }
 
         // No knockback during immunity — only separation
         if (eitherImmune) continue;

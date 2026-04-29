@@ -207,14 +207,40 @@ export class BrawlRoom extends Room<GameState> {
       console.log(`[BrawlRoom] ${client.sessionId} requested unknown critter "${requested}", using ${critterName}`);
     }
 
+    // 2026-04-29 identity refinement — in-room duplicate detection.
+    // Two browser tabs sharing the same localStorage will pass the
+    // /api/player auth (same token + identityId), but we don't want
+    // both connections counting as the SAME player in the same room
+    // (would double-credit match results). If the candidate player
+    // is verified AND another connection in this room is already
+    // logged in with the same playerId, reject the second tab with a
+    // structured leave reason. Anonymous (guest) players are NOT
+    // affected — they have no playerId so dedupe is a no-op for them.
+    const incomingPlayerId = options.playerId && options.playerToken
+      && verifyPlayer(options.playerId, options.playerToken)
+      ? options.playerId
+      : null;
+    if (incomingPlayerId) {
+      for (const data of this.internal.values()) {
+        if (data.onlinePlayerId === incomingPlayerId) {
+          console.log(`[BrawlRoom] rejected ${client.sessionId}: nickname already active in this room`);
+          // Send a typed message before leave so the client can show a
+          // proper toast instead of a generic disconnect.
+          client.send('joinRejected', { reason: 'nickname_active_in_room' });
+          client.leave();
+          return;
+        }
+      }
+    }
+
     const p = this.buildPlayerSchema(client.sessionId, critterName, spawn, /*isBot*/ false);
     this.state.players.set(client.sessionId, p);
     const internal = newInternal();
     // Verify the online identity if the client supplied one. Only a
     // verified identity gets credited on match-end; guests (no identity
     // or failed verification) play normally but earn nothing for belts.
-    if (options.playerId && options.playerToken && verifyPlayer(options.playerId, options.playerToken)) {
-      internal.onlinePlayerId = options.playerId;
+    if (incomingPlayerId) {
+      internal.onlinePlayerId = incomingPlayerId;
       console.log(`[BrawlRoom] ${client.sessionId} online identity verified (${options.nickname ?? options.playerId})`);
     } else if (options.playerId) {
       console.log(`[BrawlRoom] ${client.sessionId} failed identity verification — playing as guest`);

@@ -95,6 +95,15 @@ export interface AbilityDef {
   blinkImpactRadius?: number;
   blinkImpactForce?: number;
 
+  /** 2026-04-29 K-refinement — Cheeto Shadow Step seek-nearest.
+   *  When true, the blink targets the closest valid enemy within
+   *  `blinkSeekRange` and lands `blinkSeekOffset` units short of
+   *  them on the caster→target line. Falls back to the legacy
+   *  `blinkDistance` facing-blink when no target is in range. */
+  blinkSeekNearest?: boolean;
+  blinkSeekRange?: number;
+  blinkSeekOffset?: number;
+
   /** Cone-restricted ground_pound (v0.11): when set, the slam only
    *  pushes enemies whose direction from the caster falls within
    *  ±`coneAngleDeg` of the caster's facing. Used by Sebastian Claw
@@ -153,6 +162,24 @@ export interface AbilityDef {
    *  alpha override on the mesh + spawns a static decoy clone at
    *  the origin position. */
   invisibilityDuration?: number;
+
+  /** 2026-04-29 K-refinement — Shelly Steel Shell physical anchor.
+   *  When true, while the buff is active the caster's effective
+   *  mass is multiplied by `ANCHOR_MASS_MULT` (effectively
+   *  immovable) so other critters bounce off her instead of
+   *  shoving her around. Combined with the existing
+   *  `selfImmunityDuration`-driven knockback skip, Shelly is
+   *  100 % static during Steel Shell. Server mirrors via the
+   *  `selfAnchorWhileBuffed` flag in `AbilityDef`. */
+  selfAnchorWhileBuffed?: boolean;
+
+  /** 2026-04-29 K-refinement — Kurama Mirror Trick escape teleport.
+   *  When set on a self-buff K, the caster blinks this many units
+   *  AWAY from the closest enemy at activation (fallback: along
+   *  facing if no enemy exists). The decoy stays at the original
+   *  spot. Pairs with `invisibilityDuration` so the engaño reads
+   *  as "señuelo se queda, Kurama se va lejos". */
+  decoyEscapeDistance?: number;
 
   // --- 2026-04-29 K-session: projectile additions (Kowalski Snowball) ---
   /** Forward speed of the projectile (units / second). */
@@ -588,15 +615,22 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     // selfBuffOnly: true. Bot AI keeps targeting her by sessionId
     // (we don't redirect targeting to the decoy; documented in
     // ABILITY_QA_CHECKLIST.md as a recorte).
+    // 2026-04-29 K-refinement (Rafa: "señuelo dura muy poco, Kurama
+     // queda demasiado pegado al señuelo, debe alejarse muchísimo
+     // más"): duration 1.6 → 2.8 s, ghost duration igualada,
+     // cooldown 7 → 9. Y añadimos `decoyEscapeDistance: 7` para
+     // que la fire-effect cliente teleport a Kurama lejos del
+     // enemigo más cercano (fallback al facing si no hay enemigo).
     makeGroundPound({
       name: 'Mirror Trick',
-      description: 'Leave a decoy and ghost step for 1.6 s',
+      description: 'Leave a decoy, ghost away from danger for 2.8 s',
       radius: 0, force: 0,
-      windUp: 0.10, cooldown: 7.0, duration: 1.6,
+      windUp: 0.10, cooldown: 9.0, duration: 2.8,
       slowDuringActive: 0, cancelAnimOnEnd: true,
       selfBuffOnly: true,
-      selfImmunityDuration: 1.6,
-      invisibilityDuration: 1.6,
+      selfImmunityDuration: 2.8,
+      invisibilityDuration: 2.8,
+      decoyEscapeDistance: 7.0,
     }),
     makeFrenzy({
       name: 'Nine-Tails Frenzy',
@@ -619,14 +653,21 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     // (rooted via slowDuringActive: 0), tints her metallic gray.
     // Reads as "she's in her shell, you can't push her".
     makeGroundPound({
+      // 2026-04-29 K-refinement (Rafa): duration 5.0 → 4.0,
+      // selfImmunityDuration mirrored. Anclaje físico absoluto:
+      // durante el shell, mass × 9999 (vía new field
+      // `selfMassWhileBuffed`) — los demás rebotan al chocar pero
+      // Shelly no se desplaza. Manejado tanto en cliente
+      // (effectiveMass) como en server (effectiveMass).
       name: 'Steel Shell',
-      description: 'Lock into the shell — invulnerable for 5 s',
+      description: 'Lock into the shell — invulnerable for 4 s',
       radius: 0, force: 0,
-      windUp: 0.20, cooldown: 12.0, duration: 5.0,
+      windUp: 0.20, cooldown: 12.0, duration: 4.0,
       slowDuringActive: 0, cancelAnimOnEnd: true,
       selfBuffOnly: true,
-      selfImmunityDuration: 5.0,
+      selfImmunityDuration: 4.0,
       selfTintHex: 0xa8c0d0, // metallic blue-gray
+      selfAnchorWhileBuffed: true,
     }),
     makeFrenzy({
       name: 'Berserker Shell',
@@ -647,18 +688,18 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 2.3, massMultiplier: 1.7,
     }),
     makeGroundPound({
+      // 2026-04-29 K-refinement: zone duration 2.0 → 10.0 s (Rafa:
+      // "debe durar unos 10 segundos"). Cooldown 7.0 → 16.0 para
+      // que la zona no quede solapada con la siguiente. Kermit es
+      // immune to su propia nube (manejado en physics: el caster
+      // se filtra del slow check via `ownerSid`).
       name: 'Poison Cloud',
-      description: 'Wide toxic burst — leaves a slowing fog',
-      radius: 5.0, force: 14, windUp: 0.15, cooldown: 7.0,
+      description: 'Toxic fog that lingers and slows enemies',
+      radius: 5.0, force: 14, windUp: 0.15, cooldown: 16.0,
       slowDuringActive: 0, cancelAnimOnEnd: true,
-      // Lingering toxic fog: 2.0 s on the ground, 60 % movement speed
-      // for anyone standing inside. The slam itself still nudges
-      // everyone with the same low force; the zone is the
-      // controller-defining piece — Kermit forces the fight to
-      // happen somewhere ELSE for two seconds.
       zone: {
         radius: 5.0,
-        duration: 2.0,
+        duration: 10.0,
         slowMultiplier: 0.60,
         color: 0x66ff44,
         secondary: 0x9c3cee,
@@ -686,9 +727,14 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     // allá". El blink usa la misma mecánica que Cheeto pero con
     // distancia menor + zoneAtOrigin: true.
     makeBlink({
+      // 2026-04-29 K-refinement (Rafa: "al salir debe aparecer
+      // más adelante"): blinkDistance 3.5 → 6.5 (recorrido casi
+      // doblado, todavía dentro del arena disc — radius 12, ARENA
+      // BLINK clamp 11.6, así que un Sihans en el centro aparece
+      // a 6.5u sin riesgo de void).
       name: 'Sand Trap',
       description: 'Burrow under, leave quicksand, surface ahead',
-      blinkDistance: 3.5,
+      blinkDistance: 6.5,
       cooldown: 7.0,
       windUp: 0.20,
       duration: 0.10,
@@ -721,10 +767,15 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 2.4, massMultiplier: 1.5,
     }),
     makeProjectile({
+      // 2026-04-29 K-refinement (Rafa: "1s más antes de lanzar para
+      // que se reproduzca más la animación de cast"): windUp 0.20 →
+      // 1.10. Durante el cast Kowalski queda rooted (slowDuringWindUp
+      // 0). Cooldown sube 5.5 → 6.5 para compensar el cast más largo
+      // sin volverla spammeable.
       name: 'Snowball',
       description: 'Frontal snowball — knocks back and freezes the target',
-      cooldown: 5.5,
-      windUp: 0.20,
+      cooldown: 6.5,
+      windUp: 1.10,
       duration: 0.05,
       projectileSpeed: 18,
       projectileTtl: 1.2,
@@ -749,21 +800,21 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 3.0, massMultiplier: 1.2,
     }),
     makeBlink({
-      // v0.11 (Rafa: "al aparecer debe provocar empuje fuerte"):
-      // se mantiene blink + se añade impact knockback radial en
-      // destino para los enemigos cercanos a donde aparece Cheeto.
-      // 2026-04-29 K-session bump (Rafa: "ajustar force/radius si
-      // ya existe pero se siente débil"): radius 2.2 → 2.6, force
-      // 28 → 36. Lectura "el aterrizaje empuja fuerte" sin entrar
-      // en zona de Sergei Shockwave (3.5 / 34).
+      // 2026-04-29 K-refinement — Cheeto Shadow Step ahora seek
+      // al enemigo más cercano dentro de blinkSeekRange y aterriza
+      // pegado al target. Empuja MUCHO más fuerte. Fallback al
+      // facing-blink si no hay target en rango.
       name: 'Shadow Step',
-      description: 'Blink forward — burst pushes nearby enemies',
+      description: 'Teleport onto the nearest target — knock them out',
       blinkDistance: 4.5,
       cooldown: 5.5,
       windUp: 0.06,
       duration: 0.10,
-      blinkImpactRadius: 2.6,
-      blinkImpactForce: 36,
+      blinkSeekNearest: true,
+      blinkSeekRange: 9.0,
+      blinkSeekOffset: 1.4,
+      blinkImpactRadius: 3.2,
+      blinkImpactForce: 48,
     }),
     makeFrenzy({
       name: 'Tiger Rage',
@@ -791,8 +842,13 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // arco frontal de 120°. Mismo radius/force pero direccional.
       // Identidad "Glass Cannon" se refuerza: Sebastian no protege
       // espalda con esta K.
+      // 2026-04-29 K-refinement (Rafa: "no parece reproducir
+      // animación"): duration 0.05 → 0.45 para que el clip
+      // Ability2 (al 1.3×) tenga ventana de ~0.55 s antes del
+      // cancelAnimOnEnd. Cooldown se mantiene a 6.5.
       name: 'Claw Wave', description: 'Frontal claw shockwave',
       radius: 3.5, force: 38, windUp: 0.30, cooldown: 6.5,
+      duration: 0.45,
       slowDuringActive: 0, cancelAnimOnEnd: true,
       coneAngleDeg: 60,
     }),
@@ -927,6 +983,49 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       // visual layer (in updateVisuals / vfx) drops her alpha.
       spawnDecoyAt(scene, critter, invisDur);
       critter.invisibilityTimer = invisDur;
+      // 2026-04-29 K-refinement — Mirror Trick escape teleport.
+      // Find the closest alive enemy and dash AWAY from them by
+      // `decoyEscapeDistance` units, leaving the decoy at the
+      // original spot. Fallback: facing-direction blink. Clamped to
+      // arena radius so we never land in the void.
+      const escDist = def.decoyEscapeDistance ?? 0;
+      if (escDist > 0) {
+        let nearest: Critter | null = null;
+        let bestDist = Infinity;
+        for (const other of allCritters) {
+          if (other === critter || !other.alive) continue;
+          const dx = other.x - critter.x;
+          const dz = other.z - critter.z;
+          const d = Math.sqrt(dx * dx + dz * dz);
+          if (d < bestDist) { bestDist = d; nearest = other; }
+        }
+        let escAngle = critter.mesh.rotation.y; // fallback: facing forward
+        if (nearest) {
+          // Direction AWAY from the nearest enemy.
+          const dx = critter.x - nearest.x;
+          const dz = critter.z - nearest.z;
+          escAngle = Math.atan2(dx, dz);
+        }
+        let nx = critter.x + Math.sin(escAngle) * escDist;
+        let nz = critter.z + Math.cos(escAngle) * escDist;
+        const r = Math.sqrt(nx * nx + nz * nz);
+        if (r > ARENA_BLINK_RADIUS) {
+          nx = (nx / r) * ARENA_BLINK_RADIUS;
+          nz = (nz / r) * ARENA_BLINK_RADIUS;
+        }
+        critter.x = nx;
+        critter.z = nz;
+        critter.mesh.position.x = nx;
+        critter.mesh.position.z = nz;
+        critter.vx = 0;
+        critter.vz = 0;
+        // Tiny dust burst at the new position so the reappearance
+        // reads, even though Kurama is alpha 0.25.
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          spawnDustPuff(scene, nx + Math.cos(a) * 0.4, 0, nz + Math.sin(a) * 0.4);
+        }
+      }
     }
     if (def.selfTintHex !== undefined) {
       critter.selfTintHex = def.selfTintHex;
@@ -978,11 +1077,40 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   if (hitCount > 0) {
     triggerHitStop(FEEL.hitStop.groundPound);
   }
-  // Per-critter tint: each shockwave reads as the critter's element
-  // (Trunk earth, Kurama violet illusion, Kowalski ice, etc.). When
-  // no entry exists for the critter, `spawnShockwaveRing` falls back
-  // to its original red palette.
-  spawnShockwaveRing(scene, critter.x, critter.z, def.radius, CRITTER_VFX_PALETTE[critter.config.name]?.pound);
+  // 2026-04-29 K-refinement — Sebastian Claw Wave frontal VFX.
+  // When `coneAngleDeg` is set the slam is a frontal cone, so the
+  // 360° shockwave ring reads wrong ("dice frontal pero veo 360°").
+  // Replaced with: a row of dust-puffs sweeping forward in a fan
+  // shape across the cone. The puffs are radial-only (no facing)
+  // but their POSITIONS draw a fan in front of the caster, which
+  // is enough to communicate "wave goes forward, not all around".
+  if (coneCos !== null) {
+    const palette = CRITTER_VFX_PALETTE[critter.config.name]?.pound;
+    // Tinted half-radius ring at the caster's feet so the activation
+    // is still readable, kept smaller than `def.radius` so it
+    // doesn't compete with the fan. Uses palette so identity reads.
+    spawnShockwaveRing(scene, critter.x, critter.z, def.radius * 0.45, palette);
+    // Forward fan of puffs — sweep from -coneAngleDeg to +coneAngleDeg
+    // along the facing, distance from 0.6 u to def.radius.
+    const baseAngle = critter.mesh.rotation.y;
+    const halfCone = (def.coneAngleDeg! * Math.PI) / 180;
+    const FAN_PUFFS = 9;
+    for (let i = 0; i < FAN_PUFFS; i++) {
+      const t = i / (FAN_PUFFS - 1);
+      const angle = baseAngle - halfCone + t * halfCone * 2;
+      // Distance varies with i so the fan reads as a sweep, not a row.
+      const radial = 0.8 + (1 - Math.abs(t - 0.5) * 1.4) * (def.radius * 0.85);
+      const px = critter.x + Math.sin(angle) * radial;
+      const pz = critter.z + Math.cos(angle) * radial;
+      spawnDustPuff(scene, px, 0, pz);
+    }
+  } else {
+    // Per-critter tint: each shockwave reads as the critter's element
+    // (Trunk earth, Kurama violet illusion, Kowalski ice, etc.). When
+    // no entry exists for the critter, `spawnShockwaveRing` falls back
+    // to its original red palette.
+    spawnShockwaveRing(scene, critter.x, critter.z, def.radius, CRITTER_VFX_PALETTE[critter.config.name]?.pound);
+  }
   playSound('groundPound');
   // Lingering zone (Kermit Poison Cloud, Kowalski Arctic Burst, …) —
   // pushes a slow-zone entry into the offline tracker and renders a
@@ -990,14 +1118,16 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   // full lifetime. Server-side mirror is in BrawlRoom; this branch
   // covers offline matches.
   if (def.zone) {
+    const kind = deriveZoneVfxKind(critter.config.name);
     activeZones.push({
       x: critter.x, z: critter.z,
       radius: def.zone.radius,
       slowMultiplier: def.zone.slowMultiplier,
       ttl: def.zone.duration,
-      vfxKind: deriveZoneVfxKind(critter.config.name),
+      vfxKind: kind,
+      ownerKey: critter.config.name,
     });
-    spawnZoneRing(scene, critter.x, critter.z, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary);
+    spawnZoneRing(scene, critter.x, critter.z, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary, kind);
   }
 }
 
@@ -1035,6 +1165,11 @@ interface ActiveZone {
   slowMultiplier: number;
   ttl: number;
   vfxKind?: ZoneVfxKind;
+  /** Identifier of the caster — used so the owner of the zone is
+   *  immune to its slow effect. Offline path stores the critter
+   *  name; online path stores the session id. Either matches the
+   *  same field passed to `getZoneSlowMultiplier`. */
+  ownerKey?: string;
 }
 
 const activeZones: ActiveZone[] = [];
@@ -1087,10 +1222,14 @@ export function isInsideZoneOfKind(x: number, z: number, kind: ZoneVfxKind): boo
 }
 
 /** Compound slow multiplier from every active zone the point is inside.
- *  Returns 1.0 when not inside any zone. Multiplicative when overlapping. */
-export function getZoneSlowMultiplier(x: number, z: number): number {
+ *  Returns 1.0 when not inside any zone. Multiplicative when overlapping.
+ *  `ownerKey`: pass the critter's session-id (online) or name (offline)
+ *  to skip zones owned by self — used so Kermit isn't slowed by his own
+ *  Poison Cloud, Sihans isn't trapped by her own Quicksand, etc. */
+export function getZoneSlowMultiplier(x: number, z: number, ownerKey?: string): number {
   let m = 1.0;
   for (const zone of activeZones) {
+    if (ownerKey !== undefined && zone.ownerKey === ownerKey) continue;
     const dx = x - zone.x;
     const dz = z - zone.z;
     if (dx * dx + dz * dz <= zone.radius * zone.radius) {
@@ -1107,12 +1246,46 @@ const ARENA_BLINK_RADIUS = 11.6;
 
 function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
   const angle = critter.mesh.rotation.y;
-  const dist = def.blinkDistance ?? 4.0;
   // Capture origin for VFX + optional zone-at-origin (Sihans Burrow).
   const originX = critter.x;
   const originZ = critter.z;
-  let targetX = critter.x + Math.sin(angle) * dist;
-  let targetZ = critter.z + Math.cos(angle) * dist;
+  let targetX: number;
+  let targetZ: number;
+
+  // 2026-04-29 K-refinement — Cheeto Shadow Step seek-nearest.
+  // Replica de la lógica server. Find closest alive enemy within
+  // `blinkSeekRange` and land `blinkSeekOffset` short on the caster
+  // → target line. Falls back to facing-blink if no target in range.
+  let seekHit: Critter | null = null;
+  if (def.blinkSeekNearest) {
+    const range = def.blinkSeekRange ?? 9.0;
+    let bestDist = range;
+    for (const other of allCritters) {
+      if (other === critter || !other.alive) continue;
+      if (other.falling || other.isImmune) continue;
+      const dx = other.x - critter.x;
+      const dz = other.z - critter.z;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < bestDist && d > 0.01) {
+        bestDist = d;
+        seekHit = other;
+      }
+    }
+  }
+
+  if (seekHit) {
+    const dx = seekHit.x - critter.x;
+    const dz = seekHit.z - critter.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    const offset = def.blinkSeekOffset ?? 1.4;
+    targetX = seekHit.x - (dx / d) * offset;
+    targetZ = seekHit.z - (dz / d) * offset;
+    critter.mesh.rotation.y = Math.atan2(dx, dz);
+  } else {
+    const dist = def.blinkDistance ?? 4.0;
+    targetX = critter.x + Math.sin(angle) * dist;
+    targetZ = critter.z + Math.cos(angle) * dist;
+  }
   // Clamp to arena disc — never land outside or in the void band.
   const r = Math.sqrt(targetX * targetX + targetZ * targetZ);
   if (r > ARENA_BLINK_RADIUS) {
@@ -1155,14 +1328,16 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
   if (def.zone) {
     const zx = def.zoneAtOrigin ? originX : targetX;
     const zz = def.zoneAtOrigin ? originZ : targetZ;
+    const kind = deriveZoneVfxKind(critter.config.name);
     activeZones.push({
       x: zx, z: zz,
       radius: def.zone.radius,
       slowMultiplier: def.zone.slowMultiplier,
       ttl: def.zone.duration,
-      vfxKind: deriveZoneVfxKind(critter.config.name),
+      vfxKind: kind,
+      ownerKey: critter.config.name,
     });
-    spawnZoneRing(scene, zx, zz, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary);
+    spawnZoneRing(scene, zx, zz, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary, kind);
   }
   // 2026-04-29 K-session — Burrow visual (Sihans). When the blink
   // is configured with `zoneAtOrigin: true` we treat it as the
@@ -1347,6 +1522,14 @@ export function getMassMultiplier(states: AbilityState[]): number {
   for (const s of states) {
     if (s.active && s.windUpLeft <= 0) {
       m *= s.def.massMultiplier;
+      // 2026-04-29 K-refinement — Shelly Steel Shell anchor.
+      // Multiply by an absurd mass while the self-buff is active
+      // so collision knockback shoves the OTHER critter and
+      // Shelly stays put. The selfBuffOnly + selfAnchorWhileBuffed
+      // pair is unique to Shelly's K right now.
+      if (s.def.selfBuffOnly && s.def.selfAnchorWhileBuffed) {
+        m *= 9999;
+      }
     }
   }
   return m;
@@ -1555,6 +1738,7 @@ export function spawnZoneRing(
   durationSec: number,
   color: number = 0x66ff44,
   secondary: number = 0xffffff,
+  vfxKind?: ZoneVfxKind,
 ): void {
   const duration = durationSec * 1000;
   const startTime = performance.now();
@@ -1579,6 +1763,87 @@ export function spawnZoneRing(
   ring.position.set(x, 0.05, z);
   scene.add(ring);
 
+  // 2026-04-29 K-refinement — Kermit Poison Cloud body. Spawn
+  // ~14 transparent green spheres at random positions inside the
+  // disc, slowly bobbing. They live for the full zone duration
+  // and read as a thick volumetric cloud from outside. Cheap:
+  // shared geometry (small icosphere), per-instance material so
+  // each can fade independently.
+  const poisonPuffs: Array<{
+    mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial;
+    geo: THREE.BufferGeometry; baseY: number; bobPhase: number;
+    bobSpeed: number; baseOpacity: number;
+  }> = [];
+  if (vfxKind === 'poison') {
+    const PUFF_COUNT = 14;
+    const puffGeo = new THREE.IcosahedronGeometry(1, 1);
+    for (let i = 0; i < PUFF_COUNT; i++) {
+      // Random position inside the disc, slightly raised.
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * (radius * 0.85);
+      const px = x + Math.cos(a) * r;
+      const pz = z + Math.sin(a) * r;
+      const py = 0.6 + Math.random() * 1.6; // 0.6 .. 2.2 above ground
+      const scale = 0.7 + Math.random() * 0.9;
+      const mat = new THREE.MeshBasicMaterial({
+        color: i % 3 === 0 ? secondary : color,
+        transparent: true,
+        opacity: 0.0, // ramps up via fadeIn below
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(puffGeo, mat);
+      mesh.scale.setScalar(scale);
+      mesh.position.set(px, py, pz);
+      scene.add(mesh);
+      poisonPuffs.push({
+        mesh, mat, geo: puffGeo, baseY: py,
+        bobPhase: Math.random() * Math.PI * 2,
+        bobSpeed: 0.6 + Math.random() * 0.5,
+        baseOpacity: 0.45 + Math.random() * 0.18,
+      });
+    }
+  }
+  // 2026-04-29 K-refinement — Sihans Quicksand swirl. When the zone
+  // is `vfxKind: 'sand'` we layer two additional inner discs that
+  // rotate around Y at different speeds, producing a remolino /
+  // whirlpool read instead of "another flat circle on the floor".
+  // Polar UV would be nicer but a simple textured disc is overkill
+  // for jam scope — the rotation alone communicates "the floor is
+  // moving" against the static ring.
+  const sandSwirls: Array<{
+    mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial;
+    geo: THREE.BufferGeometry; speed: number; baseOpacity: number;
+  }> = [];
+  if (vfxKind === 'sand') {
+    // Inner ring 1 — wide, slower
+    {
+      const geo = new THREE.RingGeometry(radius * 0.35, radius * 0.85, 32, 1);
+      const mat = new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity: 0.35,
+        depthWrite: false, side: THREE.DoubleSide,
+      });
+      // Stagger the start so the segments don't all line up
+      const m = new THREE.Mesh(geo, mat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x, 0.04, z);
+      scene.add(m);
+      sandSwirls.push({ mesh: m, mat, geo, speed: 1.2, baseOpacity: 0.35 });
+    }
+    // Inner ring 2 — narrower, faster, opposite direction
+    {
+      const geo = new THREE.RingGeometry(radius * 0.15, radius * 0.55, 24, 1);
+      const mat = new THREE.MeshBasicMaterial({
+        color: secondary, transparent: true, opacity: 0.45,
+        depthWrite: false, side: THREE.DoubleSide,
+      });
+      const m = new THREE.Mesh(geo, mat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x, 0.05, z);
+      scene.add(m);
+      sandSwirls.push({ mesh: m, mat, geo, speed: -2.6, baseOpacity: 0.45 });
+    }
+  }
+
   function animate() {
     const elapsed = performance.now() - startTime;
     const t = Math.min(elapsed / duration, 1);
@@ -1589,12 +1854,37 @@ export function spawnZoneRing(
     const fadeOut = t > 0.75 ? 1 - (t - 0.75) / 0.25 : 1;
     discMat.opacity = 0.22 * fadeIn * fadeOut;
     ringMat.opacity = 0.65 * fadeIn * fadeOut;
+    // Swirl rings rotate around their local Z axis (which after the
+    // -PI/2 X rotation maps to world Y) at fixed angular velocities.
+    for (const sw of sandSwirls) {
+      sw.mesh.rotation.z = (elapsed / 1000) * sw.speed;
+      sw.mat.opacity = sw.baseOpacity * fadeIn * fadeOut;
+    }
+    // Poison puffs bob gently and fade in/out with the same envelope.
+    for (const p of poisonPuffs) {
+      p.mesh.position.y = p.baseY + 0.18 * Math.sin((elapsed / 1000) * p.bobSpeed + p.bobPhase);
+      p.mat.opacity = p.baseOpacity * fadeIn * fadeOut;
+    }
     if (t < 1) {
       requestAnimationFrame(animate);
     } else {
       scene.remove(disc); scene.remove(ring);
       discGeo.dispose(); discMat.dispose();
       ringGeo.dispose(); ringMat.dispose();
+      for (const sw of sandSwirls) {
+        scene.remove(sw.mesh);
+        sw.geo.dispose();
+        sw.mat.dispose();
+      }
+      // Puffs share the icosahedron geometry — dispose once after
+      // the loop, not per-instance.
+      let sharedPuffGeo: THREE.BufferGeometry | null = null;
+      for (const p of poisonPuffs) {
+        scene.remove(p.mesh);
+        p.mat.dispose();
+        sharedPuffGeo = p.geo;
+      }
+      sharedPuffGeo?.dispose();
     }
   }
   requestAnimationFrame(animate);

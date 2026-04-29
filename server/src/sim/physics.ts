@@ -65,17 +65,46 @@ export function resolveCollisions(
         const nx = dx / dist;
         const nz = dz / dist;
 
-        // Separate overlapping players
-        const overlap = (minDist - dist) / 2;
-        a.x -= nx * overlap;
-        a.z -= nz * overlap;
-        b.x += nx * overlap;
-        b.z += nz * overlap;
+        // 2026-04-29 K-refinement — mass-aware separation. With
+        // Shelly Steel Shell setting effectiveMass to ~base*9999,
+        // the anchored critter receives ~0 of the displacement and
+        // the attacker takes the full overlap → "Shelly clavada,
+        // los demás rebotan al chocarla" exactly as Rafa asked.
+        // Equal masses fall back to legacy 50/50 split.
+        const massAforSep = effectiveMass(a);
+        const massBforSep = effectiveMass(b);
+        const totalMass = massAforSep + massBforSep;
+        const aShare = massBforSep / totalMass;
+        const bShare = massAforSep / totalMass;
+        const totalOverlap = minDist - dist;
+        a.x -= nx * totalOverlap * aShare;
+        a.z -= nz * totalOverlap * aShare;
+        b.x += nx * totalOverlap * bShare;
+        b.z += nz * totalOverlap * bShare;
+
+        // 2026-04-29 K-refinement — Steel Shell bounce. If exactly
+        // one side is `selfAnchorWhileBuffed`-active (Shelly only),
+        // the OTHER side receives a small velocity bounce away even
+        // though the anchored side is immune. Stops the legacy
+        // "running into Shelly does nothing" behaviour Rafa flagged.
+        const aAnchored = isAnchored(a);
+        const bAnchored = isAnchored(b);
+        const BOUNCE = SIM.collision.normalPushForce * 1.4;
+        if (aAnchored && !bAnchored) {
+          b.vx += nx * BOUNCE;
+          b.vz += nz * BOUNCE;
+          continue;
+        }
+        if (bAnchored && !aAnchored) {
+          a.vx -= nx * BOUNCE;
+          a.vz -= nz * BOUNCE;
+          continue;
+        }
 
         if (eitherImmune) continue;
 
-        const massA = effectiveMass(a);
-        const massB = effectiveMass(b);
+        const massA = massAforSep;
+        const massB = massBforSep;
 
         // Knockback force — headbutt multiplies, plus per-critter
         // headbuttBoost (v0.11) for the characters Rafa marked
@@ -203,6 +232,23 @@ export function updateFalling(
   return { toRespawn, deaths };
 }
 
+/**
+ * True if the player is currently anchored by an active K with
+ * `selfAnchorWhileBuffed: true` (Shelly Steel Shell). Used by
+ * `resolveCollisions` to decide whether running into them should
+ * bounce the attacker away.
+ */
+export function isAnchored(p: PlayerSchema): boolean {
+  const kit = getAbilityKit(p.critterName);
+  for (let i = 0; i < p.abilities.length; i++) {
+    const a = p.abilities[i];
+    const def = kit[i];
+    if (!def || !a.active || a.windUpLeft > 0) continue;
+    if (def.selfBuffOnly && def.selfAnchorWhileBuffed) return true;
+  }
+  return false;
+}
+
 /** Effective mass = base mass × active buff multipliers (per-kit overrides). */
 export function effectiveMass(p: PlayerSchema): number {
   let m = getCritterConfig(p.critterName).mass;
@@ -215,6 +261,12 @@ export function effectiveMass(p: PlayerSchema): number {
       m *= def.massMultiplier ?? SIM.chargeRush.massMultiplier;
     } else if (a.abilityType === 'frenzy') {
       m *= def.frenzyMassMult ?? SIM.frenzy.massMultiplier;
+    }
+    // 2026-04-29 K-refinement — Shelly Steel Shell physical anchor.
+    // Massive mass multiplier so collision knockback shoves the
+    // other critter and Shelly stays put.
+    if (def.selfBuffOnly && def.selfAnchorWhileBuffed) {
+      m *= 9999;
     }
   }
   return m;
@@ -243,6 +295,11 @@ export interface ActiveZoneSnapshot {
   z: number;
   radius: number;
   slowMultiplier: number;
+  /** Session id of the player who spawned the zone. Used so the
+   *  caster doesn't get slowed by their own zone (Kermit walking
+   *  through his own Poison Cloud, etc.). Optional — caller can
+   *  omit for tests or generic snapshots. */
+  ownerSid?: string;
 }
 
 export function effectiveSpeed(p: PlayerSchema, activeZones: readonly ActiveZoneSnapshot[] = []): number {
@@ -268,7 +325,10 @@ export function effectiveSpeed(p: PlayerSchema, activeZones: readonly ActiveZone
     }
   }
   // Lingering slow zones — apply once per zone the point is inside.
+  // Skip zones owned by the player themselves so casters don't get
+  // slowed by their own ground hazards (Kermit Poison Cloud etc.).
   for (const zone of activeZones) {
+    if (zone.ownerSid !== undefined && zone.ownerSid === p.sessionId) continue;
     const dx = p.x - zone.x;
     const dz = p.z - zone.z;
     if (dx * dx + dz * dz <= zone.radius * zone.radius) {
