@@ -23,6 +23,14 @@ import { getDefaultServerUrl } from './network';
 const TOKEN_KEY = 'br-online-player-token';
 const PLAYER_ID_KEY = 'br-online-player-id';
 const NICKNAME_KEY = 'br-online-player-nickname';
+// 2026-04-29 identity refinement — separate `device-stable identity`
+// from the security token. The token authenticates a claim; the
+// identity_id is a stable per-device fingerprint that survives even
+// if the token gets rotated (or somebody clears just one of the
+// localStorage keys). Server lets a nickname be re-claimed if EITHER
+// matches the stored row, which is what Rafa wanted: same browser +
+// same nickname after a reset just works.
+const IDENTITY_ID_KEY = 'br-online-player-identity';
 
 // ---------------------------------------------------------------------------
 // Server URL resolution — the WebSocket URL tells us where the REST API lives
@@ -63,6 +71,27 @@ function getOrCreateToken(): string {
   return t;
 }
 
+/**
+ * Device-stable identity id. Generated on first use, persisted
+ * independently from the auth token. The server uses it as a
+ * second key (alongside the token) to allow same-device nickname
+ * reuse — if either matches the stored row, the claim succeeds.
+ */
+function getOrCreateIdentityId(): string {
+  let id = localStorage.getItem(IDENTITY_ID_KEY);
+  if (id && id.length >= 16 && id.length <= 128) return id;
+  id = randomToken();
+  localStorage.setItem(IDENTITY_ID_KEY, id);
+  return id;
+}
+
+/** Read-only accessor for the device identity id — used by the
+ *  network layer when joining a brawl room so the server can
+ *  enforce in-room duplicate detection. */
+export function getDeviceIdentityId(): string {
+  return getOrCreateIdentityId();
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -93,12 +122,13 @@ export function getCachedIdentity(): OnlineIdentity | null {
  */
 export async function registerNickname(nickname: string): Promise<OnlineIdentity> {
   const token = getOrCreateToken();
+  const identityId = getOrCreateIdentityId();
   let res: Response;
   try {
     res = await fetch(restBase() + '/api/player', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nickname, token }),
+      body: JSON.stringify({ nickname, token, identityId }),
     });
   } catch (err) {
     console.warn('[online-identity] network error:', err);

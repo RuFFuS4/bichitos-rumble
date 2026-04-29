@@ -47,6 +47,21 @@ db.exec(`
     created_at      INTEGER NOT NULL,
     last_seen       INTEGER NOT NULL
   );
+`);
+
+// 2026-04-29 identity refinement — add device-stable identity_id
+// column. Idempotent migration: only adds if missing. Rows from
+// before the migration have NULL identity_id, which is fine —
+// `registerOrClaimPlayer` handles the null case by falling back to
+// token-only auth (legacy behaviour).
+const playerCols = db.prepare("PRAGMA table_info(players)").all() as Array<{ name: string }>;
+const hasIdentityId = playerCols.some(c => c.name === 'identity_id');
+if (!hasIdentityId) {
+  db.exec("ALTER TABLE players ADD COLUMN identity_id TEXT");
+  console.log('[db] migrated players.identity_id (added column)');
+}
+
+db.exec(`
 
   CREATE TABLE IF NOT EXISTS player_stats (
     player_id           TEXT PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
@@ -113,10 +128,23 @@ export interface PlayerRow {
 
 /**
  * Register a new player or reclaim an existing nickname if the caller proves
- * ownership via the token. Returns the canonical player row (with display
- * nickname). Rejects if the nickname is taken by someone else.
+ * ownership via the token OR the device identity_id. Returns the canonical
+ * player row (with display nickname). Rejects only if the nickname is taken
+ * by a different device (neither token NOR identity_id matches).
+ *
+ * 2026-04-29 identity refinement — Rafa's complaint was "if I clear my
+ * cookies and try to use my old nickname I get blocked from my own row".
+ * The fix is the identity_id second key: even if the token gets rotated,
+ * the identity_id stays put, and we let the same browser-device reclaim.
+ * If BOTH are gone (e.g. completely fresh browser), the legacy
+ * `nickname_taken` rejection kicks in — that's the right behaviour for
+ * "another person on a different device tries to grab my nickname".
  */
-export function registerOrClaimPlayer(rawNick: string, rawToken: string): PlayerRow | { error: string } {
+export function registerOrClaimPlayer(
+  rawNick: string,
+  rawToken: string,
+  rawIdentityId?: string,
+): PlayerRow | { error: string } {
   const v = validateNickname(rawNick);
   if (!v.ok) return { error: v.reason };
   const nickNorm = normaliseNickname(v.nick);
@@ -125,27 +153,41 @@ export function registerOrClaimPlayer(rawNick: string, rawToken: string): Player
     return { error: 'invalid_token' };
   }
   const tokenHash = sha256(rawToken);
+  const identityId =
+    typeof rawIdentityId === 'string' && rawIdentityId.length >= 16 && rawIdentityId.length <= 128
+      ? rawIdentityId
+      : null;
   const now = nowMs();
 
   const existing = db
-    .prepare('SELECT id, nickname_display, token_hash FROM players WHERE nickname_norm = ?')
-    .get(nickNorm) as { id: string; nickname_display: string; token_hash: string } | undefined;
+    .prepare('SELECT id, nickname_display, token_hash, identity_id FROM players WHERE nickname_norm = ?')
+    .get(nickNorm) as
+    | { id: string; nickname_display: string; token_hash: string; identity_id: string | null }
+    | undefined;
 
   if (existing) {
-    if (existing.token_hash !== tokenHash) {
+    const tokenMatches = existing.token_hash === tokenHash;
+    const identityMatches =
+      identityId !== null && existing.identity_id !== null && existing.identity_id === identityId;
+    if (!tokenMatches && !identityMatches) {
       return { error: 'nickname_taken' };
     }
-    // Same token → same owner, bump last_seen and return.
-    db.prepare('UPDATE players SET last_seen = ? WHERE id = ?').run(now, existing.id);
+    // Same token OR same device identity → same owner. Bump last_seen,
+    // and if either piece of identity is missing on the stored row,
+    // backfill it so subsequent reclaims work either way (token or id).
+    db.prepare(
+      'UPDATE players SET last_seen = ?, token_hash = ?, identity_id = COALESCE(identity_id, ?) WHERE id = ?',
+    ).run(now, tokenHash, identityId, existing.id);
     return { id: existing.id, nickname: existing.nickname_display, isNew: false };
   }
 
-  // Fresh registration.
+  // Fresh registration. Store both the token hash and the identity_id
+  // so subsequent reclaims succeed via either path.
   const id = randomUUID();
   const tx = db.transaction(() => {
     db.prepare(
-      'INSERT INTO players (id, nickname_norm, nickname_display, token_hash, created_at, last_seen) VALUES (?, ?, ?, ?, ?, ?)',
-    ).run(id, nickNorm, v.nick, tokenHash, now, now);
+      'INSERT INTO players (id, nickname_norm, nickname_display, token_hash, identity_id, created_at, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(id, nickNorm, v.nick, tokenHash, identityId, now, now);
     db.prepare(
       'INSERT INTO player_stats (player_id, updated_at) VALUES (?, ?)',
     ).run(id, now);
