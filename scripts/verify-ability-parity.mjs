@@ -30,7 +30,8 @@ const srv = await readFile('server/src/sim/abilities.ts', 'utf-8');
 //   'blink' (blinkDistance/wU/CD).
 const expected = {
   Kurama:    {
-    // 2026-04-29 K-refinement: duration 1.6 → 2.8, cooldown 7 → 9.
+    // 2026-04-29 final-K: same durations, decoy-first + retreat
+    // backward (logic change, no numeric drift).
     K: { kind: 'pound', rad: 0, frc: 0, wU: 0.10, CD: 9.0,
          selfBuff: { immunity: 2.8 } },
     L: { dur: 3.5, CD: 16.0, wU: 0.30, spd: 1.50, mass: 1.20 },
@@ -54,10 +55,10 @@ const expected = {
     L: { dur: 4.5, CD: 20.0, wU: 0.40, spd: 1.15, mass: 1.50 },
   },
   Kowalski:  {
-    // 2026-04-29 K-refinement: windUp 0.20 → 1.10 (cast feel),
-    // cooldown 5.5 → 6.5.
-    K: { kind: 'projectile', wU: 1.10, CD: 6.5,
-         projectile: { speed: 18, ttl: 1.2, radius: 0.55, impulse: 22, slowDur: 2.0 } },
+    // 2026-04-29 final-K: windUp 1.10 → 0.50, cooldown 6.5 → 6.0,
+    // slowDur 2.0 → 5.0.
+    K: { kind: 'projectile', wU: 0.50, CD: 6.0,
+         projectile: { speed: 18, ttl: 1.2, radius: 0.55, impulse: 22, slowDur: 5.0 } },
     L: { dur: 3.0, CD: 17.0, wU: 0.40, spd: 1.40, mass: 1.10 },
   },
   Cheeto:    {
@@ -68,8 +69,8 @@ const expected = {
     L: { dur: 2.0, CD: 14.0, wU: 0.35, spd: 1.55, mass: 1.05 },
   },
   Sebastian: {
-    // 2026-04-29 K-refinement: duration 0.05 → 0.45 (clip readable).
-    K: { kind: 'pound', rad: 3.5, frc: 38, wU: 0.30, CD: 6.5 },
+    // 2026-04-29 final-K: force 38 → 76 (Rafa: "duplicar potencia").
+    K: { kind: 'pound', rad: 3.5, frc: 76, wU: 0.30, CD: 6.5 },
     L: { dur: 2.5, CD: 15.0, wU: 0.40, spd: 1.20, mass: 1.20 },
   },
 };
@@ -240,20 +241,36 @@ for (const [name, e] of Object.entries(expected)) {
   }
 }
 
-// Sentinels — v0.11 retuned values for Trunk + Sergei
+// Sentinels — 2026-04-29 final-K retuned values for Trunk + Sergei.
+// Trunk K is now Grip (radius 0, gripK: true) so the sentinel checks
+// the gripStunDuration mirrored value instead. Sergei K force 34 → 68.
 const sentinels = {
-  Trunk:  { K: { rad: 4.8, frc: 48 }, L: { spd: 1.35, mass: 2.10 } },
-  Sergei: { K: { rad: 3.5, frc: 34 }, L: { spd: 1.55, mass: 1.75 } },
+  Trunk:  { gripStun: 2.0, L: { spd: 1.35, mass: 2.10 } },
+  Sergei: { K: { rad: 3.5, frc: 68 }, L: { spd: 1.55, mass: 1.75 } },
 };
 for (const [name, e] of Object.entries(sentinels)) {
   const cliBlock = findCriterBlock(cli, name);
   const srvBlock = findCriterBlock(srv, name);
+  if (e.gripStun !== undefined) {
+    const cliG = pickFirst(cliBlock, /gripStunDuration:\s*([\d.]+)/);
+    const srvG = pickFirst(srvBlock, /gripStunDuration:\s*([\d.]+)/);
+    const cliS = pickFirst(cliBlock, /makeFrenzy\(\{[\s\S]*?speedMultiplier:\s*([\d.]+)/);
+    const srvS = pickFirst(srvBlock, /type:\s*'frenzy'[\s\S]*?frenzySpeedMult:\s*([\d.]+)/);
+    const matches = cliG === e.gripStun && srvG === e.gripStun && cliS === e.L.spd && srvS === e.L.spd;
+    console.log(`${name.padEnd(10)} sentinel  gripStun cli/srv ${cliG}/${srvG}  L spd cli/srv ${cliS}/${srvS}  ${matches ? 'OK' : 'FAIL'}`);
+    if (!matches) ok = false;
+    continue;
+  }
   const cliR = pickFirst(cliBlock, /makeGroundPound\(\{[\s\S]*?radius:\s*([\d.]+)/);
   const srvR = pickFirst(srvBlock, /type:\s*'ground_pound'[\s\S]*?radius:\s*([\d.]+)/);
+  const cliF = pickFirst(cliBlock, /makeGroundPound\(\{[\s\S]*?force:\s*([\d.]+)/);
+  const srvF = pickFirst(srvBlock, /type:\s*'ground_pound'[\s\S]*?force:\s*([\d.]+)/);
   const cliS = pickFirst(cliBlock, /makeFrenzy\(\{[\s\S]*?speedMultiplier:\s*([\d.]+)/);
   const srvS = pickFirst(srvBlock, /type:\s*'frenzy'[\s\S]*?frenzySpeedMult:\s*([\d.]+)/);
-  const matches = cliR === e.K.rad && srvR === e.K.rad && cliS === e.L.spd && srvS === e.L.spd;
-  console.log(`${name.padEnd(10)} sentinel  K rad cli/srv ${cliR}/${srvR}  L spd cli/srv ${cliS}/${srvS}  ${matches ? 'OK' : 'FAIL'}`);
+  const matches = cliR === e.K.rad && srvR === e.K.rad &&
+    cliF === e.K.frc && srvF === e.K.frc &&
+    cliS === e.L.spd && srvS === e.L.spd;
+  console.log(`${name.padEnd(10)} sentinel  K rad/frc cli/srv ${cliR}/${srvR}/${cliF}/${srvF}  L spd cli/srv ${cliS}/${srvS}  ${matches ? 'OK' : 'FAIL'}`);
   if (!matches) ok = false;
 }
 

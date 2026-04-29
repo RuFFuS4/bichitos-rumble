@@ -112,7 +112,7 @@ function serverConfig(name: string, headbuttBoost?: number): CritterConfigServer
 }
 
 export const CRITTER_CONFIGS: Record<string, CritterConfigServer> = {
-  Sergei:    serverConfig('Sergei',    1.15), // headbutt boosted (Rafa: enfatizar)
+  Sergei:    serverConfig('Sergei',    1.40), // 2026-04-29 final-K — Rafa: "más potencia headbutt". 1.15 → 1.40.
   Trunk:     serverConfig('Trunk'),
   Kurama:    serverConfig('Kurama'),     // Trickster
   Shelly:    serverConfig('Shelly'),     // Tank
