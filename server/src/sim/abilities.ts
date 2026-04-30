@@ -307,10 +307,12 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       blinkSeekOffset: 1.4,
       blinkImpactRadius: 3.2, blinkImpactForce: 48 },
     // 2026-04-30 final-L — Cone Pulse channeled.
+    // 2026-04-30 final-polish — pulseForce 28 → 40, pulseRadius 4.5 →
+    // 5.5, frenzyMassMult 1.05 → 4.0 (Cheeto anchored during channel).
     { type: 'frenzy',       cooldown: 14.0, duration: 1.8, windUp: 0.35,
-      frenzySpeedMult: 0.0, frenzyMassMult: 1.05,
+      frenzySpeedMult: 0.0, frenzyMassMult: 4.0,
       conePulseL: true, pulseInterval: 0.30,
-      pulseRadius: 4.5, pulseAngleDeg: 45, pulseForce: 28 },
+      pulseRadius: 5.5, pulseAngleDeg: 45, pulseForce: 40 },
   ],
 
   Sebastian: [
@@ -325,10 +327,12 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // 2026-04-30 final-L — All-in Side Slash. Frenzy duration is the
     // 1.0 s rooted windup; the lateral dash + hit/miss resolution
     // fires when the duration ticks down.
+    // 2026-04-30 final-polish — dashRange 5.5 → 7.0, hitForce 60 →
+    // 100, missSelfForce 38 → 110 (Rafa "miss = inevitablemente cae").
     { type: 'frenzy',       cooldown: 15.0, duration: 1.0, windUp: 0.0,
       frenzySpeedMult: 0.0, frenzyMassMult: 1.20,
-      allInL: true, allInDashSpeed: 28, allInDashRange: 5.5,
-      allInHitForce: 60, allInMissSelfForce: 38 },
+      allInL: true, allInDashSpeed: 28, allInDashRange: 7.0,
+      allInHitForce: 100, allInMissSelfForce: 110 },
   ],
 };
 

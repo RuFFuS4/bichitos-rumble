@@ -513,7 +513,7 @@ function loop(now: number) {
     // 2026-04-30 final-L — per-tick L mechanics (Cone Pulse / Saw /
     // Toxic Touch contact, Sinkhole pull). Server runs the same
     // logic in `simulatePlaying`; this branch covers offline.
-    tickLOffline(dt, game.getActiveCritters());
+    tickLOffline(dt, game.getActiveCritters(), scene);
     // 2026-04-29 K-session — Kowalski Snowball projectile tick.
     // Integrates position + sweeps collision (offline) or just
     // advances the visual mesh (online; collision is server-driven).

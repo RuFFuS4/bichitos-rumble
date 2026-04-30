@@ -65,8 +65,8 @@ const expected = {
   Cheeto:    {
     K: { kind: 'blink', blinkDistance: 4.5, wU: 0.06, CD: 5.5,
          impact: { rad: 3.2, frc: 48 } },
-    // 2026-04-30 final-L Cone Pulse: rooted (spd 0), dur 2.0 → 1.8.
-    L: { dur: 1.8, CD: 14.0, wU: 0.35, spd: 0.0, mass: 1.05 },
+    // 2026-04-30 final-polish — Cone Pulse anchored: mass 1.05 → 4.0.
+    L: { dur: 1.8, CD: 14.0, wU: 0.35, spd: 0.0, mass: 4.0 },
   },
   Sebastian: {
     K: { kind: 'pound', rad: 3.5, frc: 76, wU: 0.30, CD: 6.5 },

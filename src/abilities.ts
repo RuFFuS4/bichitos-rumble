@@ -1003,21 +1003,27 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       blinkImpactForce: 48,
     }),
     makeFrenzy({
-      // 2026-04-30 final-L — Cone Pulse. Cheeto roots in
-      // place (slowDuringActive 0 / mass 0.0001 ≈ massless so
-      // physics doesn't drag him) and emits a frontal cone
-      // knockback every `pulseInterval` seconds for the L's
-      // duration. Targets in the cone get pushed each pulse;
-      // outside the cone is safe.
+      // 2026-04-30 final-L — Cone Pulse. Cheeto roots in place
+      // and emits a frontal cone knockback every `pulseInterval`
+      // seconds for the L's duration. Targets in the cone get
+      // pushed each pulse; outside the cone is safe.
+      // 2026-04-30 final-polish (Rafa: "no se ve ni se siente"):
+      //   - pulseForce 28 → 40 (cada pulso ahora empuja como un
+      //     cabezazo medio; suma con fall-off)
+      //   - pulseRadius 4.5 → 5.5 (más alcance, sigue siendo cone)
+      //   - massMultiplier 1.05 → 4.0 (Cheeto anclado durante el
+      //     channel, no se descoloca por contraataques)
+      // VFX se añade en tickLOffline (un ring expansivo + camera
+      // shake corto + sonido por cada pulso).
       name: 'Cone Pulse',
       description: 'Channels a roaring frontal pulse — pushes enemies away',
       duration: 1.8, cooldown: 14.0, windUp: 0.35,
-      speedMultiplier: 0.0, massMultiplier: 1.05,
+      speedMultiplier: 0.0, massMultiplier: 4.0,
       conePulseL: true,
       pulseInterval: 0.30,
-      pulseRadius: 4.5,
+      pulseRadius: 5.5,
       pulseAngleDeg: 45,
-      pulseForce: 28,
+      pulseForce: 40,
     }),
   ],
 
@@ -1065,9 +1071,14 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 0.0, massMultiplier: 1.20,
       allInL: true,
       allInDashSpeed: 28,
-      allInDashRange: 5.5,
-      allInHitForce: 60,
-      allInMissSelfForce: 38,
+      // 2026-04-30 final-polish (Rafa: "miss = sigue y cae"):
+      // dashRange 5.5 → 7.0 (más compromiso), hitForce 60 → 100
+      // (knockback brutal en hit), missSelfForce 38 → 110 (set
+      // como velocidad absoluta en fireAllInResolution para que
+      // el cap de maxSpeed no lo amortigüe).
+      allInDashRange: 7.0,
+      allInHitForce: 100,
+      allInMissSelfForce: 110,
     }),
   ],
 };
@@ -1458,7 +1469,7 @@ export function deriveZoneVfxKind(critterName: string): ZoneVfxKind {
  * via `lastAbilityActive` falling-edge detection.
  */
 const _pulseAccum = new WeakMap<Critter, number>();
-export function tickLOffline(dt: number, critters: Critter[]): void {
+export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scene): void {
   for (const c of critters) {
     if (!c.alive || c.falling) continue;
     const lState = c.abilityStates[2];
@@ -1491,6 +1502,19 @@ export function tickLOffline(dt: number, critters: Critter[]): void {
           other.vx += nx * force * fall;
           other.vz += nz * force * fall;
         }
+        // 2026-04-30 final-polish (Rafa: "no se ve ni se siente el
+        // pulso"): each pulse spawns an expanding ring centred ~half
+        // the cone radius ahead of Cheeto + a small camera shake +
+        // the ability sound. The ring lives 250 ms so it doesn't
+        // accumulate in front of him during the channel.
+        if (scene) {
+          const burstX = c.x + facingX * radius * 0.55;
+          const burstZ = c.z + facingZ * radius * 0.55;
+          const palette = CRITTER_VFX_PALETTE[c.config.name]?.pound ?? { color: 0xff5522, secondary: 0xffe066 };
+          spawnShockwaveRing(scene, burstX, burstZ, radius * 0.65, { ...palette, holdMs: 250 });
+        }
+        triggerCameraShake(FEEL.shake.groundPound * 0.25);
+        playSound('abilityFire');
       }
       _pulseAccum.set(c, acc);
     }
@@ -1965,10 +1989,31 @@ export function updateAbilities(
  * dash direction.
  */
 function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
-  // Lateral = facing rotated +90° (right side).
-  const dirX = Math.cos(critter.mesh.rotation.y);
-  const dirZ = -Math.sin(critter.mesh.rotation.y);
+  // 2026-04-30 final-polish (Rafa: "se mueve hacia un borde, hit =
+  // golpea muy fuerte y para; miss = sigue y cae inevitablemente").
+  //
+  // Pick whichever lateral direction (right-of-facing OR left-of-
+  // facing) takes Sebastian CLOSER to the arena rim. Sebastian's
+  // "Glass Cannon side strike" identity stays — it's still a 90°
+  // strike, but now we always commit toward an edge so the all-in
+  // is real: hit reads as a brutal smash, miss is a free fall.
+  const right: [number, number] = [
+    Math.cos(critter.mesh.rotation.y),
+    -Math.sin(critter.mesh.rotation.y),
+  ];
+  const left: [number, number] = [-right[0], -right[1]];
   const range = def.allInDashRange ?? 5.5;
+  // Score each direction by the radial distance the dash endpoint
+  // would land at — bigger = closer to (or past) the rim.
+  const scoreSide = (dx: number, dz: number) => {
+    const ex = critter.x + dx * range;
+    const ez = critter.z + dz * range;
+    return Math.sqrt(ex * ex + ez * ez);
+  };
+  const dir = scoreSide(right[0], right[1]) >= scoreSide(left[0], left[1]) ? right : left;
+  const dirX = dir[0];
+  const dirZ = dir[1];
+
   let hit: Critter | null = null;
   const SAMPLES = 8;
   for (let i = 1; i <= SAMPLES && !hit; i++) {
@@ -1989,19 +2034,32 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
   }
   const palette = CRITTER_VFX_PALETTE[critter.config.name]?.frenzy;
   if (hit) {
+    // HIT — brutal knockback to target, Sebastian stops dead so the
+    // player gets clean control back.
     const force = def.allInHitForce ?? 60;
     hit.vx += dirX * force;
     hit.vz += dirZ * force;
+    critter.vx = 0;
+    critter.vz = 0;
     applyImpactFeedback(hit);
     triggerHitStop(FEEL.hitStop.headbutt);
-    spawnShockwaveRing(scene, hit.x, hit.z, 1.6, palette);
-    triggerCameraShake(FEEL.shake.headbutt * 1.4);
+    // Crimson side-slash burst at the contact point.
+    spawnShockwaveRing(scene, hit.x, hit.z, 1.8, palette);
+    spawnShockwaveRing(scene, critter.x, critter.z, 1.4, palette);
+    triggerCameraShake(FEEL.shake.headbutt * 1.6);
+    playSound('headbuttHit');
   } else {
-    const sf = def.allInMissSelfForce ?? 38;
-    critter.vx += dirX * sf;
-    critter.vz += dirZ * sf;
-    spawnShockwaveRing(scene, critter.x, critter.z, 1.0, palette);
-    triggerCameraShake(FEEL.shake.headbutt * 0.7);
+    // MISS — Sebastian commits past the rim. Bump self-force WAY up
+    // (38 → 110) and apply it as an outright velocity set, not just
+    // an additive impulse, so the existing maxSpeed cap can't dampen
+    // the punishment. Friction will still slow him over ~1.5 s, but
+    // by then he's well past arena maxRadius and has fallen.
+    const sf = def.allInMissSelfForce ?? 110;
+    critter.vx = dirX * sf;
+    critter.vz = dirZ * sf;
+    spawnShockwaveRing(scene, critter.x, critter.z, 1.4, palette);
+    triggerCameraShake(FEEL.shake.headbutt * 0.9);
+    playSound('abilityFire');
   }
 }
 

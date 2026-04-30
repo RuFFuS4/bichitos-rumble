@@ -964,9 +964,22 @@ export class BrawlRoom extends Room<GameState> {
         data.allInActive = false;
         continue;
       }
-      const dx = data.allInDirX ?? Math.cos(p.rotationY);
-      const dz = data.allInDirZ ?? -Math.sin(p.rotationY);
+      // 2026-04-30 final-polish — pick whichever lateral side
+      // (right OR left of cached facing) takes Sebastian closer to
+      // the rim, so "auto-move toward an edge" is real on the server
+      // too. Cached direction is the right-of-facing (cos, -sin); the
+      // left side is just its negation. Pick whichever endpoint
+      // lands at higher radial distance from origin.
       const range = lDef.allInDashRange ?? 5.5;
+      const cachedX = data.allInDirX ?? Math.cos(p.rotationY);
+      const cachedZ = data.allInDirZ ?? -Math.sin(p.rotationY);
+      const altX = -cachedX;
+      const altZ = -cachedZ;
+      const radEnd = (ex: number, ez: number) => Math.sqrt(ex * ex + ez * ez);
+      const cachedEnd = radEnd(p.x + cachedX * range, p.z + cachedZ * range);
+      const altEnd = radEnd(p.x + altX * range, p.z + altZ * range);
+      const dx = cachedEnd >= altEnd ? cachedX : altX;
+      const dz = cachedEnd >= altEnd ? cachedZ : altZ;
       // Sweep along the dash line for any enemy capsule the dash
       // intersects. Discrete: sample 8 points.
       let hitVictim: PlayerSchema | null = null;
@@ -988,18 +1001,23 @@ export class BrawlRoom extends Room<GameState> {
         }
       }
       if (hitVictim) {
+        // 2026-04-30 final-polish — on hit, brutal knockback +
+        // hard-stop Sebastian so the caster's control returns
+        // immediately (Rafa: "Sebastian se para y el usuario
+        // recupera control").
         const force = lDef.allInHitForce ?? 60;
-        // Push along the dash direction with a strong bias.
         hitVictim.vx += dx * force;
         hitVictim.vz += dz * force;
-        // Snap Sebastian to a position just behind the target so
-        // the hit reads as "I caught you mid-slash". No movement
-        // of the caster otherwise.
+        p.vx = 0;
+        p.vz = 0;
       } else {
-        // Miss → self-knockback in the dash direction.
-        const sf = lDef.allInMissSelfForce ?? 38;
-        p.vx += dx * sf;
-        p.vz += dz * sf;
+        // 2026-04-30 final-polish — on miss, SET (not add) the
+        // outward velocity so the existing maxSpeed cap can't
+        // dampen the punishment. Sebastian commits past the rim
+        // and the void takes him.
+        const sf = lDef.allInMissSelfForce ?? 110;
+        p.vx = dx * sf;
+        p.vz = dz * sf;
       }
       this.broadcast('lAllInResolve', {
         sessionId: p.sessionId,
