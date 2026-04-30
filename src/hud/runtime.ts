@@ -350,6 +350,45 @@ export function updateAbilityHUD(states: AbilityState[]): void {
   }
 }
 
+// ---- Kurama Copycat target indicator (L slot sub-icon) ------------------
+
+/**
+ * Show or hide a small portrait of the critter Kurama's L (Copycat) is
+ * about to mimic. Only meaningful when the local player is Kurama.
+ *
+ * Wiring: `main.ts` calls this every frame inside the per-critter
+ * status update with `local.lastHitTargetCritter` (or null if the
+ * local player isn't Kurama / hasn't hit anyone yet). The indicator
+ * sits inside Kurama's L ability slot as an overlay so the player
+ * can read at a glance "if I press L now, I'll copy X".
+ *
+ * Implementation note: we build/destroy the inner span by class
+ * presence rather than swapping textContent so the existing
+ * `.sprite-hud-<critter>` CSS does the heavy lifting (same source as
+ * the character-select grid + waiting room thumbs once they switch).
+ */
+export function setCopycatTarget(targetCritterName: string | null): void {
+  // Find the L slot — kits ship with 3 abilities (J, K, L). Last entry.
+  if (slotEls.length < 3) {
+    return;
+  }
+  const lSlot = slotEls[slotEls.length - 1];
+  let badge = lSlot.root.querySelector<HTMLSpanElement>('.copycat-target-icon');
+  if (!targetCritterName) {
+    if (badge) badge.remove();
+    return;
+  }
+  const targetSlug = targetCritterName.toLowerCase();
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = `sprite-hud sprite-hud-${targetSlug} copycat-target-icon`;
+    lSlot.root.appendChild(badge);
+  } else {
+    // Replace the slug-bearing class without nuking the position class.
+    badge.className = `sprite-hud sprite-hud-${targetSlug} copycat-target-icon`;
+  }
+}
+
 // ---- Portal legend (top-left, visible during match) ---------------------
 
 /** Configure the portal HUD legend: visibility and which rows to show. */

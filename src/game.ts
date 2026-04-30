@@ -8,7 +8,7 @@ import { updateAbilities } from './abilities';
 import { resolveCollisions, checkFalloff, updateFalling } from './physics';
 import {
   updateHUD, showOverlay, hideOverlay,
-  initAbilityHUD, updateAbilityHUD,
+  initAbilityHUD, updateAbilityHUD, setCopycatTarget,
   initAllLivesHUD, updateAllLivesHUD,
   showTitleScreen, hideTitleScreen,
   showCharacterSelect, updateCharacterSelect, hideCharacterSelect,
@@ -1309,6 +1309,7 @@ export class Game {
       const alive = allPlayers.filter(p => p.alive).length;
       updateHUD(alive, Math.max(0, state.matchTimer ?? 0));
       updateAbilityHUD(this.player.abilityStates);
+      setCopycatTarget(this.player.config.name === 'Kurama' && this.player.lastHitTargetCritter ? this.player.lastHitTargetCritter : null);
       updateAllLivesHUD([...this.onlineCritters.values()]);
     }
   }
@@ -1768,11 +1769,13 @@ export class Game {
         if (this.paused) {
           // Still update the HUD once so cooldown bars don't snap on resume.
           updateAbilityHUD(this.player.abilityStates);
+          setCopycatTarget(this.player.config.name === 'Kurama' && this.player.lastHitTargetCritter ? this.player.lastHitTargetCritter : null);
           break;
         }
         const effectiveDt = applyHitStop(dt);
         if (effectiveDt === 0) {
           updateAbilityHUD(this.player.abilityStates);
+          setCopycatTarget(this.player.config.name === 'Kurama' && this.player.lastHitTargetCritter ? this.player.lastHitTargetCritter : null);
           break;
         }
 
@@ -1833,6 +1836,7 @@ export class Game {
         // 8. Update HUD
         updateHUD(this.activeCount, Math.max(0, this.matchTimer));
         updateAbilityHUD(this.player.abilityStates);
+        setCopycatTarget(this.player.config.name === 'Kurama' && this.player.lastHitTargetCritter ? this.player.lastHitTargetCritter : null);
         updateAllLivesHUD(this.critters);
 
         // Win/loss check

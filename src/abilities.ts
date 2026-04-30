@@ -747,7 +747,12 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       description: 'Leave a decoy, ghost away from danger for 2.8 s',
       radius: 0, force: 0,
       windUp: 0.10, cooldown: 9.0, duration: 2.8,
-      slowDuringActive: 0, cancelAnimOnEnd: true,
+      // 2026-04-30 final-polish (Rafa: "durante el clon Kurama debe
+      // poder moverse libremente"): slowDuringActive 0 → 1.0 para
+      // que la Trickster no quede rooted mientras el señuelo está
+      // en pie. Mantiene cancelAnimOnEnd para que el clip de pound
+      // termine limpio.
+      slowDuringActive: 1.0, cancelAnimOnEnd: true,
       selfBuffOnly: true,
       selfImmunityDuration: 2.8,
       invisibilityDuration: 2.8,
@@ -2169,15 +2174,24 @@ export interface ShockwaveRingOpts {
  */
 function spawnDecoyAt(scene: THREE.Scene, critter: Critter, ttl: number): void {
   if (!critter.glbMesh) return; // procedural-only critters: skip
+  // 2026-04-30 final-polish — snapshot the GLB world transform NOW,
+  // before the SkeletonUtils dynamic import resolves. Fire path:
+  // the K dispatcher calls spawnDecoyAt and IMMEDIATELY moves
+  // Kurama by `decoyEscapeDistance`. Without this snapshot the
+  // async clone reads the post-move position and the decoy ends
+  // up next to her instead of where she activated the K.
+  const snapPos = critter.glbMesh.getWorldPosition(new THREE.Vector3());
+  const snapRot = critter.glbMesh.getWorldQuaternion(new THREE.Quaternion());
+  const snapScl = critter.glbMesh.getWorldScale(new THREE.Vector3());
   // SkeletonUtils.clone gives an independent skeleton so the clone
   // doesn't keep retargeting Kurama's live bones. Imported lazily
   // to avoid a top-level cycle.
   void (async () => {
     const SkeletonUtils = await import('three/examples/jsm/utils/SkeletonUtils.js');
     const decoy = SkeletonUtils.clone(critter.glbMesh!);
-    decoy.position.copy(critter.glbMesh!.getWorldPosition(new THREE.Vector3()));
-    decoy.quaternion.copy(critter.glbMesh!.getWorldQuaternion(new THREE.Quaternion()));
-    decoy.scale.copy(critter.glbMesh!.getWorldScale(new THREE.Vector3()));
+    decoy.position.copy(snapPos);
+    decoy.quaternion.copy(snapRot);
+    decoy.scale.copy(snapScl);
     const decoyMats: THREE.MeshStandardMaterial[] = [];
     decoy.traverse((node) => {
       const m = node as THREE.Mesh;

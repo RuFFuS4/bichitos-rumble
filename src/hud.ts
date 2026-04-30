@@ -25,7 +25,7 @@ export {
   updateHUD,
   initAllLivesHUD, updateAllLivesHUD,
   showOverlay, hideOverlay,
-  initAbilityHUD, updateAbilityHUD,
+  initAbilityHUD, updateAbilityHUD, setCopycatTarget,
   setPortalLegend, setPortalToggleHandler,
   showSpectatorPrompt, hideSpectatorPrompt,
   showGamepadToast,
