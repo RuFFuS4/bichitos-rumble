@@ -10,6 +10,21 @@ Status legend:
 Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish + 2026-04-30 final-L + 2026-04-30 final-polish + 2026-05-01 microfixes (deadline candidate).
 Use `git log --grep abilities` to see the commit trail behind each item.
 
+> **Last-minute pass (2026-05-01 — submit-night). Todos `[~]` pendientes de validación de Rafa:**
+>
+> - **Sebastian L**: trajectory preview en el suelo durante el 1 s windup (línea crimson + acento amarillo) + hitbox más generosa (SAMPLES 12 → 18, reach +0.55 u). Sigue siendo high-risk pero ahora ACERTABLE.
+> - **Cheeto L**: ramp DOUBLING `min(2^(N-1), 8)` → 1, 2, 4, 8, 8, 8 sobre 6 pulsos. Cada pulso pega claramente más fuerte que el anterior; el cap a 8× evita que el último sea absurdo dado el clamp de maxSpeed.
+> - **Trunk K/L REDISEÑO TOTAL**:
+>   - K → **Trunk Slam**: ground_pound radius 7 + force 50 + brief stun 1.0 s (`slamStunDuration` flag). Golpe amplio similar a Kowalski Frozen Floor footprint.
+>   - L → **Trunk Grip** (movido desde K): yank al enemigo más cercano frontal (range 28, cone 35°) + stun 5.0 s.
+>   - **Vulnerable multiplier 2× → 4×** global (sólo Trunk escribe stunTimer así que no afecta a otros). Un cabezazo a un target stunned manda ×4 más fuerte.
+>   - Stampede / rammingL retirado.
+> - **Kurama online invisibility cleanup**: cuando el K slot pierde `active`, force-zero `invisibilityTimer` en cada tick para todos los critters Kurama (mismo patrón que Sihans Burrow).
+> - **Multi-tab nicknames**: sessionStorage fork. Si la pestaña pide un nick distinto del cached en localStorage, registra con tokens session-only → server crea row independiente, no colisión. Misma pestaña refresh = persiste vía sessionStorage. Mismo nick en dos pestañas sigue dando "nickname_active_in_room" error claro.
+> - **Mobile landscape character select**: media query `max-height: 520` ahora pone preview + grid + info side-by-side compactos + overflow scroll fallback + anchor top.
+>
+> Sentinels: Trunk reshape K rad/force/slamStun + L gripStun.
+
 > **Microfix pass (2026-05-01 — submit-day). Todos `[~]` pendientes de validación de Rafa:**
 >
 > - **Sebastian L** All-in ahora teleporta de verdad: HIT → posición justo antes de la víctima + velocidad cero (control vuelve limpio); MISS → endpoint × 1.5 más allá del rim + velocidad outward 130 (cae al void). Range 7 → 9, hitForce 100 → 110, missSelfForce 110 → 130. Cliente + server.

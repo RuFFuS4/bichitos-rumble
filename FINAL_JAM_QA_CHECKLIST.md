@@ -4,7 +4,7 @@
 > Tick items only when you've personally verified them on the **production**
 > URL ([https://www.bichitosrumble.com](https://www.bichitosrumble.com)) — local dev passes don't count.
 >
-> Build under test: `5d2d321` (or later — check `git log -1` and confirm Vercel
+> Build under test: `ce5a61f` (or later — check `git log -1` and confirm Vercel
 > shows the same hash deployed).
 >
 > Symbol legend:
@@ -203,6 +203,19 @@
 
 ---
 
+## Last-minute fixes 2026-05-01 (submit-night, verificar específicamente)
+
+> Estos siete puntos se cambiaron tras la prueba de Rafa en producción
+> 2e34870. Confirmar antes del go-final.
+
+- [ ] **Sebastian L**: durante el windup se ve una línea roja en el suelo apuntando hacia el borde por donde Sebastian va a salir. Hit más fácil que antes; miss sigue mandándolo al void.
+- [ ] **Cheeto L**: la fuerza de cada pulso es CLARAMENTE el doble del anterior (al menos los 4 primeros). Pulso 5 y 6 ya cap.
+- [ ] **Trunk K = Trunk Slam**: golpe amplio (radius 7) que knockback a todos los enemigos en el área Y los stunea brevemente (1 s). Si después le metes un cabezazo, sale volando ×4.
+- [ ] **Trunk L = Trunk Grip**: agarra al enemigo más cercano en cono frontal hasta 28 u, lo trae al lado de Trunk, stun 5 s + ×4 vulnerable. Cabezazo posterior = mandado al carajo.
+- [ ] **Kurama online**: usa K en la pestaña A; en la pestaña B verifica que Kurama vuelve a visible cuando se acaba el clon (NO se queda invisible permanente).
+- [ ] **Multi-tab online**: pestaña A = "Rafa1" entra. Pestaña B mismo navegador = "Rafa2" entra. Antes daba problema, ahora no.
+- [ ] **Mobile landscape**: en un móvil real (o DevTools 812×375), el character select muestra grid 3×3 + preview lado a lado, sin clipping.
+
 ## Microfixes 2026-05-01 (verificar específicamente)
 
 > Estos seis bullets cambiaron en `fce9bd5` + `5d2d321`. Revísalos
@@ -215,6 +228,15 @@
 - [ ] **Trunk K**: alcanza enemigos a 28 u (casi todo el arena) PERO solo si están en cono frontal estrecho (35°).
 - [ ] **Trunk L Stampede**: Trunk pasa cerca de un enemigo y lo MANDA a volar (nuevo flag `rammingL`). No hace falta headbutt.
 - [ ] **HUD sprites**: settings buttons, hearts, bot-mask, end-screen crown/skull/trophy se ven como iconos generados (no emojis).
+
+## Polish notes pendientes para post-jam
+
+> No bloquean el submit. Documentados aquí para que no se olviden.
+
+- [ ] **Belts / insignias 3D**: actualmente los belts en Hall of Belts y end-screen se muestran con imágenes 2D que tienen fondo cuadrado feo. Hay modelos 3D de belts (`public/models/belts/*.glb`, ~8 MB total) que podrían sustituir las imágenes con un thumbnail render. Click → modal con preview 3D rotable. POST-JAM: requiere ~2 horas de UI work, no toca gameplay.
+- [ ] **Gamepad full validation**: el código soporta gamepad standard layout (left stick + A/B/X/Y + RB + Start) según `src/input.ts`. Rafa NO lo ha probado físicamente. El title-screen menciona "🎮 Gamepad auto-detected" sólo si es desktop sin touch. Si en post-jam se confirma que el mapping no encaja en algún navegador / mando concreto, el texto debería suavizarse a "Gamepad support (alpha)" o moverse a docs.
+- [ ] **Limpieza usuarios test producción**: antes del submit, correr `cd server && DATA_DIR=<railway path> npm run admin:list-players` → si solo aparecen test patterns (test/qa/demo/foo/bar/temp/dummy), `npm run admin:delete-test -- --confirm`. Si aparecen jugadores reales (testers Discord), NO borrar.
+- [ ] **Online smoke 2-tabs final** después de Railway redeploy: con `ce5a61f+` desplegado, verificar las 7 cosas de la sección "Last-minute fixes 2026-05-01" arriba.
 
 ## Riesgos go/no-go conocidos
 
