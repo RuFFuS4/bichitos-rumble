@@ -34,6 +34,13 @@ import { join } from 'node:path';
 
 const DIST = 'dist';
 const TARGET_NAME = '_raw';
+// Tooling backups created by build-side scripts (e.g. trim-hud-sheet.mjs
+// leaves a *.original.png next to its trimmed output so a second pass
+// can read the original). Runtime never loads these — they sit in
+// public/images/ to keep the optimisation pipeline reproducible. Vite
+// copies them to dist/ along with everything else, so we drop them
+// here. Add new patterns to the array if more dev-only siblings ship.
+const FILE_PATTERNS = [/\.original\.png$/i];
 
 if (!existsSync(DIST)) {
   console.log(`[clean-dist-raw] no ${DIST}/ directory — nothing to do`);
@@ -57,7 +64,8 @@ async function dirSize(path) {
 }
 
 async function findRawDirs(root) {
-  const found = [];
+  const dirs = [];
+  const files = [];
   const stack = [root];
   while (stack.length) {
     const p = stack.pop();
@@ -68,32 +76,42 @@ async function findRawDirs(root) {
       continue;
     }
     for (const e of entries) {
-      if (!e.isDirectory()) continue;
       const child = join(p, e.name);
-      if (e.name === TARGET_NAME) {
-        found.push(child);
-        // Don't descend into a found `_raw` — we'll wipe the whole tree.
-        continue;
+      if (e.isDirectory()) {
+        if (e.name === TARGET_NAME) {
+          dirs.push(child);
+          // Don't descend into a found `_raw` — we'll wipe the whole tree.
+          continue;
+        }
+        stack.push(child);
+      } else if (FILE_PATTERNS.some((re) => re.test(e.name))) {
+        files.push(child);
       }
-      stack.push(child);
     }
   }
-  return found;
+  return { dirs, files };
 }
 
-const targets = await findRawDirs(DIST);
-if (targets.length === 0) {
-  console.log(`[clean-dist-raw] no ${TARGET_NAME}/ directories under ${DIST}/`);
+const { dirs, files } = await findRawDirs(DIST);
+if (dirs.length === 0 && files.length === 0) {
+  console.log(`[clean-dist-raw] nothing to clean under ${DIST}/`);
   process.exit(0);
 }
 
 let freedBytes = 0;
-for (const t of targets) {
+for (const t of dirs) {
   const size = await dirSize(t).catch(() => 0);
   freedBytes += size;
   await rm(t, { recursive: true, force: true });
   const mb = (size / (1024 * 1024)).toFixed(1);
-  console.log(`[clean-dist-raw] removed ${t} (${mb} MB)`);
+  console.log(`[clean-dist-raw] removed dir  ${t} (${mb} MB)`);
+}
+for (const t of files) {
+  const size = await stat(t).then((s) => s.size).catch(() => 0);
+  freedBytes += size;
+  await rm(t, { force: true });
+  const kb = (size / 1024).toFixed(1);
+  console.log(`[clean-dist-raw] removed file ${t} (${kb} kB)`);
 }
 const totalMb = (freedBytes / (1024 * 1024)).toFixed(1);
 console.log(`[clean-dist-raw] total freed: ${totalMb} MB`);
