@@ -2494,6 +2494,34 @@
         font-size: 20px;
         margin-bottom: 14px;
       }
+      /* 2026-05-01 — phone landscape (height ≤ 520) was rendering
+         the character select as a 670px-tall column that overflowed
+         off-screen. Compact: side-by-side layout (preview on the
+         left, grid + info on the right), and make the whole overlay
+         scrollable as a fallback in case any internal block still
+         doesn't fit. */
+      #character-select .select-body {
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 0 12px;
+      }
+      #character-select #preview-pane { width: 280px; }
+      #character-select #preview-canvas { width: 260px; height: 200px; }
+      #character-select #critter-grid { width: 280px; gap: 6px; }
+      #character-select .critter-slot { width: 80px; height: 80px; }
+      #character-select .critter-slot .slot-avatar { width: 56px; height: 56px; }
+      #character-select .critter-slot .slot-name { font-size: 11px; }
+      #character-select #critter-info-name { font-size: 18px; }
+      #character-select #critter-info-tagline { font-size: 11px; }
+      /* Anchor to top + scroll when content overflows. Default
+         `justify-content: center` was pushing the body up by half
+         the overflow, so the grid started above y=0. */
+      #character-select {
+        overflow-y: auto;
+        justify-content: flex-start;
+        padding-top: 12px;
+      }
     }
 
     /* ---------- Responsive: very narrow (portrait phones that somehow
