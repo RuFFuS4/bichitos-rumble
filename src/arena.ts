@@ -230,6 +230,16 @@ export class Arena {
    *  async loaders can tell they've been superseded and bail out without
    *  writing stale meshes into the live scene. */
   private packApplyToken = 0;
+  /**
+   * Resolves when the most recent applyPack() has finished loading every
+   * asset (ground texture, skybox, outer props, in-arena decor) — or has
+   * given up because of a fetch error. Used by `waitForPack()` so the
+   * countdown can wait for visible decor before "GO!" instead of starting
+   * with an empty arena while textures pop in mid-match.
+   * Initialised to a resolved promise so callers can `waitForPack()` even
+   * before any pack has been applied.
+   */
+  private currentPackPromise: Promise<void> = Promise.resolve();
   private sceneRef: THREE.Scene;
   /** Decorative "skirt" ring just outside the playable arena. Displays the
    *  pack's ground texture and gives props a surface to sit on — without it
@@ -337,13 +347,33 @@ export class Arena {
       this.baseColors.push(BAND_COLORS[f.band] ?? 0x4a6741);
     }
 
-    // Apply pack cosmetics (async — fragments are already up, props drift
-    // in a few frames later). Skipping packId keeps the legacy look.
+    // Apply pack cosmetics (async — fragments are already up, decor
+    // settles in a few frames later). The promise is captured on
+    // `currentPackPromise` so callers can `waitForPack()` before
+    // showing "GO!" instead of starting a match against an empty arena.
     if (packId) {
-      void this.applyPack(packId, seed);
+      this.currentPackPromise = this.applyPack(packId, seed);
     } else {
       this.clearPack();
+      this.currentPackPromise = Promise.resolve();
     }
+  }
+
+  /**
+   * Resolve when the in-flight pack load has finished, or when the
+   * timeout elapses — whichever comes first. Used by the countdown gate
+   * so the match doesn't start with bare fragments while textures and
+   * decor GLBs are still in flight. Always resolves; the timeout exists
+   * so a slow / failed asset can't block "GO!" forever.
+   */
+  waitForPack(timeoutMs = 2500): Promise<void> {
+    const inFlight = this.currentPackPromise;
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const done = () => { if (!settled) { settled = true; resolve(); } };
+      inFlight.then(done, done);
+      setTimeout(done, timeoutMs);
+    });
   }
 
   // --- Pack (decorations) --------------------------------------------------
@@ -359,7 +389,7 @@ export class Arena {
    * pack on the same seed we still rebuild — rare, and it's cheap
    * thanks to the texture + model caches.
    */
-  private async applyPack(packId: ArenaPackId, seed: number): Promise<void> {
+  private applyPack(packId: ArenaPackId, seed: number): Promise<void> {
     // Token guards against a stale loader overwriting a newer pack.
     const myToken = ++this.packApplyToken;
 
@@ -370,27 +400,27 @@ export class Arena {
     // doesn't see a "wrong horizon" frame while textures load.
     setSceneFogColor(getPackFogColor(packId));
 
-    // Ground texture — fire the load; apply to fragments AND build the
-    // outer ring "skirt" when it resolves (both share the same texture).
-    loadPackGroundTexture(packId)
+    // Each load runs in parallel; we await them all together so the
+    // returned promise only resolves when every visible decor element
+    // is up. Failures are logged + tolerated — a missing texture or
+    // 404'd GLB does not block the countdown gate.
+    const groundLoad = loadPackGroundTexture(packId)
       .then((tex) => {
         if (myToken !== this.packApplyToken) return; // superseded
         this.applyGroundTexture(tex);
         this.buildOuterRing(tex);
       })
       .catch((err) => {
-        console.debug('[Arena] ground texture load failed:', packId, err);
+        console.warn('[Arena] ground texture load failed:', packId, err);
       });
 
-    // Skybox — swap the main.ts sky dome. Fallback shader stays as-is if
-    // the load fails.
-    loadPackSkyboxTexture(packId)
+    const skyboxLoad = loadPackSkyboxTexture(packId)
       .then((tex) => {
         if (myToken !== this.packApplyToken) return;
         setSceneSkyboxTexture(tex);
       })
       .catch((err) => {
-        console.debug('[Arena] skybox load failed:', packId, err);
+        console.warn('[Arena] skybox load failed:', packId, err);
       });
 
     // Outer ring props — historically a ring of large GLBs at radius
@@ -398,63 +428,69 @@ export class Arena {
     // .props is []), so this loop is a no-op for every pack. Kept
     // structurally in case we re-introduce outer ornaments in the
     // future; today it does nothing visually.
-    const placements = layoutPackProps(packId, seed);
-    try {
-      const meshes = await loadPackPropMeshes(packId, placements);
-      if (myToken !== this.packApplyToken) {
-        // Another applyPack ran while we were awaiting. Dispose the
-        // meshes we just built so nothing leaks into the scene.
-        for (const m of meshes) disposeGroupMeshes(m);
-        return;
+    const propsLoad = (async () => {
+      try {
+        const placements = layoutPackProps(packId, seed);
+        const meshes = await loadPackPropMeshes(packId, placements);
+        if (myToken !== this.packApplyToken) {
+          // Superseded — dispose so nothing leaks into the scene.
+          for (const m of meshes) disposeGroupMeshes(m);
+          return;
+        }
+        if (meshes.length > 0) {
+          const deco = new THREE.Group();
+          deco.name = `arena-decorations-${packId}`;
+          for (const m of meshes) deco.add(m);
+          this.decorationsGroup = deco;
+          this.sceneRef.add(deco);
+          this.propBatchIndex = this.computePropBatchIndex(placements);
+        }
+      } catch (err) {
+        console.warn('[Arena] pack props load failed:', packId, err);
       }
-      if (meshes.length > 0) {
-        const deco = new THREE.Group();
-        deco.name = `arena-decorations-${packId}`;
-        for (const m of meshes) deco.add(m);
-        this.decorationsGroup = deco;
-        this.sceneRef.add(deco);
-        this.propBatchIndex = this.computePropBatchIndex(placements);
-      }
-    } catch (err) {
-      console.debug('[Arena] pack props load failed:', packId, err);
-    }
+    })();
 
     // In-arena decor — small props that live INSIDE the playable arena,
     // each parented to the fragment that contains it so it falls when
     // that fragment collapses. Layouts are static per pack (data-only,
     // see arena-decor-layouts.ts) so every client sees the same layout
     // without seed sync.
-    try {
-      const inArena = await loadInArenaDecorations(getDecorLayout(packId));
-      if (myToken !== this.packApplyToken) {
-        for (const d of inArena) disposeGroupMeshes(d.mesh);
-        return;
-      }
-      for (const { mesh, placement } of inArena) {
-        const wx = Math.cos(placement.angle) * placement.r;
-        const wz = Math.sin(placement.angle) * placement.r;
-        const hostIdx = this.findFragmentAt(wx, wz);
-        if (hostIdx < 0) {
-          // Outside any fragment (e.g. between sectors due to jitter).
-          // Drop the mesh so we don't leak; cosmetic only.
-          disposeGroupMeshes(mesh);
-          continue;
+    const inArenaLoad = (async () => {
+      try {
+        const inArena = await loadInArenaDecorations(getDecorLayout(packId));
+        if (myToken !== this.packApplyToken) {
+          for (const d of inArena) disposeGroupMeshes(d.mesh);
+          return;
         }
-        // Reparent to the host fragment group. Three.js' Object3D.attach
-        // preserves the world transform across the parent change, which
-        // is what we want — the mesh keeps its world (x,z) but later
-        // when the fragment falls (group rotates + drops), the mesh
-        // inherits the motion gratis.
-        const host = this.fragmentGroups[hostIdx];
-        if (!host) {
-          disposeGroupMeshes(mesh);
-          continue;
+        for (const { mesh, placement } of inArena) {
+          const wx = Math.cos(placement.angle) * placement.r;
+          const wz = Math.sin(placement.angle) * placement.r;
+          const hostIdx = this.findFragmentAt(wx, wz);
+          if (hostIdx < 0) {
+            // Outside any fragment (e.g. between sectors due to jitter).
+            // Drop the mesh so we don't leak; cosmetic only.
+            disposeGroupMeshes(mesh);
+            continue;
+          }
+          // Reparent to the host fragment group. Three.js' Object3D.attach
+          // preserves the world transform across the parent change, which
+          // is what we want — the mesh keeps its world (x,z) but later
+          // when the fragment falls (group rotates + drops), the mesh
+          // inherits the motion gratis.
+          const host = this.fragmentGroups[hostIdx];
+          if (!host) {
+            disposeGroupMeshes(mesh);
+            continue;
+          }
+          host.attach(mesh);
         }
-        host.attach(mesh);
+      } catch (err) {
+        console.warn('[Arena] in-arena decor load failed:', packId, err);
       }
-    } catch (err) {
-      console.debug('[Arena] in-arena decor load failed:', packId, err);
-    }
+    })();
+
+    return Promise.allSettled([groundLoad, skyboxLoad, propsLoad, inArenaLoad])
+      .then(() => undefined);
   }
 
   /**
@@ -829,7 +865,7 @@ export class Arena {
       this.buildFromSeed(seed, packId);
     } else if (packId && packId !== this.appliedPackId) {
       // Server switched packs without re-seeding (unusual but supported).
-      void this.applyPack(packId, seed);
+      this.currentPackPromise = this.applyPack(packId, seed);
     }
 
     // Apply any newly completed levels

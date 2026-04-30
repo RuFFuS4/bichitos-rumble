@@ -448,7 +448,11 @@ export class Game {
     hideEndScreen();
     showMatchHud();
     this.phase = 'countdown';
-    this.phaseTimer = FEEL.match.countdown;
+    // Sentinel: -1 means "scene still loading, don't tick the countdown
+    // yet". Once `arena.waitForPack` resolves (or its timeout fires) we
+    // swap this for the real `FEEL.match.countdown` and the "3, 2, 1,
+    // GO!" sequence begins. See the case in update() for the gate.
+    this.phaseTimer = -1;
     this.matchTimer = FEEL.match.duration;
 
     // Music: swap to the in-game loop. Crossfades from 'intro' if it was
@@ -508,7 +512,23 @@ export class Game {
       getRosterEntry(this.player.config.name)?.id ?? null,
     );
     initAllLivesHUD(this.critters, this.playerIndex);
-    showOverlay('Get Ready!');
+    showOverlay('Preparing arena…');
+
+    // 2026-04-29 — wait for the arena pack assets (skybox, ground texture,
+    // decor GLBs) to settle before kicking off the visible countdown.
+    // Without this gate, "GO!" fired with bare fragments while textures
+    // and decor were still in flight, so players would start moving
+    // against an empty arena and decor would pop in mid-fight.
+    // 2.5 s timeout is a safety net — if a slow CDN / 404 stalls a
+    // single asset, we proceed anyway with whatever loaded so the
+    // match never blocks indefinitely.
+    void this.arena.waitForPack(2500).then(() => {
+      // Guard: user may have quit / restarted while we were awaiting.
+      if (this.phase === 'countdown' && this.phaseTimer < 0) {
+        this.phaseTimer = FEEL.match.countdown;
+        showOverlay('Get Ready!');
+      }
+    });
 
     // Drop-from-sky entrance: before the "3" shows, hoist every critter
     // to a random altitude between 12 and 15 units with a small initial
@@ -1117,10 +1137,23 @@ export class Game {
       if (serverPhase !== 'waiting') hideWaitingScreen();
 
       if (serverPhase === 'playing') {
-        hideOverlay();
-        // Stamp match start for badge duration tracking (Speedrun Belt).
-        // Mirrors the offline countdown→playing transition.
+        // Stamp match start now — server time has already started ticking
+        // and the Speedrun Belt clock should follow that, not the local
+        // visual delay we may add waiting for textures.
         this.matchStartMs = performance.now();
+        // 2026-04-29 — gate the visible "ready to play" moment behind
+        // the arena pack load. If textures and decor GLBs are still in
+        // flight when the server hits 'playing', the local view stays
+        // on a "Preparing arena…" overlay until they settle (or 2.5 s
+        // timeout). Server keeps marching; we only delay the local
+        // confirmation. Once `waitForPack` resolves we drop the overlay
+        // and the player sees the fully-decorated scene.
+        showOverlay('Preparing arena…');
+        void this.arena.waitForPack(2500).then(() => {
+          // Defensive: only hide if we're still in playing phase. A
+          // fast end-of-match could have already swapped phases.
+          if (this.lastServerPhase === 'playing') hideOverlay();
+        });
       } else if (serverPhase === 'countdown') {
         // Online countdown: switch to the in-game loop so by the time the
         // "GO!" pops the music is already at full volume.
@@ -1663,9 +1696,17 @@ export class Game {
       }
 
       case 'countdown': {
-        this.phaseTimer -= dt;
-        // Drop-from-sky animation runs alongside the number overlay.
+        // Drop-from-sky animation runs even while we wait for pack
+        // assets — it's visual only and gives the loading window
+        // something to look at. The "Preparing arena…" overlay
+        // set in enterCountdown stays up during this window.
         this.updateCountdownDrops(dt);
+        // Sentinel `phaseTimer < 0` means the arena pack assets are
+        // still loading. Hold the visible "3-2-1" overlay until
+        // `arena.waitForPack` resolves and replaces the sentinel
+        // with the real countdown duration.
+        if (this.phaseTimer < 0) break;
+        this.phaseTimer -= dt;
         const sec = Math.ceil(this.phaseTimer);
         if (sec > 0) {
           showOverlay(`${sec}`);
