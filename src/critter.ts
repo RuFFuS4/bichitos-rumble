@@ -703,13 +703,17 @@ export class Critter {
         }
       }
     } else if (this.invisibilityTimer > 0) {
-      // v0.11 — Kurama Mirror Trick. Mesh ghosted to alpha 0.25.
+      // v0.11 — Kurama Mirror Trick. Mesh ghosted while the decoy
+      // tricks bots and other players.
       // 2026-04-29 K-session — Sihans Burrow Rush reuses the same
       // timer but collapses to alpha 0 (totally underground) for
-      // its short 0.30 s window. Distinguishing per-critter keeps
-      // both abilities authorial without adding a second timer
-      // field to Critter.
-      const ghostAlpha = this.config.name === 'Sihans' ? 0.0 : 0.25;
+      // its short 0.30 s window.
+      // 2026-05-01 microfix (Rafa: "Kurama original debe estar
+      // invisible o casi invisible mientras dura el clon"): alpha
+      // dropped 0.25 → 0.08. Still leaves a faint silhouette so a
+      // very attentive player can spot her if they really look,
+      // but at glance the decoy is the only Kurama on screen.
+      const ghostAlpha = this.config.name === 'Sihans' ? 0.0 : 0.08;
       for (const mat of mats) {
         mat.transparent = true;
         mat.opacity = ghostAlpha;

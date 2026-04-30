@@ -241,11 +241,12 @@ for (const [name, e] of Object.entries(expected)) {
   }
 }
 
-// Sentinels — 2026-04-30 final-polish retuned values.
-//   · Trunk: gripStun 2.0 → 4.0 (+2 s), L speed 1.35 → 1.65, mass 2.10 → 4.50
-//   · Sergei: K 3.5 / 68 unchanged, L speed 1.55 unchanged, mass 1.75 → 5.50
+// Sentinels — 2026-05-01 microfix retuned values.
+//   · Trunk: gripStun 4.0 (kept), L speed 1.65 → 1.85, mass 4.50 → 6.00
+//     (Stampede now ramming + heavier; Grip range 6 → 28).
+//   · Sergei: K 3.5 / 68 unchanged, L speed 1.55 unchanged, mass 5.50.
 const sentinels = {
-  Trunk:  { gripStun: 4.0, L: { spd: 1.65, mass: 4.50 } },
+  Trunk:  { gripStun: 4.0, L: { spd: 1.85, mass: 6.00 } },
   Sergei: { K: { rad: 3.5, frc: 68 }, L: { spd: 1.55, mass: 5.50 } },
 };
 for (const [name, e] of Object.entries(sentinels)) {

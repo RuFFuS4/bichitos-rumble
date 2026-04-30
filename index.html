@@ -346,11 +346,13 @@
       45%  { opacity: 1;    transform: scale(1.05); }
       100% { opacity: 0;    transform: scale(1.40); }
     }
-    /* Kurama Copycat — small portrait of the critter the L will
-       mimic, anchored to the top-right of the L slot icon. Sits over
-       the cooldown overlay so the player can always see who is being
-       copied. Only added when Kurama has a valid lastHitTarget;
-       runtime.ts adds/removes the node accordingly. */
+    /* Kurama Copycat — solid-colour chip on the L slot tinted with
+       the target critter's base palette + their first letter for
+       quick read. Anchored top-right of the slot icon, sits over the
+       cooldown overlay. Only added when Kurama has a valid
+       lastHitTarget; runtime.ts adds/removes the node accordingly.
+       2026-05-01: replaced sprite portrait with colour disc — the
+       32×32 mini-portrait was hard to recognise mid-fight. */
     .ability-slot .copycat-target-icon {
       position: absolute;
       top: -8px;
@@ -360,15 +362,17 @@
       border-radius: 50%;
       border: 2px solid #ff9933;
       box-shadow: 0 0 6px rgba(255, 153, 51, 0.8);
-      background-color: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0;
+      line-height: 1;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
       z-index: 4;
-      pointer-events: none;
-    }
-    /* Sprite-hud sheet uses background-position; clip the avatar
-       to a circular crop matching the chip outline. */
-    .ability-slot .copycat-target-icon.sprite-hud {
-      background-size: 250% 250%;
-      background-position: center center;
+      pointer-events: auto;
+      cursor: help;
     }
     .ability-key {
       font-size: 14px;

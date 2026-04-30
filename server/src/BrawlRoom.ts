@@ -87,6 +87,15 @@ interface InternalPlayerData {
    *  can drain it in `pulseInterval` chunks regardless of variable
    *  tick spacing. */
   pulseAccum?: number;
+  /** 2026-05-01 microfix — Cone Pulse counter for the per-pulse
+   *  force ramp. First pulse uses base force; each subsequent pulse
+   *  scales by 1 + (count - 1) × 0.5 so a target the first pulse
+   *  shoved out of the cone radius still gets caught by the next.
+   *  Reset on rising edge of conePulseL active.
+   *  `pulseLastActive` mirrors the offline `lastActive` flag for
+   *  edge detection. */
+  pulseCount?: number;
+  pulseLastActive?: boolean;
   /** 2026-04-30 final-L — Sebastian All-in cached starting facing
    *  (set on activation, consumed on resolution). The dash uses
    *  the rotationY at FIRE-TIME so the lateral slide is locked
@@ -841,26 +850,48 @@ export class BrawlRoom extends Room<GameState> {
       if (p.confusedTimer > 0) p.confusedTimer = Math.max(0, p.confusedTimer - dt);
       if (p.stunTimer > 0) p.stunTimer = Math.max(0, p.stunTimer - dt);
 
+      // 2026-05-01 microfix — Cone Pulse rising-edge detection runs
+      // BEFORE the active gate so the per-pulse counter resets even
+      // after the L falls off. Without this, the second activation
+      // of conePulseL inherits stale pulseLastActive=true and the
+      // ramp counter never resets.
+      if (lDef.conePulseL) {
+        const isActive = lState.active && lState.windUpLeft <= 0;
+        const data = this.internal.get(p.sessionId);
+        if (data) {
+          if (isActive && !data.pulseLastActive) {
+            data.pulseAccum = 0;
+            data.pulseCount = 0;
+          }
+          data.pulseLastActive = isActive;
+        }
+      }
+
       if (!lState.active || lState.windUpLeft > 0) continue;
 
       // --- Cone Pulse (Cheeto) ---
+      // 2026-05-01 microfix — Per-pulse force RAMP: pulse N uses
+      // baseForce × (1 + (N - 1) × 0.5). Pre-fix the first pulse
+      // shoved the target out of the 5.5 u radius and every later
+      // pulse missed; the ramp catches up.
       if (lDef.conePulseL) {
-        // Track per-pulse counter via internalData. The pulseInterval
-        // dictates how often we apply knockback; between pulses the
-        // caster idles in place (his speedMultiplier 0 grounds him).
         const data = this.internal.get(p.sessionId);
         if (data) {
           if (data.pulseAccum === undefined) data.pulseAccum = 0;
+          if (data.pulseCount === undefined) data.pulseCount = 0;
           data.pulseAccum += dt;
           const interval = lDef.pulseInterval ?? 0.30;
           while (data.pulseAccum >= interval) {
             data.pulseAccum -= interval;
+            data.pulseCount++;
+            const ramp = 1 + (data.pulseCount - 1) * 0.5;
             const halfCone = ((lDef.pulseAngleDeg ?? 45) * Math.PI) / 180;
             const cosCone = Math.cos(halfCone);
             const facingX = Math.sin(p.rotationY);
             const facingZ = Math.cos(p.rotationY);
             const radius = lDef.pulseRadius ?? 4.5;
-            const force = lDef.pulseForce ?? 28;
+            const baseForce = lDef.pulseForce ?? 28;
+            const effectiveForce = baseForce * ramp;
             for (const other of players) {
               if (other === p || !other.alive || other.falling) continue;
               if (other.immunityTimer > 0) continue;
@@ -872,8 +903,8 @@ export class BrawlRoom extends Room<GameState> {
               const nz = dz / d;
               if (nx * facingX + nz * facingZ < cosCone) continue;
               const fall = 1 - d / radius;
-              other.vx += nx * force * fall;
-              other.vz += nz * force * fall;
+              other.vx += nx * effectiveForce * fall;
+              other.vz += nz * effectiveForce * fall;
             }
             this.broadcast('lPulse', {
               sessionId: p.sessionId,
@@ -881,6 +912,24 @@ export class BrawlRoom extends Room<GameState> {
               radius, angleDeg: lDef.pulseAngleDeg ?? 45,
             });
           }
+        }
+      }
+
+      // --- Stampede ramming (Trunk) — same shape as Saw Shell but
+      //     with a different impulse value. 2026-05-01 microfix.
+      if (lDef.rammingL) {
+        const reach = 0.55 + 0.55 + 0.10;
+        const impulse = lDef.ramContactImpulse ?? 50;
+        for (const other of players) {
+          if (other === p || !other.alive || other.falling) continue;
+          if (other.immunityTimer > 0) continue;
+          const dx = other.x - p.x;
+          const dz = other.z - p.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 > reach * reach || d2 < 0.0001) continue;
+          const d = Math.sqrt(d2);
+          other.vx += (dx / d) * impulse;
+          other.vz += (dz / d) * impulse;
         }
       }
 
@@ -977,12 +1026,6 @@ export class BrawlRoom extends Room<GameState> {
         data.allInActive = false;
         continue;
       }
-      // 2026-04-30 final-polish — pick whichever lateral side
-      // (right OR left of cached facing) takes Sebastian closer to
-      // the rim, so "auto-move toward an edge" is real on the server
-      // too. Cached direction is the right-of-facing (cos, -sin); the
-      // left side is just its negation. Pick whichever endpoint
-      // lands at higher radial distance from origin.
       const range = lDef.allInDashRange ?? 5.5;
       const cachedX = data.allInDirX ?? Math.cos(p.rotationY);
       const cachedZ = data.allInDirZ ?? -Math.sin(p.rotationY);
@@ -993,10 +1036,12 @@ export class BrawlRoom extends Room<GameState> {
       const altEnd = radEnd(p.x + altX * range, p.z + altZ * range);
       const dx = cachedEnd >= altEnd ? cachedX : altX;
       const dz = cachedEnd >= altEnd ? cachedZ : altZ;
-      // Sweep along the dash line for any enemy capsule the dash
-      // intersects. Discrete: sample 8 points.
+      // 2026-05-01 — sweep + record hitT so the caster can teleport
+      // INTO the resolution. Without this, the dash was just a
+      // remote-effect knockback while Sebastian stood still.
       let hitVictim: PlayerSchema | null = null;
-      const SAMPLES = 8;
+      let hitT = 0;
+      const SAMPLES = 12;
       for (let i = 1; i <= SAMPLES && !hitVictim; i++) {
         const t = (i / SAMPLES) * range;
         const sx = p.x + dx * t;
@@ -1009,26 +1054,34 @@ export class BrawlRoom extends Room<GameState> {
           const reach = 0.55 + 0.55;
           if (odx * odx + odz * odz <= reach * reach) {
             hitVictim = other;
+            hitT = t;
             break;
           }
         }
       }
       if (hitVictim) {
-        // 2026-04-30 final-polish — on hit, brutal knockback +
-        // hard-stop Sebastian so the caster's control returns
-        // immediately (Rafa: "Sebastian se para y el usuario
-        // recupera control").
-        const force = lDef.allInHitForce ?? 60;
-        hitVictim.vx += dx * force;
-        hitVictim.vz += dz * force;
+        // HIT — teleport Sebastian to just-before the victim so the
+        // slash reads as "I sprinted there and caught you", not the
+        // previous remote effect. Hard-stop velocity returns
+        // control instantly.
+        const arrivalT = Math.max(0, hitT - 0.55 * 0.7);
+        p.x += dx * arrivalT;
+        p.z += dz * arrivalT;
         p.vx = 0;
         p.vz = 0;
+        const force = lDef.allInHitForce ?? 100;
+        hitVictim.vx += dx * force;
+        hitVictim.vz += dz * force;
       } else {
-        // 2026-04-30 final-polish — on miss, SET (not add) the
-        // outward velocity so the existing maxSpeed cap can't
-        // dampen the punishment. Sebastian commits past the rim
-        // and the void takes him.
-        const sf = lDef.allInMissSelfForce ?? 110;
+        // MISS — Sebastian commits all the way past the rim.
+        // Teleport to the dash endpoint × 1.5 (guarantees we're
+        // outside arena maxRadius even if he started inside) +
+        // outward velocity so the server's `isOnArena` check next
+        // tick triggers `falling` (no manual void check needed;
+        // existing collapse logic handles it).
+        p.x += dx * range * 1.5;
+        p.z += dz * range * 1.5;
+        const sf = lDef.allInMissSelfForce ?? 130;
         p.vx = dx * sf;
         p.vz = dz * sf;
       }

@@ -229,6 +229,16 @@ export interface AbilityDef {
   sawContactImpulse?: number;
   sawSpinSpeed?: number;
 
+  /** 2026-05-01 — Trunk Stampede ramming flag. Symmetric to sawL:
+   *  while frenzy is active post-windup, any contact between Trunk
+   *  and another non-immune non-falling critter applies a strong
+   *  outward impulse to the OTHER critter on top of the normal
+   *  collision response. Combined with the Stampede mass × 6 multi-
+   *  plier this finally reads as "battering ram" instead of a
+   *  silent speed buff. */
+  rammingL?: boolean;
+  ramContactImpulse?: number;
+
   /** Cheeto Cone Pulse: during frenzy, the caster is rooted
    *  (slowDuringActive 0). Every `pulseInterval` seconds the
    *  server emits a frontal cone knockback (radius
@@ -701,8 +711,13 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       slowDuringActive: 0, cancelAnimOnEnd: true,
       shakeBoost: 1.0,
       gripK: true,
-      gripFrontalRange: 6.0,
-      gripFrontalAngleDeg: 50,
+      // 2026-05-01 microfix (Rafa: "rango 5-6× más amplio, cone
+      // frontal más estrecho para no ser injusto"). Range 6 → 28
+      // u (4.7×). Cone halved 50° → 35° so el reach largo solo
+      // afecta a quien esté CASI exactamente delante de Trunk —
+      // sigue siendo "agarre con trompa", no un imán global.
+      gripFrontalRange: 28.0,
+      gripFrontalAngleDeg: 35,
       gripPullDistance: 1.6,
       // 2026-04-30 final-polish (Rafa: "stun debe durar 2 segundos
       // más"): 2.0 → 4.0. Status icons 💫 + 💥 also follow this timer
@@ -710,25 +725,26 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       gripStunDuration: 4.0,
     }),
     makeFrenzy({
-      // 2026-04-30 final-polish (Rafa: "L Stampede no se percibe
-      // tocada — debe ser mucho más relevante/potente"):
-      //   - duration 3.0 → 4.0 (más ventana útil para cargar)
-      //   - speedMultiplier 1.35 → 1.65 (Trunk persigue, ya no
-      //     parece sólo otro buff de masa)
-      //   - massMultiplier 2.10 → 4.50 (literalmente embiste como
-      //     bola de demolición — los demás rebotan en lugar de
-      //     desplazarlo)
-      //   - cooldown 18.0 → 20.0 (compensa el aumento de impacto)
-      // cancelAnimOnEnd se mantiene para evitar que el clip se
-      // quede colgado al terminar el buff.
+      // 2026-05-01 microfix (Rafa: "Stampede sigue sin convencer"):
+      //   - speedMultiplier 1.65 → 1.85
+      //   - massMultiplier 4.50 → 6.00 (clash de masas brutal)
+      //   - new flag `rammingL: true` con `ramContactImpulse: 55` —
+      //     simétrico a Shelly Saw Shell pero para Trunk: cualquier
+      //     contacto durante Stampede aplica un impulso extra
+      //     radial sobre el otro critter, no solo el knockback
+      //     normal de colisión por mass-ratio. Esto asegura que
+      //     Stampede se SIENTE como un battering ram en vez de
+      //     "solo un buff invisible".
       name: 'Stampede',
-      description: 'Enraged charge: massive +speed, +mass',
+      description: 'Battering-ram charge: every contact launches enemies',
       duration: 4.0,
       cooldown: 20.0,
       windUp: 0.45,
-      speedMultiplier: 1.65,
-      massMultiplier: 4.50,
+      speedMultiplier: 1.85,
+      massMultiplier: 6.00,
       cancelAnimOnEnd: true,
+      rammingL: true,
+      ramContactImpulse: 55,
     }),
   ],
 
@@ -1019,27 +1035,22 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       blinkImpactForce: 48,
     }),
     makeFrenzy({
-      // 2026-04-30 final-L — Cone Pulse. Cheeto roots in place
-      // and emits a frontal cone knockback every `pulseInterval`
-      // seconds for the L's duration. Targets in the cone get
-      // pushed each pulse; outside the cone is safe.
-      // 2026-04-30 final-polish (Rafa: "no se ve ni se siente"):
-      //   - pulseForce 28 → 40 (cada pulso ahora empuja como un
-      //     cabezazo medio; suma con fall-off)
-      //   - pulseRadius 4.5 → 5.5 (más alcance, sigue siendo cone)
-      //   - massMultiplier 1.05 → 4.0 (Cheeto anclado durante el
-      //     channel, no se descoloca por contraataques)
-      // VFX se añade en tickLOffline (un ring expansivo + camera
-      // shake corto + sonido por cada pulso).
+      // 2026-05-01 microfix (Rafa: "solo el primer pulso empujaba"):
+      //   - pulseRadius 5.5 → 6.5 (catches a target the prior pulse
+      //     just shoved across the cone exit boundary)
+      //   - pulseForce 40 → 36 BASE (the ramp adds the real punch:
+      //     pulse N = base × (1 + (N - 1) × 0.5), so N=6 ≈ 3.5×)
+      // The per-pulse force ramp + rising-edge state reset live in
+      // tickLOffline / BrawlRoom — see 2026-05-01 microfix comments.
       name: 'Cone Pulse',
-      description: 'Channels a roaring frontal pulse — pushes enemies away',
+      description: 'Channels a roaring frontal pulse — escalating push',
       duration: 1.8, cooldown: 14.0, windUp: 0.35,
       speedMultiplier: 0.0, massMultiplier: 4.0,
       conePulseL: true,
       pulseInterval: 0.30,
-      pulseRadius: 5.5,
+      pulseRadius: 6.5,
       pulseAngleDeg: 45,
-      pulseForce: 40,
+      pulseForce: 36,
     }),
   ],
 
@@ -1087,14 +1098,14 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 0.0, massMultiplier: 1.20,
       allInL: true,
       allInDashSpeed: 28,
-      // 2026-04-30 final-polish (Rafa: "miss = sigue y cae"):
-      // dashRange 5.5 → 7.0 (más compromiso), hitForce 60 → 100
-      // (knockback brutal en hit), missSelfForce 38 → 110 (set
-      // como velocidad absoluta en fireAllInResolution para que
-      // el cap de maxSpeed no lo amortigüe).
-      allInDashRange: 7.0,
-      allInHitForce: 100,
-      allInMissSelfForce: 110,
+      // 2026-05-01 microfix (Rafa: "no hace dash real, no cae al
+      // miss"): dashRange 7 → 9 + fireAllInResolution ahora
+      // teleporta a Sebastian al hit point (caso hit) o al
+      // endpoint × 1.5 (caso miss). Sin el teleport el dash era
+      // un efecto remoto: Sebastian no se movía.
+      allInDashRange: 9.0,
+      allInHitForce: 110,
+      allInMissSelfForce: 130,
     }),
   ],
 };
@@ -1484,55 +1495,95 @@ export function deriveZoneVfxKind(critterName: string): ZoneVfxKind {
  * The All-in resolution edge-case is handled in `updateAbilities`
  * via `lastAbilityActive` falling-edge detection.
  */
-const _pulseAccum = new WeakMap<Critter, number>();
+interface ConePulseState { acc: number; count: number; lastActive: boolean; }
+const _pulseStates = new WeakMap<Critter, ConePulseState>();
 export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scene): void {
   for (const c of critters) {
     if (!c.alive || c.falling) continue;
     const lState = c.abilityStates[2];
+
+    // 2026-05-01 microfix — Cone Pulse must update its rising-edge
+    // detector even when the L isn't post-windup yet, so the count
+    // resets cleanly each activation (the pre-fix WeakMap of just
+    // `acc` carried stale state across activations and never reset
+    // the per-pulse counter — first pulse pushed, the rest landed
+    // outside the cone radius the target escaped to).
+    if (lState?.def?.conePulseL) {
+      const isActive = !!lState.active && lState.windUpLeft <= 0;
+      let state = _pulseStates.get(c);
+      if (!state) state = { acc: 0, count: 0, lastActive: false };
+      if (isActive && !state.lastActive) {
+        state.acc = 0;
+        state.count = 0;
+      }
+      state.lastActive = isActive;
+      if (isActive) {
+        state.acc += dt;
+        const def = lState.def;
+        const interval = def.pulseInterval ?? 0.30;
+        const halfCone = ((def.pulseAngleDeg ?? 45) * Math.PI) / 180;
+        const cosCone = Math.cos(halfCone);
+        const radius = def.pulseRadius ?? 4.5;
+        const baseForce = def.pulseForce ?? 28;
+        const facingX = Math.sin(c.mesh.rotation.y);
+        const facingZ = Math.cos(c.mesh.rotation.y);
+        while (state.acc >= interval) {
+          state.acc -= interval;
+          state.count++;
+          // Force ramp — first pulse base, each subsequent pulse
+          // hits 50 % harder. Catches up to a target that the prior
+          // pulse already pushed away. With 6 pulses over 1.8 s the
+          // last one is base × 3.5 — brutal but read-as-finisher.
+          const ramp = 1 + (state.count - 1) * 0.5;
+          const effectiveForce = baseForce * ramp;
+          for (const other of critters) {
+            if (other === c || !other.alive || other.falling) continue;
+            if (other.isImmune) continue;
+            const dx = other.x - c.x;
+            const dz = other.z - c.z;
+            const d = Math.sqrt(dx * dx + dz * dz);
+            if (d > radius || d < 0.01) continue;
+            const nx = dx / d;
+            const nz = dz / d;
+            if (nx * facingX + nz * facingZ < cosCone) continue;
+            const fall = 1 - d / radius;
+            other.vx += nx * effectiveForce * fall;
+            other.vz += nz * effectiveForce * fall;
+          }
+          if (scene) {
+            const burstX = c.x + facingX * radius * 0.55;
+            const burstZ = c.z + facingZ * radius * 0.55;
+            const palette = CRITTER_VFX_PALETTE[c.config.name]?.pound ?? { color: 0xff5522, secondary: 0xffe066 };
+            spawnShockwaveRing(scene, burstX, burstZ, radius * 0.65, { ...palette, holdMs: 250 });
+          }
+          triggerCameraShake(FEEL.shake.groundPound * (0.25 + state.count * 0.04));
+          playSound('abilityFire');
+        }
+      }
+      _pulseStates.set(c, state);
+    }
+
     if (!lState?.active || lState.windUpLeft > 0) continue;
     const def = lState.def;
 
-    if (def.conePulseL) {
-      let acc = _pulseAccum.get(c) ?? 0;
-      acc += dt;
-      const interval = def.pulseInterval ?? 0.30;
-      const halfCone = ((def.pulseAngleDeg ?? 45) * Math.PI) / 180;
-      const cosCone = Math.cos(halfCone);
-      const radius = def.pulseRadius ?? 4.5;
-      const force = def.pulseForce ?? 28;
-      const facingX = Math.sin(c.mesh.rotation.y);
-      const facingZ = Math.cos(c.mesh.rotation.y);
-      while (acc >= interval) {
-        acc -= interval;
-        for (const other of critters) {
-          if (other === c || !other.alive || other.falling) continue;
-          if (other.isImmune) continue;
-          const dx = other.x - c.x;
-          const dz = other.z - c.z;
-          const d = Math.sqrt(dx * dx + dz * dz);
-          if (d > radius || d < 0.01) continue;
-          const nx = dx / d;
-          const nz = dz / d;
-          if (nx * facingX + nz * facingZ < cosCone) continue;
-          const fall = 1 - d / radius;
-          other.vx += nx * force * fall;
-          other.vz += nz * force * fall;
-        }
-        // 2026-04-30 final-polish (Rafa: "no se ve ni se siente el
-        // pulso"): each pulse spawns an expanding ring centred ~half
-        // the cone radius ahead of Cheeto + a small camera shake +
-        // the ability sound. The ring lives 250 ms so it doesn't
-        // accumulate in front of him during the channel.
-        if (scene) {
-          const burstX = c.x + facingX * radius * 0.55;
-          const burstZ = c.z + facingZ * radius * 0.55;
-          const palette = CRITTER_VFX_PALETTE[c.config.name]?.pound ?? { color: 0xff5522, secondary: 0xffe066 };
-          spawnShockwaveRing(scene, burstX, burstZ, radius * 0.65, { ...palette, holdMs: 250 });
-        }
-        triggerCameraShake(FEEL.shake.groundPound * 0.25);
-        playSound('abilityFire');
+    if (def.rammingL) {
+      // 2026-05-01 — Trunk Stampede ramming. Same shape as sawL but
+      // with a different impulse magnitude. Reach is critter contact
+      // radius + a small margin so the ram "catches" critters on
+      // approach rather than only on perfect overlap.
+      const reach = c.radius + 0.55 + 0.10;
+      const impulse = def.ramContactImpulse ?? 50;
+      for (const other of critters) {
+        if (other === c || !other.alive || other.falling) continue;
+        if (other.isImmune) continue;
+        const dx = other.x - c.x;
+        const dz = other.z - c.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 > reach * reach || d2 < 0.0001) continue;
+        const d = Math.sqrt(d2);
+        other.vx += (dx / d) * impulse;
+        other.vz += (dz / d) * impulse;
       }
-      _pulseAccum.set(c, acc);
     }
 
     if (def.sawL) {
@@ -2041,8 +2092,14 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
   const dirX = dir[0];
   const dirZ = dir[1];
 
+  // Sweep along the dash path and find the FIRST hit point + its
+  // distance along the line. The previous version only flagged "hit
+  // yes/no" — Sebastian never actually moved. Now we use the hitT
+  // distance to TELEPORT him into the resolution, so the slash reads
+  // as a real lateral commit instead of a magic effect-from-afar.
   let hit: Critter | null = null;
-  const SAMPLES = 8;
+  let hitT = 0;
+  const SAMPLES = 12;
   for (let i = 1; i <= SAMPLES && !hit; i++) {
     const t = (i / SAMPLES) * range;
     const sx = critter.x + dirX * t;
@@ -2055,19 +2112,27 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
       const reach = critter.radius + other.radius;
       if (odx * odx + odz * odz <= reach * reach) {
         hit = other;
+        hitT = t;
         break;
       }
     }
   }
   const palette = CRITTER_VFX_PALETTE[critter.config.name]?.frenzy;
   if (hit) {
-    // HIT — brutal knockback to target, Sebastian stops dead so the
-    // player gets clean control back.
-    const force = def.allInHitForce ?? 60;
-    hit.vx += dirX * force;
-    hit.vz += dirZ * force;
+    // HIT — teleport Sebastian to just-before the victim along the
+    // dash line so the slash reads as "I sprinted there and caught
+    // you", not "I hit you from across the arena". Zero velocity for
+    // a clean control return.
+    const arrivalT = Math.max(0, hitT - critter.radius * 0.7);
+    critter.x += dirX * arrivalT;
+    critter.z += dirZ * arrivalT;
+    critter.mesh.position.x = critter.x;
+    critter.mesh.position.z = critter.z;
     critter.vx = 0;
     critter.vz = 0;
+    const force = def.allInHitForce ?? 100;
+    hit.vx += dirX * force;
+    hit.vz += dirZ * force;
     applyImpactFeedback(hit);
     triggerHitStop(FEEL.hitStop.headbutt);
     // Crimson side-slash burst at the contact point.
@@ -2076,12 +2141,19 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     triggerCameraShake(FEEL.shake.headbutt * 1.6);
     playSound('headbuttHit');
   } else {
-    // MISS — Sebastian commits past the rim. Bump self-force WAY up
-    // (38 → 110) and apply it as an outright velocity set, not just
-    // an additive impulse, so the existing maxSpeed cap can't dampen
-    // the punishment. Friction will still slow him over ~1.5 s, but
-    // by then he's well past arena maxRadius and has fallen.
-    const sf = def.allInMissSelfForce ?? 110;
+    // MISS — Sebastian commits all the way past the rim. Teleport
+    // him to the dash endpoint (which is already chosen to be the
+    // far side of arena radius) and set a high outward velocity so
+    // physics carries him further still. `checkFalloff` next frame
+    // sees him outside any alive fragment → `startFalling` fires →
+    // void.
+    // 1.5× ensures the endpoint clears the arena maxRadius (12)
+    // even if Sebastian started somewhere inside the inner half.
+    critter.x += dirX * range * 1.5;
+    critter.z += dirZ * range * 1.5;
+    critter.mesh.position.x = critter.x;
+    critter.mesh.position.z = critter.z;
+    const sf = def.allInMissSelfForce ?? 130;
     critter.vx = dirX * sf;
     critter.vz = dirZ * sf;
     spawnShockwaveRing(scene, critter.x, critter.z, 1.4, palette);
@@ -2257,7 +2329,14 @@ export interface ShockwaveRingOpts {
  *
  * Lifecycle: ttl seconds, then dispose. Fade-out in the last 30 %.
  */
-function spawnDecoyAt(scene: THREE.Scene, critter: Critter, ttl: number): void {
+export function spawnDecoyAt(
+  scene: THREE.Scene,
+  critter: Critter,
+  ttl: number,
+  overrideX?: number,
+  overrideZ?: number,
+  overrideRotY?: number,
+): void {
   if (!critter.glbMesh) return; // procedural-only critters: skip
   // 2026-04-30 final-polish — snapshot the GLB world transform NOW,
   // before the SkeletonUtils dynamic import resolves. Fire path:
@@ -2265,8 +2344,17 @@ function spawnDecoyAt(scene: THREE.Scene, critter: Critter, ttl: number): void {
   // Kurama by `decoyEscapeDistance`. Without this snapshot the
   // async clone reads the post-move position and the decoy ends
   // up next to her instead of where she activated the K.
-  const snapPos = critter.glbMesh.getWorldPosition(new THREE.Vector3());
-  const snapRot = critter.glbMesh.getWorldQuaternion(new THREE.Quaternion());
+  // 2026-05-01 microfix — accept (x, z, rotY) override so the
+  // online path can spawn the decoy at the broadcast position
+  // (where Kurama WAS at cast time per server) instead of her
+  // current local position (which has already been state-synced
+  // to the escape spot).
+  const snapPos = overrideX !== undefined && overrideZ !== undefined
+    ? new THREE.Vector3(overrideX, critter.glbMesh.position.y, overrideZ)
+    : critter.glbMesh.getWorldPosition(new THREE.Vector3());
+  const snapRot = overrideRotY !== undefined
+    ? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), overrideRotY)
+    : critter.glbMesh.getWorldQuaternion(new THREE.Quaternion());
   const snapScl = critter.glbMesh.getWorldScale(new THREE.Vector3());
   // SkeletonUtils.clone gives an independent skeleton so the clone
   // doesn't keep retargeting Kurama's live bones. Imported lazily

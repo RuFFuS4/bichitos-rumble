@@ -353,20 +353,34 @@ export function updateAbilityHUD(states: AbilityState[]): void {
 // ---- Kurama Copycat target indicator (L slot sub-icon) ------------------
 
 /**
- * Show or hide a small portrait of the critter Kurama's L (Copycat) is
- * about to mimic. Only meaningful when the local player is Kurama.
+ * Show or hide a small target indicator on the L slot, for Kurama's
+ * Copycat ultimate. Only meaningful when the local player is Kurama.
  *
- * Wiring: `main.ts` calls this every frame inside the per-critter
- * status update with `local.lastHitTargetCritter` (or null if the
- * local player isn't Kurama / hasn't hit anyone yet). The indicator
- * sits inside Kurama's L ability slot as an overlay so the player
- * can read at a glance "if I press L now, I'll copy X".
+ * Wiring: `game.ts` calls this every frame inside the per-frame HUD
+ * update with `local.lastHitTargetCritter` (or null if the local
+ * player isn't Kurama / hasn't hit anyone yet). The indicator sits
+ * inside the L slot so the player can read at a glance "if I press L
+ * now, I'll copy X".
  *
- * Implementation note: we build/destroy the inner span by class
- * presence rather than swapping textContent so the existing
- * `.sprite-hud-<critter>` CSS does the heavy lifting (same source as
- * the character-select grid + waiting room thumbs once they switch).
+ * 2026-05-01 microfix (Rafa: "la mini imagen no se aprecia, mejor un
+ * indicador simple de color"): swapped the sprite portrait for a
+ * solid-colour disc tinted with the target's base palette colour +
+ * the target's first letter, plus a `title` attribute with the full
+ * name for tooltip-on-hover. Reads instantly without depending on
+ * 32×32 sprite legibility.
  */
+const CRITTER_COLOR_MAP: Record<string, string> = {
+  Sergei:    '#b5651d',
+  Trunk:     '#8c8c8c',
+  Kurama:    '#ff6633',
+  Shelly:    '#2d8659',
+  Kermit:    '#9c3cee',
+  Sihans:    '#8b6914',
+  Kowalski:  '#1a1a3e',
+  Cheeto:    '#ffaa22',
+  Sebastian: '#cc3333',
+};
+
 export function setCopycatTarget(targetCritterName: string | null): void {
   // Find the L slot — kits ship with 3 abilities (J, K, L). Last entry.
   if (slotEls.length < 3) {
@@ -378,15 +392,32 @@ export function setCopycatTarget(targetCritterName: string | null): void {
     if (badge) badge.remove();
     return;
   }
-  const targetSlug = targetCritterName.toLowerCase();
+  const color = CRITTER_COLOR_MAP[targetCritterName] ?? '#888';
+  const initial = targetCritterName.charAt(0).toUpperCase();
   if (!badge) {
     badge = document.createElement('span');
-    badge.className = `sprite-hud sprite-hud-${targetSlug} copycat-target-icon`;
+    badge.className = 'copycat-target-icon';
     lSlot.root.appendChild(badge);
-  } else {
-    // Replace the slug-bearing class without nuking the position class.
-    badge.className = `sprite-hud sprite-hud-${targetSlug} copycat-target-icon`;
   }
+  badge.style.background = color;
+  badge.style.color = pickReadableTextColor(color);
+  badge.textContent = initial;
+  badge.title = `Copycat target: ${targetCritterName}`;
+  badge.setAttribute('aria-label', `Copycat target: ${targetCritterName}`);
+}
+
+/**
+ * Quick perceived-luminance check so the initial letter stays readable
+ * against the badge background. Used only by `setCopycatTarget`; if the
+ * background is dark we paint white text, if light we paint near-black.
+ */
+function pickReadableTextColor(hex: string): string {
+  if (hex.length !== 7 || hex[0] !== '#') return '#fff';
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luma < 0.55 ? '#ffffff' : '#1a1a1a';
 }
 
 // ---- Portal legend (top-left, visible during match) ---------------------

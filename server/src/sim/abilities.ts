@@ -79,6 +79,9 @@ export interface AbilityDef {
   sawL?: boolean;
   sawContactImpulse?: number;
   sawSpinSpeed?: number;
+  // 2026-05-01 — Trunk Stampede ramming.
+  rammingL?: boolean;
+  ramContactImpulse?: number;
   conePulseL?: boolean;
   pulseInterval?: number;
   pulseRadius?: number;
@@ -171,23 +174,22 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // impulse 25 → 32, duration 0.42 → 0.55, speedMult 2.1 → 2.4.
     { type: 'charge_rush',  cooldown: 4.5, duration: 0.55, windUp: 0.08,
       impulse: 32, speedMultiplier: 2.4, massMultiplier: 4.0 },
-    // 2026-04-29 final-K REDESIGN — Trunk K is now Grip: yank a
-    // frontal target and stun + expose them.
-    // 2026-04-30 final-polish — gripStunDuration 2.0 → 4.0
-    // (Rafa "stun debe durar 2 segundos más").
+    // 2026-05-01 microfix — Grip range 6 → 28 (4.7×) + cone 50° →
+    // 35° para mantener "frontal preciso largo" sin volverse global.
     { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.40,
       radius: 0, force: 0, ...ROOTED_K,
       gripK: true,
-      gripFrontalRange: 6.0,
-      gripFrontalAngleDeg: 50,
+      gripFrontalRange: 28.0,
+      gripFrontalAngleDeg: 35,
       gripPullDistance: 1.6,
       gripStunDuration: 4.0 },
-    // 2026-04-30 final-polish — Stampede mucho más relevante
-    // (Rafa): duration 3.0 → 4.0, speedMult 1.35 → 1.65, massMult
-    // 2.10 → 4.50, cooldown 18 → 20. Trunk durante Stampede es
-    // un battering ram — los demás rebotan.
+    // 2026-05-01 microfix — Stampede ahora ramming. speedMult 1.65
+    // → 1.85, massMult 4.50 → 6.00, + flag rammingL con
+    // ramContactImpulse 55. Cualquier contacto durante Stampede
+    // empuja al otro critter.
     { type: 'frenzy',       cooldown: 20.0, duration: 4.0, windUp: 0.45,
-      frenzySpeedMult: 1.65, frenzyMassMult: 4.50 },
+      frenzySpeedMult: 1.85, frenzyMassMult: 6.00,
+      rammingL: true, ramContactImpulse: 55 },
   ],
 
   // --- Bloque C: 7 remaining playables ---
@@ -306,13 +308,13 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       blinkSeekRange: 9.0,
       blinkSeekOffset: 1.4,
       blinkImpactRadius: 3.2, blinkImpactForce: 48 },
-    // 2026-04-30 final-L — Cone Pulse channeled.
-    // 2026-04-30 final-polish — pulseForce 28 → 40, pulseRadius 4.5 →
-    // 5.5, frenzyMassMult 1.05 → 4.0 (Cheeto anchored during channel).
+    // 2026-05-01 microfix — pulseForce 40 → 36 base (ramp adds the
+    // real punch: N=6 ≈ 3.5×), pulseRadius 5.5 → 6.5 (catches
+    // targets the prior pulse pushed near cone exit).
     { type: 'frenzy',       cooldown: 14.0, duration: 1.8, windUp: 0.35,
       frenzySpeedMult: 0.0, frenzyMassMult: 4.0,
       conePulseL: true, pulseInterval: 0.30,
-      pulseRadius: 5.5, pulseAngleDeg: 45, pulseForce: 40 },
+      pulseRadius: 6.5, pulseAngleDeg: 45, pulseForce: 36 },
   ],
 
   Sebastian: [
@@ -327,12 +329,13 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // 2026-04-30 final-L — All-in Side Slash. Frenzy duration is the
     // 1.0 s rooted windup; the lateral dash + hit/miss resolution
     // fires when the duration ticks down.
-    // 2026-04-30 final-polish — dashRange 5.5 → 7.0, hitForce 60 →
-    // 100, missSelfForce 38 → 110 (Rafa "miss = inevitablemente cae").
+    // 2026-05-01 microfix — dashRange 7 → 9 + teleport-on-resolution
+    // (Sebastian se mueve de verdad ahora). Force: 100 → 110, miss
+    // 110 → 130 + endpoint × 1.5 garantiza que sale del arena.
     { type: 'frenzy',       cooldown: 15.0, duration: 1.0, windUp: 0.0,
       frenzySpeedMult: 0.0, frenzyMassMult: 1.20,
-      allInL: true, allInDashSpeed: 28, allInDashRange: 7.0,
-      allInHitForce: 100, allInMissSelfForce: 110 },
+      allInL: true, allInDashSpeed: 28, allInDashRange: 9.0,
+      allInHitForce: 110, allInMissSelfForce: 130 },
   ],
 };
 

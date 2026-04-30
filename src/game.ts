@@ -48,7 +48,7 @@ import { type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
-import { spawnShockwaveRing, spawnFrenzyBurst, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing, deriveZoneVfxKind } from './abilities';
+import { spawnShockwaveRing, spawnFrenzyBurst, spawnDecoyAt, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing, deriveZoneVfxKind } from './abilities';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { clearProjectiles } from './projectiles';
 import { clearAllCritterStatus, disposeCritterStatus } from './hud/status-icons';
@@ -1412,6 +1412,19 @@ export class Game {
       triggerCameraShake(FEEL.shake.groundPound);
       triggerHitStop(FEEL.hitStop.groundPound);
       playSoundEffect('groundPound');
+      // 2026-05-01 microfix — Kurama Mirror Trick online sync. The
+      // server fires a ground_pound abilityFired event when Kurama
+      // casts K (selfBuffOnly path). Pre-fix the remote clients
+      // saw the ring + shake but Kurama herself stayed fully
+      // visible — bots/players couldn't tell who was the decoy.
+      // Now we mirror the offline fire-effect: spawn a decoy at the
+      // broadcast position + ghost the caster's mesh for the K
+      // duration. Server already moves Kurama to the escape spot
+      // via state sync, so we don't reposition here.
+      if (c.config.name === 'Kurama') {
+        spawnDecoyAt(this.scene, c, 2.8, ev.x, ev.z, ev.rotationY);
+        c.invisibilityTimer = Math.max(c.invisibilityTimer, 2.8);
+      }
     } else if (ev.type === 'frenzy') {
       // Frenzy entry burst — server only emits this event when the buff
       // ACTIVATES, so we get one ring per ult activation, same cadence
