@@ -21,6 +21,7 @@ import {
   loadPackSkyboxTexture,
   loadPackPropMeshes,
   getPackFogColor,
+  getPackDecorScale,
   loadInArenaDecorations,
 } from './arena-decorations';
 import { getDecorLayout } from './arena-decor-layouts';
@@ -457,7 +458,10 @@ export class Arena {
     // without seed sync.
     const inArenaLoad = (async () => {
       try {
-        const inArena = await loadInArenaDecorations(getDecorLayout(packId));
+        const inArena = await loadInArenaDecorations(
+          getDecorLayout(packId),
+          getPackDecorScale(packId),
+        );
         if (myToken !== this.packApplyToken) {
           for (const d of inArena) disposeGroupMeshes(d.mesh);
           return;

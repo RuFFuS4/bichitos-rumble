@@ -362,6 +362,51 @@ export function getPackFogColor(packId: ArenaPackId): number {
 }
 
 // ---------------------------------------------------------------------------
+// Per-pack decor scale — bumped 2026-04-29 for stronger pack identity
+// ---------------------------------------------------------------------------
+//
+// Every prop in a pack is multiplied by the same factor. Picked so the
+// LARGEST prop in each pack hits ≈ 4.25 u (≈ 2.5 × the unified critter
+// reference height of 1.7 u — see IN_GAME_TARGET_HEIGHT in critter.ts).
+// Smaller props in the pack scale proportionally so silhouettes stay
+// internally consistent.
+//
+// Intentionally pack-scoped: each art set has different anchors (palms
+// tower, tundra has horizon-flat icebergs, etc.), so a single global
+// multiplier would either flatten the tundra or make the jungle absurd.
+//
+// Tuning anchors (target ≈ 4.25 u for the tallest prop):
+//   jungle           palmtall_jungle 3.5 → 3.5 × 1.20 = 4.20  ✓
+//   frozen_tundra    icebergtall/pine 2.5 → 2.5 × 1.65 = 4.13 ✓
+//   desert_dunes     spiretall_desert 2.8 → 2.8 × 1.50 = 4.20 ✓
+//   coral_beach      palm_beach       3.0 → 3.0 × 1.40 = 4.20 ✓
+//   kitsune_shrine   sakura_shrine    3.2 → 3.2 × 1.30 = 4.16 ✓
+//
+// Footprint check: placements live at r 7.0–11.5; arena maxRadius is 12.
+// Auto-fit scales uniformly (height + width + depth), so a prop with
+// silhouette 1u wide before becomes ~1.65u wide on the heaviest pack.
+// Most props sit at r ≥ 10.4 and have thin trunks (palms/totems/spires)
+// so the inward extension is ≤ 0.4 u — well clear of the inner combat
+// zone (r ≤ 8). Rocks/icebergs are wider but their placements were
+// already authored with margin to the inner ring.
+const PACK_DECOR_SCALE: Record<ArenaPackId, number> = {
+  jungle:         1.20,
+  frozen_tundra:  1.65,
+  desert_dunes:   1.50,
+  coral_beach:    1.40,
+  kitsune_shrine: 1.30,
+};
+
+/**
+ * Per-pack uniform multiplier on decoration silhouettes. Defaults to 1.0
+ * for any pack not in the table (defensive — never breaks if a new pack
+ * is added without an entry). Read by loadInArenaDecorations.
+ */
+export function getPackDecorScale(packId: ArenaPackId): number {
+  return PACK_DECOR_SCALE[packId] ?? 1.0;
+}
+
+// ---------------------------------------------------------------------------
 // In-arena decorations — small props authored in arena-decor-layouts.ts
 // and parented to the fragment that contains them so they fall together.
 // ---------------------------------------------------------------------------
@@ -387,6 +432,7 @@ export interface InArenaDecor {
  */
 export async function loadInArenaDecorations(
   placements: DecorPlacement[],
+  packScale: number = 1.0,
 ): Promise<InArenaDecor[]> {
   if (placements.length === 0) return [];
   const out: InArenaDecor[] = [];
@@ -405,6 +451,10 @@ export async function loadInArenaDecorations(
       // HEIGHT — keeps the catalogue legible (per-prop heights instead
       // of opaque scale multipliers) and tolerates GLB exporters that
       // normalise to different sizes.
+      // 2026-04-29 — `packScale` adds a per-pack uniform multiplier
+      // (see PACK_DECOR_SCALE) so each pack hits the "≈ 2.5 × critter"
+      // size target without authoring new displayHeights. Applied to
+      // the fit factor so width + depth + height all scale uniformly.
       mesh.scale.setScalar(1);
       mesh.rotation.y = p.rotY;
       mesh.position.set(
@@ -418,7 +468,7 @@ export async function loadInArenaDecorations(
         ? Math.max(0.001, bboxRaw.max.y - bboxRaw.min.y)
         : 1;
       const fitFactor = type.displayHeight / measuredH;
-      mesh.scale.setScalar(fitFactor * p.scale);
+      mesh.scale.setScalar(fitFactor * p.scale * packScale);
       // Re-measure post-scale to ground the prop. Auto-grounding on
       // bbox.min.y matters because some IA-generated GLBs centre on
       // bbox instead of base; without this lift the prop sinks halfway
