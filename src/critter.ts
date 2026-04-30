@@ -87,6 +87,11 @@ export const CRITTER_PRESETS: CritterConfig[] = [
   {
     ...deriveCritterStats('Trunk'),
     name: 'Trunk', color: 0x8c8c8c,
+    // 2026-04-30 final-polish (Rafa: "el cabezazo debe sentirse x3"):
+    // Trunk shipped with boost 1.0 (default). Bumping to 3.0 multiplies
+    // both the raw headbutt force and the camera shake on impact —
+    // matches the "elephant just charged you" read he was missing.
+    headbuttBoost: 3.0,
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
   },

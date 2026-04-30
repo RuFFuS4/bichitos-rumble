@@ -612,15 +612,20 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       slowDuringActive: 0, cancelAnimOnEnd: true,
     }),
     makeFrenzy({
-      description: 'Enters berserk mode: +speed, +power',
+      description: 'Enters berserk mode: +speed, +power, near-immovable',
       duration: 2.5,
       cooldown: 15.0,
       windUp: 0.35,
-      // v0.11 buff (Rafa: "darle más potencia"): speed 1.45 → 1.55,
-      // mass 1.50 → 1.75. Sergei stays balanced but the gorilla's
-      // berserk window now genuinely overpowers a mid-fight stalemate.
+      // 2026-04-30 final-polish (Rafa: "en frenesí no parece verosímil
+      // que otros lo muevan fácilmente a cabezazos — más resistencia"):
+      // mass 1.75 → 5.50. Sergei sigue moviéndose y atacando, pero
+      // los headbutts enemigos solo desplazan ~1/6 de lo normal
+      // (massRatio en physics: 1.0 / (1.0 + 5.5) ≈ 15 %). No es
+      // invulnerabilidad total (eso ya lo tiene Shelly Steel Shell
+      // con anchor), es "el gorila berserk no se mueve fácil".
+      // speed sin tocar — el rework es de aguante, no de movilidad.
       speedMultiplier: 1.55,
-      massMultiplier: 1.75,
+      massMultiplier: 5.50,
     }),
   ],
 
@@ -645,20 +650,20 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   // VFX code (kept out of scope for this pass).
   Trunk: [
     makeChargeRush({
-      // v0.11 (Rafa: "más distancia y más potencia"): impulse 20 → 25,
-      // duration 0.35 → 0.42, mass 3.5 → 4.0. Recorre ~30 % más
-      // distancia y rompe paredes de tanques con más naturalidad.
-      // clipPlaybackRate sube a 6.0 para que el clip sigue cuadrando
-      // con la nueva duración.
+      // 2026-04-30 final-polish (Rafa: "J debe recorrer más espacio"):
+      // impulse 25 → 32, duration 0.42 → 0.55, speedMultiplier 2.1 →
+      // 2.4. Distancia recorrida ≈ impulse × duration × speedMultiplier
+      // sube de ~22 a ~42 — casi el doble. Mantenemos masa alta para
+      // que siga sintiéndose pesado y no incontrolable.
       name: 'Trunk Ram',
       description: 'Unstoppable forward dash with tusks',
-      impulse: 25,
-      duration: 0.42,
+      impulse: 32,
+      duration: 0.55,
       cooldown: 4.5,
       windUp: 0.08,
-      speedMultiplier: 2.1,
+      speedMultiplier: 2.4,
       massMultiplier: 4.0,
-      clipPlaybackRate: 6.0,
+      clipPlaybackRate: 4.5,
     }),
     makeGroundPound({
       // v0.11 (Rafa: "no hace lo que debe hacer"): radius 4.5 → 4.8,
@@ -683,20 +688,30 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       gripFrontalRange: 6.0,
       gripFrontalAngleDeg: 50,
       gripPullDistance: 1.6,
-      gripStunDuration: 2.0,
+      // 2026-04-30 final-polish (Rafa: "stun debe durar 2 segundos
+      // más"): 2.0 → 4.0. Status icons 💫 + 💥 also follow this timer
+      // (computeCritterStatuses reads stunTimer > 0).
+      gripStunDuration: 4.0,
     }),
     makeFrenzy({
-      // v0.11 (Rafa: "bastante más fuerte" + "anim colgada"):
-      // speed 1.25 → 1.35, mass 1.80 → 2.10, cancelAnimOnEnd: true
-      // para cortar el clip de Ability3GroundPound al terminar el
-      // buff (era el síntoma del "anim colgada").
+      // 2026-04-30 final-polish (Rafa: "L Stampede no se percibe
+      // tocada — debe ser mucho más relevante/potente"):
+      //   - duration 3.0 → 4.0 (más ventana útil para cargar)
+      //   - speedMultiplier 1.35 → 1.65 (Trunk persigue, ya no
+      //     parece sólo otro buff de masa)
+      //   - massMultiplier 2.10 → 4.50 (literalmente embiste como
+      //     bola de demolición — los demás rebotan en lugar de
+      //     desplazarlo)
+      //   - cooldown 18.0 → 20.0 (compensa el aumento de impacto)
+      // cancelAnimOnEnd se mantiene para evitar que el clip se
+      // quede colgado al terminar el buff.
       name: 'Stampede',
-      description: 'Enraged charge: +speed, +mass',
-      duration: 3.0,
-      cooldown: 18.0,
+      description: 'Enraged charge: massive +speed, +mass',
+      duration: 4.0,
+      cooldown: 20.0,
       windUp: 0.45,
-      speedMultiplier: 1.35,
-      massMultiplier: 2.10,
+      speedMultiplier: 1.65,
+      massMultiplier: 4.50,
       cancelAnimOnEnd: true,
     }),
   ],
@@ -791,12 +806,22 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // headbutt state. Speed/mass multipliers stay so she
       // can chase, but the contact damage is the headline.
       name: 'Saw Shell',
-      description: 'Spin like a saw — every contact launches enemies',
+      description: 'Spin like a saw — every contact launches enemies hard',
       duration: 3.5, cooldown: 18.0, windUp: 0.4,
       speedMultiplier: 1.40, massMultiplier: 1.65,
       sawL: true,
-      sawContactImpulse: 32,
+      // 2026-04-30 final-polish (Rafa: "muchísimo más empuje al
+      // tocar"): contactImpulse 32 → 90. Una sierra de caparazón
+      // tiene que expulsar brutalmente, no nudgear. Sentinel
+      // server-side mirrored.
+      sawContactImpulse: 90,
       sawSpinSpeed: 22,
+      // 2026-04-30 final-polish (Rafa: "al terminar de girar,
+      // parece que empieza a reproducir la animación"): añadimos
+      // cancelAnimOnEnd para que el clip de frenzy NO se reproduzca
+      // en falling-edge del active flag — la base rotation ya se
+      // restaura vía baseGlbRotationY en critter.ts.
+      cancelAnimOnEnd: true,
     }),
   ],
 
@@ -938,8 +963,12 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       duration: 3.0, cooldown: 17.0, windUp: 0.4,
       speedMultiplier: 1.10, massMultiplier: 1.10,
       frozenFloorL: true,
-      floorRadius: 6.0,
-      floorDuration: 5.0,
+      // 2026-04-30 final-polish (Rafa: "agrandar tamaño/radio +
+      // añadir +2s duración"). Radius 6.0 → 8.0 and floorDuration
+      // 5.0 → 7.0 — sigue siendo divertida sin ser ruptora porque
+      // el slippery solo escala friction, no crea void.
+      floorRadius: 8.0,
+      floorDuration: 7.0,
     }),
   ],
 

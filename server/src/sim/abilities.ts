@@ -161,29 +161,33 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // 2026-04-29 final-K: force 34 → 68 (doblar potencia).
     { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.30,
       radius: 3.5, force: 68, ...ROOTED_K },
-    // v0.11 buff (Rafa: "darle más potencia"): 1.45/1.5 → 1.55/1.75
+    // 2026-04-30 final-polish — frenzy massMult 1.75 → 5.50 (near-
+    // immovable berserk, Rafa "más resistencia"). speed unchanged.
     { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.35,
-      frenzySpeedMult: 1.55, frenzyMassMult: 1.75 },
+      frenzySpeedMult: 1.55, frenzyMassMult: 5.50 },
   ],
   Trunk: [
-    // v0.11 (Rafa: "más distancia + más potencia"): impulse 20→25,
-    // duration 0.35→0.42, mass 3.5→4.0
-    { type: 'charge_rush',  cooldown: 4.5, duration: 0.42, windUp: 0.08,
-      impulse: 25, speedMultiplier: 2.1, massMultiplier: 4.0 },
+    // 2026-04-30 final-polish (Rafa: "J debe recorrer más espacio"):
+    // impulse 25 → 32, duration 0.42 → 0.55, speedMult 2.1 → 2.4.
+    { type: 'charge_rush',  cooldown: 4.5, duration: 0.55, windUp: 0.08,
+      impulse: 32, speedMultiplier: 2.4, massMultiplier: 4.0 },
     // 2026-04-29 final-K REDESIGN — Trunk K is now Grip: yank a
-    // frontal target and stun + expose them. See AbilityDef.gripK.
-    // Replaces the previous Earthquake (radial slam — too close
-    // to the L's identity).
+    // frontal target and stun + expose them.
+    // 2026-04-30 final-polish — gripStunDuration 2.0 → 4.0
+    // (Rafa "stun debe durar 2 segundos más").
     { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.40,
       radius: 0, force: 0, ...ROOTED_K,
       gripK: true,
       gripFrontalRange: 6.0,
       gripFrontalAngleDeg: 50,
       gripPullDistance: 1.6,
-      gripStunDuration: 2.0 },
-    // v0.11 (Rafa: "bastante más fuerte"): speed 1.25→1.35, mass 1.80→2.10
-    { type: 'frenzy',       cooldown: 18.0, duration: 3.0, windUp: 0.45,
-      frenzySpeedMult: 1.35, frenzyMassMult: 2.10 },
+      gripStunDuration: 4.0 },
+    // 2026-04-30 final-polish — Stampede mucho más relevante
+    // (Rafa): duration 3.0 → 4.0, speedMult 1.35 → 1.65, massMult
+    // 2.10 → 4.50, cooldown 18 → 20. Trunk durante Stampede es
+    // un battering ram — los demás rebotan.
+    { type: 'frenzy',       cooldown: 20.0, duration: 4.0, windUp: 0.45,
+      frenzySpeedMult: 1.65, frenzyMassMult: 4.50 },
   ],
 
   // --- Bloque C: 7 remaining playables ---
@@ -221,9 +225,11 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       selfBuffOnly: true, selfImmunityDuration: 4.0,
       selfAnchorWhileBuffed: true },
     // 2026-04-30 final-L — Saw Shell. Spin contact knockback.
+    // 2026-04-30 final-polish — sawContactImpulse 32 → 90 (Rafa
+    // "muchísimo más empuje"). Sentinel parity bumped.
     { type: 'frenzy',       cooldown: 18.0, duration: 3.5, windUp: 0.40,
       frenzySpeedMult: 1.40, frenzyMassMult: 1.65,
-      sawL: true, sawContactImpulse: 32, sawSpinSpeed: 22 },
+      sawL: true, sawContactImpulse: 90, sawSpinSpeed: 22 },
   ],
 
   // Kermit — Controller: K spawns a 2.0 s slow zone (60 % move speed
@@ -275,9 +281,11 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       projectileImpulse: 22,
       projectileSlowDuration: 5.0 },
     // 2026-04-30 final-L — Frozen Floor slippery zone.
+    // 2026-04-30 final-polish (Rafa "agrandar + +2s"): radius
+    // 6.0 → 8.0, floorDuration 5.0 → 7.0.
     { type: 'frenzy',       cooldown: 17.0, duration: 3.0, windUp: 0.40,
       frenzySpeedMult: 1.10, frenzyMassMult: 1.10,
-      frozenFloorL: true, floorRadius: 6.0, floorDuration: 5.0 },
+      frozenFloorL: true, floorRadius: 8.0, floorDuration: 7.0 },
   ],
 
   // Cheeto — Assassin: K is now a real BLINK (4.5 u teleport along
