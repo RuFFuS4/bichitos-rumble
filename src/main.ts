@@ -362,11 +362,18 @@ function wireSettingsButton(btn: HTMLButtonElement, onClick: () => void): void {
   });
 }
 
+// 2026-05-01 polish — settings buttons now ship the sprite icon AND
+// the emoji fallback simultaneously. CSS hides the unused one based
+// on the `has-hud-sprites` body class (set by the preload). Result:
+// sprite sheet loaded → user sees the AI-generated speaker / note;
+// sheet failed to load → the emoji stays visible. No JS branching.
 const btnSfx = document.getElementById('btn-sfx') as HTMLButtonElement | null;
 if (btnSfx) {
   const refresh = () => {
     const m = isSfxMuted();
-    btnSfx.textContent = m ? '🔇' : '🔊';
+    btnSfx.innerHTML = `
+      <span class="sprite-fallback-hud" aria-hidden="true">${m ? '🔇' : '🔊'}</span>
+      <span class="sprite-hud sprite-hud-sfx-${m ? 'off' : 'on'}" aria-hidden="true"></span>`;
     btnSfx.classList.toggle('muted', m);
     btnSfx.title = m ? 'Enable sound effects' : 'Disable sound effects';
     btnSfx.setAttribute('aria-pressed', m ? 'true' : 'false');
@@ -379,9 +386,11 @@ const btnMusic = document.getElementById('btn-music') as HTMLButtonElement | nul
 if (btnMusic) {
   const refresh = () => {
     const m = isMusicMuted();
-    btnMusic.textContent = m ? '🎵' : '🎶';
+    btnMusic.innerHTML = `
+      <span class="sprite-fallback-hud" aria-hidden="true">${m ? '🎵' : '🎶'}</span>
+      <span class="sprite-hud sprite-hud-music-${m ? 'off' : 'on'}" aria-hidden="true"></span>`;
     btnMusic.classList.toggle('muted', m);
-    btnMusic.title = m ? 'Enable music (not yet available)' : 'Disable music';
+    btnMusic.title = m ? 'Enable music' : 'Disable music';
     btnMusic.setAttribute('aria-pressed', m ? 'true' : 'false');
   };
   refresh();

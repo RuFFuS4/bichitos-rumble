@@ -123,7 +123,23 @@ export function showEndScreen(
   subtitle: string,
   showPortalOptions = false,
 ): void {
-  endResultEl.textContent = title;
+  // 2026-05-01 polish — prepend a crown / trophy / skull sprite to
+  // the title text so the win/lose/draw read at-glance is reinforced
+  // by the AI-generated HUD sheet. Emoji fallback ships alongside;
+  // CSS hides the unused one based on the `has-hud-sprites` body
+  // class. No behaviour change beyond visual.
+  const sprite =
+    result === 'win'  ? 'crown' :
+    result === 'lose' ? 'skull' :
+                        'trophy';
+  const fallback =
+    result === 'win'  ? '👑' :
+    result === 'lose' ? '💀' :
+                        '🏆';
+  endResultEl.innerHTML =
+    '<span class="sprite-fallback-hud end-result-icon" aria-hidden="true">' + fallback + '</span>' +
+    '<span class="sprite-hud sprite-hud-' + sprite + ' end-result-sprite" aria-hidden="true"></span>' +
+    '<span class="end-result-text">' + title + '</span>';
   endResultEl.className = 'end-result ' + result;
   endSubtitleEl.textContent = subtitle;
   // Show portal prompt only for players who arrived via portal

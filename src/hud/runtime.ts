@@ -120,7 +120,7 @@ export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = 
 
     const hearts = document.createElement('span');
     hearts.className = 'lives-hearts';
-    hearts.textContent = '\u2764'.repeat(c.lives);
+    renderHearts(hearts, c.lives, true);
 
     corner.appendChild(dot);
     corner.appendChild(name);
@@ -131,7 +131,11 @@ export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = 
     if (c.isBot) {
       const badge = document.createElement('span');
       badge.className = 'lives-bot-badge';
-      badge.textContent = '🤖';
+      // 2026-05-01 polish — sprite + emoji fallback. CSS hides the
+      // unused one based on the `has-hud-sprites` body class.
+      badge.innerHTML =
+        '<span class="sprite-fallback-hud" aria-hidden="true">\u{1F916}</span>' +
+        '<span class="sprite-hud sprite-hud-bot-mask lives-bot-sprite" aria-hidden="true"></span>';
       badge.title = 'Bot';
       corner.appendChild(badge);
     }
@@ -140,16 +144,39 @@ export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = 
   }
 }
 
+/**
+ * 2026-05-01 polish — render the heart row with both sprite + emoji
+ * fallback so the AI-generated HUD sheet picks up automatically when
+ * loaded. Each life renders one heart slot; eliminated critters
+ * collapse to a skull glyph.
+ */
+function renderHearts(el: HTMLElement, lives: number, alive: boolean): void {
+  if (!alive) {
+    el.innerHTML =
+      '<span class="sprite-fallback-hud lives-heart-emoji" aria-hidden="true">✖</span>' +
+      '<span class="sprite-hud sprite-hud-skull lives-heart-sprite" aria-hidden="true"></span>';
+    return;
+  }
+  if (lives <= 0) {
+    el.innerHTML = '';
+    return;
+  }
+  const slot =
+    '<span class="sprite-fallback-hud lives-heart-emoji" aria-hidden="true">❤</span>' +
+    '<span class="sprite-hud sprite-hud-heart-full lives-heart-sprite" aria-hidden="true"></span>';
+  el.innerHTML = slot.repeat(lives);
+}
+
 /** Update lives display each frame. */
 export function updateAllLivesHUD(critters: Critter[]): void {
   for (let i = 0; i < critters.length && i < liveEls.length; i++) {
     const c = critters[i];
     const el = liveEls[i];
     if (!c.alive) {
-      el.hearts.textContent = '\u2716'; // ✖
+      renderHearts(el.hearts, 0, false);
       el.root.classList.add('is-dead');
     } else {
-      el.hearts.textContent = '\u2764'.repeat(c.lives);
+      renderHearts(el.hearts, c.lives, true);
       el.root.classList.remove('is-dead');
     }
   }

@@ -492,11 +492,24 @@
       letter-spacing: 2px;
       line-height: 1;
       text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+      display: inline-flex;
+      align-items: center;
+      gap: 1px;
     }
+    /* 2026-05-01 polish — sprite hearts inside the lives row.
+       Sized to roughly match the 16 px font of the emoji fallback so
+       the row height stays the same regardless of which one renders.
+       The fallback-hud / sprite-hud display swap is handled by the
+       generic `.has-hud-sprites` body-class rules further below. */
+    .lives-heart-sprite { --icon-size: 18px; }
+    .lives-heart-emoji  { letter-spacing: 1px; }
     .lives-bot-badge {
       font-size: 12px;
       opacity: 0.8;
+      display: inline-flex;
+      align-items: center;
     }
+    .lives-bot-sprite { --icon-size: 16px; }
 
     /* ---------- Portal legend (HUD, top-left under timer) ---------- */
     #portal-legend {
@@ -1280,7 +1293,16 @@
       text-align: center;
       margin-bottom: 12px;
       text-shadow: 0 4px 24px rgba(0,0,0,0.9);
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
     }
+    /* Crown / skull / trophy chip on the end title.
+       2026-05-01 polish — sized to roughly match the title cap-height
+       so the icon reads as part of the headline word, not a stray
+       glyph. Sprite + emoji fallback share the same slot. */
+    #end-screen .end-result-sprite { --icon-size: 56px; }
+    #end-screen .end-result-icon   { font-size: 0.9em; line-height: 1; }
     #end-screen .end-result.win {
       color: #4ade80;
       text-shadow: 0 4px 28px rgba(74,222,128,0.55), 0 0 60px rgba(74,222,128,0.25);
@@ -1610,7 +1632,14 @@
       text-transform: uppercase;
       font-weight: 700;
       opacity: 0.85;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      justify-content: center;
     }
+    /* Bot row: mask sprite + "BOT" label flow inline. */
+    .waiting-bot-sprite { --icon-size: 14px; }
+    .waiting-bot-label { line-height: 1; }
     .waiting-slot.human .waiting-slot-badge { color: #4ade80; }
     .waiting-slot.bot .waiting-slot-badge { color: #ffaa44; }
     .waiting-slot.empty .waiting-slot-badge { color: rgba(255,255,255,0.35); }

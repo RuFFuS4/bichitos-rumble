@@ -115,12 +115,19 @@ function buildWaitingSlotEl(s: WaitingSlotData): HTMLDivElement {
   el.appendChild(name);
 
   // Badge: HUMAN / 🤖 BOT / OPEN — type of participant, below the name.
+  // 2026-05-01 polish — bot rows now ship the sprite mask alongside
+  // the emoji fallback. CSS hides the unused one based on the
+  // `has-hud-sprites` body class.
   const badge = document.createElement('span');
   badge.className = 'waiting-slot-badge';
-  badge.textContent =
-    s.kind === 'human' ? 'HUMAN' :
-    s.kind === 'bot'   ? '🤖 BOT' :
-                         'OPEN';
+  if (s.kind === 'bot') {
+    badge.innerHTML =
+      '<span class="sprite-fallback-hud" aria-hidden="true">\u{1F916}</span>' +
+      '<span class="sprite-hud sprite-hud-bot-mask waiting-bot-sprite" aria-hidden="true"></span>' +
+      '<span class="waiting-bot-label">BOT</span>';
+  } else {
+    badge.textContent = s.kind === 'human' ? 'HUMAN' : 'OPEN';
+  }
   el.appendChild(badge);
 
   return el;
