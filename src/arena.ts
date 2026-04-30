@@ -1092,6 +1092,54 @@ export class Arena {
    * flag is already false by the time we get here so the physics layer
    * treats the fragment as gone immediately.
    */
+  /**
+   * 2026-04-30 final-polish — Sihans Sinkhole real-hole support.
+   * Find every alive non-immune fragment whose centroid lies inside
+   * the (cx, cz, r) disc. Used to pre-select knock-out candidates
+   * before calling `killFragmentIndices`. Centroid check (not strict
+   * containment) is the safer pick: it errs toward only knocking out
+   * fragments fully under the hole, never the immune islet.
+   */
+  public getAliveFragmentsInDisc(cx: number, cz: number, r: number): number[] {
+    if (!this.layout) return [];
+    const r2 = r * r;
+    const out: number[] = [];
+    for (let i = 0; i < this.layout.fragments.length; i++) {
+      const f = this.layout.fragments[i];
+      if (!f || f.immune) continue;
+      if (!this.alive[i]) continue;
+      // Approx centroid: midpoint of (band, sectorAngle) — for the
+      // jagged sector shape this is roughly the visual middle.
+      const midR = (f.innerR + f.outerR) * 0.5;
+      const midA = (f.startAngle + f.endAngle) * 0.5;
+      const fx = Math.cos(midA) * midR;
+      const fz = Math.sin(midA) * midR;
+      const dx = fx - cx;
+      const dz = fz - cz;
+      if (dx * dx + dz * dz <= r2) out.push(i);
+    }
+    return out;
+  }
+
+  /**
+   * 2026-04-30 final-polish — knock specific fragments out of the
+   * arena. Used by Sihans Sinkhole to open a real hole players can
+   * fall through. Skips already-dead fragments and the immune
+   * centre (defensive — callers should already filter, but the
+   * extra check protects the safe zone).
+   */
+  public killFragmentIndices(indices: number[]): void {
+    if (!this.layout) return;
+    for (const idx of indices) {
+      const f = this.layout.fragments[idx];
+      if (!f || f.immune) continue;
+      if (!this.alive[idx]) continue;
+      this.alive[idx] = false;
+      this.startFragmentFall(idx);
+    }
+    this.updateRadius();
+  }
+
   private startFragmentFall(idx: number): void {
     const g = this.fragmentGroups[idx];
     if (!g) return;

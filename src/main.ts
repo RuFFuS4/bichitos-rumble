@@ -15,7 +15,7 @@ import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 import { initOnlineBeltToast } from './online-belt-toast';
 import { updateDustPuffs } from './dust-puff';
-import { tickAbilityZones, isInsideZoneOfKind, tickLOffline } from './abilities';
+import { tickAbilityZones, isInsideZoneOfKind, tickLOffline, setArenaForAbilities } from './abilities';
 import { tickProjectiles } from './projectiles';
 import {
   setCritterStatus,
@@ -390,6 +390,13 @@ if (btnMusic) {
 
 // Game
 const game = new Game(scene);
+
+// 2026-04-30 final-polish — wire the live arena into the abilities
+// module so Sihans Sinkhole can knock out real fragments from
+// `fireFrenzy`. The abilities module deliberately doesn't import
+// `./arena` directly (cycle risk via DECOR_TYPES → THREE), so we
+// pass the reference through a setter at boot.
+setArenaForAbilities(game.arena);
 
 // Decor preview banner — only shown when /decor-editor.html opened
 // the game with `?arenaPack=<id>&decorPreview=1`. Acts as both a

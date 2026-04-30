@@ -86,6 +86,51 @@ export class ArenaSim {
     return isPointOnArena(x, z, this.layout.fragments, this.alive);
   }
 
+  /**
+   * 2026-04-30 final-polish — Sihans Sinkhole real-hole support.
+   * Find every alive non-immune fragment whose centroid lies inside
+   * the (cx, cz, r) disc. Centroid (band-mid × angle-mid) is the
+   * conservative pick — fragments only fully under the hole are
+   * eligible. Used by `applyAbilityEffectIfAny` so the server can
+   * pre-select knock-out candidates and broadcast their indices to
+   * clients.
+   */
+  getAliveFragmentsInDisc(cx: number, cz: number, r: number): number[] {
+    const r2 = r * r;
+    const out: number[] = [];
+    for (let i = 0; i < this.layout.fragments.length; i++) {
+      const f = this.layout.fragments[i];
+      if (!f || f.immune) continue;
+      if (!this.alive[i]) continue;
+      const midR = (f.innerR + f.outerR) * 0.5;
+      const midA = (f.startAngle + f.endAngle) * 0.5;
+      const fx = Math.cos(midA) * midR;
+      const fz = Math.sin(midA) * midR;
+      const dx = fx - cx;
+      const dz = fz - cz;
+      if (dx * dx + dz * dz <= r2) out.push(i);
+    }
+    return out;
+  }
+
+  /**
+   * Mark the given fragment indices as dead. Skips already-dead and
+   * immune fragments defensively. Returns the indices that were
+   * actually killed (for the broadcast payload — clients only need
+   * to apply the same change locally).
+   */
+  killFragmentIndices(indices: number[]): number[] {
+    const killed: number[] = [];
+    for (const idx of indices) {
+      const f = this.layout.fragments[idx];
+      if (!f || f.immune) continue;
+      if (!this.alive[idx]) continue;
+      this.alive[idx] = false;
+      killed.push(idx);
+    }
+    return killed;
+  }
+
   reset(): void {
     this.layout = generateArenaLayout(this.seed);
     this.alive = this.layout.fragments.map(() => true);

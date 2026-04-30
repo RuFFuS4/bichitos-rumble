@@ -5,6 +5,22 @@ import { play as playSound } from './audio';
 import { spawnDustPuff } from './dust-puff';
 import { spawnLocalProjectile } from './projectiles';
 
+// 2026-04-30 final-polish — Sihans Sinkhole opens a real arena hole.
+// We need access to the live Arena (to query + kill fragments under
+// the hole disc) without making this module depend on `./arena`
+// directly (which imports DECOR_TYPES → THREE → cycles). Boot wires
+// the arena via `setArenaForAbilities` from main.ts so the gameplay
+// path can call `arena.killFragmentIndices(...)` without a static
+// circular import.
+interface ArenaForAbilities {
+  getAliveFragmentsInDisc(cx: number, cz: number, r: number): number[];
+  killFragmentIndices(indices: number[]): void;
+}
+let _arenaRef: ArenaForAbilities | null = null;
+export function setArenaForAbilities(a: ArenaForAbilities | null): void {
+  _arenaRef = a;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -1853,9 +1869,10 @@ function fireFrenzy(def: AbilityDef, critter: Critter, _all: Critter[], scene: T
       cx = (cx / Math.max(r, 0.01)) * 4.0;
       cz = (cz / Math.max(r, 0.01)) * 4.0;
     }
+    const holeR = def.holeRadius ?? 3.0;
     activeZones.push({
       x: cx, z: cz,
-      radius: def.holeRadius ?? 3.0,
+      radius: holeR,
       slowMultiplier: 0.55,
       ttl: def.holeDuration ?? 5.0,
       vfxKind: 'sand',
@@ -1864,8 +1881,18 @@ function fireFrenzy(def: AbilityDef, critter: Critter, _all: Critter[], scene: T
       pullForce: def.holeForce ?? 14,
     });
     spawnZoneRing(scene, cx, cz,
-      def.holeRadius ?? 3.0, def.holeDuration ?? 5.0,
+      holeR, def.holeDuration ?? 5.0,
       0x4a3a26, 0x8b6914, 'sand');
+    // 2026-04-30 final-polish (Rafa: "agujero real, los enemigos
+    // pueden caer"): knock out arena fragments under the hole disc.
+    // Immune centre is filtered server-side and inside Arena.
+    // killFragmentIndices, so this never breaks the safe zone.
+    if (_arenaRef) {
+      const indices = _arenaRef.getAliveFragmentsInDisc(cx, cz, holeR);
+      if (indices.length > 0) {
+        _arenaRef.killFragmentIndices(indices);
+      }
+    }
   }
 }
 

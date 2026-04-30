@@ -40,7 +40,7 @@ import {
 } from './portal';
 import type { Room } from 'colyseus.js';
 import { getStateCallbacks } from 'colyseus.js';
-import { sendInput, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, type AbilityFiredEvent } from './network';
+import { sendInput, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, type AbilityFiredEvent } from './network';
 import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
@@ -914,6 +914,16 @@ export class Game {
       });
       spawnZoneRing(this.scene, ev.x, ev.z, ev.radius, ev.duration,
         palette?.pound?.color, palette?.pound?.secondary, vfxKind);
+    });
+
+    // 2026-04-30 final-polish — Sihans Sinkhole real-hole sync.
+    // Server broadcasts the indices of fragments it just knocked
+    // out under the hole disc; clients knock them out locally so
+    // the visual fall + isOnArena read match the server.
+    onArenaFragmentsKilled(room, (ev) => {
+      if (ev.indices && ev.indices.length > 0) {
+        this.arena.killFragmentIndices(ev.indices);
+      }
     });
 
     // Online Belts: if the server detects a belt changed hands after this

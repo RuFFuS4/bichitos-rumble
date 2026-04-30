@@ -725,6 +725,19 @@ export class BrawlRoom extends Room<GameState> {
           slippery: !!z.slippery,
           sinkhole: !!z.sinkhole,
         });
+        // 2026-04-30 final-polish — Sihans Sinkhole knocks out real
+        // arena fragments under the hole disc. Server-authoritative:
+        // pick indices, kill them in the simulation (so isOnArena
+        // returns false on next tick → players standing there fall),
+        // and broadcast the indices so clients can knock out the
+        // matching meshes and play the fall animation.
+        if (z.sinkhole) {
+          const candidates = this.arenaSim.getAliveFragmentsInDisc(z.x, z.z, z.radius);
+          const killed = this.arenaSim.killFragmentIndices(candidates);
+          if (killed.length > 0) {
+            this.broadcast('arenaFragmentsKilled', { indices: killed });
+          }
+        }
       }
       // 2026-04-29 K-session — Kowalski Snowball projectile spawns.
       // Same one-shot broadcast pattern as zones: each projectile

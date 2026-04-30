@@ -96,6 +96,20 @@ export function onProjectileExpired(room: Room, cb: (ev: ProjectileExpiredEvent)
   room.onMessage('projectileExpired', cb);
 }
 
+/**
+ * 2026-04-30 final-polish — Sihans Sinkhole real-hole broadcast.
+ * Server picks the fragments inside the sinkhole disc, marks them
+ * dead in `arenaSim.alive[]`, and emits this event so clients can
+ * knock the same indices out of their local Arena (visual fall +
+ * `alive[]` mirror so the local prediction also reads "void here").
+ */
+export interface ArenaFragmentsKilledEvent {
+  indices: number[];
+}
+export function onArenaFragmentsKilled(room: Room, cb: (ev: ArenaFragmentsKilledEvent) => void): void {
+  room.onMessage('arenaFragmentsKilled', cb);
+}
+
 export interface JoinBrawlOptions {
   critterName?: string;
 }
