@@ -134,19 +134,18 @@ Full stack details: [`STACK.md`](STACK.md).
 
 ## Status
 
-9-character roster, all playable with 3D GLB models (generated in Tripo).
+9-character roster, all playable with 3D GLB models. Each critter has
+3 active abilities (J / K / L) with distinct identities — see the
+[Abilities](#abilities-jkl) table below for the current kit.
 Procedural animation layer gives each critter distinct idle bob, run
 cadence, lean and squash/stretch derived from their mass+speed stats.
-Skeletal animation loader is wired — drop a GLB with embedded clips
-from Mixamo / Tripo Animate / Meshy into `public/models/critters/` and
-the engine picks them up automatically.
-
-Skeletal coverage at 2026-04-22: **4 / 9** critters shipping the full
-eight-state kit (idle / run / ability_1 / ability_2 / ultimate /
-victory / defeat / fall). Pipeline: `npm run import:critter <id>
-<source.glb>` with a duration-mapping JSON under `scripts/mappings/`.
-See [`CHARACTER_DESIGN.md`](CHARACTER_DESIGN.md) for the per-critter
-table.
+Skeletal animation coverage **9 / 9** — every critter ships the
+8-state kit (idle / run / ability_1 / ability_2 / ultimate / victory /
+defeat / fall) via Mixamo, Tripo Animate, or Meshy clips, with
+authored procedural fallback for the few that ship fewer named clips.
+Pipeline: `npm run import:critter <id> <source.glb>` with a duration-
+mapping JSON under `scripts/mappings/`. See
+[`CHARACTER_DESIGN.md`](CHARACTER_DESIGN.md) for the per-critter table.
 
 **Stats are driven by a single P/W/S tuple** per critter
 (Power / Weight / Speed, each -2..+2). `src/pws-stats.ts` derives the
@@ -169,6 +168,40 @@ Vibe Jam portal integration is live: exit portal (webring) and return
 portal; players arriving via `?portal=true` skip menus and drop
 straight into a match. A warp transition plays for ~650 ms before each
 redirect so the hand-off feels like a portal trip, not a hard-cut.
+
+## Abilities (J/K/L)
+
+Every critter has 3 active abilities + a basic headbutt (Space). The
+roster is built around contrasting roles: bruisers anchor and ram
+through the crowd, tricksters dodge and copy, mages set up zones, the
+glass cannon swings everything on a single strike.
+
+| Critter | J | K | L |
+|---|---|---|---|
+| Sergei | Gorilla Rush (heavy dash) | Shockwave (radial slam) | Frenzy (near-immovable berserk) |
+| Trunk | Trunk Ram (long dash) | Trunk Grip (yank + 4 s stun) | Stampede (battering ram) |
+| Kurama | Fox Dash (fast feint) | Mirror Trick (decoy + ghost) | Copycat (mimics last-hit target's L) |
+| Shelly | Shell Charge (slow ram) | Steel Shell (immune anchor) | Saw Shell (spinning contact knockback) |
+| Kermit | Leap Forward | Poison Cloud (slow + fog) | Toxic Touch (control inversion) |
+| Sihans | Burrow Rush | Sand Trap (blink + quicksand) | Sinkhole (real arena hole) |
+| Kowalski | Ice Slide | Snowball (freeze projectile) | Frozen Floor (slippery zone) |
+| Cheeto | Pounce (lightning lunge) | Shadow Step (blink + impact) | Cone Pulse (frontal pulses) |
+| Sebastian | Claw Rush (sideways scuttle) | Claw Wave (frontal cone) | All-in (commit, hit big or fall) |
+
+A floating emoji over each critter signals their current status:
+❄️ frozen / 🐌 slowed / ☠️ poisoned / 💫 stunned / 💥 vulnerable /
+🔥 frenzy / 🛡️ steel-shell / 👻 decoy-ghost. The "?" button on the
+title and HUD opens a status legend so players don't need to memorise
+them.
+
+## Arena packs
+
+Five visually distinct arena packs roll randomly per match: jungle,
+frozen tundra, desert dunes, coral beach, kitsune shrine. Each ships
+its own skybox, fog tint, ground texture, and ~40-50 in-arena decor
+GLBs (palms, icebergs, cacti, corals, torii). The countdown waits for
+the pack assets to settle before "GO!" so the match never starts on
+a bare floor.
 
 **Local achievement system** (BADGES) — 16 WWE-style belts
 (9 per-critter Champions + 7 global trophies like Speedrun / Iron

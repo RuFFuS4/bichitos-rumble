@@ -52,26 +52,66 @@ reads physical keys directly.
 Full key → action table in [`RULES.md`](RULES.md).
 
 ## Combat
-- **Headbutt**: 0.2s lunge forward, applies directional knockback force, 0.5s cooldown
-- **Abilities**: Each critter has 2 unique special abilities (J and K), independent cooldowns
-- **Mass**: affects knockback received (heavier = harder to move). Abilities can modify effective mass.
-- **Collision**: all critters push each other on overlap, headbutts amplify force 2.5x
+- **Headbutt**: 0.2 s lunge forward, applies directional knockback,
+  0.5 s cooldown. Per-critter `headbuttBoost` scales the impact
+  (Trunk ×3, Sebastian ×1.45, Cheeto ×1.30, Sergei/Kowalski ×1.20-1.40).
+- **Abilities**: Each critter has 3 active abilities (J / K / L)
+  with independent cooldowns. L is the "ultimate"-feel slot.
+- **Mass**: affects knockback received (heavier = harder to move).
+  Abilities modify effective mass at activation time — Shelly's
+  Steel Shell anchors to ×9999, Sergei's Frenzy hardens to ×5.5,
+  Trunk's Stampede goes to ×4.5, etc.
+- **Collision**: critters push each other on overlap; headbutts
+  amplify force ~2.5×; collision response uses mass-ratio so heavy
+  vs. light reads correctly.
+- **Status**: stun (Trunk Grip), vulnerable (×2 incoming knockback
+  while stunned), slow (Sihans Quicksand, Kermit Poison Cloud),
+  frozen (Kowalski Snowball / Frozen Floor), confused (Kermit Toxic
+  Touch, inverts movement), sinkhole pull (Sihans). All sync online.
 
 ## Abilities (differentiated per critter)
-All 9 playable critters share **3 base ability types** applied with
-per-critter tuning:
-- `charge_rush` — directional dash with speed/mass multipliers.
-- `ground_pound` — AoE radial knockback with wind-up.
-- `frenzy` — temporary speed+mass buff (ultimate).
+Every critter has 3 active abilities sharing a small set of base
+types, each with per-critter tuning + flag-driven specialisation:
 
-Tuning values (impulse, radius, force, cooldown, multipliers, wind-up)
-are per-critter and live in `src/abilities.ts`. The perception of
-"each critter plays differently" comes from the combination of
-(speed, mass, headbuttForce) × (ability tunings) × procedural
-animation personality.
+- **charge_rush** (J slot for everyone) — directional dash with
+  speed/mass multipliers. Tuning: impulse, duration, multipliers.
+- **ground_pound** — AoE radial knockback with wind-up. Specialised
+  via flags: `gripK` (Trunk yank+stun), `coneAngleDeg` (Sebastian
+  frontal cone), `selfBuffOnly` (Shelly Steel Shell, Kurama Mirror
+  Trick decoy).
+- **blink** — instant teleport with optional zone-at-origin.
+  Specialised via `blinkSeekNearest` (Cheeto Shadow Step seeks the
+  closest target), `zoneAtOrigin` (Sihans Sand Trap leaves
+  quicksand behind).
+- **projectile** — server-authoritative travelling hit (Kowalski
+  Snowball).
+- **frenzy** (L slot for everyone) — base speed/mass buff plus an
+  L-flag dispatcher: `sawL`, `conePulseL`, `allInL`, `toxicTouchL`,
+  `frozenFloorL`, `sinkholeL`, `copycatL`. Each flag adds a
+  per-tick effect on top of the buff (saw-contact knockback, cone
+  pulses, lateral all-in dash, contact confusion, slippery zone,
+  real arena hole, copy-of-last-hit-target's L).
 
-Full kit tables + design-vs-placeholder gap: see
-[`CHARACTER_DESIGN.md`](CHARACTER_DESIGN.md).
+Per-character roles, full kit tables, and tuning values: see
+[`CHARACTER_DESIGN.md`](CHARACTER_DESIGN.md). Live tuning is in
+`src/abilities.ts` (offline) + `server/src/sim/abilities.ts`
+(online), kept byte-aligned via `scripts/verify-ability-parity.mjs`.
+
+## Status Effects
+Floating emoji glyphs render above each critter while a status
+applies. Top 3 by priority survive the diff. The `?` HUD button
+opens a full legend.
+
+| Glyph | Status | Source |
+|-------|--------|--------|
+| 💫 | stunned | Trunk Grip (rooted, 4 s) |
+| 💥 | vulnerable | post-stun ×2 incoming knockback |
+| ❄️ | frozen | Snowball hit / Frozen Floor zone |
+| 🛡️ | steel-shell | Shelly Steel Shell active |
+| 🔥 | frenzy | any L active post-windup |
+| ☠️ | poisoned | Kermit Poison Cloud / Toxic Touch confusion |
+| 🐌 | slowed | Sihans Quicksand zone |
+| 👻 | decoy-ghost | Kurama Mirror Trick caster |
 
 ## Arena
 

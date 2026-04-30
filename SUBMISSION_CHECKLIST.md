@@ -52,7 +52,7 @@
 - [x] 3D rotatable preview in character select (auto-fit uniform scale per critter via `max(h,w,d)` sampling over 900ms — all 9 read at ~1.9u regardless of Tripo vs Meshy source)
 - [x] **Matte-Meshy materials fixed** — `metalness=0 + roughness=0.7` forced whenever source PBR came in with `metalness>0.5`. Restores the flat-colour look from the Meshy visor.
 - [x] Skeletal animations populated for the roster — **9/9 completos** 🎉 (Cheeto 8/8, Kermit 7/8 + Hypnosapo procedural, Kowalski 8/8, Trunk 8/8, Shelly 6/8 + Shell Charge/Shell Shield procedurales, Kurama 8/8 via Meshy, Sebastian 6/8 + Claw Rush/Crab Slash procedurales via Meshy, Sihans 8/8 via Meshy, Sergei 8/8 via Meshy). User pipeline: Meshy AI + Tripo Animate → `scripts/import-critter.mjs`.
-- [x] **3 abilities per critter (J / K / L)** — Sergei's 3-slot kit is the design-final; the other 8 critters carry a themed `frenzy` placeholder as their ULTI (Trunk Stampede, Kermit Hypnosapo, Sihans Diggy Rush, Kowalski Blizzard, Cheeto Tiger Rage, Sebastian Red Claw). Client + server kits mirrored.
+- [x] **3 abilities per critter (J / K / L)** — **all 9 critters now ship signature L abilities** (Trunk Stampede battering ram, Kermit Toxic Touch confusion, Sihans Sinkhole real arena hole, Kowalski Frozen Floor slippery zone, Cheeto Cone Pulse channeled, Sebastian All-in side slash, Shelly Saw Shell spinning contact, Kurama Copycat mimics last-hit, Sergei Frenzy near-immovable berserk). Each L is flag-driven on top of the shared `frenzy` type so client + server stay parity-aligned. See `ABILITY_QA_CHECKLIST.md` for the full list + tuning history.
 - [x] **Countdown drop desync'd** — critters hover at random altitudes (10–16u) with per-index delay (player instant, bots staggered 0.15–0.35s each) and play their `fall` clip under gravity, snapping to `idle` on landing.
 - [x] **Offline pause menu** — ESC during `phase === 'playing'` (vs-bots only) opens a card with Resume / Restart / Quit-to-title. Freezes input + bots + physics; online path unaffected.
 - [x] **"Press P" portal hint** — sprite floats above each portal when it's minimized (inverse opacity to the main label), switches to "TAP 🌀" on touch devices.
@@ -60,9 +60,16 @@
 - [x] **Top-centre hero cluster** — timer 44px gold + Alive count uppercase letter-spaced. Readable from arm's length.
 - [x] **Sprite system + AI-generated icons** — `/images/hud-icons.png` (4×7 grid, 26 icons) and `/images/ability-icons.png` (3×9 grid, 27 icons) preloaded by `main.ts`. Body classes `has-hud-sprites` / `has-ability-sprites` activate sprites only on load; emoji fallbacks stay on if the asset 404s. First integration live: abilities in character-select info pane + cooldown HUD. Hearts / bot-mask / belts-trophy / SFX / music icons pending next tanda.
 - [x] **Favicon** — `/favicon-br.png` (AI-generated BR mark) as primary, previous SVG kept as fallback.
-- [ ] Signature per-critter abilities (6 out of 9 ULTIs are `frenzy` placeholders; gap tracked in CHARACTER_DESIGN.md)
-- [ ] Particle effects (beyond shockwave rings)
-- [ ] Remaining sprite integrations (hearts, bot-mask, belts, sfx/music icons, critter-head fallbacks)
+- [x] **5 themed arena packs** with skybox + ground texture + 40-50 in-arena decor GLBs each (jungle / frozen_tundra / desert_dunes / coral_beach / kitsune_shrine). Per-pack uniform decoration scaling so the largest prop hits ≈ 2.5× critter height for stronger pack identity.
+- [x] **Scene-ready countdown gate** — "Preparing arena…" overlay holds the 3-2-1 sequence until skybox / ground / decor GLBs settle (or 2.5 s timeout). Eliminates the "GO! → decor pops in mid-fight" pop-in.
+- [x] **Status effect HUD** — emoji glyphs above each critter (frozen / slowed / poisoned / stunned / vulnerable / frenzy / steel-shell / decoy-ghost), top-3 by priority, diff-rendered DOM overlay. `?` button opens an always-available legend.
+- [x] **Sihans Sinkhole real hole** — L knocks out actual arena fragments under the disc (server-authoritative, broadcast `arenaFragmentsKilled`). Critters standing on the broken fragments fall to void. Centre immune fragment protected at 3 layers.
+- [x] **Kurama Copycat HUD indicator** — when Kurama hits an enemy, a small portrait of the target appears in her L slot so she knows whose ultimate she'll mimic if she fires now.
+- [x] **Persistent online identity** — device-scoped `playerIdentityId` + token in `localStorage` (no login). Server uses it for the Online Belts ledger and rejects a second tab joining the same room with the same identity (clear error toast: "this nickname is already active in another tab").
+- [x] **Server admin scripts** for player table cleanup — `npm run admin:list-players`, `admin:player-stats`, `admin:delete-test`, `admin:delete-pattern`, `admin:reset-players` (in `server/scripts/admin-players.mjs`).
+- [x] Signature per-critter abilities — 9/9 L abilities authored and parity-verified (was 3/9 placeholders in the early build).
+- [ ] Particle effects (beyond shockwave rings) — POST-JAM
+- [ ] Remaining sprite integrations (hearts, bot-mask, belts, sfx/music icons, critter-head fallbacks) — POST-JAM
 
 ### Skeletal state policy (congelada 2026-04-21)
 - **8 estados target** por bichito: `idle`, `run`, `ability_1`,
@@ -92,11 +99,17 @@
 - [x] `vercel.json` with SPA rewrites config
 - [x] `vite.config.ts` with `base: './'` (relative asset paths) + multi-entry (`index.html` + `tools.html`)
 - [x] Client build verified locally (`npm run build`)
-  - main game bundle: ~3 kB (entry)
-  - shared chunk: ~840 kB (Three.js + Colyseus.js + game logic)
-  - index.html: ~34 kB
-  - tools chunk: ~37 kB (internal dev lab, separate entry)
-  - music assets: ~3 MB (intro/ingame/special MP3 in `public/audio/`)
+  - index.html: ~96 kB / 22 kB gzip
+  - main bundle: ~108 kB / 34 kB gzip (game logic + HUD + critter pipeline)
+  - three.js chunk: ~628 kB / 158 kB gzip (cached across deploys)
+  - colyseus.js chunk: ~127 kB / 39 kB gzip
+  - model-loader + critter chunks: ~170 kB combined
+  - critter GLBs: ~58 MB total (loaded on demand, browser-cached
+    via `Cache-Control: max-age=31536000, immutable` per pack)
+  - arena pack GLBs: ~88 MB total (5 packs, decor + skyboxes)
+  - music: ~2.9 MB (intro / ingame / special MP3, lazy-loaded)
+  - **dist post-build: ~240 MB total** (down from 2.7 GB before
+    `clean-dist-raw.mjs` postbuild — see commit `df1cb5c`)
 - [x] Vercel project connected (auto-deploy from GitHub: main → prod, dev → preview)
 - [x] Custom domain `www.bichitosrumble.com` aliased to production
 - [x] Server autodeploy to Railway
