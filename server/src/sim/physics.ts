@@ -123,10 +123,12 @@ export function resolveCollisions(
         const ratioA = massB / (massA + massB);
         const ratioB = massA / (massA + massB);
 
-        // 2026-04-29 — Trunk Grip vulnerability ×2 knockback
-        // multiplier on whichever side is currently stunned.
-        const aVulnMul = a.stunTimer > 0 ? 2 : 1;
-        const bVulnMul = b.stunTimer > 0 ? 2 : 1;
+        // 2026-05-01 final — Trunk Grip/Slam vulnerability ×4 on the
+        // stunned side (was ×2). Mirrors client physics. Currently
+        // only Trunk's K+L write `stunTimer > 0`; safe to bump
+        // globally without disturbing other critters.
+        const aVulnMul = a.stunTimer > 0 ? 4 : 1;
+        const bVulnMul = b.stunTimer > 0 ? 4 : 1;
         if (a.isHeadbutting) {
           b.vx += nx * force * ratioB * bVulnMul;
           b.vz += nz * force * ratioB * bVulnMul;

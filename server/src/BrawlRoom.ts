@@ -884,7 +884,9 @@ export class BrawlRoom extends Room<GameState> {
           while (data.pulseAccum >= interval) {
             data.pulseAccum -= interval;
             data.pulseCount++;
-            const ramp = 1 + (data.pulseCount - 1) * 0.5;
+            // 2026-05-01 last-minute — doubling ramp capped at 8×.
+            // Pulse N: base × min(2^(N-1), 8). Mirrors offline.
+            const ramp = Math.min(Math.pow(2, data.pulseCount - 1), 8);
             const halfCone = ((lDef.pulseAngleDeg ?? 45) * Math.PI) / 180;
             const cosCone = Math.cos(halfCone);
             const facingX = Math.sin(p.rotationY);
@@ -1039,9 +1041,11 @@ export class BrawlRoom extends Room<GameState> {
       // 2026-05-01 — sweep + record hitT so the caster can teleport
       // INTO the resolution. Without this, the dash was just a
       // remote-effect knockback while Sebastian stood still.
+      // 2026-05-01 last-minute — SAMPLES 12 → 18 + reach margin
+      // 0 → 0.55 to make the slash hittable. Mirrors offline.
       let hitVictim: PlayerSchema | null = null;
       let hitT = 0;
-      const SAMPLES = 12;
+      const SAMPLES = 18;
       for (let i = 1; i <= SAMPLES && !hitVictim; i++) {
         const t = (i / SAMPLES) * range;
         const sx = p.x + dx * t;
@@ -1051,7 +1055,7 @@ export class BrawlRoom extends Room<GameState> {
           if (other.immunityTimer > 0) continue;
           const odx = other.x - sx;
           const odz = other.z - sz;
-          const reach = 0.55 + 0.55;
+          const reach = 0.55 + 0.55 + 0.55;
           if (odx * odx + odz * odz <= reach * reach) {
             hitVictim = other;
             hitT = t;

@@ -241,24 +241,34 @@ for (const [name, e] of Object.entries(expected)) {
   }
 }
 
-// Sentinels — 2026-05-01 microfix retuned values.
-//   · Trunk: gripStun 4.0 (kept), L speed 1.65 → 1.85, mass 4.50 → 6.00
-//     (Stampede now ramming + heavier; Grip range 6 → 28).
-//   · Sergei: K 3.5 / 68 unchanged, L speed 1.55 unchanged, mass 5.50.
+// Sentinels — 2026-05-01 last-minute retuned values.
+//   · Trunk: K is now Slam (radius 7, force 50, slamStunDuration 1.0).
+//     L is Grip (gripStunDuration 5.0). No more frenzy on Trunk.
+//   · Sergei: K 3.5 / 68 unchanged, L frenzy speed 1.55, mass 5.50.
 const sentinels = {
-  Trunk:  { gripStun: 4.0, L: { spd: 1.85, mass: 6.00 } },
+  Trunk:  { trunkRedesign: true, K: { rad: 7.0, frc: 50, slamStun: 1.0 }, L: { gripStun: 5.0 } },
   Sergei: { K: { rad: 3.5, frc: 68 }, L: { spd: 1.55, mass: 5.50 } },
 };
 for (const [name, e] of Object.entries(sentinels)) {
   const cliBlock = findCriterBlock(cli, name);
   const srvBlock = findCriterBlock(srv, name);
-  if (e.gripStun !== undefined) {
-    const cliG = pickFirst(cliBlock, /gripStunDuration:\s*([\d.]+)/);
-    const srvG = pickFirst(srvBlock, /gripStunDuration:\s*([\d.]+)/);
-    const cliS = pickFirst(cliBlock, /makeFrenzy\(\{[\s\S]*?speedMultiplier:\s*([\d.]+)/);
-    const srvS = pickFirst(srvBlock, /type:\s*'frenzy'[\s\S]*?frenzySpeedMult:\s*([\d.]+)/);
-    const matches = cliG === e.gripStun && srvG === e.gripStun && cliS === e.L.spd && srvS === e.L.spd;
-    console.log(`${name.padEnd(10)} sentinel  gripStun cli/srv ${cliG}/${srvG}  L spd cli/srv ${cliS}/${srvS}  ${matches ? 'OK' : 'FAIL'}`);
+  if (e.trunkRedesign) {
+    // Trunk K: makeGroundPound radius+force+slamStunDuration.
+    const cliR = pickFirst(cliBlock, /makeGroundPound\(\{[\s\S]*?radius:\s*([\d.]+)/);
+    const srvR = pickFirst(srvBlock, /type:\s*'ground_pound'[\s\S]*?radius:\s*([\d.]+)/);
+    const cliF = pickFirst(cliBlock, /makeGroundPound\(\{[\s\S]*?force:\s*([\d.]+)/);
+    const srvF = pickFirst(srvBlock, /type:\s*'ground_pound'[\s\S]*?force:\s*([\d.]+)/);
+    const cliSlam = pickFirst(cliBlock, /slamStunDuration:\s*([\d.]+)/);
+    const srvSlam = pickFirst(srvBlock, /slamStunDuration:\s*([\d.]+)/);
+    // Trunk L: gripStunDuration in second ground_pound entry.
+    const cliGrip = pickFirst(cliBlock, /gripStunDuration:\s*([\d.]+)/);
+    const srvGrip = pickFirst(srvBlock, /gripStunDuration:\s*([\d.]+)/);
+    const matches =
+      cliR === e.K.rad && srvR === e.K.rad &&
+      cliF === e.K.frc && srvF === e.K.frc &&
+      cliSlam === e.K.slamStun && srvSlam === e.K.slamStun &&
+      cliGrip === e.L.gripStun && srvGrip === e.L.gripStun;
+    console.log(`${name.padEnd(10)} sentinel  K rad/frc/slamStun cli/srv ${cliR}/${cliF}/${cliSlam}  ${srvR}/${srvF}/${srvSlam}  L gripStun cli/srv ${cliGrip}/${srvGrip}  ${matches ? 'OK' : 'FAIL'}`);
     if (!matches) ok = false;
     continue;
   }

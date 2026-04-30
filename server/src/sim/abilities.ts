@@ -79,9 +79,13 @@ export interface AbilityDef {
   sawL?: boolean;
   sawContactImpulse?: number;
   sawSpinSpeed?: number;
-  // 2026-05-01 — Trunk Stampede ramming.
+  // 2026-05-01 — Trunk Stampede ramming (retired in the same-day
+  // final pass when Trunk L was rebuilt as Grip; flags kept on the
+  // interface for future reuse).
   rammingL?: boolean;
   ramContactImpulse?: number;
+  // 2026-05-01 final — Trunk Slam K brief-stun on hit.
+  slamStunDuration?: number;
   conePulseL?: boolean;
   pulseInterval?: number;
   pulseRadius?: number;
@@ -174,22 +178,24 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // impulse 25 → 32, duration 0.42 → 0.55, speedMult 2.1 → 2.4.
     { type: 'charge_rush',  cooldown: 4.5, duration: 0.55, windUp: 0.08,
       impulse: 32, speedMultiplier: 2.4, massMultiplier: 4.0 },
-    // 2026-05-01 microfix — Grip range 6 → 28 (4.7×) + cone 50° →
-    // 35° para mantener "frontal preciso largo" sin volverse global.
-    { type: 'ground_pound', cooldown: 7.5, duration: 0.05, windUp: 0.40,
+    // 2026-05-01 final REDESIGN — Trunk K is now Trunk Slam: wide
+    // AoE radial knockback (radius 7, force 50) + brief 1 s stun
+    // on every hit critter via slamStunDuration. Replaces the
+    // previous Grip K — Grip moved to L.
+    { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.30,
+      radius: 7.0, force: 50, ...ROOTED_K,
+      slamStunDuration: 1.0 },
+    // 2026-05-01 final — Trunk Grip moved here. Yank to 1.6 u in
+    // front + stun 5 s. While stunned, target receives × 4
+    // incoming knockback (handled in physics). Reads as "grab,
+    // helpless, finish".
+    { type: 'ground_pound', cooldown: 18.0, duration: 0.05, windUp: 0.45,
       radius: 0, force: 0, ...ROOTED_K,
       gripK: true,
       gripFrontalRange: 28.0,
       gripFrontalAngleDeg: 35,
       gripPullDistance: 1.6,
-      gripStunDuration: 4.0 },
-    // 2026-05-01 microfix — Stampede ahora ramming. speedMult 1.65
-    // → 1.85, massMult 4.50 → 6.00, + flag rammingL con
-    // ramContactImpulse 55. Cualquier contacto durante Stampede
-    // empuja al otro critter.
-    { type: 'frenzy',       cooldown: 20.0, duration: 4.0, windUp: 0.45,
-      frenzySpeedMult: 1.85, frenzyMassMult: 6.00,
-      rammingL: true, ramContactImpulse: 55 },
+      gripStunDuration: 5.0 },
   ],
 
   // --- Bloque C: 7 remaining playables ---
@@ -932,5 +938,11 @@ function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: Play
     const falloff = 1 - dist / radius;
     other.vx += nx * force * falloff;
     other.vz += nz * force * falloff;
+    // 2026-05-01 final — Trunk Slam K applies brief stun to every
+    // critter inside the radial AoE via `slamStunDuration`. Stuns
+    // compose with the ×4 vulnerable multiplier in physics.
+    if (def.slamStunDuration && def.slamStunDuration > 0) {
+      other.stunTimer = Math.max(other.stunTimer, def.slamStunDuration);
+    }
   }
 }

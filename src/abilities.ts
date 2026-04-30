@@ -229,15 +229,22 @@ export interface AbilityDef {
   sawContactImpulse?: number;
   sawSpinSpeed?: number;
 
-  /** 2026-05-01 — Trunk Stampede ramming flag. Symmetric to sawL:
-   *  while frenzy is active post-windup, any contact between Trunk
-   *  and another non-immune non-falling critter applies a strong
-   *  outward impulse to the OTHER critter on top of the normal
-   *  collision response. Combined with the Stampede mass × 6 multi-
-   *  plier this finally reads as "battering ram" instead of a
-   *  silent speed buff. */
+  /** Trunk Stampede ramming flag (legacy 2026-05-01 microfix —
+   *  retired in the same-day final pass when Trunk's L was rebuilt
+   *  around Grip. Kept on the interface so old kits can still set
+   *  the flag without breaking the type, and so the client/server
+   *  ramming branch can be reused if a future critter wants the
+   *  same shape. Not set on any current critter.) */
   rammingL?: boolean;
   ramContactImpulse?: number;
+
+  /** 2026-05-01 final — Trunk Slam K. When set on a ground_pound,
+   *  every critter inside the radial AoE additionally receives a
+   *  brief stun (`stunTimer = slamStunDuration`). Stuns from this
+   *  source compose with the global "stunned takes ×4 incoming
+   *  knockback" rule in physics — so Slam alone reads as a heavy
+   *  thump, but a Slam followed by a headbutt deletes the target. */
+  slamStunDuration?: number;
 
   /** Cheeto Cone Pulse: during frenzy, the caster is rooted
    *  (slowDuringActive 0). Every `pulseInterval` seconds the
@@ -692,59 +699,46 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       clipPlaybackRate: 4.5,
     }),
     makeGroundPound({
-      // v0.11 (Rafa: "no hace lo que debe hacer"): radius 4.5 → 4.8,
-      // force 40 → 48 + shakeBoost: true (camera shake × 1.4 al
-      // 2026-04-29 final-K REDESIGN — Trunk K renombrada a
-      // "Trunk Grip": agarra al enemigo frontal más cercano, lo
-      // tira hacia Trunk, y lo deja stuneado/vulnerable durante
-      // 2 s. Mientras está stunned, cualquier knockback recibido
-      // se duplica (vía `stunTimer > 0` en physics). Antes la K
-      // era un Earthquake radial que se solapaba con la L.
-      // Implementada como un ground_pound con `gripK: true` —
-      // reusa el dispatcher existente sin AbilityType nuevo.
-      name: 'Trunk Grip',
-      description: 'Yank a frontal target close — stuns and exposes them',
-      radius: 0, force: 0,
-      windUp: 0.40,
-      cooldown: 7.5,
+      // 2026-05-01 final REDESIGN (Rafa: "K = golpe amplio que
+      // stunee, similar a la ulti de Kowalski"). Trunk K is now
+      // a wide AoE slam: 7 u radius, 50 force, plus a brief 1 s
+      // stun on every hit critter via `slamStunDuration`. Replaces
+      // the previous Trunk Grip — that mechanic moved to L this
+      // pass.
+      name: 'Trunk Slam',
+      description: 'Wide AoE thump — knocks back and stuns briefly',
+      radius: 7.0,
+      force: 50,
+      windUp: 0.30,
+      cooldown: 7.0,
       clipPlaybackRate: 2.8,
+      slowDuringActive: 0, cancelAnimOnEnd: true,
+      shakeBoost: 1.4,
+      slamStunDuration: 1.0,
+    }),
+    makeGroundPound({
+      // 2026-05-01 final — Trunk Grip moved here (was Trunk K).
+      // Grabs the closest valid frontal enemy, snaps them to
+      // 1.6 u in front of Trunk, locks them in `stunTimer = 5 s`.
+      // While stunned, the global "vulnerable" rule in physics
+      // applies × 4 incoming knockback so a follow-up headbutt
+      // launches the target across the arena. Rafa's read: "I
+      // grab them with the trunk, leave them helpless, then
+      // finish them off."
+      name: 'Trunk Grip',
+      key: 'L',
+      description: 'Trunk pulls a target close — they take ×4 from any hit for 5 s',
+      radius: 0, force: 0,
+      windUp: 0.45,
+      cooldown: 18.0,
+      duration: 0.05,
       slowDuringActive: 0, cancelAnimOnEnd: true,
       shakeBoost: 1.0,
       gripK: true,
-      // 2026-05-01 microfix (Rafa: "rango 5-6× más amplio, cone
-      // frontal más estrecho para no ser injusto"). Range 6 → 28
-      // u (4.7×). Cone halved 50° → 35° so el reach largo solo
-      // afecta a quien esté CASI exactamente delante de Trunk —
-      // sigue siendo "agarre con trompa", no un imán global.
       gripFrontalRange: 28.0,
       gripFrontalAngleDeg: 35,
       gripPullDistance: 1.6,
-      // 2026-04-30 final-polish (Rafa: "stun debe durar 2 segundos
-      // más"): 2.0 → 4.0. Status icons 💫 + 💥 also follow this timer
-      // (computeCritterStatuses reads stunTimer > 0).
-      gripStunDuration: 4.0,
-    }),
-    makeFrenzy({
-      // 2026-05-01 microfix (Rafa: "Stampede sigue sin convencer"):
-      //   - speedMultiplier 1.65 → 1.85
-      //   - massMultiplier 4.50 → 6.00 (clash de masas brutal)
-      //   - new flag `rammingL: true` con `ramContactImpulse: 55` —
-      //     simétrico a Shelly Saw Shell pero para Trunk: cualquier
-      //     contacto durante Stampede aplica un impulso extra
-      //     radial sobre el otro critter, no solo el knockback
-      //     normal de colisión por mass-ratio. Esto asegura que
-      //     Stampede se SIENTE como un battering ram en vez de
-      //     "solo un buff invisible".
-      name: 'Stampede',
-      description: 'Battering-ram charge: every contact launches enemies',
-      duration: 4.0,
-      cooldown: 20.0,
-      windUp: 0.45,
-      speedMultiplier: 1.85,
-      massMultiplier: 6.00,
-      cancelAnimOnEnd: true,
-      rammingL: true,
-      ramContactImpulse: 55,
+      gripStunDuration: 5.0,
     }),
   ],
 
@@ -1358,6 +1352,14 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       other.vx += nx * def.force * falloff;
       other.vz += nz * def.force * falloff;
       applyImpactFeedback(other);
+      // 2026-05-01 final — Trunk Slam K applies a brief stun on
+      // every critter inside the AoE via `slamStunDuration`.
+      // Stuns from this source compose with the global ×4
+      // vulnerable rule in physics — Slam alone reads as a heavy
+      // thump, Slam → headbutt deletes the target.
+      if (def.slamStunDuration && def.slamStunDuration > 0 && !other.isImmune) {
+        other.stunTimer = Math.max(other.stunTimer, def.slamStunDuration);
+      }
       hitCount++;
     }
   }
@@ -1530,11 +1532,15 @@ export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scen
         while (state.acc >= interval) {
           state.acc -= interval;
           state.count++;
-          // Force ramp — first pulse base, each subsequent pulse
-          // hits 50 % harder. Catches up to a target that the prior
-          // pulse already pushed away. With 6 pulses over 1.8 s the
-          // last one is base × 3.5 — brutal but read-as-finisher.
-          const ramp = 1 + (state.count - 1) * 0.5;
+          // 2026-05-01 last-minute (Rafa: "duplicar fuerza por
+          // pulso"): doubling ramp capped at 8×. Pulse N uses
+          // base × min(2^(N-1), 8). With 6 pulses over 1.8 s:
+          //   1, 2, 4, 8, 8, 8 — the cap stops the late pulses
+          // from being absurd while still doubling on the first
+          // four. The maxSpeed cap clamps actual velocity, so
+          // the doubling reads more as escalating SHOCK than
+          // ever-bigger displacement.
+          const ramp = Math.min(Math.pow(2, state.count - 1), 8);
           const effectiveForce = baseForce * ramp;
           for (const other of critters) {
             if (other === c || !other.alive || other.falling) continue;
@@ -1911,6 +1917,33 @@ function fireFrenzy(def: AbilityDef, critter: Critter, _all: Critter[], scene: T
       def.floorRadius ?? 6.0, def.floorDuration ?? 5.0,
       0x6cc9ff, 0xffffff, 'ice');
   }
+  // 2026-05-01 last-minute — Sebastian All-in trajectory preview.
+  // Ground line from Sebastian to the chosen lateral edge endpoint
+  // so the player can see WHERE he's about to commit before the
+  // dash fires. The line lives `duration` seconds (= the rooted
+  // windup window) and fades out with the resolution.
+  if (def.allInL) {
+    const range = def.allInDashRange ?? 9;
+    const right: [number, number] = [
+      Math.cos(critter.mesh.rotation.y),
+      -Math.sin(critter.mesh.rotation.y),
+    ];
+    const left: [number, number] = [-right[0], -right[1]];
+    const radEnd = (dx: number, dz: number) => {
+      const ex = critter.x + dx * range;
+      const ez = critter.z + dz * range;
+      return Math.sqrt(ex * ex + ez * ez);
+    };
+    const dir = radEnd(right[0], right[1]) >= radEnd(left[0], left[1]) ? right : left;
+    spawnAllInTrajectoryPreview(
+      scene,
+      critter.x, critter.z,
+      dir[0], dir[1],
+      range,
+      def.duration ?? 1.0,
+    );
+  }
+
   if (def.sinkholeL) {
     const offset = def.holeCastOffset ?? 4.0;
     let cx = critter.x + Math.sin(critter.mesh.rotation.y) * offset;
@@ -2097,9 +2130,15 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
   // yes/no" — Sebastian never actually moved. Now we use the hitT
   // distance to TELEPORT him into the resolution, so the slash reads
   // as a real lateral commit instead of a magic effect-from-afar.
+  // 2026-05-01 last-minute (Rafa: "muy difícil acertar"): SAMPLES
+  // 12 → 18 + reach widened with a `+ 0.55` margin so a target
+  // dancing just outside the perfect dash line still gets caught.
+  // Combined with the trajectory preview painted at activation, the
+  // L is now readable AND hittable while keeping the miss = void
+  // punishment.
   let hit: Critter | null = null;
   let hitT = 0;
-  const SAMPLES = 12;
+  const SAMPLES = 18;
   for (let i = 1; i <= SAMPLES && !hit; i++) {
     const t = (i / SAMPLES) * range;
     const sx = critter.x + dirX * t;
@@ -2109,7 +2148,7 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
       if (other.isImmune) continue;
       const odx = other.x - sx;
       const odz = other.z - sz;
-      const reach = critter.radius + other.radius;
+      const reach = critter.radius + other.radius + 0.55;
       if (odx * odx + odz * odz <= reach * reach) {
         hit = other;
         hitT = t;
@@ -2293,6 +2332,103 @@ export function spawnFrenzyBurst(scene: THREE.Scene, x: number, z: number, opts?
       flashGeo.dispose();
       flashMat.dispose();
     }
+  }
+  requestAnimationFrame(animate);
+}
+
+// ---------------------------------------------------------------------------
+// VFX: Sebastian All-in trajectory preview
+// ---------------------------------------------------------------------------
+
+/**
+ * 2026-05-01 last-minute — Sebastian All-in trajectory preview. A
+ * crimson ground line drawn from Sebastian's origin to the chosen
+ * lateral edge endpoint, used during the 1 s rooted windup so the
+ * player can SEE which way the slash will commit before pressing
+ * any input. Fades in fast (~120 ms), holds for the bulk of the
+ * windup, fades out at resolution.
+ *
+ * Pure visual — pulled into `fireFrenzy` when `def.allInL` is true.
+ * Cleans up after `ttl` seconds; no per-frame state hung off
+ * Critter.
+ */
+function spawnAllInTrajectoryPreview(
+  scene: THREE.Scene,
+  originX: number,
+  originZ: number,
+  dirX: number,
+  dirZ: number,
+  range: number,
+  ttl: number,
+): void {
+  // Plane sized to the dash. Width is ~0.7 u so it reads as a
+  // committed strip, not a hairline. Depth (range) is the literal
+  // dash length so the player can read distance.
+  const width = 0.75;
+  const length = range;
+  const geo = new THREE.PlaneGeometry(width, length);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xcc3333,
+    transparent: true,
+    opacity: 0.0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2; // lay on the ground
+  // The plane's local +Y direction (after the -π/2 X-rotation) lines
+  // up with WORLD +Z. We need it pointing along (dirX, dirZ), so
+  // rotate around Z by the angle between (0, 1) and (dirX, dirZ).
+  const angleZ = Math.atan2(dirX, dirZ);
+  mesh.rotation.z = angleZ;
+  mesh.position.set(
+    originX + dirX * length * 0.5,
+    0.02, // a hair above the ground to avoid z-fight
+    originZ + dirZ * length * 0.5,
+  );
+  scene.add(mesh);
+
+  // Inner accent — narrower bright stripe down the middle so the line
+  // reads even against busy decor.
+  const innerGeo = new THREE.PlaneGeometry(width * 0.35, length);
+  const innerMat = new THREE.MeshBasicMaterial({
+    color: 0xffe066,
+    transparent: true,
+    opacity: 0.0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const innerMesh = new THREE.Mesh(innerGeo, innerMat);
+  innerMesh.rotation.x = -Math.PI / 2;
+  innerMesh.rotation.z = angleZ;
+  innerMesh.position.set(
+    originX + dirX * length * 0.5,
+    0.025,
+    originZ + dirZ * length * 0.5,
+  );
+  scene.add(innerMesh);
+
+  const startTime = performance.now();
+  const totalMs = ttl * 1000;
+  const fadeInMs = 120;
+  const fadeOutMs = 200;
+  function animate(): void {
+    const elapsed = performance.now() - startTime;
+    if (elapsed >= totalMs) {
+      scene.remove(mesh);
+      scene.remove(innerMesh);
+      geo.dispose();
+      mat.dispose();
+      innerGeo.dispose();
+      innerMat.dispose();
+      return;
+    }
+    let alpha = 1.0;
+    if (elapsed < fadeInMs) alpha = elapsed / fadeInMs;
+    else if (elapsed > totalMs - fadeOutMs) alpha = (totalMs - elapsed) / fadeOutMs;
+    mat.opacity = 0.55 * alpha;
+    innerMat.opacity = 0.85 * alpha;
+    requestAnimationFrame(animate);
   }
   requestAnimationFrame(animate);
 }

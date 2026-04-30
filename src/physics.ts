@@ -92,9 +92,14 @@ export function resolveCollisions(critters: Critter[]): void {
         const massRatioA = b.effectiveMass / (a.effectiveMass + b.effectiveMass);
         const massRatioB = a.effectiveMass / (a.effectiveMass + b.effectiveMass);
 
-        // 2026-04-29 — Trunk Grip vulnerability ×2 knockback on the stunned side.
-        const aVuln = a.stunTimer > 0 ? 2 : 1;
-        const bVuln = b.stunTimer > 0 ? 2 : 1;
+        // 2026-05-01 final — Trunk Grip / Slam vulnerability ×4 on the
+        // stunned side (was ×2 in earlier passes). Trunk's L now leaves
+        // a target stunned for 5 s and a follow-up headbutt should send
+        // them flying, so we crank the modifier. Currently only Trunk
+        // (Slam K + Grip L) writes `stunTimer > 0`; safe to bump
+        // globally without affecting other critters' tunings.
+        const aVuln = a.stunTimer > 0 ? 4 : 1;
+        const bVuln = b.stunTimer > 0 ? 4 : 1;
         if (a.isHeadbutting) {
           b.vx += nx * force * massRatioB * bVuln;
           b.vz += nz * force * massRatioB * bVuln;
