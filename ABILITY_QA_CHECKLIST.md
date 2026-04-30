@@ -7,8 +7,31 @@ Status legend:
 - `[!]` problema detectado / requiere ajuste / NO se cierra antes de la entrega
 - `[~⚠]` implementado con simplificación documentada (versión fiel al espíritu, no idéntica al diseño)
 
-Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish + 2026-04-30 final-L (deadline candidate).
+Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish + 2026-04-30 final-L + 2026-04-30 final-polish (deadline candidate).
 Use `git log --grep abilities` to see the commit trail behind each item.
+
+> **Final polish pass (2026-04-30 — pre-deadline). Todos `[~]` pendientes de validación de Rafa:**
+>
+> Cambios per-personaje:
+> - **Trunk** — headbuttBoost 1.0 → **3.0** (×3 sensación de cabezazo). J Ram: impulse 25→32, dur 0.42→0.55, speedMult 2.1→2.4 (recorre ~el doble). K Grip: stunDuration 2.0→**4.0** (+2 s). L Stampede: dur 3.0→4.0, speed 1.35→1.65, **mass 2.10 → 4.50** (battering ram), CD 18→20.
+> - **Sergei** — L mass **1.75 → 5.50** (casi inamovible bajo frenzy, mass-ratio en physics ≈ 15 % del knockback recibido). No es invuln, es aguante.
+> - **Shelly L Saw Shell** — sawContactImpulse **32 → 90** (expulsa brutalmente). Añadido `cancelAnimOnEnd: true` para cortar clip al terminar el spin. Base rotation ya restaurada vía `baseGlbRotationY` (fix anterior).
+> - **Kowalski L Frozen Floor** — floorRadius **6 → 8**, floorDuration **5 → 7** (área mayor + 2 s).
+> - **Kurama K Mirror Trick** — `slowDuringActive` 0 → **1.0** (Kurama puede moverse durante el clon). Decoy ahora snapshot world transform SYNC antes del teleport — el clon aterriza en la posición de cast aunque el clone async resuelva después.
+> - **Kurama L Copycat HUD** — `setCopycatTarget(critterName)` agrega un sub-icono circular en el slot L cuando el local player es Kurama y `lastHitTargetCritter` es válido. Reusa sprite-hud-{critter} del selector.
+> - **Cheeto L Cone Pulse** — pulseForce 28→40, pulseRadius 4.5→5.5, frenzyMassMult 1.05→**4.0** (anclado durante el channel). Cada pulso ahora spawnea VFX (shockwave ring + camera shake + sound), antes era invisible.
+> - **Sebastian L All-in** — dirección lateral ahora elige el lado (right/left of facing) que LLEVA AL BORDE más cercano. Hit: force 60→**100** + Sebastian hard-stop (vx/vz=0). Miss: dashRange 5.5→7.0 + missSelfForce 38→**110** SET (no add) — sobrepasa el cap de maxSpeed → cae al void.
+> - **Sihans L Sinkhole REAL HOLE** — al disparar, `arena.killFragmentIndices(getAliveFragmentsInDisc(...))` rompe los fragmentos bajo el disco del agujero. Centro inmune protegido a 3 capas (offset clamp + immune flag check + secondary check). Server picks indices, broadcasts via nuevo `arenaFragmentsKilled` event; cliente mirrors via `onArenaFragmentsKilled`.
+>
+> Cambios sistémicos:
+> - **Status icons cleanup** — emparejado `disposeCritterStatus(c)` con cada `c.dispose()` en game.ts (8 sites). `clearAllCritterStatus()` añadido a `enterCharacterSelect` y `enterEnded`. Loop principal en main.ts skipea `setCritterStatus`/`updateAllStatusPositions` cuando `!game.isMatchPlaying()` — sin re-add post-end-screen.
+> - **Online waiting room thumbnails** — `getCritterThumbnail` ahora carga animations + tickea idle clip 0.5 s antes del PNG snapshot, para que las miniaturas no salgan en T-pose.
+>
+> Sentinels actualizados:
+> - Trunk: gripStun 4.0, L spd 1.65, mass 4.50.
+> - Sergei: L mass 5.50.
+> - Cheeto: L mass 4.0.
+> Parity script pasa todos los checks.
 
 > **Out-of-scope but cerrado entre tomas (no es habilidad pero estaba bloqueando QA visual):**
 > - **Skybox 360 final** (`b054e96`). Cuatro iteraciones (camera-parented sphere → world-anchored sphere PBR → backdrop toggle hacks → cortes verticales en bordes) fallaron por interacciones entre depth/transparency/grazing-angle. Solución definitiva: `scene.background = equirectTexture` con `EquirectangularReflectionMapping` — pre-pass built-in de Three.js, full-screen guaranteed, sin meshes ni z-buffer involucrado. Eliminados: skydome esférico, backdrop screen-space, cloudsBelow plano. Las 5 panorámicas en `public/images/skyboxes/<id>.png` se enchufan vía `setSceneSkyboxTexture`.
