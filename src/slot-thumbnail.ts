@@ -13,7 +13,7 @@
 
 import * as THREE from 'three';
 import type { RosterEntry } from './roster';
-import { loadModel } from './model-loader';
+import { loadModelWithAnimations } from './model-loader';
 
 const THUMB_SIZE = 128; // px — rendered square, downscaled visually in CSS
 
@@ -73,7 +73,7 @@ export function getCritterThumbnail(entry: RosterEntry): Promise<string | null> 
       initSharedScene();
       if (!renderer || !scene || !camera || !holder) return null;
 
-      const glb = await loadModel(entry.glbPath!);
+      const { scene: glb, animations } = await loadModelWithAnimations(entry.glbPath!);
       glb.scale.setScalar(entry.scale);
       glb.rotation.y = entry.rotation;
       glb.position.set(entry.offset[0], entry.offset[1] + entry.pivotY, entry.offset[2]);
@@ -92,6 +92,27 @@ export function getCritterThumbnail(entry: RosterEntry): Promise<string | null> 
         });
       }
       holder.add(glb);
+
+      // 2026-04-30 final-polish — drive the idle clip for ~0.5 s
+      // before snapping the thumbnail. Without this, the GLB renders
+      // in BIND POSE (T-pose for Mixamo / arms-out for Tripo) which
+      // looks broken in the online waiting room. Picking the
+      // best-named idle clip is a soft heuristic — fall back to the
+      // first clip if none matches; if no clips ship with the GLB,
+      // we render bind pose and live with it (rare — only true
+      // procedural-only critters, none currently in roster).
+      const idleClip = animations.find((c) => /idle|breath|stand/i.test(c.name))
+        ?? animations[0]
+        ?? null;
+      if (idleClip) {
+        const mixer = new THREE.AnimationMixer(glb);
+        const action = mixer.clipAction(idleClip);
+        action.play();
+        // Advance to a non-zero pose. 0.5 s is well into the loop for
+        // most idles (~1.5 s typical) so the silhouette reads "alive".
+        mixer.update(0.5);
+        glb.updateMatrixWorld(true);
+      }
 
       renderer.render(scene, camera);
       const url = renderer.domElement.toDataURL('image/png');
