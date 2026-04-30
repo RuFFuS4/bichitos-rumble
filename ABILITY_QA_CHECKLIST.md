@@ -7,8 +7,21 @@ Status legend:
 - `[!]` problema detectado / requiere ajuste / NO se cierra antes de la entrega
 - `[~⚠]` implementado con simplificación documentada (versión fiel al espíritu, no idéntica al diseño)
 
-Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish + 2026-04-30 final-L + 2026-04-30 final-polish (deadline candidate).
+Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish + 2026-04-30 final-L + 2026-04-30 final-polish + 2026-05-01 microfixes (deadline candidate).
 Use `git log --grep abilities` to see the commit trail behind each item.
+
+> **Microfix pass (2026-05-01 — submit-day). Todos `[~]` pendientes de validación de Rafa:**
+>
+> - **Sebastian L** All-in ahora teleporta de verdad: HIT → posición justo antes de la víctima + velocidad cero (control vuelve limpio); MISS → endpoint × 1.5 más allá del rim + velocidad outward 130 (cae al void). Range 7 → 9, hitForce 100 → 110, missSelfForce 110 → 130. Cliente + server.
+> - **Cheeto L** Cone Pulse ramp: pulso N usa `base × (1 + (N - 1) × 0.5)` — primero 1.0×, último 3.5×. Rising-edge reset del contador en cada activación (antes el segundo cast heredaba count stale). Radius 5.5 → 6.5 (catches escapees), force base 40 → 36. Cliente + server.
+> - **Kurama K** alpha de invisibilidad 0.25 → 0.08 (casi invisible). Online sync nuevo: `handleAbilityFired` ahora spawnea decoy + setea `invisibilityTimer` en remotos cuando se detecta Kurama K. Pre-fix la invisibilidad era caster-local-only.
+> - **Kurama L** Copycat UI: portrait swap → disco de color con la inicial del bichito target + tooltip. Más legible que el sprite-mini.
+> - **Trunk K** range 6 → 28 u (4.7×) + cone half-angle 50° → 35° (frontal preciso largo, no global magnet). Cliente + server.
+> - **Trunk L** Stampede ahora ramming: nuevo flag `rammingL: true` con `ramContactImpulse: 55` (simétrico a sawL). Cualquier contacto durante Stampede aplica impulso outward al otro critter. Mass 4.50 → 6.00, speed 1.65 → 1.85. Cliente + server.
+> - **HUD sprites** activados (no afectan gameplay): SFX/music toggle, lives hearts (con skull para eliminados), bot-mask badge en lives HUD + waiting room, end screen crown/skull/trophy. Todos con emoji fallback si la sheet 404a.
+>
+> Sentinels actualizados: Trunk L spd 1.85 / mass 6.00. Sergei sin cambios.
+> Parity: ALL PASSED.
 
 > **Final polish pass (2026-04-30 — pre-deadline). Todos `[~]` pendientes de validación de Rafa:**
 >

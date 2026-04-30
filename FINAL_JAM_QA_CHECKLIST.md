@@ -4,7 +4,7 @@
 > Tick items only when you've personally verified them on the **production**
 > URL ([https://www.bichitosrumble.com](https://www.bichitosrumble.com)) — local dev passes don't count.
 >
-> Build under test: `7293266` (or later — check `git log -1` and confirm Vercel
+> Build under test: `5d2d321` (or later — check `git log -1` and confirm Vercel
 > shows the same hash deployed).
 >
 > Symbol legend:
@@ -202,6 +202,19 @@
 - [ ] Datos de producción saneados o documentados (sección 12).
 
 ---
+
+## Microfixes 2026-05-01 (verificar específicamente)
+
+> Estos seis bullets cambiaron en `fce9bd5` + `5d2d321`. Revísalos
+> antes del go-final aunque las secciones 5-8 ya los cubran.
+
+- [ ] **Sebastian L**: hit → enemigo vuela + Sebastian se PARA + control vuelve limpio. Miss → Sebastian sale al void inevitablemente.
+- [ ] **Cheeto L**: cada pulso empuja MÁS que el anterior (escalado visible). Enemigo delante recibe push acumulativo.
+- [ ] **Kurama K**: original casi invisible (alpha 0.08) durante el clon, en LOCAL Y EN REMOTO (online).
+- [ ] **Kurama L**: chip de color con la inicial del bichito copiado se ve claro en el slot L. Tooltip al hover dice "Copycat target: X".
+- [ ] **Trunk K**: alcanza enemigos a 28 u (casi todo el arena) PERO solo si están en cono frontal estrecho (35°).
+- [ ] **Trunk L Stampede**: Trunk pasa cerca de un enemigo y lo MANDA a volar (nuevo flag `rammingL`). No hace falta headbutt.
+- [ ] **HUD sprites**: settings buttons, hearts, bot-mask, end-screen crown/skull/trophy se ven como iconos generados (no emojis).
 
 ## Riesgos go/no-go conocidos
 
