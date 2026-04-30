@@ -1125,13 +1125,24 @@ export class Game {
       // landed but the clear path didn't run. The visual layer is
       // SIHANS-ONLY (per-frame check in Critter.updateVisuals via
       // `invisibilityTimer`); we drop it back to 0 the moment the
-      // synced ability slot stops being active. Kurama keeps her
-      // own Mirror Trick invisibility because immunityTimer is what
-      // drives that one — it gets sync'd via `p.immunityTimer`
-      // every patch.
+      // synced ability slot stops being active.
       if (c.config.name === 'Sihans') {
         const blinkSlot = p.abilities?.[1];
         if (!blinkSlot || !blinkSlot.active) {
+          c.invisibilityTimer = 0;
+        }
+      }
+      // 2026-05-01 last-minute — Kurama Mirror Trick was sticking
+      // PERMANENT invisibility on remote clients online. Same root
+      // cause as the Sihans bug: skipPhysics critters never
+      // decrement `invisibilityTimer`, and the local-only set in
+      // `handleAbilityFired` had no cleanup pair. Mirror the Sihans
+      // pattern: when Kurama's K slot (index 1) is no longer
+      // active per server state, force-zero the timer so she goes
+      // visible again on every viewer.
+      if (c.config.name === 'Kurama') {
+        const kSlot = p.abilities?.[1];
+        if (!kSlot || !kSlot.active) {
           c.invisibilityTimer = 0;
         }
       }

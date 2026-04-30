@@ -31,6 +31,44 @@ const NICKNAME_KEY = 'br-online-player-nickname';
 // matches the stored row, which is what Rafa wanted: same browser +
 // same nickname after a reset just works.
 const IDENTITY_ID_KEY = 'br-online-player-identity';
+// 2026-05-01 last-minute — sessionStorage shadow keys. When two tabs
+// of the same browser want to register DIFFERENT nicknames, each tab
+// needs its own (token, identity, playerId) so the server-side
+// "same playerId already in this room" check doesn't reject the
+// second tab. We mirror localStorage's three keys into sessionStorage
+// for that case; sessionStorage is per-tab so each tab can hold a
+// distinct identity. localStorage stays as the long-lived "preferred
+// identity" cache (used when only one tab is open + the user re-uses
+// the cached nickname).
+const SESSION_TOKEN_KEY      = 'br-online-tab-token';
+const SESSION_IDENTITY_KEY   = 'br-online-tab-identity';
+const SESSION_PLAYER_ID_KEY  = 'br-online-tab-player-id';
+const SESSION_NICKNAME_KEY   = 'br-online-tab-nickname';
+
+/** True when sessionStorage holds a registered identity for THIS tab.
+ *  All read accessors prefer the session copy so the rest of the app
+ *  doesn't need to know whether we forked or not. */
+function hasSessionIdentity(): boolean {
+  if (typeof sessionStorage === 'undefined') return false;
+  return !!sessionStorage.getItem(SESSION_PLAYER_ID_KEY) &&
+         !!sessionStorage.getItem(SESSION_NICKNAME_KEY);
+}
+
+function getOrCreateSessionToken(): string {
+  let t = sessionStorage.getItem(SESSION_TOKEN_KEY);
+  if (t && t.length >= 16 && t.length <= 128) return t;
+  t = randomToken();
+  sessionStorage.setItem(SESSION_TOKEN_KEY, t);
+  return t;
+}
+
+function getOrCreateSessionIdentityId(): string {
+  let id = sessionStorage.getItem(SESSION_IDENTITY_KEY);
+  if (id && id.length >= 16 && id.length <= 128) return id;
+  id = randomToken();
+  sessionStorage.setItem(SESSION_IDENTITY_KEY, id);
+  return id;
+}
 
 // ---------------------------------------------------------------------------
 // Server URL resolution — the WebSocket URL tells us where the REST API lives
@@ -87,8 +125,12 @@ function getOrCreateIdentityId(): string {
 
 /** Read-only accessor for the device identity id — used by the
  *  network layer when joining a brawl room so the server can
- *  enforce in-room duplicate detection. */
+ *  enforce in-room duplicate detection. Returns the per-tab session
+ *  identity when this tab forked (different nickname than the
+ *  browser-wide cache), or the persistent localStorage identity
+ *  otherwise. */
 export function getDeviceIdentityId(): string {
+  if (hasSessionIdentity()) return getOrCreateSessionIdentityId();
   return getOrCreateIdentityId();
 }
 
@@ -106,8 +148,17 @@ export interface OnlineIdentity {
   nickname: string;
 }
 
-/** Returns the cached identity or null if the user has never registered. */
+/** Returns the cached identity or null if the user has never
+ *  registered. Prefers the per-tab session identity over the
+ *  browser-wide localStorage cache so a forked tab keeps its own
+ *  nickname after a refresh. */
 export function getCachedIdentity(): OnlineIdentity | null {
+  if (hasSessionIdentity()) {
+    return {
+      playerId: sessionStorage.getItem(SESSION_PLAYER_ID_KEY) ?? '',
+      nickname: sessionStorage.getItem(SESSION_NICKNAME_KEY) ?? '',
+    };
+  }
   const playerId = localStorage.getItem(PLAYER_ID_KEY);
   const nickname = localStorage.getItem(NICKNAME_KEY);
   if (!playerId || !nickname) return null;
@@ -119,10 +170,33 @@ export function getCachedIdentity(): OnlineIdentity | null {
  * Returns the canonical identity on success or throws with a machine-readable
  * reason code (e.g. 'nickname_taken', 'too_short', 'network_error') so the
  * caller can show a localised message in the modal.
+ *
+ * 2026-05-01 last-minute — multi-tab fork: when this tab is asking
+ * for a nickname DIFFERENT from the one the browser has cached in
+ * localStorage, we register with a per-tab `sessionStorage` token +
+ * identity so the server creates a fresh player row. The result is
+ * stored in sessionStorage too — this tab keeps the new identity
+ * for its lifetime, but other tabs (and the next browser session)
+ * still see the persistent localStorage identity. Same nickname or
+ * first-time registration uses the persistent identity exactly like
+ * before, so the no-fork path is unchanged.
  */
 export async function registerNickname(nickname: string): Promise<OnlineIdentity> {
-  const token = getOrCreateToken();
-  const identityId = getOrCreateIdentityId();
+  const trimmedTarget = nickname.trim();
+  const cachedNick = localStorage.getItem(NICKNAME_KEY);
+  // Fork conditions:
+  //   - this tab already holds a session identity (the user reloaded
+  //     a forked tab and the same nickname is being claimed again),
+  //   OR
+  //   - the browser already cached a different nickname in
+  //     localStorage and we're now picking a new one (second tab).
+  const forkSession =
+    hasSessionIdentity() ||
+    (cachedNick !== null && cachedNick.trim().toLowerCase() !== trimmedTarget.toLowerCase());
+
+  const token = forkSession ? getOrCreateSessionToken() : getOrCreateToken();
+  const identityId = forkSession ? getOrCreateSessionIdentityId() : getOrCreateIdentityId();
+
   let res: Response;
   try {
     res = await fetch(restBase() + '/api/player', {
@@ -146,8 +220,16 @@ export async function registerNickname(nickname: string): Promise<OnlineIdentity
 
   const body = (await res.json()) as { id: string; nickname: string };
   const identity: OnlineIdentity = { playerId: body.id, nickname: body.nickname };
-  localStorage.setItem(PLAYER_ID_KEY, identity.playerId);
-  localStorage.setItem(NICKNAME_KEY, identity.nickname);
+  if (forkSession) {
+    // Per-tab identity. Keep localStorage untouched so other tabs
+    // (and future browser sessions) still see the original
+    // nickname as the preferred identity.
+    sessionStorage.setItem(SESSION_PLAYER_ID_KEY, identity.playerId);
+    sessionStorage.setItem(SESSION_NICKNAME_KEY, identity.nickname);
+  } else {
+    localStorage.setItem(PLAYER_ID_KEY, identity.playerId);
+    localStorage.setItem(NICKNAME_KEY, identity.nickname);
+  }
   return identity;
 }
 
@@ -160,8 +242,11 @@ export function forgetIdentity(): void {
 }
 
 /** The device token, exposed read-only so the network layer can send it
- *  with the first WebSocket message for per-request verification. */
+ *  with the first WebSocket message for per-request verification.
+ *  Returns the per-tab session token when this tab forked, or the
+ *  persistent localStorage token otherwise. */
 export function getDeviceToken(): string {
+  if (hasSessionIdentity()) return getOrCreateSessionToken();
   return getOrCreateToken();
 }
 
