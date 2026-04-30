@@ -550,17 +550,27 @@ function loop(now: number) {
     // 2026-04-29 final-K — status icons. Recalculate the active
     // status set per critter each frame and let the HUD layer
     // diff/render the emoji glyphs above each head.
-    for (const c of allCritters) {
-      if (!c.alive) {
-        setCritterStatus(c, EMPTY_STATUS_SET);
-        continue;
+    //
+    // 2026-04-30 final-polish — only run while a match is actually
+    // in play. In title / character_select / countdown / ended /
+    // online-waiting phases the per-critter status computation isn't
+    // useful and worse, can re-add an icon for a winner who's still
+    // alive (e.g. frenzy slot still flagged active during the
+    // celebrate clip). Phase-transition `clearAllCritterStatus()`
+    // calls then keep the DOM clean.
+    if (game.isMatchPlaying()) {
+      for (const c of allCritters) {
+        if (!c.alive) {
+          setCritterStatus(c, EMPTY_STATUS_SET);
+          continue;
+        }
+        setCritterStatus(c, computeCritterStatuses(c));
       }
-      setCritterStatus(c, computeCritterStatuses(c));
+      updateAllStatusPositions(camera, {
+        width: renderer.domElement.clientWidth,
+        height: renderer.domElement.clientHeight,
+      });
     }
-    updateAllStatusPositions(camera, {
-      width: renderer.domElement.clientWidth,
-      height: renderer.domElement.clientHeight,
-    });
   } else {
     // Paused: drop the overlay so the pause menu reads cleanly.
     setPoisonOverlayIntensity(0);

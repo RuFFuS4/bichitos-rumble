@@ -51,7 +51,7 @@ import { play as playSoundEffect } from './audio';
 import { spawnShockwaveRing, spawnFrenzyBurst, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing, deriveZoneVfxKind } from './abilities';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { clearProjectiles } from './projectiles';
-import { clearAllCritterStatus } from './hud/status-icons';
+import { clearAllCritterStatus, disposeCritterStatus } from './hud/status-icons';
 import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
 import { getPreviewPackId } from './arena-decor-layouts';
 
@@ -363,6 +363,23 @@ export class Game {
     return this.paused;
   }
 
+  /**
+   * True while a match is actively in play (offline or online). Used by
+   * the main loop's status-icon pump so floating glyphs only get
+   * computed and rendered while the match is live — title/character-
+   * select/countdown/ended phases skip the work AND let
+   * `clearAllCritterStatus()` (called at every phase transition out of
+   * 'playing') keep the DOM clean.
+   */
+  public isMatchPlaying(): boolean {
+    if (this.phase === 'playing') return true;
+    if (this.phase === 'online') {
+      const sp = (this.room?.state as any)?.phase;
+      return sp === 'playing';
+    }
+    return false;
+  }
+
   // -------------------------------------------------------------------------
   // Phase transitions
   // -------------------------------------------------------------------------
@@ -392,7 +409,7 @@ export class Game {
     // the previous fragments painted under the title overlay for a
     // frame or two — "dirty transition" feel.
     this.arena.reset();
-    this.onlineCritters.forEach(c => c.dispose());
+    this.onlineCritters.forEach(c => { disposeCritterStatus(c); c.dispose(); });
     this.onlineCritters.clear();
     // Purge any drop-state or dust-puff leftovers — same anti-flicker
     // reason as the arena reset above.
@@ -432,6 +449,12 @@ export class Game {
     document.body.classList.remove('match-active');
     hideTitleScreen();
     hideEndScreen();
+    // Defensive: drop any leftover floating status emojis from a
+    // previous match. Per-critter dispose paths already clean their
+    // own icons, but a phase transition is the right place for a hard
+    // wipe in case a critter was eliminated while the icon's hide
+    // animation was still mid-frame.
+    clearAllCritterStatus();
     showCharacterSelect(this.displayRoster, CRITTER_PRESETS, this.selectedIdx);
     // showPreview resets rotation; swapPreviewForEntry handles config resolution
     const entry = this.displayRoster[this.selectedIdx];
@@ -548,7 +571,7 @@ export class Game {
    */
   private rebuildCritters(roster: CritterConfig[]): void {
     // Dispose and drop existing critters
-    for (const c of this.critters) c.dispose();
+    for (const c of this.critters) { disposeCritterStatus(c); c.dispose(); }
     this.critters = [];
 
     // Instantiate fresh critters from the roster, clipped to spawn slots.
@@ -681,7 +704,7 @@ export class Game {
         // Clean visual state BEFORE we start waiting on the network so
         // the user sees a clean "Connecting..." screen instead of the
         // previous match's arena/critters.
-        for (const c of this.onlineCritters.values()) c.dispose();
+        for (const c of this.onlineCritters.values()) { disposeCritterStatus(c); c.dispose(); }
         this.onlineCritters.clear();
         this.arena.reset();
         showOverlay('Connecting...');
@@ -722,9 +745,9 @@ export class Game {
       // network await. Otherwise the "Connecting..." overlay shows over
       // the lingering title-screen placeholders for ~100-500ms — that
       // "flicker of placeholders" the user reported.
-      for (const c of this.critters) c.dispose();
+      for (const c of this.critters) { disposeCritterStatus(c); c.dispose(); }
       this.critters = [];
-      this.onlineCritters.forEach(c => c.dispose());
+      this.onlineCritters.forEach(c => { disposeCritterStatus(c); c.dispose(); });
       this.onlineCritters.clear();
       this.arena.reset();
       showOverlay('Connecting...');
@@ -798,7 +821,7 @@ export class Game {
     showMatchHud();
 
     // Clear offline critters; online critters are driven by server state
-    for (const c of this.critters) c.dispose();
+    for (const c of this.critters) { disposeCritterStatus(c); c.dispose(); }
     this.critters = [];
     this.onlineCritters.clear();
 
@@ -826,6 +849,10 @@ export class Game {
     $(room.state).players.onRemove((_playerState: any, sessionId: string) => {
       const c = this.onlineCritters.get(sessionId);
       if (c) {
+        // Clean the floating status emoji DOM node BEFORE disposing —
+        // otherwise a remote disconnect leaves the icon orphaned in the
+        // page until the next phase transition wipes everything.
+        disposeCritterStatus(c);
         c.dispose();
         this.onlineCritters.delete(sessionId);
       }
@@ -1388,6 +1415,12 @@ export class Game {
   private enterEnded(result: EndResult, title: string, subtitle: string): void {
     clearMenuActions();
     this.phase = 'ended';
+    // Wipe floating status emoji DOM nodes so the celebration / defeat
+    // pose isn't decorated with the residual frenzy/stun glyphs from
+    // the moment the match ended. The per-frame loop in main.ts won't
+    // refresh once we leave 'playing', so the cleanup needs to happen
+    // here at the transition.
+    clearAllCritterStatus();
     // Record the result for the camera framing pipeline — win/lose/
     // draw drives different end-screen camera poses (see
     // getEndScreenCameraPose). Reset implicit on next enterEnded
@@ -1834,7 +1867,7 @@ export class Game {
         if (consumeMenuAction('back')) {
           this.room?.leave().catch(() => { /* ignore */ });
           this.room = null;
-          for (const c of this.onlineCritters.values()) c.dispose();
+          for (const c of this.onlineCritters.values()) { disposeCritterStatus(c); c.dispose(); }
           this.onlineCritters.clear();
           this.critters = [];
           this.enterTitle();
@@ -1857,7 +1890,7 @@ export class Game {
           if (this.room) {
             this.room.leave().catch(() => { /* ignore */ });
             this.room = null;
-            for (const c of this.onlineCritters.values()) c.dispose();
+            for (const c of this.onlineCritters.values()) { disposeCritterStatus(c); c.dispose(); }
             this.onlineCritters.clear();
           }
           this.enterTitle();
@@ -2022,7 +2055,7 @@ export class Game {
 
   /** Lab-only: tear down the current match and go back to an idle state. */
   public debugEndMatchImmediately(): void {
-    for (const c of this.critters) c.dispose();
+    for (const c of this.critters) { disposeCritterStatus(c); c.dispose(); }
     this.critters = [];
     this.arena.reset();
     this.phase = 'title';
