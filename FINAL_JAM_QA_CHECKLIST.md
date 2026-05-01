@@ -4,8 +4,9 @@
 > Tick items only when you've personally verified them on the **production**
 > URL ([https://www.bichitosrumble.com](https://www.bichitosrumble.com)) — local dev passes don't count.
 >
-> Build under test: `ce5a61f` (or later — check `git log -1` and confirm Vercel
-> shows the same hash deployed).
+> Build under test: **`13d33e0`** (P0 belts frontales) + docs commit on top
+> (BLOQUE FINALÍSIMO 2026-05-01). Confirm with `git log -1` y que Vercel
+> y Railway muestran el mismo hash desplegado.
 >
 > Symbol legend:
 > - `[ ]` pendiente / por probar
@@ -170,19 +171,22 @@
 
 ## 12. Limpieza de datos
 
-- [x] Local DB tiene 1 player de prueba (`TestPlayer`). `npm run admin:delete-test` lo detecta correctamente. NO hay producción contaminada en local.
-- [ ] **Producción** (Railway shell o `DATA_DIR` configurado): correr `npm run admin:list-players` y revisar.
-- [ ] Si solo aparecen test players (`*test*`, `*qa*`, `*demo*`, `*foo*`, `*bar*`, `*temp*`, `*dummy*`):
+- [x] **Local DB limpia** (BLOQUE FINALÍSIMO): `server/data/br-online.sqlite` reseteado de 1 → 0 players via `npm run admin:reset-players -- --confirm --i-know-what-im-doing`. Verificado con `npm run admin:list-players` → `no players registered`.
+- [ ] **Producción / Railway DB**: Rafa ha autorizado wipe total pre-submit. Acceder al shell de Railway (Dashboard → service `bichitos-rumble-server` → Settings → Run a command, o vía Railway CLI) y ejecutar:
    ```sh
-   cd server
-   npm run admin:delete-test            # dry-run preview
-   npm run admin:delete-test -- --confirm   # actually delete
+   cd /app/server
+   npm run admin:list-players                                              # 1) snapshot (cuántos hay)
+   npm run admin:reset-players -- --confirm --i-know-what-im-doing         # 2) wipe total
+   npm run admin:list-players                                              # 3) confirmar 0
    ```
-- [ ] Si hay players reales (de testers Discord / amigos / playtests previos): **NO borrar**, solo documentar la lista.
-- [ ] Si necesitas reset total (último recurso, irreversible):
+   Si Railway lo prefiere desde el CLI local:
    ```sh
-   npm run admin:reset-players -- --confirm --i-know-what-im-doing
+   railway login
+   railway link                                                             # selecciona proyecto bichitos-rumble
+   railway run --service bichitos-rumble-server "cd server && npm run admin:reset-players -- --confirm --i-know-what-im-doing"
    ```
+   El script lee `$DATA_DIR/br-online.sqlite` (Railway persistent volume). DRY-RUN por defecto sin `--confirm`. El reset total exige **AMBAS** flags `--confirm` Y `--i-know-what-im-doing` para evitar accidentes.
+- [ ] **NO borrar en caliente los archivos SQLite** (`*.sqlite`, `*.sqlite-wal`, `*.sqlite-shm`) mientras el server está vivo; usar siempre el script admin. Si por alguna razón hubiera que reset por archivo, parar el servicio primero.
 
 ## 13. Go / no-go final
 
@@ -202,6 +206,19 @@
 - [ ] Datos de producción saneados o documentados (sección 12).
 
 ---
+
+## BLOQUE FINALÍSIMO 2026-05-01 (último pase pre-submit)
+
+> Pase final tras la prueba de Rafa de los micropasses anteriores. Tick
+> cada bullet contra la build live `13d33e0+` desplegada en Vercel.
+
+- [ ] **Belts frontales en Hall of Belts grid**: cada cinturón de la grid (offline tab + online tab) se ve **DE FRENTE** — medallón mirando al jugador, no de lado ni a la derecha.
+- [ ] **Modal viewer abre frontal**: click en cualquier belt → modal 640×640 abre con el cinturón ya en pose frontal. Idle auto-rotate sigue funcionando. Drag manual funciona desde la base frontal.
+- [ ] **Toasts 3D frontales**: end-screen unlock toast (offline) y `beltChanged` toast (online) muestran el cinturón en 3D **frontal**, no la PNG plana ni rotado.
+- [ ] **Producción Railway DB limpia**: `cd /app/server && npm run admin:list-players` desde Railway shell devuelve `0 players` (ver §13 abajo).
+- [ ] **Deploy final**: Vercel muestra `13d33e0+` (o el hash de docs encima) como production deployment. Railway server autodeploy completado.
+- [ ] **Smoke online final** post-redeploy: 2 pestañas mismo browser, una partida 2-humano + 2-bot end-to-end. Belt unlock toast con render 3D. Sin errores rojos en consola.
+- [ ] **VibeJam submit-form sigue OK** (ya enviado 2026-04-23, sin cambios necesarios).
 
 ## BLOQUE FINAL 2026-05-01 (deadline-day, verificar específicamente)
 

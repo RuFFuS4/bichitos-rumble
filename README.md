@@ -77,7 +77,9 @@ Top-right: 🔊 SFX toggle · 🎶 music toggle (state persists in
 `localStorage`).
 
 ### Desktop — Gamepad (Xbox / PS / generic standard)
-Any controller that reports the W3C 'standard' Gamepad layout works:
+Any controller that reports the W3C 'standard' Gamepad layout works.
+On connect, every on-screen J / K / L / SPACE chip auto-swaps to the
+gamepad equivalent (X / Y / RB / A) and reverts on disconnect.
 
 | Input | Action |
 |-------|--------|
@@ -86,6 +88,7 @@ Any controller that reports the W3C 'standard' Gamepad layout works:
 | B (◯) | Back / leave room |
 | X (▢) | Ability 1 |
 | Y (△) | Ability 2 |
+| LB (L1) | Expand / minimize portal (replaces P) |
 | RB (R1) | Ultimate |
 | Start | Restart / confirm |
 | D-Pad | Menu navigation |
@@ -179,14 +182,14 @@ glass cannon swings everything on a single strike.
 | Critter | J | K | L |
 |---|---|---|---|
 | Sergei | Gorilla Rush (heavy dash) | Shockwave (radial slam) | Frenzy (near-immovable berserk) |
-| Trunk | Trunk Ram (long dash) | Trunk Grip (yank + 4 s stun) | Stampede (battering ram) |
+| Trunk | Trunk Ram (long dash) | Trunk Slam (wide AoE + brief stun) | Trunk Grip (yank + 3.8 s vulnerable) |
 | Kurama | Fox Dash (fast feint) | Mirror Trick (decoy + ghost) | Copycat (mimics last-hit target's L) |
 | Shelly | Shell Charge (slow ram) | Steel Shell (immune anchor) | Saw Shell (spinning contact knockback) |
 | Kermit | Leap Forward | Poison Cloud (slow + fog) | Toxic Touch (control inversion) |
 | Sihans | Burrow Rush | Sand Trap (blink + quicksand) | Sinkhole (real arena hole) |
 | Kowalski | Ice Slide | Snowball (freeze projectile) | Frozen Floor (slippery zone) |
 | Cheeto | Pounce (lightning lunge) | Shadow Step (blink + impact) | Cone Pulse (frontal pulses) |
-| Sebastian | Claw Rush (sideways scuttle) | Claw Wave (frontal cone) | All-in (commit, hit big or fall) |
+| Sebastian | Claw Rush (sideways scuttle) | Claw Wave (frontal cone) | All-in (hold-to-aim → forward dash; hit = yeet, miss = void) |
 
 A floating emoji over each critter signals their current status:
 ❄️ frozen / 🐌 slowed / ☠️ poisoned / 💫 stunned / 💥 vulnerable /
@@ -203,13 +206,19 @@ GLBs (palms, icebergs, cacti, corals, torii). The countdown waits for
 the pack assets to settle before "GO!" so the match never starts on
 a bare floor.
 
-**Local achievement system** (BADGES) — 16 WWE-style belts
+**Local achievement system** (BADGES) — 16 offline belts
 (9 per-critter Champions + 7 global trophies like Speedrun / Iron
-Will / Pain Tolerance) that unlock as you play. Progress persists in
-localStorage. A floating toast surfaces new unlocks on the end-screen;
-the full catalogue lives in a "Hall of Belts" modal accessible from
-character-select (button or **B** key). Placeholder emoji icons until
-the generated PNGs drop (prompts in [`AI_PROMPTS.md`](AI_PROMPTS.md)).
+Will / Pain Tolerance) plus 5 online competitive belts (Throne /
+Flash / Ironclad / Slayer / Hot Streak) tracked server-side.
+Progress persists in `localStorage` for the offline ones; the online
+five live on the server's SQLite DB and update on every match end.
+A floating toast surfaces new unlocks on the end-screen; the full
+catalogue lives in a "Hall of Belts" modal accessible from
+character-select (button or **B** key) with two tabs (Offline /
+Online). Each belt renders as a 3D thumbnail of its GLB model and
+clicks open into a full-screen rotating viewer (drag to rotate,
+ESC to close). Toast notifications also upgrade their PNG fallback
+to the same 3D render when the GLB resolves.
 
 ## More docs
 

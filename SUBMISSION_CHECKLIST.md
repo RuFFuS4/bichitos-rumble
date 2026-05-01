@@ -65,8 +65,19 @@
 - [x] **Status effect HUD** — emoji glyphs above each critter (frozen / slowed / poisoned / stunned / vulnerable / frenzy / steel-shell / decoy-ghost), top-3 by priority, diff-rendered DOM overlay. `?` button opens an always-available legend.
 - [x] **Sihans Sinkhole real hole** — L knocks out actual arena fragments under the disc (server-authoritative, broadcast `arenaFragmentsKilled`). Critters standing on the broken fragments fall to void. Centre immune fragment protected at 3 layers.
 - [x] **Kurama Copycat HUD indicator** — when Kurama hits an enemy, a small portrait of the target appears in her L slot so she knows whose ultimate she'll mimic if she fires now.
-- [x] **Persistent online identity** — device-scoped `playerIdentityId` + token in `localStorage` (no login). Server uses it for the Online Belts ledger and rejects a second tab joining the same room with the same identity (clear error toast: "this nickname is already active in another tab").
+- [x] **Persistent online identity v2 (BLOQUE FINAL)** — `sessionStorage` = THIS tab's confirmed identity, `localStorage` = device-preferred nickname for prefill only. Single tab + refresh = silent recovery. Two tabs same browser = second tab does NOT autologin (modal opens prefilled). Same nickname active in two tabs = clear `nickname_active_in_room` error.
+- [x] **Hall of Belts 3D** — 16 offline + 5 online belts render as 3D thumbnails of their GLBs (shared offscreen WebGLRenderer 144×144, cached per id). Click any belt → full-screen modal with drag-to-rotate + idle auto-rotate + ESC/backdrop close. Same upgrade applied to badge unlock toasts and the online belt change toasts.
+- [x] **Belt orientation final fix** — shared constants `BELT_FRONT_ROTATION_Y = -π/2` + `BELT_PREVIEW_ROTATION_X = 0.06` in `belt-thumbnail.ts` imported by `belt-viewer.ts`. Compensates for the GLB's native +X-facing export so belts read frontal across grid, modal, and toasts.
 - [x] **Server admin scripts** for player table cleanup — `npm run admin:list-players`, `admin:player-stats`, `admin:delete-test`, `admin:delete-pattern`, `admin:reset-players` (in `server/scripts/admin-players.mjs`).
+- [x] **Local dev DB cleaned** (`server/data/br-online.sqlite` reset 1 → 0 players via `npm run admin:reset-players -- --confirm --i-know-what-im-doing`).
+- [ ] **Production / Railway DB cleaned** — Rafa to run on Railway shell:
+  ```sh
+  cd /app/server
+  npm run admin:list-players                                              # before
+  npm run admin:reset-players -- --confirm --i-know-what-im-doing
+  npm run admin:list-players                                              # confirm 0
+  ```
+  Default DB path is `$DATA_DIR/br-online.sqlite` (Railway persistent volume). The script DRY-RUNs without `--confirm` and requires both `--confirm` AND `--i-know-what-im-doing` for the wipe.
 - [x] Signature per-critter abilities — 9/9 L abilities authored and parity-verified (was 3/9 placeholders in the early build).
 - [ ] Particle effects (beyond shockwave rings) — POST-JAM
 - [ ] Remaining sprite integrations (hearts, bot-mask, belts, sfx/music icons, critter-head fallbacks) — POST-JAM
@@ -81,8 +92,10 @@
   Hypnosapo = efecto emissivo procedural porque no hay clip).
 
 ## Input / Accessibility
-- [x] Keyboard support (WASD + Space/J/K/L + R/T)
+- [x] Keyboard support (WASD + Space/J/K/L + R/T + P portal + B belts)
 - [x] **Gamepad support** (standard Xbox/PS layout, connect/disconnect toast)
+- [x] **Gamepad LB → portal toggle** (replaces P key when controller connected)
+- [x] **Auto glyph swap on gamepad connect** — every J / K / L / SPACE / R chip in the UI rewrites to its gamepad equivalent (X / Y / RB / A / Start) and reverts on disconnect
 - [x] Mobile touch (virtual joystick + 4 action buttons, landscape lock)
 - [x] Settings buttons (🔊 / 🎶) reachable on every screen, not hidden behind overlays
 

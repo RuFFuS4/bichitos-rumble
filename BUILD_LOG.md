@@ -9,6 +9,95 @@
 
 ---
 
+## 2026-05-01 — BLOQUE FINAL + finalísimo (deadline-day, submit-ready)
+
+**Final pre-submit pass.** Three rounds of micro-tuning over the
+deadline-day build, plus production DB cleanup. Closes the kit Rafa
+flagged in his last playtest and leaves the repo in submit shape.
+
+Final hash on `main`/`origin/main` after this entry: **see latest
+commit** (was `13d33e0` for the belts P0 fix; docs commit on top).
+
+**Abilities — final tuning pass:**
+- **Sebastian L (All-in)** — hold-to-fire windup + trajectory preview
+  on the ground (crimson line + amber accent). Direction is now
+  forward-only (no lateral auto-pick); the dash commits in Sebastian's
+  facing at fire time. Hit = guaranteed yeet: `allInHitForce 110 → 220`,
+  velocity SET (not added), victim teleported `range × 0.8` along
+  the dash line + explicit `startFalling()` (cliente) / `falling=true
+  + lives--` (server). Miss = void via `range × 1.5` teleport +
+  outward velocity.
+- **Trunk** — accumulated `-25 %` from the over-tuned final block.
+  `headbuttBoost 3.0 → 2.55 → 2.30`, K Slam `slamStunDuration 2.0
+  → 1.7 → 1.5`, L Grip `gripStunDuration 5.0 → 4.25 → 3.80`. Speed
+  16 + headbuttForce 48 unchanged. Reads "elephant that chases
+  + Slam wide" without one-shotting.
+- **Cheeto L (Cone Pulse)** — frontal arc (no 360° ring) with wave
+  bands `min(2^(N-1), 8)` doubling per pulse (1, 2, 4, 8, 8, 8 over
+  6 pulses). Push along facing, not radial. `lPulse` event extended
+  with `waveCenter, waveThickness, count` so online sees the
+  matching arc.
+- **Trunk K = Slam** wide AoE (radius 7, force 50) + brief stun,
+  Slam → headbutt eliminates a stunned target. **Trunk L = Grip**
+  yanks a frontal target (range 28, cone 35°) and grants 4 s
+  vulnerable.
+- **Kurama, Kermit, Sihans, Shelly, Kowalski** — verify-only, no
+  changes from the final block. Online invisibility cleanup, copycat
+  L color chip, sinkhole real fragment killer all stable.
+
+**Online identity:**
+- Rebuilt around two storages: `sessionStorage` = THIS tab's
+  confirmed identity, `localStorage` = device-preferred nickname for
+  prefill only. One tab + refresh = silent recovery. Two tabs same
+  browser = second tab does NOT autologin, modal opens prefilled.
+  `PlayerSchema.nickname` field synced; waiting room renders
+  nicknames as the slot's main label.
+
+**Hall of Belts (rewards) — full 3D treatment:**
+- New `src/belt-thumbnail.ts` — shared offscreen WebGLRenderer
+  144×144 with auto-fit, key + rim lighting, cached per `beltId`.
+- New `src/belt-viewer.ts` — full-screen modal with drag-to-rotate
+  (mouse + touch), idle auto-rotate, ESC + backdrop close.
+- Hall of Belts (offline + online tabs) shows the 3D render as an
+  async upgrade over the 2D PNG fallback. Click → modal. Same upgrade
+  applied to both unlock toasts (`badge-toast.ts` and
+  `online-belt-toast.ts`).
+- **Orientation** — three iterations were needed. The GLBs export
+  with the medallion facing +X (Tripo default), so the camera at +Z
+  saw them edge-on. Final fix: shared constant
+  `BELT_FRONT_ROTATION_Y = -π/2` in `belt-thumbnail.ts`, imported by
+  `belt-viewer.ts`. Belts read frontal across grid, modal, and toasts.
+
+**Gamepad UX:**
+- New `src/input-glyphs.ts` — `tagGlyph(el, source, wrapper?)` marks
+  any chip in the DOM; `setGamepadGlyphMode(on)` toggles
+  `body.using-gamepad` + walks every tagged element to retext
+  J→X / K→Y / L→RB / SPACE→A / R→↺. Connect/disconnect events
+  flip the mode.
+- LB (button 4) added as portal toggle — synthesises a `KeyP`
+  keydown so the existing portal handler picks it up unchanged.
+- Title-screen legend swaps via CSS (`.controls-hint` keyboard line
+  hidden, `.controls-hint-gamepad` promoted to primary). The
+  gamepad hint is gold-tinted by default so users see "🎮 Gamepad
+  supported" even before plugging one in.
+- Character-select prompt has parallel `.kbd-only` + `.gamepad-only`
+  variants that swap with the same body class.
+
+**Production DB cleanup:**
+- Local `data/br-online.sqlite` reset via `npm run admin:reset-players
+  -- --confirm --i-know-what-im-doing` (1 → 0). Railway production
+  cleanup deferred to Rafa (no shell access from this session); exact
+  command documented in `SUBMISSION_CHECKLIST.md`.
+
+**Validation closing the deadline-day:**
+- `npm run check` ✅ (vite + clean-dist-raw)
+- `cd server && npx tsc --noEmit` ✅
+- `node scripts/verify-ability-parity.mjs` ✅ ALL PARITY CHECKS PASSED
+- Belt orientation smoke verified in headless preview (5 thumbs +
+  modal screenshot).
+
+---
+
 ## 2026-04-26 — Tool-patch workflow (calibrate + anim-lab + decor-editor)
 
 **Goal**: reduce manual paste steps when applying lab tweaks to source

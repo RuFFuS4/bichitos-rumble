@@ -46,7 +46,10 @@ reads physical keys directly.
 - **L**: Ultimate (if available)
 - **R**: Restart / confirm
 - **T / Escape**: Back to title / leave online room
-- **Gamepad**: A=headbutt+confirm · B=back · X=J · Y=K · RB=L · Start=restart · D-Pad/stick=menu nav
+- **P**: Toggle portal expand/minimize (vs Vibe Jam webring)
+- **B**: Open Hall of Belts (from character-select / end screen)
+- **Gamepad**: A=headbutt+confirm · B=back · X=J · Y=K · RB=L · LB=portal toggle · Start=restart · D-Pad/stick=menu nav
+- **Auto glyph swap**: every J / K / L / SPACE chip in the UI rewrites to its gamepad equivalent (X / Y / RB / A) the moment a controller is connected, and reverts on disconnect (`src/input-glyphs.ts`).
 - **Touch**: virtual joystick (left) + 4 action buttons (right)
 
 Full key → action table in [`RULES.md`](RULES.md).
@@ -54,20 +57,22 @@ Full key → action table in [`RULES.md`](RULES.md).
 ## Combat
 - **Headbutt**: 0.2 s lunge forward, applies directional knockback,
   0.5 s cooldown. Per-critter `headbuttBoost` scales the impact
-  (Trunk ×3, Sebastian ×1.45, Cheeto ×1.30, Sergei/Kowalski ×1.20-1.40).
+  (Trunk ×2.30, Sebastian ×1.45, Cheeto ×1.30, Sergei/Kowalski ×1.20-1.40).
 - **Abilities**: Each critter has 3 active abilities (J / K / L)
   with independent cooldowns. L is the "ultimate"-feel slot.
 - **Mass**: affects knockback received (heavier = harder to move).
   Abilities modify effective mass at activation time — Shelly's
-  Steel Shell anchors to ×9999, Sergei's Frenzy hardens to ×5.5,
-  Trunk's Stampede goes to ×4.5, etc.
+  Steel Shell anchors to ×9999, Sergei's Frenzy hardens to ×5.5, etc.
+  Trunk's PWS-derived mass (1.2) is unchanged; the elephant's
+  presence comes from the cabezazo + speed buff, not mass.
 - **Collision**: critters push each other on overlap; headbutts
   amplify force ~2.5×; collision response uses mass-ratio so heavy
   vs. light reads correctly.
-- **Status**: stun (Trunk Grip), vulnerable (×2 incoming knockback
-  while stunned), slow (Sihans Quicksand, Kermit Poison Cloud),
-  frozen (Kowalski Snowball / Frozen Floor), confused (Kermit Toxic
-  Touch, inverts movement), sinkhole pull (Sihans). All sync online.
+- **Status**: stun (Trunk Slam 1.5 s AoE / Trunk Grip 3.8 s frontal),
+  vulnerable (×2 incoming knockback while stunned, ×4 in the Trunk
+  pipeline), slow (Sihans Quicksand, Kermit Poison Cloud), frozen
+  (Kowalski Snowball / Frozen Floor), confused (Kermit Toxic Touch,
+  inverts movement), sinkhole pull (Sihans). All sync online.
 
 ## Abilities (differentiated per critter)
 Every critter has 3 active abilities sharing a small set of base
@@ -76,9 +81,11 @@ types, each with per-critter tuning + flag-driven specialisation:
 - **charge_rush** (J slot for everyone) — directional dash with
   speed/mass multipliers. Tuning: impulse, duration, multipliers.
 - **ground_pound** — AoE radial knockback with wind-up. Specialised
-  via flags: `gripK` (Trunk yank+stun), `coneAngleDeg` (Sebastian
-  frontal cone), `selfBuffOnly` (Shelly Steel Shell, Kurama Mirror
-  Trick decoy).
+  via flags: `slamStunDuration` (Trunk Slam — radius 7, force 50,
+  brief AoE stun), `gripK` (Trunk Grip — frontal yank to 1.6 u
+  in front + 3.8 s rooted vulnerable), `coneAngleDeg` (Sebastian
+  Claw Wave frontal cone), `selfBuffOnly` (Shelly Steel Shell,
+  Kurama Mirror Trick decoy).
 - **blink** — instant teleport with optional zone-at-origin.
   Specialised via `blinkSeekNearest` (Cheeto Shadow Step seeks the
   closest target), `zoneAtOrigin` (Sihans Sand Trap leaves
@@ -86,11 +93,21 @@ types, each with per-critter tuning + flag-driven specialisation:
 - **projectile** — server-authoritative travelling hit (Kowalski
   Snowball).
 - **frenzy** (L slot for everyone) — base speed/mass buff plus an
-  L-flag dispatcher: `sawL`, `conePulseL`, `allInL`, `toxicTouchL`,
-  `frozenFloorL`, `sinkholeL`, `copycatL`. Each flag adds a
-  per-tick effect on top of the buff (saw-contact knockback, cone
-  pulses, lateral all-in dash, contact confusion, slippery zone,
-  real arena hole, copy-of-last-hit-target's L).
+  L-flag dispatcher:
+  · `sawL` (Shelly Saw Shell — spinning contact knockback)
+  · `conePulseL` (Cheeto — frontal arc with doubling pulses
+    `min(2^(N-1), 8)` over 6 pulses, push along facing not radial)
+  · `allInL + holdToFireL` (Sebastian — press-and-hold paints a
+    forward trajectory line; release executes a forward dash; hit
+    = guaranteed elimination via teleport-past-victim + explicit
+    fall flow; miss = void via 1.5× range overshoot)
+  · `toxicTouchL` (Kermit — contact confusion inverts target input)
+  · `frozenFloorL` (Kowalski — slippery zone, friction × 5)
+  · `sinkholeL` (Sihans — real arena fragment killer; centre-clamp
+    protects the immune fragment)
+  · `copycatL` (Kurama — mimics last-hit-target's L kit)
+  All flags compose with the base frenzy buff and stay parity-aligned
+  between cliente and server.
 
 Per-character roles, full kit tables, and tuning values: see
 [`CHARACTER_DESIGN.md`](CHARACTER_DESIGN.md). Live tuning is in
@@ -104,7 +121,7 @@ opens a full legend.
 
 | Glyph | Status | Source |
 |-------|--------|--------|
-| 💫 | stunned | Trunk Grip (rooted, 4 s) |
+| 💫 | stunned | Trunk Slam (1.5 s AoE) / Trunk Grip (3.8 s frontal) |
 | 💥 | vulnerable | post-stun ×2 incoming knockback |
 | ❄️ | frozen | Snowball hit / Frozen Floor zone |
 | 🛡️ | steel-shell | Shelly Steel Shell active |
@@ -191,6 +208,30 @@ server.
   preroll) between phase transitions.
 - All systems in `gamefeel.ts` / `audio.ts`, visual/audio-only, no
   gameplay logic coupling.
+
+## Rewards (Hall of Belts)
+Two parallel achievement ladders surface in the same modal (B key from
+character-select / end-screen):
+
+- **Offline (16 belts)** — 9 per-critter Champions (Win 5 matches with
+  X) + 7 cross-roster trophies (Speedrun, Iron Will, Untouchable,
+  Survivor, Globetrotter, Arena Apex, Pain Tolerance). Progress
+  persists in `localStorage`.
+- **Online (5 belts)** — server-authoritative leaderboard ladder:
+  Throne (most wins), Flash (fastest win), Ironclad (best
+  lives-per-match ratio with 5+ matches), Slayer (most human kills),
+  Hot Streak (longest win streak). Stored in the SQLite DB on
+  Railway, updated on every online match end. The current holder of
+  each belt is broadcast to all connected clients via a `beltChanged`
+  event.
+
+Each belt renders as a 3D thumbnail of its GLB model in the grid
+(shared offscreen renderer 144 × 144, cached per id). Click → full-
+screen modal with drag-to-rotate + idle auto-rotate + ESC/backdrop
+close. Same 3D upgrade applied to badge unlock toasts and the
+online belt-change toasts. The PNG fallback in
+`/images/belts/<id>.png` stays as the immediate render until the
+GLB resolves, so missing models never break the layout.
 
 ## Current Scope
 - 1 seed-deterministic fragment arena with 2 collapse patterns.
