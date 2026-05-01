@@ -11,6 +11,7 @@ import type { AbilityState } from '../abilities';
 import type { Critter } from '../critter';
 import { getRosterEntry } from '../roster';
 import { getCritterThumbnail } from '../slot-thumbnail';
+import { tagGlyph } from '../input-glyphs';
 
 // ---- Top bar -------------------------------------------------------------
 
@@ -292,7 +293,9 @@ export function initAbilityHUD(
 
     const keyLabel = document.createElement('div');
     keyLabel.className = 'ability-key';
-    keyLabel.textContent = `[${s.def.key}]`;
+    // BLOQUE FINAL micropass — tag so a connected gamepad swaps the
+    // chip text to its bound button (J → X, K → Y, L → RB).
+    tagGlyph(keyLabel, s.def.key, '[%s]');
 
     const nameLabel = document.createElement('div');
     nameLabel.className = 'ability-name';

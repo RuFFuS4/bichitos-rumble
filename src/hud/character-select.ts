@@ -8,6 +8,7 @@ import type { CritterConfig } from '../critter';
 import type { RosterEntry } from '../roster';
 import { getCritterThumbnail } from '../slot-thumbnail';
 import { setMatchHudVisible } from './dom-shared';
+import { tagGlyph } from '../input-glyphs';
 
 const characterSelect = document.getElementById('character-select')!;
 const critterGrid    = document.getElementById('critter-grid')!;
@@ -282,9 +283,10 @@ function appendAbilityRow(critterSlug: string, slotIdx: number, key: string, nam
 
   // Key label without brackets — the CSS styles it as a chip (gold
   // outlined pill) so the '[ ]' wrappers would read as double framing.
+  // Tagged via input-glyphs so a connected gamepad swaps J/K/L → X/Y/RB.
   const keyEl = document.createElement('span');
   keyEl.className = 'ability-info-key';
-  keyEl.textContent = key;
+  tagGlyph(keyEl, key);
 
   const nameEl = document.createElement('span');
   nameEl.className = 'ability-info-name';

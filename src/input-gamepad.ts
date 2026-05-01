@@ -37,6 +37,7 @@ import {
   type MenuAction,
 } from './input';
 import { showGamepadToast } from './hud';
+import { setGamepadGlyphMode } from './input-glyphs';
 
 // Deadzone for the left stick: below this magnitude we treat input as zero.
 // Prevents drifting sticks from nudging the critter and suppresses jitter
@@ -103,6 +104,10 @@ export function initGamepadInput(): void {
     pad.stickY = 0;
     console.log('[Gamepad] connected:', e.gamepad.id);
     showGamepadToast(`🎮 ${shortenId(e.gamepad.id)}`);
+    // BLOQUE FINAL micropass — flip every "[J]/[K]/[L]" chip in the
+    // UI to its gamepad equivalent (X/Y/RB) and let CSS swap the
+    // title-screen legend block.
+    setGamepadGlyphMode(true);
   });
 
   window.addEventListener('gamepaddisconnected', (e) => {
@@ -113,6 +118,8 @@ export function initGamepadInput(): void {
     // Prevent held-action keys from staying pressed after disconnect.
     clearAllHeldInputs();
     showGamepadToast('🎮 Gamepad disconnected');
+    // Restore the keyboard glyphs everywhere.
+    setGamepadGlyphMode(false);
   });
 
   // Poll at render-loop cadence. getGamepads() in Chrome/Firefox mutates
