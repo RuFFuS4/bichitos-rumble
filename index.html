@@ -2522,6 +2522,58 @@
         justify-content: flex-start;
         padding-top: 12px;
       }
+
+      /* 2026-05-01 mobile audit — match HUD on phone landscape was a
+         pile of overlapping panels. Compact rules: */
+
+      /* Top hero cluster: shrink timer + tighten the spacing so it
+         doesn't clip the lives panels. */
+      #hud-timer { font-size: 28px; }
+      #hud-alive { font-size: 11px; letter-spacing: 1.5px; }
+      #hud-top-center { top: 4px; }
+      #hud-top { padding: 6px 12px; font-size: 14px; }
+
+      /* Lives corners — shrink to a 40 px avatar dot, hide the name
+         label, mini hearts. Bottom corners are HIDDEN entirely
+         because the touch joystick (BL) and the action cluster (BR)
+         own that real estate on touch devices. */
+      .player-life-corner {
+        padding: 5px 6px 6px;
+        gap: 3px;
+      }
+      .player-life-corner.corner-tl { top: 56px; left: 8px; }
+      .player-life-corner.corner-tr { top: 50px; right: 8px; }
+      .player-life-corner.corner-bl,
+      .player-life-corner.corner-br { display: none; }
+      .lives-dot { width: 36px; height: 36px; border-radius: 8px; }
+      .lives-name { font-size: 9px; letter-spacing: 0.8px; }
+      .lives-hearts { font-size: 11px; gap: 0; }
+      .lives-heart-sprite { --icon-size: 12px; }
+
+      /* Touch buttons + joystick: scale down so the bottom strip
+         doesn't eat half the viewport. */
+      #touch-joystick { width: 100px; height: 100px; bottom: 16px; left: 16px; }
+      .joystick-handle { width: 44px; height: 44px; margin-left: -22px; margin-top: -22px; }
+      #touch-actions { width: 156px; height: 156px; bottom: 16px; right: 16px; }
+      .touch-button { width: 54px; height: 54px; font-size: 12px; }
+      .touch-btn-headbutt { width: 70px; height: 70px; font-size: 18px; }
+
+      /* Ability HUD bar (J/K/L slot row at the bottom): on touch +
+         match-active the touch buttons already cover this role, and
+         the bar collides with the joystick. Hide it. */
+      body.touch-mode.match-active #ability-bar-container { display: none; }
+
+      /* Title signature (`by @RGomezR14`) — tighten so it doesn't
+         eat the bottom of a 340-px-tall match HUD. */
+      .title-signature { bottom: 8px; left: 8px; padding: 4px 8px; font-size: 10.5px; }
+
+      /* Title screen prompts — at 340 px tall the .prompt + the
+         .controls-hint + .controls-hint-gamepad + .title-signature
+         all stack into the same ~50 px strip and overlap. On touch
+         the hints duplicate what the touch buttons already show, so
+         hide the controls-hint there entirely. The .prompt stays. */
+      body.touch-mode #title-screen .controls-hint,
+      body.touch-mode #title-screen .controls-hint-gamepad { display: none; }
     }
 
     /* ---------- Responsive: very narrow (portrait phones that somehow
