@@ -23,6 +23,23 @@ import { loadModel } from './model-loader';
 
 const THUMB_SIZE = 144; // px (rendered square, downscaled visually in CSS)
 
+// ---------------------------------------------------------------------------
+// Shared belt-pose constants — used by belt-thumbnail (grid + toasts) AND by
+// belt-viewer (modal). Kept here as the single source of truth so the
+// thumbnail and the viewer can never drift.
+//
+// Empirical: GLBs in /models/belts/*.glb export with the medallion facing
+// +X by convention (Tripo default). The thumbnail camera lives at +Z
+// looking toward origin, so without correction the medallion sits 90° off
+// to the right (Rafa screenshot: "miran hacia la derecha"). A -π/2 yaw
+// rotates the medallion to face +Z (toward the camera), reading frontal.
+// If a future belt GLB happens to export with a different convention we
+// override per-id below; for now all five online + eleven offline GLBs
+// share the same export.
+// ---------------------------------------------------------------------------
+export const BELT_FRONT_ROTATION_Y = -Math.PI / 2;  // 90° CW around Y → frontal
+export const BELT_PREVIEW_ROTATION_X = 0.06;        // tiny upward tilt for relief
+
 const cache = new Map<string, string>();           // beltId → data URL
 const inflight = new Map<string, Promise<string | null>>();
 
@@ -70,16 +87,16 @@ function beltGlbPath(beltId: string): string {
 }
 
 /**
- * Stable, per-belt rotation offset. Rafa pidió frontal (no laterales),
- * así que la variación se mantiene mínima — ±0.04 rad ≈ ±2.3 ° — solo
- * para que la grid no se sienta robótica. Hash determinístico per-id
- * → mismo belt siempre se ve igual.
+ * Stable, per-belt rotation offset. Rafa pidió frontal limpio en el
+ * BLOQUE FINALÍSIMO, así que la variación se mantiene mínima
+ * — ±0.02 rad ≈ ±1 ° — sólo para que la grid no parezca un copia y
+ * pega exacto. Hash determinístico per-id → mismo belt siempre igual.
  */
 function beltOrientationOffset(beltId: string): number {
   let h = 0;
   for (let i = 0; i < beltId.length; i++) h = (h * 31 + beltId.charCodeAt(i)) | 0;
   const bucket = ((h % 5) + 5) % 5;       // 0..4
-  return (bucket - 2) * 0.02;              // -0.04, -0.02, 0, 0.02, 0.04 rad
+  return (bucket - 2) * 0.01;              // -0.02, -0.01, 0, 0.01, 0.02 rad
 }
 
 /**
@@ -120,15 +137,16 @@ export function getBeltThumbnail(beltId: string): Promise<string | null> {
         glb.position.y = -c.y + 0.05;
         glb.position.z = -c.z;
       }
-      // BLOQUE FINAL micropass v2 — Rafa: "los belts deben verse de
-      // frente, no rotados". Base rotation Y = 0 (medallón mirando a
-      // cámara) + variación determinística per-beltId mínima (±0.04
-      // rad ≈ ±2 °) para que la grid no parezca robótica. Tilt
-      // frontal sutil (rotation.x = 0.06) para que la key light siga
-      // captando el relieve sin esconder la medalla.
+      // BLOQUE FINALÍSIMO — los GLBs exportan con el medallón mirando
+      // +X (default Tripo); con la cámara en +Z eso lo dejaba 90° a
+      // la derecha. Aplicamos `BELT_FRONT_ROTATION_Y` (-π/2) para
+      // ponerlos frontales + variación determinística MUY pequeña
+      // per-id (±0.02 rad ≈ ±1 °) que rompe la lectura "todos
+      // idénticos" sin meterles ladeo. Tilt vertical sutil para
+      // que la key light marque relieve.
       const variantY = beltOrientationOffset(beltId);
-      glb.rotation.y = variantY;
-      glb.rotation.x = 0.06;
+      glb.rotation.y = BELT_FRONT_ROTATION_Y + variantY;
+      glb.rotation.x = BELT_PREVIEW_ROTATION_X;
 
       while (holder.children.length > 0) {
         const c = holder.children[0];

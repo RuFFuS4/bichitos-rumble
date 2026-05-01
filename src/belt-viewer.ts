@@ -16,6 +16,7 @@
 
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
+import { BELT_FRONT_ROTATION_Y, BELT_PREVIEW_ROTATION_X } from './belt-thumbnail';
 
 let modalEl: HTMLDivElement | null = null;
 let canvasEl: HTMLCanvasElement | null = null;
@@ -165,12 +166,12 @@ export async function openBeltViewer(
     glb.updateMatrixWorld(true);
     const c = new THREE.Box3().setFromObject(glb).getCenter(new THREE.Vector3());
     glb.position.set(-c.x, -c.y + 0.05, -c.z);
-    // BLOQUE FINAL micropass v2 — frontal pose to match the grid (Rafa
-    // pidió "de frente"). Idle auto-rotate sweeps around this and
-    // drag-to-rotate captures dragStartRotY so manual rotation still
-    // works from any angle.
-    glb.rotation.y = 0;
-    glb.rotation.x = 0.06;
+    // BLOQUE FINALÍSIMO — match the thumbnail's frontal pose using
+    // the shared constants from belt-thumbnail. Idle auto-rotate
+    // builds on top, drag-to-rotate captures dragStartRotY at click
+    // so manual rotation still starts cleanly from this base.
+    glb.rotation.y = BELT_FRONT_ROTATION_Y;
+    glb.rotation.x = BELT_PREVIEW_ROTATION_X;
     holder.add(glb);
     currentGlb = glb;
   } catch (e) {
