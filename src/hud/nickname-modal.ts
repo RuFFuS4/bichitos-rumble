@@ -15,6 +15,7 @@
 
 import {
   getCachedIdentity,
+  getPreferredNickname,
   registerNickname,
   type OnlineIdentity,
 } from '../online-identity';
@@ -72,17 +73,27 @@ function setBusy(busy: boolean): void {
  * Idempotent: if the cache hit happens, the modal never shows.
  */
 export function ensureOnlineIdentity(): Promise<OnlineIdentity> {
+  // 2026-05-01 final block — only the per-tab session identity
+  // counts as "cached". A new tab always gets the modal with the
+  // device-preferred nickname pre-filled (so accepting is one tap).
   const cached = getCachedIdentity();
   if (cached) return Promise.resolve(cached);
 
   return new Promise((resolve, reject) => {
     // Fresh state on every open (the modal can be re-used).
-    inputEl.value = '';
+    // Pre-fill with the device's preferred nickname so the user
+    // can confirm their usual identity with a single Enter press.
+    inputEl.value = getPreferredNickname();
     showError(null);
     setBusy(false);
     modalEl.classList.remove('hidden');
     // Defer focus to next frame so the browser has the element laid out.
-    requestAnimationFrame(() => inputEl.focus());
+    requestAnimationFrame(() => {
+      inputEl.focus();
+      // If we pre-filled, select the text so a quick re-type
+      // doesn't require a manual delete.
+      if (inputEl.value) inputEl.select();
+    });
 
     const close = () => {
       modalEl.classList.add('hidden');

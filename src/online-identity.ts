@@ -148,21 +148,39 @@ export interface OnlineIdentity {
   nickname: string;
 }
 
-/** Returns the cached identity or null if the user has never
- *  registered. Prefers the per-tab session identity over the
- *  browser-wide localStorage cache so a forked tab keeps its own
- *  nickname after a refresh. */
+/**
+ * 2026-05-01 final block — identity model rebuilt for predictability.
+ *
+ * The nickname-modal opens whenever sessionStorage doesn't already
+ * carry a confirmed identity for THIS tab. localStorage is reserved
+ * for "preferred nickname on this device" — it pre-fills the modal
+ * but never auto-logs the user in. Concretely:
+ *
+ *   · First tab of a fresh browser session → modal opens, localStorage
+ *     nickname (if any) is pre-filled, user just hits Enter to accept
+ *     and the registration runs as a reclaim.
+ *   · Tab refresh after a successful registration → sessionStorage is
+ *     populated, modal is skipped.
+ *   · Second tab opened in the same browser → sessionStorage empty,
+ *     modal opens. User changes nick → forked session. User keeps
+ *     same nick → server's "nickname_active_in_room" check rejects
+ *     the second tab when it tries to join the same room.
+ *
+ * `getCachedIdentity()` therefore returns sessionStorage only.
+ */
 export function getCachedIdentity(): OnlineIdentity | null {
-  if (hasSessionIdentity()) {
-    return {
-      playerId: sessionStorage.getItem(SESSION_PLAYER_ID_KEY) ?? '',
-      nickname: sessionStorage.getItem(SESSION_NICKNAME_KEY) ?? '',
-    };
-  }
-  const playerId = localStorage.getItem(PLAYER_ID_KEY);
-  const nickname = localStorage.getItem(NICKNAME_KEY);
+  if (typeof sessionStorage === 'undefined') return null;
+  const playerId = sessionStorage.getItem(SESSION_PLAYER_ID_KEY);
+  const nickname = sessionStorage.getItem(SESSION_NICKNAME_KEY);
   if (!playerId || !nickname) return null;
   return { playerId, nickname };
+}
+
+/** Read the user's "preferred" nickname from localStorage — used
+ *  ONLY to pre-fill the nickname modal. Returns '' when no identity
+ *  has been registered on this device yet. */
+export function getPreferredNickname(): string {
+  return localStorage.getItem(NICKNAME_KEY) ?? '';
 }
 
 /**
@@ -220,13 +238,16 @@ export async function registerNickname(nickname: string): Promise<OnlineIdentity
 
   const body = (await res.json()) as { id: string; nickname: string };
   const identity: OnlineIdentity = { playerId: body.id, nickname: body.nickname };
-  if (forkSession) {
-    // Per-tab identity. Keep localStorage untouched so other tabs
-    // (and future browser sessions) still see the original
-    // nickname as the preferred identity.
-    sessionStorage.setItem(SESSION_PLAYER_ID_KEY, identity.playerId);
-    sessionStorage.setItem(SESSION_NICKNAME_KEY, identity.nickname);
-  } else {
+  // 2026-05-01 final block — every registration writes to
+  // sessionStorage (this tab's confirmed identity, used by
+  // `getCachedIdentity` to skip the modal on refresh). Forks STOP
+  // there — localStorage stays as the device-preferred nickname.
+  // Non-fork (same as preferred or first-ever registration) ALSO
+  // updates localStorage so the device picks up the freshly
+  // claimed playerId for any future session.
+  sessionStorage.setItem(SESSION_PLAYER_ID_KEY, identity.playerId);
+  sessionStorage.setItem(SESSION_NICKNAME_KEY, identity.nickname);
+  if (!forkSession) {
     localStorage.setItem(PLAYER_ID_KEY, identity.playerId);
     localStorage.setItem(NICKNAME_KEY, identity.nickname);
   }

@@ -28,6 +28,11 @@ export interface WaitingSlotData {
   name: string;
   /** Display colour hex (e.g. 0xff5577). 0 for empty. */
   color: number;
+  /** 2026-05-01 final block — verified nickname for human slots.
+   *  Empty for bots, empties, and guests. When present, the slot
+   *  displays "Rafa (Sergei)"; when absent it falls back to just
+   *  the critter name. */
+  nickname?: string;
 }
 
 export interface WaitingScreenData {
@@ -76,7 +81,7 @@ export function updateWaitingScreen(data: WaitingScreenData): void {
 }
 
 function waitingSlotsFingerprint(slots: WaitingSlotData[]): string {
-  return slots.map(s => `${s.kind}:${s.name}:${s.color}`).join('|');
+  return slots.map(s => `${s.kind}:${s.name}:${s.nickname ?? ''}:${s.color}`).join('|');
 }
 
 function buildWaitingSlotEl(s: WaitingSlotData): HTMLDivElement {
@@ -106,13 +111,26 @@ function buildWaitingSlotEl(s: WaitingSlotData): HTMLDivElement {
   }
   el.appendChild(avatar);
 
-  // Critter name for filled slots ("Sergei", "Trunk"); placeholder
-  // "Open" for empty slots so the animated-dots CSS reads as
-  // "waiting for player…" instead of pointing at a dash.
+  // 2026-05-01 final block — verified human slots display the
+  // PLAYER NICKNAME on the main line ("Rafa") with the critter
+  // name as a smaller subtitle ("Sergei"). Bots and guests fall
+  // back to the critter name only. Empty slots stay "Open".
   const name = document.createElement('span');
   name.className = 'waiting-slot-name';
-  name.textContent = s.name || (s.kind === 'empty' ? 'Open' : '—');
+  if (s.kind === 'empty') {
+    name.textContent = 'Open';
+  } else if (s.nickname) {
+    name.textContent = s.nickname;
+  } else {
+    name.textContent = s.name || '—';
+  }
   el.appendChild(name);
+  if (s.nickname && s.name) {
+    const sub = document.createElement('span');
+    sub.className = 'waiting-slot-subtitle';
+    sub.textContent = s.name;
+    el.appendChild(sub);
+  }
 
   // Badge: HUMAN / 🤖 BOT / OPEN — type of participant, below the name.
   // 2026-05-01 polish — bot rows now ship the sprite mask alongside
