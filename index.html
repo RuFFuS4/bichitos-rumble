@@ -867,6 +867,12 @@
     body.using-gamepad .controls-hint:not(.touch-only) {
       display: none;
     }
+    /* BLOQUE FINAL micropass v2 — character-select prompt has two
+       desktop variants (kbd-only + gamepad-only). Default: keyboard
+       shown. With a pad connected, swap to the gamepad strings. */
+    .prompt.gamepad-only { display: none; }
+    body.using-gamepad .prompt.kbd-only { display: none; }
+    body.using-gamepad .prompt.gamepad-only { display: block; }
     body.using-gamepad .controls-hint-gamepad {
       bottom: 28px;
       font-size: 13px;
@@ -2959,7 +2965,8 @@
         </div>
       </div>
     </div>
-    <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate · <kbd>B</kbd> belts</div>
+    <div class="prompt desktop-only kbd-only"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate · <kbd>B</kbd> belts</div>
+    <div class="prompt desktop-only gamepad-only"><kbd>D-Pad</kbd> select · <kbd>A</kbd> confirm · drag to rotate · <kbd>Select</kbd> belts</div>
     <div class="prompt touch-only">Tap a slot to select · tap again to confirm · drag preview to rotate</div>
     <button id="btn-open-belts" class="belts-trigger" type="button"
             aria-label="Open Hall of Belts">

@@ -19,6 +19,9 @@
 //     A       → confirm  (SPACE/Enter)
 //     B  (1)  → back     (T/Escape)
 //     Start (9) → restart (R)
+//     LB (4)  → portal toggle (replaces KeyP — synthesises a KeyP
+//               keydown so the existing handler in game.ts picks it
+//               up unchanged)
 //     D-Pad   → up/down/left/right
 //     Left stick direction edges → same as D-Pad (with hysteresis)
 //
@@ -56,6 +59,7 @@ const BTN = {
   BACK:     1,      // B / Circle — menu back
   ABILITY1: 2,      // X / Square — held
   ABILITY2: 3,      // Y / Triangle — held
+  PORTAL:   4,      // LB / L1    — toggle portal expand (replaces KeyP)
   ULTIMATE: 5,      // RB / R1    — held
   RESTART:  9,      // Start / Options — menu restart
   DPAD_UP:   12,
@@ -173,6 +177,19 @@ function tickPad(): void {
   edge(gp, BTN.DPAD_DOWN, 'down');
   edge(gp, BTN.DPAD_LEFT, 'left');
   edge(gp, BTN.DPAD_RIGHT, 'right');
+
+  // --- Portal toggle (LB) — bypass the menu-action queue and just
+  //     synthesise a KeyP keydown so the existing portal handler in
+  //     game.ts (which uses its own portalFreshKeys set, not the
+  //     abstract input layer) picks it up unmodified.
+  {
+    const now = pressed(gp, BTN.PORTAL);
+    const prev = pad.lastButton[BTN.PORTAL];
+    if (now && !prev) {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyP', key: 'p' }));
+    }
+    pad.lastButton[BTN.PORTAL] = now;
+  }
 
   // --- Left stick direction edges (same menu actions as D-Pad) ---
   const nextX = stickDirection(gp.axes[0] ?? 0, pad.stickX);
