@@ -7,8 +7,54 @@ Status legend:
 - `[!]` problema detectado / requiere ajuste / NO se cierra antes de la entrega
 - `[~⚠]` implementado con simplificación documentada (versión fiel al espíritu, no idéntica al diseño)
 
-Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish + 2026-04-30 final-L + 2026-04-30 final-polish + 2026-05-01 microfixes (deadline candidate).
+Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish + 2026-04-30 final-L + 2026-04-30 final-polish + 2026-05-01 microfixes + 2026-05-01 BLOQUE FINAL (deadline-day).
 Use `git log --grep abilities` to see the commit trail behind each item.
+
+> **BLOQUE FINAL pass (2026-05-01 — deadline-day). Todos `[~]` pendientes de validación de Rafa:**
+>
+> Rafa pidió que NO se reinterpretasen las habilidades — texto literal del brief
+> aplicado tal cual.
+>
+> - **A1 Sebastian L (hold-to-fire All-in)** — antes el L disparaba al pulsar.
+>   Ahora:
+>   1. **Press+hold** del L → Sebastian entra en windup-charge **rooted** (`lHoldCharging = true` → `effectiveSpeed = 0`) Y se pinta la **trajectory preview** en el suelo (línea crimson + acento amarillo) hacia el borde escogido. NO ejecuta dash todavía.
+>   2. **Release** del L → dash lateral resuelve. Hit → enemy mandado lejos + Sebastian PARADO + control vuelve. Miss → endpoint × 1.5 más allá del rim → cae al void.
+>   3. **Auto-release seguro** a `holdToFireMaxMs = 3000` ms para que un hold infinito no bloquee la partida.
+>   - Server-authoritative: `BrawlRoom` añade pre-tick block que detecta rising/falling edge sobre `inputUltimate` y broadcastea `lChargeStart` (cliente offline + remoto pintan la línea idéntica).
+>   - Cliente: nuevo `tickSebastianHoldToFire` en `src/abilities.ts` orquesta el preview + mantiene el critter rooted.
+> - **A2 Cheeto L (semicírculo / cono frontal con ondas que escalan)** — antes era un anillo radial 360° con ramp uniforme. Ahora:
+>   - **Visual**: NO hay anillo 360°. Cada pulso spawnea **arco de 5 dust-puffs** sobre la onda + accent ring centrado en `waveCenter` (escalado al ancho de la onda actual). Lectura: "Cheeto ruge ondas hacia delante".
+>   - **Hit detection**: el knockback aplica solo a críters cuyo `d` (distancia 2D) cae en `[waveMin, waveMax]` Y dentro del cono frontal (`dot(facing, dir) ≥ cos(half-cone)`). El frente real se EXPANDE — el primer pulso afecta cosas pegadas, el último golpea solo a 6-7 u.
+>   - **Ramp doubling**: pulso N usa `min(2^(N-1), 8)` → 1, 2, 4, 8, 8, 8 sobre 6 pulsos. Cada pulso siente el doble que el anterior; capped a 8× para no superar el clamp `maxSpeed`.
+>   - **Push direction**: ya no radial. Ahora `facingX/Z * effectiveForce * fall` — el rugido empuja hacia DELANTE consistentemente, no en dirección al caster.
+>   - Cliente offline + server replican la geometría exacta. `lPulse` event payload añade `waveCenter, waveThickness, count` para que online viewers pinten el mismo arco.
+> - **A3 Trunk (mucho más bestia)** — texto literal de Rafa: "K stun ×2 duration, headbutt force ×3, movement speed ×2".
+>   - **K Trunk Slam**: `slamStunDuration 1.0 → 2.0` (×2). Stun afecta a TODOS los críters dentro del AoE radius 7 u. Combinado con la regla global "stunned recibe ×4 knockback", un Slam seguido de cabezazo elimina al objetivo.
+>   - **Headbutt**: `headbuttForce` 16 → 48 (sobreescribe PWS), `headbuttBoost 1.0 → 3.0`. EFFECTIVE force ≈ 48 × 2.5 × 3.0 = 360 unidades vs 16 × 2.5 × 1.0 = 40 anteriores → ×9 sensación de cabezazo.
+>   - **Speed**: `speed 8 → 16` (×2). Trunk ya no es el yunque lento; puede perseguir.
+>   - **L Trunk Grip** sigue como en el microfix pass anterior (range 28, cone 35°, gripStun 5.0). Stampede / `rammingL` retirados.
+> - **A4 Kurama** — verify-only, no tocar:
+>   - K Mirror Trick: alpha 0.08 confirmado en `updateVisuals`; online sync via `handleAbilityFired` ya operativo desde el microfix pass; force-zero `invisibilityTimer` cuando el K slot pierde `active` evita el bug de invisibilidad permanente.
+>   - L Copycat: chip de color con la inicial del bichito target sigue intacto en el slot HUD.
+>
+> **Online identity rebuild (2026-05-01 BLOQUE FINAL)**:
+> - **Modelo nuevo**: `sessionStorage = identidad confirmada de ESTA pestaña`; `localStorage = nickname preferido del device, sólo prefill`.
+> - **Una pestaña + refresh** → recuperación silenciosa via sessionStorage. Sin prompts.
+> - **DOS pestañas mismo browser** → la segunda NO autologa. Modal de nickname aparece prefilled con el preferred. Si entras nick distinto → server crea row independiente. Si entras MISMO nick activo → error claro `nickname_active_in_room`.
+> - **Otro browser / incógnito** → no hay sessionStorage compartido. Entra al flow normal de prompt.
+> - **PlayerSchema.nickname** sincronizado: `@type('string') nickname` añadido al PlayerSchema; BrawlRoom escribe el nick al join. Cliente waiting room lee `p.nickname` y lo muestra como línea principal con `.waiting-slot-subtitle` para el critter.
+>
+> **3D Belts (2026-05-01 BLOQUE FINAL — NO post-jam)**:
+> - **`src/belt-thumbnail.ts` (NEW)**: shared offscreen WebGLRenderer 144×144 con auto-fit, key + rim lighting, slight 3/4 angle. Cache per beltId. `getBeltThumbnail(id) → Promise<dataURL | null>`. Loads `./models/belts/<beltId>.glb` lazy.
+> - **`src/belt-viewer.ts` (NEW)**: full-screen modal 640×640 con drag-to-rotate (mouse + touch), idle auto-rotation, ESC + backdrop + close button. `openBeltViewer(beltId, displayName, description?)` API. Lazy-init renderer/scene → cero overhead hasta que el user clickea.
+> - **`src/hall-of-belts.ts`**: slots unlocked ahora `.belt-slot-clickable`, click/Enter abre el viewer. Async `getBeltThumbnail(badge.id)` upgrade el `<img>` del slot al render 3D mientras la 2D PNG queda como fallback. Mismo patrón en la online tab via `.belt-online-icon-clickable`.
+>
+> **Gamepad audit (2026-05-01 BLOQUE FINAL)**:
+> - Wiring confirmado en `src/input.ts` (left-stick movement, A=headbutt, X=J, Y=K, RB=L, Start=pause/menu). Title screen muestra "🎮 Gamepad auto-detected" cuando hay un mando enchufado y el viewport no es touch.
+> - Smoke test plan: documentado en `FINAL_JAM_QA_CHECKLIST.md` sección 8 (Rafa lo prueba con su mando antes del submit).
+>
+> Sentinels actualizados: Trunk K slamStun 2.0, speed 16, headbuttForce 48. Sebastian L holdToFireL true / holdToFireMaxMs 3000. Cheeto L wave model (waveStep 1.4 / waveThickness 2.0 / cap 8×).
+> Parity: ALL PASSED.
 
 > **Last-minute pass (2026-05-01 — submit-night). Todos `[~]` pendientes de validación de Rafa:**
 >

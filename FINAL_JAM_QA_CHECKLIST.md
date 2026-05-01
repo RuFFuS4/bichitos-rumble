@@ -86,14 +86,14 @@
 > Marca [x] cuando hayas confirmado en partida real (offline u online).
 
 - [ ] **Sergei** — J Gorilla Rush dash · K Shockwave radial AoE · L Frenzy (durante L, otros le golpean y casi no se mueve — confirmación visual del aguante).
-- [ ] **Trunk** — J Trunk Ram (recorre claramente más que un dash normal) · K Trunk Grip (yank + stun: víctima queda quieta + recibe ×2 knockback) · L Stampede (Trunk como battering ram, los demás rebotan al choque).
+- [ ] **Trunk** — J Trunk Ram (recorre claramente más que un dash normal) · K Trunk Slam (AoE radius 7 + stun 2 s a todos los críters golpeados; cabezazo posterior los desvanece) · L Trunk Grip (yank al enemigo más cercano frontal hasta 28 u + stun 5 s + ×4 vulnerable). Trunk se siente bestia: speed ×2, cabezazo ×3.
 - [ ] **Kurama** — J Fox Dash · K Mirror Trick (clon aparece DONDE activaste; Kurama aparece DETRÁS-ALEJADA; Kurama puede moverse durante el clon) · L Copycat (después de hacer headbutt a otro critter, **mini-icono del bichito target aparece en el slot L**; al activar L copia su mecánica).
 - [ ] **Shelly** — J Shell Charge · K Steel Shell (Shelly inamovible mientras dura, otros rebotan al chocar) · L Saw Shell (gira + cualquier toque MANDA al enemigo MUY lejos; al terminar, no hay anim rara colgada).
 - [ ] **Kermit** — J Leap Forward · K Poison Cloud (zona verde, slow + overlay vignette local SOLO cuando el viewer está dentro) · L Toxic Touch (al tocar enemigo, su input se invierte ~3 s).
 - [ ] **Sihans** — J Burrow Rush · K Sand Trap (blink + quicksand zone) · L Sinkhole (**fragmentos REALES del arena se rompen + caen** delante de Sihans; centro nunca se rompe; un crítico que esté encima cae).
 - [ ] **Kowalski** — J Ice Slide · K Snowball (proyectil; al impactar, target ❄️ frozen 5 s y reduce velocidad 50%) · L Frozen Floor (área amplia de hielo + dura ≥ 7 s; los enemigos resbalan).
-- [ ] **Cheeto** — J Pounce · K Shadow Step (blink al enemigo más cercano + impact shockwave) · L Cone Pulse (Cheeto se queda quieto + frente sale anillo expansivo cada 0.30 s + sonido + camera shake; enemigos delante reciben push, detrás no).
-- [ ] **Sebastian** — J Claw Rush · K Claw Wave (cono frontal con knockback fuerte) · L All-in (1 s vibración → dash lateral hacia un borde · HIT → enemy mandado lejos, Sebastian se PARA, control vuelve · MISS → Sebastian sigue y **cae al void**).
+- [ ] **Cheeto** — J Pounce · K Shadow Step (blink al enemigo más cercano + impact shockwave) · L Cone Pulse (Cheeto rooted + cada 0.30 s sale un ARCO frontal de dust-puffs + accent ring; cada onda golpea progresivamente más LEJOS y más FUERTE: pulso N empuja con `min(2^(N-1), 8)`× la base; push hacia delante, no radial).
+- [ ] **Sebastian** — J Claw Rush · K Claw Wave (cono frontal con knockback fuerte) · L All-in (PRESS+HOLD del L → trajectory preview en el suelo + Sebastian rooted en windup. RELEASE → dash lateral. HIT → enemy mandado lejos, Sebastian se PARA, control vuelve · MISS → Sebastian sigue y **cae al void**. Auto-release a 3 s).
 
 ## 6. Estados / Iconos
 
@@ -202,6 +202,19 @@
 - [ ] Datos de producción saneados o documentados (sección 12).
 
 ---
+
+## BLOQUE FINAL 2026-05-01 (deadline-day, verificar específicamente)
+
+> Estos seis bullets cambiaron en el bloque final pre-deadline. Confirma cada
+> punto antes del go.
+>
+> - [ ] **Sebastian L hold-to-fire**: PRESS+HOLD del L → línea crimson en el suelo apuntando al borde + Sebastian quieto en windup. RELEASE → dash lateral resuelve. Si te pasas de los 3 s, auto-release igualmente.
+> - [ ] **Cheeto L cono frontal**: el VFX es un ARCO frontal (no anillo 360°). El primer pulso golpea cosas pegadas; los siguientes pulsos pegan progresivamente más LEJOS y MÁS FUERTE (1×, 2×, 4×, 8× ...). El push siempre va hacia delante, no hacia el caster.
+> - [ ] **Trunk bestia**: speed claramente ×2 que antes (Trunk persigue), cabezazo arrasador (×3 sensación), Slam K stun ×2 duración → cabezazo posterior elimina al stuneado.
+> - [ ] **Online identity multi-tab**: pestaña A entra como Rafa1. Pestaña B mismo browser → modal aparece prefilled con Rafa1; si cambias a Rafa2, entra. Si dejas Rafa1 con A activo, error claro.
+> - [ ] **Waiting room nicknames**: en la sala de espera online, los slots ocupados muestran el NICKNAME del jugador como línea principal (no el critter name).
+> - [ ] **Hall of Belts 3D**: abre Hall of Belts con B desde character select. Cinturones unlocked se ven como render 3D (no PNG plana). Click en un cinturón → modal 640×640 con el cinturón rotando + drag para rotar manualmente. ESC cierra.
+> - [ ] **Belt viewer también en online tab**: Online tab del Hall of Belts también permite click → preview 3D rotable de cualquier belt online.
 
 ## Last-minute fixes 2026-05-01 (submit-night, verificar específicamente)
 
