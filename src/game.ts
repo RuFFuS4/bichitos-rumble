@@ -40,7 +40,7 @@ import {
 } from './portal';
 import type { Room } from 'colyseus.js';
 import { getStateCallbacks } from 'colyseus.js';
-import { sendInput, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, type AbilityFiredEvent } from './network';
+import { sendInput, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, type AbilityFiredEvent } from './network';
 import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
@@ -48,7 +48,7 @@ import { type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
-import { spawnShockwaveRing, spawnFrenzyBurst, spawnDecoyAt, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing, deriveZoneVfxKind } from './abilities';
+import { spawnShockwaveRing, spawnFrenzyBurst, spawnDecoyAt, spawnAllInTrajectoryPreview, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing, deriveZoneVfxKind } from './abilities';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { clearProjectiles } from './projectiles';
 import { clearAllCritterStatus, disposeCritterStatus } from './hud/status-icons';
@@ -916,6 +916,49 @@ export class Game {
         palette?.pound?.color, palette?.pound?.secondary, vfxKind);
     });
 
+    // 2026-05-01 final block — Cheeto Cone Pulse remote VFX. Spawns
+    // the same arc-of-dust-puffs + accent ring the offline path
+    // produces, positioned at the wave's leading edge per the
+    // server-broadcast `waveCenter`. Without this, online viewers
+    // saw the cone pulses HIT but had no visible cone wave.
+    onLPulse(room, (ev) => {
+      const caster = this.onlineCritters.get(ev.sessionId);
+      const palette = caster ? getCritterVfxPalette(caster.config.name) : undefined;
+      const halfCone = ((ev.angleDeg ?? 45) * Math.PI) / 180;
+      const facingX = Math.sin(ev.rotationY);
+      const facingZ = Math.cos(ev.rotationY);
+      const center = typeof ev.waveCenter === 'number' && ev.waveCenter > 0
+        ? ev.waveCenter
+        : (ev.radius ?? 4.5) * 0.55;
+      const thickness = typeof ev.waveThickness === 'number' && ev.waveThickness > 0
+        ? ev.waveThickness
+        : 2.0;
+      const baseAngle = Math.atan2(facingX, facingZ);
+      const N_PUFFS = 5;
+      for (let i = 0; i < N_PUFFS; i++) {
+        const t = i / (N_PUFFS - 1);
+        const a = baseAngle - halfCone + t * 2 * halfCone;
+        spawnDustPuff(this.scene, ev.x + Math.sin(a) * center, 0, ev.z + Math.cos(a) * center);
+      }
+      const ringX = ev.x + facingX * center;
+      const ringZ = ev.z + facingZ * center;
+      spawnShockwaveRing(this.scene, ringX, ringZ, thickness * 0.7, palette?.pound);
+    });
+
+    // 2026-05-01 final block — Sebastian All-in charge-start preview
+    // for remote viewers. Without this, only the local Sebastian's
+    // screen showed the trajectory line; other clients saw him
+    // rooted with no indicator of which way he was about to dash.
+    onLChargeStart(room, (ev) => {
+      spawnAllInTrajectoryPreview(
+        this.scene,
+        ev.x, ev.z,
+        ev.dirX, ev.dirZ,
+        ev.range,
+        ev.maxMs / 1000,
+      );
+    });
+
     // 2026-04-30 final-polish — Sihans Sinkhole real-hole sync.
     // Server broadcasts the indices of fragments it just knocked
     // out under the hole disc; clients knock them out locally so
@@ -1669,6 +1712,9 @@ export class Game {
         kind: p.isBot ? 'bot' : 'human',
         name: p.critterName || '',
         color: config?.color ?? 0xffffff,
+        // 2026-05-01 final block — server now syncs nickname per
+        // verified human slot. Empty for bots / guests.
+        nickname: typeof p.nickname === 'string' && p.nickname ? p.nickname : undefined,
       });
     });
     while (slots.length < ONLINE_MAX_PLAYERS) {
@@ -1816,7 +1862,7 @@ export class Game {
         this.matchTimer -= effectiveDt;
 
         // 1. Player input
-        updatePlayer(this.player, effectiveDt);
+        updatePlayer(this.player, effectiveDt, this.scene, this.critters);
 
         // 1.5. Portal check (before physics so redirect happens cleanly)
         // P key toggles minimized/expanded state during match.

@@ -103,6 +103,18 @@ interface InternalPlayerData {
   allInDirX?: number;
   allInDirZ?: number;
   allInActive?: boolean;
+  /** 2026-05-01 final block — Sebastian hold-to-fire L state.
+   *  `lHoldCharging` mirrors the client flag and is set on the
+   *  rising edge of `inputUltimate`. While charging the player is
+   *  rooted (effectiveSpeed → 0 via the same critter-side gate)
+   *  and the trajectory preview is painted client-side. On the
+   *  falling edge of `inputUltimate` (or when the auto-release
+   *  timer elapses) we set `allInActive = true` so step 2.g
+   *  resolves the dash. `lHoldChargeTime` is the server's safety
+   *  timer; `lHoldPrevInput` provides the rising-edge detection. */
+  lHoldCharging?: boolean;
+  lHoldChargeTime?: number;
+  lHoldPrevInput?: boolean;
 }
 
 function newInternal(): InternalPlayerData {
@@ -259,6 +271,15 @@ export class BrawlRoom extends Room<GameState> {
 
     const p = this.buildPlayerSchema(client.sessionId, critterName, spawn, /*isBot*/ false);
     this.state.players.set(client.sessionId, p);
+    // 2026-05-01 final block — write the verified nickname onto
+    // PlayerSchema so the cliente waiting room + future spectator
+    // UI can show "Rafa (Trunk)" instead of just the critter name.
+    // Guests (no verified identity) get an empty string and the
+    // cliente falls back to the critter name display.
+    if (typeof options.nickname === 'string') {
+      const n = options.nickname.trim().slice(0, 16);
+      if (n.length >= 3) p.nickname = n;
+    }
     const internal = newInternal();
     // Verify the online identity if the client supplied one. Only a
     // verified identity gets credited on match-end; guests (no identity
@@ -689,10 +710,86 @@ export class BrawlRoom extends Room<GameState> {
       // 2026-04-30 final-L — slippery acceleration penalty.
       const slipperyHere = isOnSlipperyZone(p, this.activeZones);
       const accelMul = slipperyHere ? 0.35 : 1.0;
-      const speed = effectiveSpeed(p, this.activeZones);
+      let speed = effectiveSpeed(p, this.activeZones);
+      // 2026-05-01 final block — Sebastian holding the L is rooted.
+      if (data.lHoldCharging) speed = 0;
       const accel = speed * SIM.movement.accelerationScale * accelMul;
       p.vx += mx * accel * dt;
       p.vz += mz * accel * dt;
+    }
+
+    // 2026-05-01 final block — Sebastian hold-to-fire L state machine.
+    // Runs BEFORE tickPlayerAbilities so we can intercept the
+    // `inputUltimate` flag and prevent the standard activation
+    // path while charging (the dash fires on RELEASE, not press).
+    for (const p of players) {
+      if (!p.alive || p.falling) continue;
+      const data = this.internal.get(p.sessionId);
+      if (!data) continue;
+      const kit = getAbilityKit(p.critterName);
+      const lDef = kit[2];
+      const lState = p.abilities[2];
+      if (!lDef || !lState || !lDef.holdToFireL) {
+        data.lHoldPrevInput = !!data.inputUltimate;
+        continue;
+      }
+      const ultDown = !!data.inputUltimate;
+      const ultPrev = !!data.lHoldPrevInput;
+      const risingEdge = ultDown && !ultPrev;
+      const fallingEdge = !ultDown && ultPrev;
+      data.lHoldPrevInput = ultDown;
+      if (data.lHoldCharging) {
+        data.lHoldChargeTime = (data.lHoldChargeTime ?? 0) + dt;
+        const maxSec = (lDef.holdToFireMaxMs ?? 3000) / 1000;
+        if (fallingEdge || (data.lHoldChargeTime ?? 0) >= maxSec) {
+          // Release → trigger resolution. Step 2.g picks it up.
+          data.lHoldCharging = false;
+          data.lHoldChargeTime = 0;
+          data.allInActive = true;
+          // Cooldown applied here so tickPlayerAbilities doesn't
+          // try to re-activate next tick.
+          lState.cooldownLeft = lDef.cooldown;
+        }
+        // Suppress activation while charging — tickPlayerAbilities
+        // would otherwise activate the L on input=true.
+        data.inputUltimate = false;
+      } else if (risingEdge && lState.cooldownLeft <= 0 && !lState.active) {
+        // Start charging. Cache lateral direction now so the dash
+        // commits to the side that's closer to the rim from THIS
+        // facing — same algorithm as the cliente preview.
+        data.lHoldCharging = true;
+        data.lHoldChargeTime = 0;
+        const range = lDef.allInDashRange ?? 9.0;
+        const right: [number, number] = [Math.cos(p.rotationY), -Math.sin(p.rotationY)];
+        const left: [number, number] = [-right[0], -right[1]];
+        const radEnd = (dx: number, dz: number) => Math.sqrt(
+          (p.x + dx * range) ** 2 + (p.z + dz * range) ** 2,
+        );
+        const dir = radEnd(right[0], right[1]) >= radEnd(left[0], left[1]) ? right : left;
+        data.allInDirX = dir[0];
+        data.allInDirZ = dir[1];
+        // Suppress activation: standard flow would set lState.active
+        // and start the windup; we want the L to stay inactive
+        // while the user holds the input.
+        data.inputUltimate = false;
+        // Broadcast charge-start so remote viewers can paint the
+        // same trajectory preview their local Sebastian sees.
+        this.broadcast('lChargeStart', {
+          sessionId: p.sessionId,
+          x: p.x, z: p.z,
+          dirX: dir[0], dirZ: dir[1],
+          range,
+          maxMs: lDef.holdToFireMaxMs ?? 3000,
+        });
+      } else if (data.lHoldCharging && !ultDown) {
+        // Defensive: suppress in case the rising-edge clause
+        // didn't run but we somehow ended up in charging without
+        // input — release immediately.
+        data.lHoldCharging = false;
+        data.allInActive = true;
+        lState.cooldownLeft = lDef.cooldown;
+        data.inputUltimate = false;
+      }
     }
 
     // 2. Tick abilities (generic dispatcher) and broadcast fire events
@@ -884,34 +981,43 @@ export class BrawlRoom extends Room<GameState> {
           while (data.pulseAccum >= interval) {
             data.pulseAccum -= interval;
             data.pulseCount++;
-            // 2026-05-01 last-minute — doubling ramp capped at 8×.
-            // Pulse N: base × min(2^(N-1), 8). Mirrors offline.
+            // 2026-05-01 final block — rolling wave model. Each
+            // pulse is a forward-moving band, force pushes targets
+            // along facing (not radial). Doubling ramp capped at 8.
             const ramp = Math.min(Math.pow(2, data.pulseCount - 1), 8);
             const halfCone = ((lDef.pulseAngleDeg ?? 45) * Math.PI) / 180;
             const cosCone = Math.cos(halfCone);
             const facingX = Math.sin(p.rotationY);
             const facingZ = Math.cos(p.rotationY);
-            const radius = lDef.pulseRadius ?? 4.5;
             const baseForce = lDef.pulseForce ?? 28;
             const effectiveForce = baseForce * ramp;
+            const waveStep = 1.4;
+            const waveThickness = 2.0;
+            const waveCenter = data.pulseCount * waveStep;
+            const waveMin = Math.max(0.3, waveCenter - waveThickness * 0.5);
+            const waveMax = waveCenter + waveThickness * 0.5;
             for (const other of players) {
               if (other === p || !other.alive || other.falling) continue;
               if (other.immunityTimer > 0) continue;
               const dx = other.x - p.x;
               const dz = other.z - p.z;
               const d = Math.sqrt(dx * dx + dz * dz);
-              if (d > radius || d < 0.01) continue;
+              if (d < waveMin || d > waveMax || d < 0.01) continue;
               const nx = dx / d;
               const nz = dz / d;
               if (nx * facingX + nz * facingZ < cosCone) continue;
-              const fall = 1 - d / radius;
-              other.vx += nx * effectiveForce * fall;
-              other.vz += nz * effectiveForce * fall;
+              const fall = 1 - Math.abs(d - waveCenter) / (waveThickness * 0.5);
+              other.vx += facingX * effectiveForce * fall;
+              other.vz += facingZ * effectiveForce * fall;
             }
             this.broadcast('lPulse', {
               sessionId: p.sessionId,
               x: p.x, z: p.z, rotationY: p.rotationY,
-              radius, angleDeg: lDef.pulseAngleDeg ?? 45,
+              radius: lDef.pulseRadius ?? 4.5,
+              angleDeg: lDef.pulseAngleDeg ?? 45,
+              waveCenter,
+              waveThickness,
+              count: data.pulseCount,
             });
           }
         }

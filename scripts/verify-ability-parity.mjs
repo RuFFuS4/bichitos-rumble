@@ -246,7 +246,7 @@ for (const [name, e] of Object.entries(expected)) {
 //     L is Grip (gripStunDuration 5.0). No more frenzy on Trunk.
 //   · Sergei: K 3.5 / 68 unchanged, L frenzy speed 1.55, mass 5.50.
 const sentinels = {
-  Trunk:  { trunkRedesign: true, K: { rad: 7.0, frc: 50, slamStun: 1.0 }, L: { gripStun: 5.0 } },
+  Trunk:  { trunkRedesign: true, K: { rad: 7.0, frc: 50, slamStun: 2.0 }, L: { gripStun: 5.0 } },
   Sergei: { K: { rad: 3.5, frc: 68 }, L: { spd: 1.55, mass: 5.50 } },
 };
 for (const [name, e] of Object.entries(sentinels)) {

@@ -15,6 +15,14 @@ export class PlayerSchema extends Schema {
   @type('string') sessionId: string = '';
   @type('string') critterName: string = 'Sergei';
   /**
+   * 2026-05-01 final block — display nickname for this player. Set on
+   * onJoin from the verified `options.nickname`. Empty for bots and
+   * for humans who joined without a verified identity (guest mode).
+   * Synced so the waiting screen + future spectator UI can show
+   * "Rafa1 (Trunk)" instead of just the critter name.
+   */
+  @type('string') nickname: string = '';
+  /**
    * True when this "player" is a server-controlled bot. Bots use the same
    * PlayerSchema (identical physics/abilities/HUD path) — only the input
    * source differs: a bot's input comes from sim/bot.ts each tick, a

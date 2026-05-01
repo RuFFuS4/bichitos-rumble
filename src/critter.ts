@@ -87,10 +87,17 @@ export const CRITTER_PRESETS: CritterConfig[] = [
   {
     ...deriveCritterStats('Trunk'),
     name: 'Trunk', color: 0x8c8c8c,
-    // 2026-04-30 final-polish (Rafa: "el cabezazo debe sentirse x3"):
-    // Trunk shipped with boost 1.0 (default). Bumping to 3.0 multiplies
-    // both the raw headbutt force and the camera shake on impact —
-    // matches the "elephant just charged you" read he was missing.
+    // 2026-05-01 final block (Rafa: "Trunk debe sentirse MUCHO más bestia
+    // — cabezazo ×3, velocidad ×2"). PWS gives Trunk speed 8 and
+    // headbuttForce 16; override here so the elephant actually feels
+    // like an elephant. headbuttBoost stays at 3.0 (multiplies
+    // headbuttForce in physics) so the EFFECTIVE headbutt is now
+    // 48 × 2.5 × 3.0 ≈ 360 force units — three times what the prior
+    // 16 × 2.5 × 3.0 = 120 delivered. Movement speed 8 → 16 is the
+    // biggest playability shift: Trunk is no longer the slow-moving
+    // anvil, he can chase. Mass stays at 1.2 from PWS.
+    speed: 16,
+    headbuttForce: 48,
     headbuttBoost: 3.0,
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
@@ -197,6 +204,13 @@ export class Critter {
    *  Set by physics.resolveCollisions on a successful headbutt
    *  hit; consumed by Kurama L Copycat at fire time. */
   lastHitTargetCritter = '';
+  /** 2026-05-01 final block — Sebastian hold-to-fire L charging
+   *  state. While `lHoldCharging` is true the player is rooted
+   *  (effectiveSpeed → 0) and the trajectory preview is painted
+   *  on the ground. Set on press of the L input, cleared on
+   *  release (where the dash actually fires). */
+  lHoldCharging = false;
+  lHoldChargeTime = 0;
   /** 2026-04-29 — local-only fog-of-war fade. Set by the Kermit
    *  Poison Cloud overlay driver each frame: when the local critter
    *  is inside the cloud and THIS critter is outside it, fadeAlpha
@@ -407,6 +421,10 @@ export class Critter {
   get effectiveSpeed(): number {
     // Stun (Trunk Grip K) overrides everything: rooted, can't move.
     if (this.stunTimer > 0) return 0;
+    // 2026-05-01 final block — Sebastian holding the L to charge
+    // the All-in dash is rooted while he aims. Released → dash
+    // fires and this flag clears.
+    if (this.lHoldCharging) return 0;
     // Active abilities (charge_rush boost, frenzy buff, K root, blink
     // root) × any slow zones the critter is currently standing inside
     // (Kermit Poison Cloud, Sihans Quicksand) × the Snowball hit-slow

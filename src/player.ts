@@ -1,5 +1,6 @@
+import * as THREE from 'three';
 import { Critter } from './critter';
-import { activateAbility } from './abilities';
+import { activateAbility, tickSebastianHoldToFire } from './abilities';
 import { FEEL } from './gamefeel';
 import { getMoveVector, isHeld } from './input';
 
@@ -8,7 +9,12 @@ import { getMoveVector, isHeld } from './input';
  * Never touches the keyboard directly. When touch input is added, this file
  * needs no changes.
  */
-export function updatePlayer(critter: Critter, dt: number): void {
+export function updatePlayer(
+  critter: Critter,
+  dt: number,
+  scene?: THREE.Scene,
+  allCritters?: readonly Critter[],
+): void {
   if (!critter.alive) return;
 
   const move = getMoveVector();
@@ -48,7 +54,18 @@ export function updatePlayer(critter: Critter, dt: number): void {
   }
   // Ultimate — only critters with a third ability respond. Safe on current
   // roster (placeholders have 2 abilities → abilityStates[2] is undefined).
-  if (isHeld('ultimate') && critter.abilityStates[2]) {
-    activateAbility(critter.abilityStates[2], critter);
+  // 2026-05-01 final block — Sebastian's L is hold-to-fire: pressing
+  // doesn't activate, it starts a charge state with the trajectory
+  // preview painted on the ground; releasing fires the dash.
+  // `tickSebastianHoldToFire` owns that state machine. Other critters
+  // keep the press-to-activate behaviour.
+  const lState = critter.abilityStates[2];
+  if (lState) {
+    const ultDown = isHeld('ultimate');
+    if (lState.def.holdToFireL && scene && allCritters) {
+      tickSebastianHoldToFire(critter, ultDown, dt, allCritters as Critter[], scene);
+    } else if (ultDown) {
+      activateAbility(lState, critter);
+    }
   }
 }

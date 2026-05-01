@@ -110,6 +110,48 @@ export function onArenaFragmentsKilled(room: Room, cb: (ev: ArenaFragmentsKilled
   room.onMessage('arenaFragmentsKilled', cb);
 }
 
+/**
+ * 2026-05-01 final block — Cheeto Cone Pulse per-pulse broadcast.
+ * Server emits one event per pulse so clients can spawn the matching
+ * wave VFX (arc of dust puffs + accent ring) at the correct radius.
+ * Falls back gracefully if the server is on the older protocol — the
+ * `count` / `waveCenter` / `waveThickness` fields default to 0 and
+ * the offline-style handler picks sensible defaults.
+ */
+export interface LPulseEvent {
+  sessionId: string;
+  x: number;
+  z: number;
+  rotationY: number;
+  radius: number;
+  angleDeg: number;
+  waveCenter?: number;
+  waveThickness?: number;
+  count?: number;
+}
+export function onLPulse(room: Room, cb: (ev: LPulseEvent) => void): void {
+  room.onMessage('lPulse', cb);
+}
+
+/**
+ * 2026-05-01 final block — Sebastian All-in charge-start broadcast.
+ * Server emits this when a Sebastian player starts holding the L
+ * input. Carries the pre-picked dash direction so remote viewers
+ * can paint the same trajectory preview the local Sebastian sees.
+ */
+export interface LChargeStartEvent {
+  sessionId: string;
+  x: number;
+  z: number;
+  dirX: number;
+  dirZ: number;
+  range: number;
+  maxMs: number;
+}
+export function onLChargeStart(room: Room, cb: (ev: LChargeStartEvent) => void): void {
+  room.onMessage('lChargeStart', cb);
+}
+
 export interface JoinBrawlOptions {
   critterName?: string;
 }

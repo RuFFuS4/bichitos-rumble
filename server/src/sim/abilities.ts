@@ -96,6 +96,9 @@ export interface AbilityDef {
   allInDashRange?: number;
   allInHitForce?: number;
   allInMissSelfForce?: number;
+  // 2026-05-01 final block — Sebastian hold-to-fire flag.
+  holdToFireL?: boolean;
+  holdToFireMaxMs?: number;
   toxicTouchL?: boolean;
   confusedDuration?: number;
   frozenFloorL?: boolean;
@@ -178,13 +181,13 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // impulse 25 → 32, duration 0.42 → 0.55, speedMult 2.1 → 2.4.
     { type: 'charge_rush',  cooldown: 4.5, duration: 0.55, windUp: 0.08,
       impulse: 32, speedMultiplier: 2.4, massMultiplier: 4.0 },
-    // 2026-05-01 final REDESIGN — Trunk K is now Trunk Slam: wide
-    // AoE radial knockback (radius 7, force 50) + brief 1 s stun
-    // on every hit critter via slamStunDuration. Replaces the
-    // previous Grip K — Grip moved to L.
+    // 2026-05-01 final REDESIGN — Trunk Slam K. 2026-05-01 final
+    // block: slamStunDuration 1.0 → 2.0 (Rafa "doblar duración del
+    // stun"). Combined with the ×4 vulnerable rule, a Slam disables
+    // a target for 2 s during which any headbutt sends them flying.
     { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.30,
       radius: 7.0, force: 50, ...ROOTED_K,
-      slamStunDuration: 1.0 },
+      slamStunDuration: 2.0 },
     // 2026-05-01 final — Trunk Grip moved here. Yank to 1.6 u in
     // front + stun 5 s. While stunned, target receives × 4
     // incoming knockback (handled in physics). Reads as "grab,
@@ -335,13 +338,13 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // 2026-04-30 final-L — All-in Side Slash. Frenzy duration is the
     // 1.0 s rooted windup; the lateral dash + hit/miss resolution
     // fires when the duration ticks down.
-    // 2026-05-01 microfix — dashRange 7 → 9 + teleport-on-resolution
-    // (Sebastian se mueve de verdad ahora). Force: 100 → 110, miss
-    // 110 → 130 + endpoint × 1.5 garantiza que sale del arena.
+    // 2026-05-01 final block — hold-to-fire: dash fires on RELEASE,
+    // not press. Auto-release at 3000 ms. Mirrors offline.
     { type: 'frenzy',       cooldown: 15.0, duration: 1.0, windUp: 0.0,
       frenzySpeedMult: 0.0, frenzyMassMult: 1.20,
       allInL: true, allInDashSpeed: 28, allInDashRange: 9.0,
-      allInHitForce: 110, allInMissSelfForce: 130 },
+      allInHitForce: 110, allInMissSelfForce: 130,
+      holdToFireL: true, holdToFireMaxMs: 3000 },
   ],
 };
 

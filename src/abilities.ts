@@ -270,6 +270,14 @@ export interface AbilityDef {
   allInDashRange?: number;
   allInHitForce?: number;
   allInMissSelfForce?: number;
+  /** 2026-05-01 final block — Sebastian hold-to-charge / release-
+   *  to-fire flag. When true, the L doesn't activate on press;
+   *  instead the player goes into a charging state that paints
+   *  the trajectory preview and roots Sebastian. The dash fires
+   *  on the RELEASE of the L input (or after `holdToFireMaxMs`
+   *  as a safety auto-release). Pairs with `allInL`. */
+  holdToFireL?: boolean;
+  holdToFireMaxMs?: number;
 
   /** Kermit Toxic Touch: during frenzy, contact with another
    *  critter writes `target.confusedTimer = confusedDuration`.
@@ -706,7 +714,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // the previous Trunk Grip — that mechanic moved to L this
       // pass.
       name: 'Trunk Slam',
-      description: 'Wide AoE thump — knocks back and stuns briefly',
+      description: 'Wide AoE thump — knocks back and stuns',
       radius: 7.0,
       force: 50,
       windUp: 0.30,
@@ -714,7 +722,11 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       clipPlaybackRate: 2.8,
       slowDuringActive: 0, cancelAnimOnEnd: true,
       shakeBoost: 1.4,
-      slamStunDuration: 1.0,
+      // 2026-05-01 final block (Rafa: "duplicar la duración del stun"):
+      // 1.0 → 2.0. Combined with the global ×4 vulnerable rule in
+      // physics, a Slam now disables a target for 2 s during which any
+      // headbutt sends them flying ×4.
+      slamStunDuration: 2.0,
     }),
     makeGroundPound({
       // 2026-05-01 final — Trunk Grip moved here (was Trunk K).
@@ -1092,14 +1104,15 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 0.0, massMultiplier: 1.20,
       allInL: true,
       allInDashSpeed: 28,
-      // 2026-05-01 microfix (Rafa: "no hace dash real, no cae al
-      // miss"): dashRange 7 → 9 + fireAllInResolution ahora
-      // teleporta a Sebastian al hit point (caso hit) o al
-      // endpoint × 1.5 (caso miss). Sin el teleport el dash era
-      // un efecto remoto: Sebastian no se movía.
       allInDashRange: 9.0,
       allInHitForce: 110,
       allInMissSelfForce: 130,
+      // 2026-05-01 final block (Rafa: "PRESS+HOLD muestra preview,
+      // RELEASE ejecuta"). The dash no longer fires on activation;
+      // it fires on the release of the L input. Auto-release after
+      // 3.0 s as a safety so a held-down ult never blocks a match.
+      holdToFireL: true,
+      holdToFireMaxMs: 3000,
     }),
   ],
 };
@@ -1525,44 +1538,62 @@ export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scen
         const interval = def.pulseInterval ?? 0.30;
         const halfCone = ((def.pulseAngleDeg ?? 45) * Math.PI) / 180;
         const cosCone = Math.cos(halfCone);
-        const radius = def.pulseRadius ?? 4.5;
         const baseForce = def.pulseForce ?? 28;
         const facingX = Math.sin(c.mesh.rotation.y);
         const facingZ = Math.cos(c.mesh.rotation.y);
         while (state.acc >= interval) {
           state.acc -= interval;
           state.count++;
-          // 2026-05-01 last-minute (Rafa: "duplicar fuerza por
-          // pulso"): doubling ramp capped at 8×. Pulse N uses
-          // base × min(2^(N-1), 8). With 6 pulses over 1.8 s:
-          //   1, 2, 4, 8, 8, 8 — the cap stops the late pulses
-          // from being absurd while still doubling on the first
-          // four. The maxSpeed cap clamps actual velocity, so
-          // the doubling reads more as escalating SHOCK than
-          // ever-bigger displacement.
+          // 2026-05-01 final block (Rafa: "semicírculo / cono frontal,
+          // empuje expandiéndose hacia delante en cada pulso").
+          //
+          // Each pulse is a WAVE rolling forward through the cone:
+          // pulse N's hit band sits between (N × step − thickness/2)
+          // and (N × step + thickness/2) along the cone's depth.
+          // Force pushes targets along Cheeto's FACING (not radial)
+          // so the read is "rugido empuja hacia delante", and the
+          // doubling ramp from the prior pass stays.
           const ramp = Math.min(Math.pow(2, state.count - 1), 8);
           const effectiveForce = baseForce * ramp;
+          const waveStep = 1.4;
+          const waveThickness = 2.0;
+          const waveCenter = state.count * waveStep;
+          const waveMin = Math.max(0.3, waveCenter - waveThickness * 0.5);
+          const waveMax = waveCenter + waveThickness * 0.5;
           for (const other of critters) {
             if (other === c || !other.alive || other.falling) continue;
             if (other.isImmune) continue;
             const dx = other.x - c.x;
             const dz = other.z - c.z;
             const d = Math.sqrt(dx * dx + dz * dz);
-            if (d > radius || d < 0.01) continue;
+            if (d < waveMin || d > waveMax || d < 0.01) continue;
             const nx = dx / d;
             const nz = dz / d;
             if (nx * facingX + nz * facingZ < cosCone) continue;
-            const fall = 1 - d / radius;
-            other.vx += nx * effectiveForce * fall;
-            other.vz += nz * effectiveForce * fall;
+            // Falloff peaks at the wave's centre, drops to 0 at the
+            // band edges. Push direction is Cheeto's facing, not
+            // radial — the wave sweeps targets FORWARD.
+            const fall = 1 - Math.abs(d - waveCenter) / (waveThickness * 0.5);
+            other.vx += facingX * effectiveForce * fall;
+            other.vz += facingZ * effectiveForce * fall;
           }
+          // VFX: arc of dust puffs at the wave's leading edge,
+          // spanning the cone's full angular width, plus a small
+          // forward-shifted ring for accent.
           if (scene) {
-            const burstX = c.x + facingX * radius * 0.55;
-            const burstZ = c.z + facingZ * radius * 0.55;
             const palette = CRITTER_VFX_PALETTE[c.config.name]?.pound ?? { color: 0xff5522, secondary: 0xffe066 };
-            spawnShockwaveRing(scene, burstX, burstZ, radius * 0.65, { ...palette, holdMs: 250 });
+            const baseAngle = Math.atan2(facingX, facingZ);
+            const N_PUFFS = 5;
+            for (let i = 0; i < N_PUFFS; i++) {
+              const t = i / (N_PUFFS - 1);
+              const a = baseAngle - halfCone + t * 2 * halfCone;
+              spawnDustPuff(scene, c.x + Math.sin(a) * waveCenter, 0, c.z + Math.cos(a) * waveCenter);
+            }
+            const ringX = c.x + facingX * waveCenter;
+            const ringZ = c.z + facingZ * waveCenter;
+            spawnShockwaveRing(scene, ringX, ringZ, waveThickness * 0.7, { ...palette, holdMs: 280 });
           }
-          triggerCameraShake(FEEL.shake.groundPound * (0.25 + state.count * 0.04));
+          triggerCameraShake(FEEL.shake.groundPound * (0.25 + state.count * 0.06));
           playSound('abilityFire');
         }
       }
@@ -1918,30 +1949,13 @@ function fireFrenzy(def: AbilityDef, critter: Critter, _all: Critter[], scene: T
       0x6cc9ff, 0xffffff, 'ice');
   }
   // 2026-05-01 last-minute — Sebastian All-in trajectory preview.
-  // Ground line from Sebastian to the chosen lateral edge endpoint
-  // so the player can see WHERE he's about to commit before the
-  // dash fires. The line lives `duration` seconds (= the rooted
-  // windup window) and fades out with the resolution.
-  if (def.allInL) {
-    const range = def.allInDashRange ?? 9;
-    const right: [number, number] = [
-      Math.cos(critter.mesh.rotation.y),
-      -Math.sin(critter.mesh.rotation.y),
-    ];
-    const left: [number, number] = [-right[0], -right[1]];
-    const radEnd = (dx: number, dz: number) => {
-      const ex = critter.x + dx * range;
-      const ez = critter.z + dz * range;
-      return Math.sqrt(ex * ex + ez * ez);
-    };
-    const dir = radEnd(right[0], right[1]) >= radEnd(left[0], left[1]) ? right : left;
-    spawnAllInTrajectoryPreview(
-      scene,
-      critter.x, critter.z,
-      dir[0], dir[1],
-      range,
-      def.duration ?? 1.0,
-    );
+  // Ground line from Sebastian to the chosen lateral edge endpoint.
+  // Painted at activation only when the L is NOT hold-to-fire;
+  // hold-to-fire builds spawn the preview at charge START via the
+  // `startSebastianAllInCharge` helper instead, so the player sees
+  // the line for as long as they keep the input pressed.
+  if (def.allInL && !def.holdToFireL) {
+    spawnAllInPreview(scene, critter, def.allInDashRange ?? 9, def.duration ?? 1.0);
   }
 
   if (def.sinkholeL) {
@@ -2337,6 +2351,97 @@ export function spawnFrenzyBurst(scene: THREE.Scene, x: number, z: number, opts?
 }
 
 // ---------------------------------------------------------------------------
+// Sebastian All-in hold-to-fire helpers (offline)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the lateral side that takes Sebastian closer to the rim
+ * from his current position + facing. Used both at preview-spawn
+ * time and at resolution time so the line drawn on the ground
+ * matches where the dash will actually go.
+ */
+function pickAllInDir(critter: Critter, range: number): [number, number] {
+  const right: [number, number] = [
+    Math.cos(critter.mesh.rotation.y),
+    -Math.sin(critter.mesh.rotation.y),
+  ];
+  const left: [number, number] = [-right[0], -right[1]];
+  const radEnd = (dx: number, dz: number) => {
+    const ex = critter.x + dx * range;
+    const ez = critter.z + dz * range;
+    return Math.sqrt(ex * ex + ez * ez);
+  };
+  return radEnd(right[0], right[1]) >= radEnd(left[0], left[1]) ? right : left;
+}
+
+function spawnAllInPreview(scene: THREE.Scene, critter: Critter, range: number, ttl: number): void {
+  const dir = pickAllInDir(critter, range);
+  spawnAllInTrajectoryPreview(scene, critter.x, critter.z, dir[0], dir[1], range, ttl);
+}
+
+/**
+ * Local-player Sebastian started holding the L. Roots the caster,
+ * spawns the trajectory preview, and starts the auto-release timer.
+ * Idempotent: calling while already charging is a no-op.
+ */
+export function startSebastianAllInCharge(critter: Critter, scene: THREE.Scene): void {
+  if (critter.lHoldCharging) return;
+  const lState = critter.abilityStates[2];
+  if (!lState || lState.cooldownLeft > 0 || lState.active) return;
+  if (!lState.def.allInL || !lState.def.holdToFireL) return;
+  critter.lHoldCharging = true;
+  critter.lHoldChargeTime = 0;
+  spawnAllInPreview(scene, critter, lState.def.allInDashRange ?? 9, (lState.def.holdToFireMaxMs ?? 3000) / 1000);
+  applyImpactFeedback(critter); // small "charging" pulse
+  triggerCameraShake(FEEL.shake.groundPound * 0.15);
+}
+
+/**
+ * Local-player Sebastian released the L (or auto-release timer
+ * fired). Clears the charging flag, runs the dash resolution at
+ * the current facing, and starts the cooldown.
+ */
+export function releaseSebastianAllInCharge(
+  critter: Critter,
+  allCritters: Critter[],
+  scene: THREE.Scene,
+): void {
+  if (!critter.lHoldCharging) return;
+  const lState = critter.abilityStates[2];
+  critter.lHoldCharging = false;
+  critter.lHoldChargeTime = 0;
+  if (!lState) return;
+  fireAllInResolution(lState.def, critter, allCritters, scene);
+  lState.cooldownLeft = lState.def.cooldown;
+}
+
+/**
+ * Per-frame hold-to-fire driver for the local Sebastian. Called
+ * from `updatePlayer` each tick. Reads the live `ultimate` input
+ * via the `held` parameter (player.ts already has access to
+ * isHeld). Handles auto-release timeout.
+ */
+export function tickSebastianHoldToFire(
+  critter: Critter,
+  held: boolean,
+  dt: number,
+  allCritters: Critter[],
+  scene: THREE.Scene,
+): void {
+  const lState = critter.abilityStates[2];
+  if (!lState || !lState.def.holdToFireL) return;
+  if (critter.lHoldCharging) {
+    critter.lHoldChargeTime += dt;
+    const maxSec = (lState.def.holdToFireMaxMs ?? 3000) / 1000;
+    if (!held || critter.lHoldChargeTime >= maxSec) {
+      releaseSebastianAllInCharge(critter, allCritters, scene);
+    }
+  } else if (held && lState.cooldownLeft <= 0 && !lState.active) {
+    startSebastianAllInCharge(critter, scene);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // VFX: Sebastian All-in trajectory preview
 // ---------------------------------------------------------------------------
 
@@ -2352,7 +2457,7 @@ export function spawnFrenzyBurst(scene: THREE.Scene, x: number, z: number, opts?
  * Cleans up after `ttl` seconds; no per-frame state hung off
  * Critter.
  */
-function spawnAllInTrajectoryPreview(
+export function spawnAllInTrajectoryPreview(
   scene: THREE.Scene,
   originX: number,
   originZ: number,
