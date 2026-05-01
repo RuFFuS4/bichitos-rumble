@@ -1626,6 +1626,16 @@
     .waiting-slot.empty .waiting-slot-name {
       color: rgba(255,255,255,0.5);
     }
+    /* 2026-05-01 final block — critter-name subtitle that appears
+       below the player nickname when both are set. Smaller and
+       less saturated so the nickname stays the primary line. */
+    .waiting-slot-subtitle {
+      font-size: 10px;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: rgba(255, 220, 92, 0.78);
+      margin-top: -2px;
+    }
     .waiting-slot-badge {
       font-size: 9px;
       letter-spacing: 2px;
@@ -1792,6 +1802,123 @@
       pointer-events: auto;
     }
     .belts-modal.hidden { display: none; }
+
+    /* 2026-05-01 final block — clickable belt slots in the offline
+       Hall grid + the online column header. The 3D thumbnail
+       upgrade from `getBeltThumbnail` doesn't change layout, just
+       swaps the .belt-img src so the same crop / sizing applies. */
+    .belt-slot.belt-slot-clickable {
+      cursor: pointer;
+    }
+    .belt-slot.belt-slot-clickable:hover {
+      transform: translateY(-2px);
+      transition: transform 120ms ease-out;
+    }
+    .belt-slot.belt-slot-clickable:focus-visible {
+      outline: 2px solid #ffdc5c;
+      outline-offset: 2px;
+    }
+    .belt-online-icon-clickable {
+      cursor: pointer;
+      border-radius: 12px;
+      transition: transform 120ms ease-out;
+    }
+    .belt-online-icon-clickable:hover { transform: scale(1.05); }
+    .belt-online-icon-clickable:focus-visible {
+      outline: 2px solid #ffdc5c;
+      outline-offset: 2px;
+    }
+
+    /* 2026-05-01 final block — Belt 3D viewer (close-up modal that
+       opens when the user clicks a belt slot). One full-screen
+       overlay with a centred 640×640 canvas and a label/hint
+       cluster below; backdrop click closes. */
+    .belt-viewer-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 3500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      pointer-events: auto;
+    }
+    .belt-viewer-modal.hidden { display: none; }
+    .belt-viewer-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(5, 5, 14, 0.85);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      cursor: pointer;
+    }
+    .belt-viewer-panel {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      max-width: 720px;
+    }
+    .belt-viewer-canvas {
+      width: 100%;
+      max-width: 560px;
+      aspect-ratio: 1 / 1;
+      height: auto;
+      border-radius: 16px;
+      background: radial-gradient(circle at center, rgba(255, 220, 92, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
+      cursor: grab;
+      touch-action: none;
+    }
+    .belt-viewer-canvas:active { cursor: grabbing; }
+    .belt-viewer-title {
+      font-family: 'Cinzel', 'Georgia', serif;
+      font-size: 26px;
+      font-weight: 800;
+      color: #ffdc5c;
+      letter-spacing: 1px;
+      text-align: center;
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+    }
+    .belt-viewer-desc {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.85);
+      text-align: center;
+      max-width: 520px;
+      line-height: 1.4;
+    }
+    .belt-viewer-hint {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+    .belt-viewer-close {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #fff;
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+    }
+    .belt-viewer-close:hover {
+      background: rgba(255, 255, 255, 0.22);
+    }
+    @media (max-width: 520px) {
+      .belt-viewer-canvas { max-width: 88vw; }
+      .belt-viewer-title { font-size: 20px; }
+    }
     .belts-backdrop {
       position: absolute;
       inset: 0;

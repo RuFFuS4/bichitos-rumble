@@ -22,6 +22,8 @@ import {
   type LeaderboardEntry,
   type OnlineBeltId,
 } from './online-identity';
+import { getBeltThumbnail } from './belt-thumbnail';
+import { openBeltViewer } from './belt-viewer';
 
 let modalEl: HTMLDivElement | null = null;
 /** 'offline' (original 16 badges) or 'online' (5 competitive belts). */
@@ -188,9 +190,12 @@ function renderOfflineSlot(badge: BadgeDef, isUnlocked: boolean): HTMLDivElement
   slot.className = `belt-slot ${isUnlocked ? 'unlocked' : 'locked'} belt-${badge.category}`;
   slot.setAttribute('role', 'listitem');
   slot.setAttribute('title', `${badge.name}\n${badge.description}`);
-  // AI-generated PNG + emoji fallback. If the img errors (404 etc.),
-  // the onerror handler falls back to the emoji character. Locked
-  // badges always show the padlock regardless of asset availability.
+  // 2026-05-01 final block — unlocked slots try to render the 3D
+  // belt GLB as a thumbnail. Pipeline: 2D PNG ships first as the
+  // immediate fallback (cheap), then `getBeltThumbnail` upgrades
+  // the slot to the rendered GLB once it resolves. Locked slots
+  // stay padlocked. Click on an unlocked slot opens the belt
+  // viewer for a rotating close-up.
   const iconHtml = isUnlocked
     ? `<img class="belt-img" src="${escapeHtml(badge.imgPath)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${badge.icon}'}))">`
     : '🔒';
@@ -199,6 +204,22 @@ function renderOfflineSlot(badge: BadgeDef, isUnlocked: boolean): HTMLDivElement
     <div class="belt-name">${escapeHtml(badge.name)}</div>
     <div class="belt-desc">${escapeHtml(badge.description)}</div>
   `;
+  if (isUnlocked) {
+    slot.classList.add('belt-slot-clickable');
+    slot.setAttribute('role', 'button');
+    slot.setAttribute('tabindex', '0');
+    const open = () => openBeltViewer(badge.id, badge.name, badge.description);
+    slot.addEventListener('click', open);
+    slot.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+    // Async upgrade to the 3D thumbnail. Cached after first call.
+    getBeltThumbnail(badge.id).then((url) => {
+      if (!url) return;
+      const img = slot.querySelector('img.belt-img') as HTMLImageElement | null;
+      if (img) img.src = url;
+    }).catch(() => { /* keep PNG fallback */ });
+  }
   return slot;
 }
 
@@ -269,7 +290,7 @@ function renderOnlineColumn(
   const iconHtml = `<img class="belt-img-online" src="${escapeHtml(meta.imgPath)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${meta.icon}'}))">`;
   col.innerHTML = `
     <div class="belt-online-head">
-      <div class="belt-online-icon">${iconHtml}</div>
+      <div class="belt-online-icon belt-online-icon-clickable" data-bv-belt="${escapeHtml(meta.id)}" tabindex="0" role="button" aria-label="${escapeHtml(meta.name)} preview">${iconHtml}</div>
       <div class="belt-online-meta">
         <div class="belt-online-name-big">${escapeHtml(meta.name)}</div>
         <div class="belt-online-criterion">${escapeHtml(meta.criterion)}</div>
@@ -280,6 +301,21 @@ function renderOnlineColumn(
     </div>
     <ol class="belt-online-list">${rowsHtml}</ol>
   `;
+  // 2026-05-01 final block — upgrade the 2D PNG to a 3D rendered
+  // thumbnail + wire click → openBeltViewer for a rotating close-up.
+  const iconWrap = col.querySelector('.belt-online-icon-clickable') as HTMLElement | null;
+  if (iconWrap) {
+    const open = () => openBeltViewer(meta.id, meta.name, meta.criterion);
+    iconWrap.addEventListener('click', open);
+    iconWrap.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+    getBeltThumbnail(meta.id).then((url) => {
+      if (!url) return;
+      const img = iconWrap.querySelector('img.belt-img-online') as HTMLImageElement | null;
+      if (img) img.src = url;
+    }).catch(() => { /* keep PNG fallback */ });
+  }
   return col;
 }
 
