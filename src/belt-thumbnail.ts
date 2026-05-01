@@ -70,16 +70,16 @@ function beltGlbPath(beltId: string): string {
 }
 
 /**
- * Stable, per-belt rotation offset so the grid doesn't render every
- * thumbnail at the exact same angle. Hashes the beltId into the range
- * [-0.18, +0.18] rad (≈ ±10°). Cinco valores discretos para que
- * belts vecinos no parezcan idénticos pero la lectura siga ordenada.
+ * Stable, per-belt rotation offset. Rafa pidió frontal (no laterales),
+ * así que la variación se mantiene mínima — ±0.04 rad ≈ ±2.3 ° — solo
+ * para que la grid no se sienta robótica. Hash determinístico per-id
+ * → mismo belt siempre se ve igual.
  */
 function beltOrientationOffset(beltId: string): number {
   let h = 0;
   for (let i = 0; i < beltId.length; i++) h = (h * 31 + beltId.charCodeAt(i)) | 0;
   const bucket = ((h % 5) + 5) % 5;       // 0..4
-  return (bucket - 2) * 0.09;              // -0.18, -0.09, 0, 0.09, 0.18 rad
+  return (bucket - 2) * 0.02;              // -0.04, -0.02, 0, 0.02, 0.04 rad
 }
 
 /**
@@ -120,17 +120,15 @@ export function getBeltThumbnail(beltId: string): Promise<string | null> {
         glb.position.y = -c.y + 0.05;
         glb.position.z = -c.z;
       }
-      // BLOQUE FINAL micropass — antes todos los belts apuntaban a la
-      // misma esquina (rotación fija -π/12). Ahora un ángulo base
-      // ligeramente más cinematográfico (-π/7 ≈ -25 °) + una variación
-      // determinística per-beltId para que la grid no se vea como una
-      // fila idéntica. La variación se mantiene pequeña (±0.18 rad ≈
-      // ±10 °) para preservar consistencia, y un leve tilt frontal
-      // (rotation.x ~0.10) hace que la medalla capte la key light.
-      const baseY = -Math.PI / 7;
+      // BLOQUE FINAL micropass v2 — Rafa: "los belts deben verse de
+      // frente, no rotados". Base rotation Y = 0 (medallón mirando a
+      // cámara) + variación determinística per-beltId mínima (±0.04
+      // rad ≈ ±2 °) para que la grid no parezca robótica. Tilt
+      // frontal sutil (rotation.x = 0.06) para que la key light siga
+      // captando el relieve sin esconder la medalla.
       const variantY = beltOrientationOffset(beltId);
-      glb.rotation.y = baseY + variantY;
-      glb.rotation.x = 0.10;
+      glb.rotation.y = variantY;
+      glb.rotation.x = 0.06;
 
       while (holder.children.length > 0) {
         const c = holder.children[0];

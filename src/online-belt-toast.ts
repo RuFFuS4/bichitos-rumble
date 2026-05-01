@@ -17,6 +17,7 @@
 
 import type { BeltChangedEvent } from './network';
 import { getCachedIdentity } from './online-identity';
+import { getBeltThumbnail } from './belt-thumbnail';
 
 interface BeltMeta {
   name: string;
@@ -162,7 +163,10 @@ export function showOnlineBeltToast(ev: BeltChangedEvent): void {
     : `<strong>${escapeHtml(ev.nickname)}</strong> now holds the <strong>${meta.icon} ${escapeHtml(meta.name)}</strong>`;
 
   el.classList.toggle('is-me', isMe);
-  // Prefer AI-generated PNG, fallback to emoji via onerror.
+  // Prefer AI-generated PNG, fallback to emoji via onerror. The 3D
+  // rendered thumbnail upgrade comes after the toast is visible (see
+  // getBeltThumbnail call below) so the entrance animation isn't
+  // blocked on GLB load.
   const iconHtml = `<img class="obt-img" src="${meta.imgPath}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${meta.icon}'}))">`;
   el.innerHTML = `
     <div class="obt-head">${head}</div>
@@ -184,6 +188,14 @@ export function showOnlineBeltToast(ev: BeltChangedEvent): void {
     el.classList.remove('visible');
     hideTimer = null;
   }, isMe ? 6000 : 4200);
+
+  // BLOQUE FINAL micropass v2 — same 3D thumbnail upgrade Hall of
+  // Belts + badge-toast use. PNG fallback stays if GLB load fails.
+  getBeltThumbnail(ev.belt).then((url) => {
+    if (!url) return;
+    const img = el.querySelector('img.obt-img') as HTMLImageElement | null;
+    if (img) img.src = url;
+  }).catch(() => { /* PNG fallback */ });
 }
 
 function escapeHtml(s: string): string {

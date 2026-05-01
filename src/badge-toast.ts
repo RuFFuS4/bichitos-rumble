@@ -20,6 +20,7 @@
 
 import { clearRecentlyUnlocked, getStats } from './stats';
 import { getBadgeById } from './badges';
+import { getBeltThumbnail } from './belt-thumbnail';
 
 const AUTO_DISMISS_MS = 6000;
 
@@ -69,6 +70,15 @@ export function maybeShowBadgeToast(): void {
     return;
   }
   renderToast(badge.icon, badge.imgPath, badge.name, badge.description);
+  // BLOQUE FINAL micropass v2 — upgrade the 2D PNG to the rendered 3D
+  // thumbnail asynchronously, same pattern Hall of Belts uses. The
+  // PNG remains the immediate fallback so the toast never flashes
+  // empty while the GLB resolves.
+  getBeltThumbnail(badge.id).then((url) => {
+    if (!url || !toastEl) return;
+    const img = toastEl.querySelector('img.belt-img') as HTMLImageElement | null;
+    if (img) img.src = url;
+  }).catch(() => { /* keep PNG fallback */ });
 }
 
 /**
