@@ -754,20 +754,17 @@ export class BrawlRoom extends Room<GameState> {
         // would otherwise activate the L on input=true.
         data.inputUltimate = false;
       } else if (risingEdge && lState.cooldownLeft <= 0 && !lState.active) {
-        // Start charging. Cache lateral direction now so the dash
-        // commits to the side that's closer to the rim from THIS
-        // facing — same algorithm as the cliente preview.
+        // Start charging. BLOQUE FINAL micropass — dash direction is
+        // FORWARD (facing actual), no lateral auto-pick. Cliente
+        // preview line + server resolution both read the same dir.
         data.lHoldCharging = true;
         data.lHoldChargeTime = 0;
         const range = lDef.allInDashRange ?? 9.0;
-        const right: [number, number] = [Math.cos(p.rotationY), -Math.sin(p.rotationY)];
-        const left: [number, number] = [-right[0], -right[1]];
-        const radEnd = (dx: number, dz: number) => Math.sqrt(
-          (p.x + dx * range) ** 2 + (p.z + dz * range) ** 2,
-        );
-        const dir = radEnd(right[0], right[1]) >= radEnd(left[0], left[1]) ? right : left;
-        data.allInDirX = dir[0];
-        data.allInDirZ = dir[1];
+        const dirX = Math.sin(p.rotationY);
+        const dirZ = Math.cos(p.rotationY);
+        const dir: [number, number] = [dirX, dirZ];
+        data.allInDirX = dirX;
+        data.allInDirZ = dirZ;
         // Suppress activation: standard flow would set lState.active
         // and start the windup; we want the L to stay inactive
         // while the user holds the input.
@@ -1063,18 +1060,16 @@ export class BrawlRoom extends Room<GameState> {
       //     fire time; the per-tick PULL is applied by the zone
       //     loop in step 2.f below for any sinkhole zone.
 
-      // --- All-in (Sebastian) windup tracking — cache facing on
-      //     the rising edge so the lateral dash uses the direction
-      //     Sebastian was facing AT FIRE TIME, not whatever the
-      //     post-windup orientation happens to be.
+      // --- All-in (Sebastian) windup tracking — cache the facing
+      //     vector at FIRE TIME so the dash commits to where Sebastian
+      //     was looking when he activated the L. BLOQUE FINAL
+      //     micropass — forward, no lateral.
       if (lDef.allInL) {
         const data = this.internal.get(p.sessionId);
         if (data && !data.allInActive) {
           data.allInActive = true;
-          // Lateral = facing rotated +90° (right-hand). The fixed
-          // direction stays cached until resolution.
-          data.allInDirX = Math.cos(p.rotationY);
-          data.allInDirZ = -Math.sin(p.rotationY);
+          data.allInDirX = Math.sin(p.rotationY);
+          data.allInDirZ = Math.cos(p.rotationY);
         }
       }
 
@@ -1135,15 +1130,11 @@ export class BrawlRoom extends Room<GameState> {
         continue;
       }
       const range = lDef.allInDashRange ?? 5.5;
-      const cachedX = data.allInDirX ?? Math.cos(p.rotationY);
-      const cachedZ = data.allInDirZ ?? -Math.sin(p.rotationY);
-      const altX = -cachedX;
-      const altZ = -cachedZ;
-      const radEnd = (ex: number, ez: number) => Math.sqrt(ex * ex + ez * ez);
-      const cachedEnd = radEnd(p.x + cachedX * range, p.z + cachedZ * range);
-      const altEnd = radEnd(p.x + altX * range, p.z + altZ * range);
-      const dx = cachedEnd >= altEnd ? cachedX : altX;
-      const dz = cachedEnd >= altEnd ? cachedZ : altZ;
+      // BLOQUE FINAL micropass — forward only. The cached dir was
+      // written at hold-start (or at fire-time fallback) using the
+      // facing vector; no alt/flip selection.
+      const dx = data.allInDirX ?? Math.sin(p.rotationY);
+      const dz = data.allInDirZ ?? Math.cos(p.rotationY);
       // 2026-05-01 — sweep + record hitT so the caster can teleport
       // INTO the resolution. Without this, the dash was just a
       // remote-effect knockback while Sebastian stood still.

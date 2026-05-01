@@ -87,18 +87,17 @@ export const CRITTER_PRESETS: CritterConfig[] = [
   {
     ...deriveCritterStats('Trunk'),
     name: 'Trunk', color: 0x8c8c8c,
-    // 2026-05-01 final block (Rafa: "Trunk debe sentirse MUCHO más bestia
-    // — cabezazo ×3, velocidad ×2"). PWS gives Trunk speed 8 and
-    // headbuttForce 16; override here so the elephant actually feels
-    // like an elephant. headbuttBoost stays at 3.0 (multiplies
-    // headbuttForce in physics) so the EFFECTIVE headbutt is now
-    // 48 × 2.5 × 3.0 ≈ 360 force units — three times what the prior
-    // 16 × 2.5 × 3.0 = 120 delivered. Movement speed 8 → 16 is the
-    // biggest playability shift: Trunk is no longer the slow-moving
-    // anvil, he can chase. Mass stays at 1.2 from PWS.
+    // 2026-05-01 final block + micropass — Trunk fantasy stays
+    // (speed ×2, cabezazo amplio, Slam wide), pero un -15 % en la
+    // potencia total porque se había ido de mano. Ajustes aquí:
+    // `headbuttBoost 3.0 → 2.55` (≈ -15 % del impacto del cabezazo).
+    // K `slamStunDuration` y L `gripStunDuration` también recortados
+    // en abilities.ts. Speed 16 y headbuttForce 48 sin tocar — el
+    // cabezazo se modula vía boost y la sensación de "elefante que
+    // persigue" se preserva.
     speed: 16,
     headbuttForce: 48,
-    headbuttBoost: 3.0,
+    headbuttBoost: 2.55,
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
   },

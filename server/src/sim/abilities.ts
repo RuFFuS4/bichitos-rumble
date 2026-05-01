@@ -181,24 +181,22 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // impulse 25 → 32, duration 0.42 → 0.55, speedMult 2.1 → 2.4.
     { type: 'charge_rush',  cooldown: 4.5, duration: 0.55, windUp: 0.08,
       impulse: 32, speedMultiplier: 2.4, massMultiplier: 4.0 },
-    // 2026-05-01 final REDESIGN — Trunk Slam K. 2026-05-01 final
-    // block: slamStunDuration 1.0 → 2.0 (Rafa "doblar duración del
-    // stun"). Combined with the ×4 vulnerable rule, a Slam disables
-    // a target for 2 s during which any headbutt sends them flying.
+    // 2026-05-01 final REDESIGN + micropass — Trunk Slam K. slamStun
+    // 1.0 → 2.0 (final block) → 1.7 (micropass, -15 %). Sigue
+    // habilitando el combo Slam → headbutt ×4 con ventana de escape
+    // razonable.
     { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.30,
       radius: 7.0, force: 50, ...ROOTED_K,
-      slamStunDuration: 2.0 },
-    // 2026-05-01 final — Trunk Grip moved here. Yank to 1.6 u in
-    // front + stun 5 s. While stunned, target receives × 4
-    // incoming knockback (handled in physics). Reads as "grab,
-    // helpless, finish".
+      slamStunDuration: 1.7 },
+    // 2026-05-01 final — Trunk Grip. Micropass: gripStunDuration 5.0
+    // → 4.25 (-15 %) para alinear con el recorte global de Trunk.
     { type: 'ground_pound', cooldown: 18.0, duration: 0.05, windUp: 0.45,
       radius: 0, force: 0, ...ROOTED_K,
       gripK: true,
       gripFrontalRange: 28.0,
       gripFrontalAngleDeg: 35,
       gripPullDistance: 1.6,
-      gripStunDuration: 5.0 },
+      gripStunDuration: 4.25 },
   ],
 
   // --- Bloque C: 7 remaining playables ---

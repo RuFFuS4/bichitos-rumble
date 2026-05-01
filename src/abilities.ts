@@ -722,11 +722,11 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       clipPlaybackRate: 2.8,
       slowDuringActive: 0, cancelAnimOnEnd: true,
       shakeBoost: 1.4,
-      // 2026-05-01 final block (Rafa: "duplicar la duración del stun"):
-      // 1.0 → 2.0. Combined with the global ×4 vulnerable rule in
-      // physics, a Slam now disables a target for 2 s during which any
-      // headbutt sends them flying ×4.
-      slamStunDuration: 2.0,
+      // 2026-05-01 final block + micropass — slam stun duración 1.0
+      // → 2.0 (final block) → 1.7 (micropass, -15 %). Sigue habilitando
+      // el combo Slam → headbutt ×4, pero con una ventana de escape
+      // un poco más razonable.
+      slamStunDuration: 1.7,
     }),
     makeGroundPound({
       // 2026-05-01 final — Trunk Grip moved here (was Trunk K).
@@ -739,7 +739,10 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // finish them off."
       name: 'Trunk Grip',
       key: 'L',
-      description: 'Trunk pulls a target close — they take ×4 from any hit for 5 s',
+      // BLOQUE FINAL micropass — gripStunDuration 5.0 → 4.25 (-15 %)
+      // para alinear con el global Trunk -15 %. Sigue siendo CC
+      // dominante pero con margen de respiración para el target.
+      description: 'Trunk pulls a target close — they take ×4 from any hit for 4 s',
       radius: 0, force: 0,
       windUp: 0.45,
       cooldown: 18.0,
@@ -750,7 +753,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       gripFrontalRange: 28.0,
       gripFrontalAngleDeg: 35,
       gripPullDistance: 1.6,
-      gripStunDuration: 5.0,
+      gripStunDuration: 4.25,
     }),
   ],
 
@@ -2114,30 +2117,16 @@ export function updateAbilities(
  * dash direction.
  */
 function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
-  // 2026-04-30 final-polish (Rafa: "se mueve hacia un borde, hit =
-  // golpea muy fuerte y para; miss = sigue y cae inevitablemente").
-  //
-  // Pick whichever lateral direction (right-of-facing OR left-of-
-  // facing) takes Sebastian CLOSER to the arena rim. Sebastian's
-  // "Glass Cannon side strike" identity stays — it's still a 90°
-  // strike, but now we always commit toward an edge so the all-in
-  // is real: hit reads as a brutal smash, miss is a free fall.
-  const right: [number, number] = [
-    Math.cos(critter.mesh.rotation.y),
-    -Math.sin(critter.mesh.rotation.y),
-  ];
-  const left: [number, number] = [-right[0], -right[1]];
+  // BLOQUE FINAL micropass — All-in commits FORWARD (facing actual).
+  // The previous version auto-picked a lateral edge which read
+  // confusingly: same press, different side trip-by-trip. Now the
+  // dash direction is exactly the telegraph direction, exactly the
+  // facing arrow. Hit = brutal forward strike + Sebastian para; miss
+  // = Sebastian sigue hacia delante y cae al void.
   const range = def.allInDashRange ?? 5.5;
-  // Score each direction by the radial distance the dash endpoint
-  // would land at — bigger = closer to (or past) the rim.
-  const scoreSide = (dx: number, dz: number) => {
-    const ex = critter.x + dx * range;
-    const ez = critter.z + dz * range;
-    return Math.sqrt(ex * ex + ez * ez);
-  };
-  const dir = scoreSide(right[0], right[1]) >= scoreSide(left[0], left[1]) ? right : left;
-  const dirX = dir[0];
-  const dirZ = dir[1];
+  const ry = critter.mesh.rotation.y;
+  const dirX = Math.sin(ry);
+  const dirZ = Math.cos(ry);
 
   // Sweep along the dash path and find the FIRST hit point + its
   // distance along the line. The previous version only flagged "hit
@@ -2355,23 +2344,15 @@ export function spawnFrenzyBurst(scene: THREE.Scene, x: number, z: number, opts?
 // ---------------------------------------------------------------------------
 
 /**
- * Compute the lateral side that takes Sebastian closer to the rim
- * from his current position + facing. Used both at preview-spawn
- * time and at resolution time so the line drawn on the ground
- * matches where the dash will actually go.
+ * Direction the All-in dash commits to. Always FORWARD relative to
+ * Sebastian's current facing — no lateral auto-pick. Rafa's micro-
+ * pass: "toda la habilidad L de Sebastian debe ir SIEMPRE hacia
+ * delante respecto al facing actual". The player aligns their facing
+ * before pressing L; the telegraph + dash use that direction.
  */
-function pickAllInDir(critter: Critter, range: number): [number, number] {
-  const right: [number, number] = [
-    Math.cos(critter.mesh.rotation.y),
-    -Math.sin(critter.mesh.rotation.y),
-  ];
-  const left: [number, number] = [-right[0], -right[1]];
-  const radEnd = (dx: number, dz: number) => {
-    const ex = critter.x + dx * range;
-    const ez = critter.z + dz * range;
-    return Math.sqrt(ex * ex + ez * ez);
-  };
-  return radEnd(right[0], right[1]) >= radEnd(left[0], left[1]) ? right : left;
+function pickAllInDir(critter: Critter, _range: number): [number, number] {
+  const ry = critter.mesh.rotation.y;
+  return [Math.sin(ry), Math.cos(ry)];
 }
 
 function spawnAllInPreview(scene: THREE.Scene, critter: Critter, range: number, ttl: number): void {
