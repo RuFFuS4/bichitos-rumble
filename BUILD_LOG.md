@@ -1,5 +1,8 @@
 # Build Log — Bichitos Rumble
 
+> **🏁 Final VibeJam submission build — f74f701** (2026-05-01).
+> Tagged as `v1.0-vibejam-submit`. No further code changes after this.
+
 > **Active entries from 2026-04-20 onward.** The first two weeks of
 > development (prototype → roster → first public deploy → online 4P →
 > gamepad → skeletal loader → /animations lab → arena shake) are
