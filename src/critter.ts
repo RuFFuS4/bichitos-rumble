@@ -87,17 +87,16 @@ export const CRITTER_PRESETS: CritterConfig[] = [
   {
     ...deriveCritterStats('Trunk'),
     name: 'Trunk', color: 0x8c8c8c,
-    // 2026-05-01 final block + micropass — Trunk fantasy stays
-    // (speed ×2, cabezazo amplio, Slam wide), pero un -15 % en la
-    // potencia total porque se había ido de mano. Ajustes aquí:
-    // `headbuttBoost 3.0 → 2.55` (≈ -15 % del impacto del cabezazo).
-    // K `slamStunDuration` y L `gripStunDuration` también recortados
-    // en abilities.ts. Speed 16 y headbuttForce 48 sin tocar — el
-    // cabezazo se modula vía boost y la sensación de "elefante que
-    // persigue" se preserva.
+    // 2026-05-01 final block + micropasses — Trunk fantasy stays
+    // (speed ×2, cabezazo amplio, Slam wide). Acumulado:
+    //   headbuttBoost 3.0 → 2.55 (-15 %, micropass 1)
+    //                   2.55 → 2.30 (-10 %, micropass 2)
+    // K + L stuns recortados en abilities.ts en proporción similar.
+    // Speed 16 y headbuttForce 48 sin tocar — el cabezazo se modula
+    // vía boost y la sensación de "elefante que persigue" se preserva.
     speed: 16,
     headbuttForce: 48,
-    headbuttBoost: 2.55,
+    headbuttBoost: 2.30,
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
   },

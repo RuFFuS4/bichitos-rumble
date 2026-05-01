@@ -722,11 +722,13 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       clipPlaybackRate: 2.8,
       slowDuringActive: 0, cancelAnimOnEnd: true,
       shakeBoost: 1.4,
-      // 2026-05-01 final block + micropass — slam stun duración 1.0
-      // → 2.0 (final block) → 1.7 (micropass, -15 %). Sigue habilitando
-      // el combo Slam → headbutt ×4, pero con una ventana de escape
-      // un poco más razonable.
-      slamStunDuration: 1.7,
+      // 2026-05-01 final block + micropasses — slam stun:
+      //   1.0 → 2.0 (final block, ×2 ask)
+      //   2.0 → 1.7 (micropass 1, -15 %)
+      //   1.7 → 1.5 (micropass 2, otro -12 %)
+      // Sigue habilitando el combo Slam → headbutt ×4, pero la
+      // ventana de escape ya es razonable.
+      slamStunDuration: 1.5,
     }),
     makeGroundPound({
       // 2026-05-01 final — Trunk Grip moved here (was Trunk K).
@@ -739,10 +741,12 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // finish them off."
       name: 'Trunk Grip',
       key: 'L',
-      // BLOQUE FINAL micropass — gripStunDuration 5.0 → 4.25 (-15 %)
-      // para alinear con el global Trunk -15 %. Sigue siendo CC
-      // dominante pero con margen de respiración para el target.
-      description: 'Trunk pulls a target close — they take ×4 from any hit for 4 s',
+      // BLOQUE FINAL micropasses — gripStunDuration:
+      //   5.0 → 4.25 (-15 %, micropass 1)
+      //   4.25 → 3.80 (-11 %, micropass 2)
+      // Sigue siendo CC dominante con la "vulnerable ×4" rule, pero la
+      // víctima ya no queda casi 5 s sin opciones.
+      description: 'Trunk pulls a target close — they take ×4 from any hit for 3.8 s',
       radius: 0, force: 0,
       windUp: 0.45,
       cooldown: 18.0,
@@ -753,7 +757,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       gripFrontalRange: 28.0,
       gripFrontalAngleDeg: 35,
       gripPullDistance: 1.6,
-      gripStunDuration: 4.25,
+      gripStunDuration: 3.80,
     }),
   ],
 
@@ -1108,7 +1112,11 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       allInL: true,
       allInDashSpeed: 28,
       allInDashRange: 9.0,
-      allInHitForce: 110,
+      // BLOQUE FINAL micropass v2 — hit force bumped 110 → 220 to
+      // shake the victim's momentum even when maxSpeed clamps. Combined
+      // with the explicit startFalling() in fireAllInResolution, the
+      // contact reads as "yeeted to void". Miss self-force unchanged.
+      allInHitForce: 220,
       allInMissSelfForce: 130,
       // 2026-05-01 final block (Rafa: "PRESS+HOLD muestra preview,
       // RELEASE ejecuta"). The dash no longer fires on activation;
@@ -2172,9 +2180,22 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     critter.mesh.position.z = critter.z;
     critter.vx = 0;
     critter.vz = 0;
+    // BLOQUE FINAL micropass v2 — Rafa: "si choca con alguien debe
+    // echarlo fuera directamente". Bumped force, SET (not add) so the
+    // velocity doesn't get diluted by the victim's prior momentum,
+    // teleport the victim past the dash endpoint AND call
+    // startFalling() so the all-in semantic is "guaranteed
+    // elimination on contact". The maxSpeed clamp + idle friction
+    // would otherwise eat the knockback before the target reached
+    // the rim; explicit fall removes any doubt.
     const force = def.allInHitForce ?? 100;
-    hit.vx += dirX * force;
-    hit.vz += dirZ * force;
+    hit.vx = dirX * force;
+    hit.vz = dirZ * force;
+    hit.x += dirX * (range * 0.8);
+    hit.z += dirZ * (range * 0.8);
+    hit.mesh.position.x = hit.x;
+    hit.mesh.position.z = hit.z;
+    if (!hit.falling && hit.alive) hit.startFalling();
     applyImpactFeedback(hit);
     triggerHitStop(FEEL.hitStop.headbutt);
     // Crimson side-slash burst at the contact point.

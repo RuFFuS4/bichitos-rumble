@@ -241,13 +241,13 @@ for (const [name, e] of Object.entries(expected)) {
   }
 }
 
-// Sentinels — 2026-05-01 last-minute + micropass values.
-//   · Trunk: K is Slam (radius 7, force 50, slamStunDuration 1.7
-//     after micropass -15 %). L is Grip (gripStunDuration 4.25 after
-//     micropass -15 %). No more frenzy on Trunk.
+// Sentinels — 2026-05-01 last-minute + micropasses (acumulado).
+//   · Trunk: K Slam (radius 7, force 50, slamStunDuration 1.5 tras
+//     m1 -15 % + m2 -12 %). L Grip (gripStunDuration 3.80 tras
+//     m1 -15 % + m2 -11 %).
 //   · Sergei: K 3.5 / 68 unchanged, L frenzy speed 1.55, mass 5.50.
 const sentinels = {
-  Trunk:  { trunkRedesign: true, K: { rad: 7.0, frc: 50, slamStun: 1.7 }, L: { gripStun: 4.25 } },
+  Trunk:  { trunkRedesign: true, K: { rad: 7.0, frc: 50, slamStun: 1.5 }, L: { gripStun: 3.80 } },
   Sergei: { K: { rad: 3.5, frc: 68 }, L: { spd: 1.55, mass: 5.50 } },
 };
 for (const [name, e] of Object.entries(sentinels)) {

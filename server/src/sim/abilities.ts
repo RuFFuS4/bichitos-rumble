@@ -181,22 +181,21 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // impulse 25 → 32, duration 0.42 → 0.55, speedMult 2.1 → 2.4.
     { type: 'charge_rush',  cooldown: 4.5, duration: 0.55, windUp: 0.08,
       impulse: 32, speedMultiplier: 2.4, massMultiplier: 4.0 },
-    // 2026-05-01 final REDESIGN + micropass — Trunk Slam K. slamStun
-    // 1.0 → 2.0 (final block) → 1.7 (micropass, -15 %). Sigue
-    // habilitando el combo Slam → headbutt ×4 con ventana de escape
-    // razonable.
+    // 2026-05-01 final + micropasses — Trunk Slam K slamStun
+    //   1.0 → 2.0 (final block) → 1.7 (m1) → 1.5 (m2). Combo
+    //   Slam → headbutt sigue funcionando con ventana razonable.
     { type: 'ground_pound', cooldown: 7.0, duration: 0.05, windUp: 0.30,
       radius: 7.0, force: 50, ...ROOTED_K,
-      slamStunDuration: 1.7 },
-    // 2026-05-01 final — Trunk Grip. Micropass: gripStunDuration 5.0
-    // → 4.25 (-15 %) para alinear con el recorte global de Trunk.
+      slamStunDuration: 1.5 },
+    // 2026-05-01 final — Trunk Grip. Micropasses gripStunDuration:
+    //   5.0 → 4.25 (m1) → 3.80 (m2). CC dominante con margen.
     { type: 'ground_pound', cooldown: 18.0, duration: 0.05, windUp: 0.45,
       radius: 0, force: 0, ...ROOTED_K,
       gripK: true,
       gripFrontalRange: 28.0,
       gripFrontalAngleDeg: 35,
       gripPullDistance: 1.6,
-      gripStunDuration: 4.25 },
+      gripStunDuration: 3.80 },
   ],
 
   // --- Bloque C: 7 remaining playables ---
@@ -341,7 +340,9 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'frenzy',       cooldown: 15.0, duration: 1.0, windUp: 0.0,
       frenzySpeedMult: 0.0, frenzyMassMult: 1.20,
       allInL: true, allInDashSpeed: 28, allInDashRange: 9.0,
-      allInHitForce: 110, allInMissSelfForce: 130,
+      // micropass v2 — hit force 110 → 220 to guarantee the visual
+      // yeet on contact (BrawlRoom.ts paired with explicit fall flow).
+      allInHitForce: 220, allInMissSelfForce: 130,
       holdToFireL: true, holdToFireMaxMs: 3000 },
   ],
 };

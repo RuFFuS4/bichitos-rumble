@@ -118,10 +118,10 @@ function serverConfig(
 
 export const CRITTER_CONFIGS: Record<string, CritterConfigServer> = {
   Sergei:    serverConfig('Sergei',    1.40), // 2026-04-29 final-K — Rafa: "más potencia headbutt". 1.15 → 1.40.
-  // 2026-05-01 final block + micropass — Trunk speed 8 → 16 +
-  // headbuttForce 16 → 48 (bestia). Boost recortado 3.0 → 2.55 en el
-  // micropass deadline-day (-15 % del impacto del cabezazo).
-  Trunk:     serverConfig('Trunk',     2.55, { speed: 16, headbuttForce: 48 }),
+  // 2026-05-01 final block + micropasses — Trunk speed 8 → 16 +
+  // headbuttForce 16 → 48 (bestia). Boost: 3.0 → 2.55 (micropass 1)
+  // → 2.30 (micropass 2, otro -10 %).
+  Trunk:     serverConfig('Trunk',     2.30, { speed: 16, headbuttForce: 48 }),
   Kurama:    serverConfig('Kurama'),     // Trickster
   Shelly:    serverConfig('Shelly'),     // Tank
   Kermit:    serverConfig('Kermit'),     // Controller

@@ -1170,9 +1170,21 @@ export class BrawlRoom extends Room<GameState> {
         p.z += dz * arrivalT;
         p.vx = 0;
         p.vz = 0;
+        // BLOQUE FINAL micropass v2 — guaranteed yeet. SET (not add)
+        // velocity, push victim past the dash endpoint and force the
+        // fall flow so the contact eliminates the target regardless
+        // of clamp / friction. Mirrors physics.ts off-arena fall.
         const force = lDef.allInHitForce ?? 100;
-        hitVictim.vx += dx * force;
-        hitVictim.vz += dz * force;
+        hitVictim.vx = dx * force;
+        hitVictim.vz = dz * force;
+        hitVictim.x += dx * (range * 0.8);
+        hitVictim.z += dz * (range * 0.8);
+        if (!hitVictim.falling && hitVictim.alive) {
+          hitVictim.falling = true;
+          hitVictim.lives = Math.max(0, hitVictim.lives - 1);
+          const vData = this.internal.get(hitVictim.sessionId);
+          if (vData) vData.respawnTimer = SIM.lives.respawnDelay;
+        }
       } else {
         // MISS — Sebastian commits all the way past the rim.
         // Teleport to the dash endpoint × 1.5 (guarantees we're
