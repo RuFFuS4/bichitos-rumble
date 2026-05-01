@@ -70,6 +70,19 @@ function beltGlbPath(beltId: string): string {
 }
 
 /**
+ * Stable, per-belt rotation offset so the grid doesn't render every
+ * thumbnail at the exact same angle. Hashes the beltId into the range
+ * [-0.18, +0.18] rad (≈ ±10°). Cinco valores discretos para que
+ * belts vecinos no parezcan idénticos pero la lectura siga ordenada.
+ */
+function beltOrientationOffset(beltId: string): number {
+  let h = 0;
+  for (let i = 0; i < beltId.length; i++) h = (h * 31 + beltId.charCodeAt(i)) | 0;
+  const bucket = ((h % 5) + 5) % 5;       // 0..4
+  return (bucket - 2) * 0.09;              // -0.18, -0.09, 0, 0.09, 0.18 rad
+}
+
+/**
  * Returns a data-URL PNG of the belt GLB rendered to a 144×144 canvas.
  * Cached per beltId; subsequent calls resolve synchronously from cache.
  * Returns null when the GLB fails to load.
@@ -107,9 +120,17 @@ export function getBeltThumbnail(beltId: string): Promise<string | null> {
         glb.position.y = -c.y + 0.05;
         glb.position.z = -c.z;
       }
-      // Slight 3/4 angle so the medallion isn't dead-on.
-      glb.rotation.y = -Math.PI / 12;
-      glb.rotation.x = 0.05;
+      // BLOQUE FINAL micropass — antes todos los belts apuntaban a la
+      // misma esquina (rotación fija -π/12). Ahora un ángulo base
+      // ligeramente más cinematográfico (-π/7 ≈ -25 °) + una variación
+      // determinística per-beltId para que la grid no se vea como una
+      // fila idéntica. La variación se mantiene pequeña (±0.18 rad ≈
+      // ±10 °) para preservar consistencia, y un leve tilt frontal
+      // (rotation.x ~0.10) hace que la medalla capte la key light.
+      const baseY = -Math.PI / 7;
+      const variantY = beltOrientationOffset(beltId);
+      glb.rotation.y = baseY + variantY;
+      glb.rotation.x = 0.10;
 
       while (holder.children.length > 0) {
         const c = holder.children[0];

@@ -165,6 +165,12 @@ export async function openBeltViewer(
     glb.updateMatrixWorld(true);
     const c = new THREE.Box3().setFromObject(glb).getCenter(new THREE.Vector3());
     glb.position.set(-c.x, -c.y + 0.05, -c.z);
+    // BLOQUE FINAL micropass — match the grid's cinematographic 3/4
+    // base angle so opening the viewer doesn't snap from a tilted
+    // thumbnail to a flat dead-on pose. The idle auto-rotate then
+    // sweeps around this nicer starting orientation.
+    glb.rotation.y = -Math.PI / 7;
+    glb.rotation.x = 0.10;
     holder.add(glb);
     currentGlb = glb;
   } catch (e) {
