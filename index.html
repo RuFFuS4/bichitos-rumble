@@ -794,6 +794,27 @@
     .title-signature:hover .handle {
       color: #ffffff;
     }
+    /* Legal links (Privacy · Terms) — discreet footer line bottom-RIGHT
+       of the title screen (corner freed after the jam widget retired).
+       Deliberately tiny + low-opacity so it reads as fine print. */
+    .legal-links {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      font-size: 11.5px;
+      letter-spacing: 0.6px;
+      color: rgba(255, 220, 92, 0.35);
+      pointer-events: auto;
+      z-index: 5;
+    }
+    .legal-links a {
+      color: rgba(255, 220, 92, 0.55);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .legal-links a:hover {
+      color: #ffdc5c;
+    }
     /* Line of control hints at the bottom-center of the title screen.
        Two stacked tiers: primary (WASD/SPACE/J/K/L/R) in the main row,
        gamepad auto-detection hint below in smaller type. Both rendered
@@ -2628,6 +2649,11 @@
         font-size: 11.5px;
         padding: 5px 11px;
       }
+      .legal-links {
+        bottom: 12px;
+        right: 12px;
+        font-size: 10.5px;
+      }
       .controls-hint {
         bottom: 22px;
         font-size: 11px;
@@ -2711,6 +2737,7 @@
       /* Title signature (`by @RGomezR14`) — tighten so it doesn't
          eat the bottom of a 340-px-tall match HUD. */
       .title-signature { bottom: 8px; left: 8px; padding: 4px 8px; font-size: 10.5px; }
+      .legal-links { bottom: 10px; right: 10px; font-size: 10px; }
 
       /* Title screen prompts — at 340 px tall the .prompt + the
          .controls-hint + .controls-hint-gamepad + .title-signature
@@ -2932,6 +2959,11 @@
        rel="noopener noreferrer">
       by <span class="handle">@RGomezR14</span>
     </a>
+    <div class="legal-links">
+      <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy</a>
+      &middot;
+      <a href="/terms.html" target="_blank" rel="noopener noreferrer">Terms</a>
+    </div>
   </div>
 
   <div id="character-select" class="full-overlay hidden">
