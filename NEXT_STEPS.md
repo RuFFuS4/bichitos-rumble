@@ -1,7 +1,15 @@
 # Next Steps — Bichitos Rumble
 
+> ⚠️ **DOC CONGELADO EN LA ERA DEL JAM — NO PLANIFICAR DESDE AQUÍ (2026-08-16).**
+> La auditoría post-jam confirmó que este archivo describe como pendiente
+> mucho de lo que el bloque final (04-29 → 05-01) ya implementó (los 9 ULTIs
+> signature, apply-tool-patch, leaderboards online, etc.).
+> **El plan vigente vive en [`ROADMAP.md`](ROADMAP.md)** y la foto real del
+> proyecto en [`docs/POST_JAM_AUDIT.md`](docs/POST_JAM_AUDIT.md).
+> Este doc se reescribirá (o retirará) en la pasada de doc-sync del hito H0.
+
 > **Deadline: May 1, 2026 @ 13:37 UTC** · **Submitted to Vibe Jam** 2026-04-23
-> Live: https://www.bichitosrumble.com · **Single source of truth for what's next.**
+> Live: https://www.bichitosrumble.com · ~~Single source of truth for what's next.~~
 >
 > Reorganizado 2026-04-24 noche (sesión de handoff). Las secciones al
 > principio se leen en 30 segundos: qué hacer ya, qué está parado y por
