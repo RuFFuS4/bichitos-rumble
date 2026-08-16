@@ -35,8 +35,8 @@
 // ---------------------------------------------------------------------------
 
 import Database from 'better-sqlite3';
-import { existsSync } from 'fs';
-import { resolve } from 'path';
+import { existsSync, mkdirSync, statSync } from 'fs';
+import { resolve, dirname } from 'path';
 
 // Resolve DB path the same way server/src/db.ts does so we always
 // hit the file the live server is using.
@@ -225,6 +225,22 @@ switch (cmd) {
     break;
   }
 
+  case 'backup': {
+    // H0 2026-08-16 — snapshot consistente del fichero SQLite usando la
+    // API .backup() de better-sqlite3 (online backup: seguro aunque el
+    // server esté escribiendo — no copiar el fichero a mano con WAL
+    // activo). Destino opcional como primer arg; por defecto
+    // $DATA_DIR/backups/br-online-<UTC>.sqlite. En Railway, programar
+    // este comando + copia off-volume (ver SUBMISSION_CHECKLIST/ROADMAP).
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const dest = resolve(args[0] ?? `${DATA_DIR}/backups/br-online-${stamp}.sqlite`);
+    mkdirSync(dirname(dest), { recursive: true });
+    await db.backup(dest);
+    const size = statSync(dest).size;
+    console.log(`[admin] backup written: ${dest} (${(size / 1024).toFixed(1)} kB)`);
+    break;
+  }
+
   case 'reset': {
     const really = flags.has('--i-know-what-im-doing');
     const all = db.prepare('SELECT COUNT(*) AS n FROM players').get();
@@ -249,6 +265,7 @@ switch (cmd) {
     console.log('  delete-pattern <like>      [--confirm]   delete by SQL LIKE pattern (% wildcards)');
     console.log('  delete-before <iso-date>   [--confirm]   delete players created before a date');
     console.log('  delete-test                [--confirm]   delete %test% / %qa% / %demo% / %foo% / %bar% / %temp% / %dummy%');
+    console.log('  backup [dest.sqlite]                  consistent online snapshot of the DB (default: $DATA_DIR/backups/)');
     console.log('  reset                  [--confirm --i-know-what-im-doing]   wipe the whole players table');
     console.log('');
     console.log('Without --confirm every destructive command prints a DRY-RUN preview.');

@@ -19,7 +19,7 @@
     "realign-ability-icons": "node scripts/realign-ability-icons.mjs",
     "compress:audio": "node scripts/compress-audio.mjs",
     "test:smoke": "playwright test",
-    "check": "tsc --noEmit && node scripts/verify-critter-glbs.mjs && vite build && node scripts/clean-dist-raw.mjs",
+    "check": "tsc --noEmit && node scripts/verify-critter-glbs.mjs && node scripts/verify-ability-parity.mjs && vite build && node scripts/clean-dist-raw.mjs",
     "doctor": "node scripts/doctor.mjs"
   },
   "dependencies": {
