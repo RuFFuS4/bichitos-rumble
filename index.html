@@ -755,22 +755,6 @@
       0%, 100% { opacity: 0.9; }
       50% { opacity: 0.4; }
     }
-    /* Vibe Jam widget badge — injected by widget.js with inline styles.
-       Override with !important to give it more presence: bigger font,
-       bigger padding, gold gradient accent on hover. Still bottom-right
-       but hard to miss. */
-    body > a[href*="vibej.am"] {
-      font-size: 17px !important;
-      padding: 11px 20px !important;
-      letter-spacing: 0.4px !important;
-      box-shadow: 0 -2px 18px rgba(0, 0, 0, 0.35) !important;
-      transition: transform 0.18s ease, background 0.18s !important;
-    }
-    body > a[href*="vibej.am"]:hover {
-      background: #ffdc5c !important;
-      transform: translateY(-2px) !important;
-    }
-
     /* Author signature on the title screen. Bottom-LEFT so it doesn't
        overlap the Vibe Jam 2026 widget badge that sits bottom-right.
        Pill-shaped with a subtle gold border so it reads as a proper
@@ -3092,7 +3076,10 @@
   <div id="portal-warp-overlay" aria-hidden="true"></div>
 
   <script type="module" src="/src/main.ts"></script>
-  <!-- Vibe Coding Game Jam 2026 widget (required for submission) -->
-  <script async src="https://vibej.am/2026/widget.js"></script>
+  <!-- H0 2026-08-16: retirado el widget del Vibe Jam 2026 (era requisito
+       del submit). El script post-jam de la organización quedó roto
+       (SyntaxError servido desde vibejam.com) y además hacía heartbeat
+       de actividad cada 60 s. El sistema de portales in-game (portal.ts)
+       se mantiene aparte. -->
 </body>
 </html>
