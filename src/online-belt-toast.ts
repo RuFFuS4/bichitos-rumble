@@ -15,7 +15,7 @@
 // Successive events re-arm the timer and swap the content in place.
 // ---------------------------------------------------------------------------
 
-import type { BeltChangedEvent } from './network';
+import type { BeltChangedEvent } from './network-events';
 import { getCachedIdentity } from './online-identity';
 import { getBeltThumbnail } from './belt-thumbnail';
 

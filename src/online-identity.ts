@@ -18,7 +18,7 @@
 // All state lives on `localStorage`. No cookies, no service workers.
 // ---------------------------------------------------------------------------
 
-import { getDefaultServerUrl } from './network';
+import { getDefaultServerUrl } from './network-events';
 
 const TOKEN_KEY = 'br-online-player-token';
 const PLAYER_ID_KEY = 'br-online-player-id';
