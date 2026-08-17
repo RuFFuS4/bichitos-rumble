@@ -1,6 +1,12 @@
 import * as THREE from 'three';
+import { initObservability } from './observability';
 import { createCamera, handleResize, syncSize, applyGameplayCameraPose } from './camera';
 import { Game } from './game';
+
+// Error observability first — the pre-init buffer should be listening
+// before any other module runs its boot code. Inert without
+// VITE_SENTRY_DSN (see src/observability.ts).
+initObservability();
 import { updateCameraShake } from './gamefeel';
 import { initPreview, tickPreview } from './preview';
 import { isLikelyMobile } from './input';

@@ -47,9 +47,12 @@ Checklist de [`ROADMAP.md §H0`](ROADMAP.md), estado a 2026-08-17:
 - [x] **CI mínimo** (GitHub Actions): client check + parity + server tsc
       + smoke Playwright. Estrenado en verde con el PR #1.
 - [x] **Parity en `npm run check`**.
-- [ ] **Observabilidad**: Sentry browser (o beacon propio) + Vercel Web
-      Analytics + contadores diarios server-side. Pendiente de la
-      decisión de Rafa (ver abajo). ANTES de los bumps de H1.
+- [x] **Observabilidad (código)**: Sentry integrado (decisión de Rafa
+      2026-08-17) — cliente mínimo tree-shaken (20 kB gz) en chunk async
+      cargado en idle, buffer pre-init, release = git sha, inerte sin
+      `VITE_SENTRY_DSN`. Activación pendiente de Rafa: DSN en Vercel +
+      toggle de Web Analytics (ver abajo). Contadores server-side
+      diferidos a H4 (tabla `matches`).
 - [x] **Dossier legal (core)**: Tripo/Meshy/Suno confirmados de pago
       durante la generación → crítters y música en verde
       ([`ASSET_LICENSES.md`](ASSET_LICENSES.md)). `LICENSE` + privacy +
@@ -72,8 +75,12 @@ observabilidad.**
 
 ## Qué necesita Rafa
 
-- **Decisión de observabilidad** (último bloqueante de H0): cuenta
-  Sentry gratuita vs beacon de errores self-hosted en el propio server.
+- **Activar Sentry** (último bloqueante de H0, ~5 min):
+  1. Cuenta en sentry.io (free) → Create Project → Browser JavaScript
+     → `bichitos-rumble` → copiar el **DSN**.
+  2. Vercel → Settings → Environment Variables →
+     `VITE_SENTRY_DSN` = DSN (Production) → redeploy.
+  3. Vercel → Analytics → **Enable** (Web Analytics).
 - **Archivar evidencia de licencias** (~10 min): facturas de abril 2026
   de Meshy, Tripo y Suno → `docs/licencias-evidencia/`.
 - **Identificar el generador 2D** de sprites/favicon/og/badges/skyboxes
