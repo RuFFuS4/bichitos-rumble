@@ -19,7 +19,7 @@
 //     match alive. Otherwise the match ends with opponent_left.
 // ---------------------------------------------------------------------------
 
-import { Client, Room } from 'colyseus';
+import { Room, type Client } from 'colyseus';
 import { GameState } from './state/GameState.js';
 import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
