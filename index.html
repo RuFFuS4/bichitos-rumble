@@ -44,20 +44,13 @@
   <!-- Resource hints — first-paint optimization.
        preload: title-loop music so it plays the instant the user
          clicks through the title (not after a 200ms fetch gap).
-       prefetch: the 9 critter GLBs so the first match doesn't stall
-         at the "Loading Sergei…" step. Browsers lazily fetch these
-         at low priority while the title + menu are idle. Crossorigin
-         matches the `fetch()` call model-loader uses. -->
+       H2 2026-08-18: the blanket prefetch of all 9 critter GLBs
+       (~58 MB on EVERY first visit) is GONE — it contradicted the
+       coded lazy strategy (roster.ts heavyAsset flag +
+       scheduleIdlePreload in game.ts, which already warm the cache
+       intelligently) and blew the portal-distribution budget
+       (CrazyGames gates on ≤50 MB initial footprint). -->
   <link rel="preload"  as="audio" href="/audio/intro.mp3" />
-  <link rel="prefetch" as="fetch" href="/models/critters/sergei.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/trunk.glb"     crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/kurama.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/shelly.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/kermit.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/sihans.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/kowalski.glb"  crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/cheeto.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/sebastian.glb" crossorigin="anonymous" />
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
