@@ -25,7 +25,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const DIST = 'dist';
-const TOTAL_BUDGET_MB = 135;
+const TOTAL_BUDGET_MB = 115;
 const FILE_BUDGET_MB = 17;
 
 if (!existsSync(DIST)) {
