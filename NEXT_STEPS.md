@@ -6,56 +6,57 @@
 > Al cerrar un hito: tag, y esta checklist se reescribe para el siguiente.
 
 **H0 Saneamiento: ✅ `v1.2-clean-base`** · **H1 Modernización: ✅
-`v1.3-modern-stack`** (2026-08-18 — TS 7 nativo, Vite 8 Rolldown, three
-r185, Colyseus 0.17 + schema v4; detalle en
-[`docs/H1_MIGRATION_NOTES.md`](docs/H1_MIGRATION_NOTES.md)).
-⏳ Fleco del gate H1: **cero errores nuevos en Sentry hasta 2026-08-20**
-(vigilancia post-deploy).
+`v1.3-modern-stack`** · **H2 Dieta de payload + presencia base: ✅
+`v1.4-portal-ready`** (2026-08-19 — dist −59 %, huella inicial ~1,5 MB,
+itch.io publicado con donaciones; detalle en [`ROADMAP.md`](ROADMAP.md)
+y [`BUILD_LOG.md`](BUILD_LOG.md)).
 
 ---
 
-## H2 — Dieta de payload + presencia base (técnico 5/5 ✅ · 2026-08-18)
+## H3 — Bichitos Studio: tooling unificado (en curso)
 
-Los 5 slices técnicos completados y desplegados (PRs #9-#13):
-**dist 239 → 96,9 MB (−59 %)** · JS eager 297 → 258 kB gz · primera
-visita ~64 MB → ~1,5 MB de extras.
+**Meta**: las 4-5 herramientas internas (anim-lab, calibrate,
+decor-editor, tools.html, mesh2motion) se convierten en **un solo
+estudio** con el bucle intención→cambio-aplicado en 1-2 pasos
+(hoy: 5-6 pasos manuales). Detalle y racional en
+[`ROADMAP.md`](ROADMAP.md) §H3.
 
-1. [x] Prefetch de los 9 GLBs fuera (−58 MB por primera visita).
-2. [x] `tree_jungle_broadleaf.glb` muerto (52 MB) → `_raw/`.
-3. [x] `/animations` (55 MB) + labs fuera del build de producción
-   (`VITE_BUILD_TOOLS=1` los fuerza; dev intacto).
-4. [x] Imágenes: sprites/skyboxes/grounds → WebP (23,9 → 1,6 MB),
-   og-image → JPEG 140 KB (WhatsApp la renderiza), favicon 10 KB.
-   Masters en `_raw/` (¡`images/_raw` está gitignorado — forzados!).
-5. [x] meshopt en los 6 crítters sin comprimir (14,2 → 3,1 MB;
-   sihans 18×). Heavies se quedan (siguiente palanca = `-si`, arriesgado).
-6. [x] Cache: /assets hasheados → immutable; /models /images /audio →
-   `max-age=1d + SWR=7d`; catch-all excluye assets (404 reales).
-7. [x] Colyseus lazy (split network/network-events): el SDK solo se
-   descarga al pulsar Online. `optimizeDeps.include` para dev.
-8. [x] Presupuesto en CI **y en el build de Vercel**: 100 MB total /
-   17 MB por fichero, con ratchet documentado (135→115→100).
-9. [x] SEO: robots.txt, sitemap.xml, canonical, JSON-LD VideoGame.
-10. [ ] **Página en itch.io** embebiendo la URL de producción (segundo
-    canal + botón de donaciones = primera monetización). ← RAFA
+1. [ ] **Shell único** (`studio.html`): tabs Match Lab / Animations /
+   Calibrate / Decor sobre UI kit compartido (orbit camera, resize,
+   paneles, tema). Mata ~1.200 líneas de CSS duplicado y el fork de
+   950 líneas de tools.html.
+2. [ ] **Pipeline de patches completo y no destructivo**: todas las tabs
+   emiten ToolPatch; el apply de anim-lab pasa a merge (hoy borra
+   overrides de critters no tocados); decor-editor emite patch desde
+   la UI.
+3. [ ] **Apply directo desde la UI**: endpoint de apply en el dev-server
+   (plugin de Vite) → botón "Apply to source" con diff previo.
+4. [ ] **Persistencia uniforme**: tool-storage en todas las tabs
+   (anim-lab hoy pierde la sesión con F5).
+5. [ ] **Evict mesh2motion** a repo hermano/submodule (43 % de los
+   ficheros trackeados) y documentar el flujo de animación.
+6. [ ] Quick-wins: pack picker en match lab, indicador de divergencia
+   real en calibrate, snippet TS pegable.
 
-**Gate de salida H2**: dist ≤ 50 MB (hoy 96,9 — el resto grande son los
-arena packs de 88 MB, lazy per-match; revisar si el gate literal aplica
-o se redefine como "huella inicial ≤ 50", que YA se cumple de sobra) ·
-Lighthouse móvil decente · itch.io publicado · tarjeta OG en WhatsApp ✅.
+**Gate de salida H3**: un cambio de calibración/animación/decoración se
+aplica a fuente desde el navegador en < 1 min con diff visible · cero
+pérdida de datos al recargar · mesh2motion fuera del repo.
 
 ---
 
-## Flecos heredados (no bloquean H2)
+## Flecos heredados (no bloquean H3)
 
-- **Sentry 48 h** (gate H1): revisar el panel el 2026-08-20; si hay
-  errores nuevos del deploy, tratarlos antes de seguir.
+- **Sentry** (gates H1/H2): revisar el panel el 2026-08-20; sin errores
+  nuevos de los deploys → gates formalmente cerrados.
+- **itch.io post-publish**: vigilar comentarios/analytics la primera
+  semana; considerar un devlog de lanzamiento (itch lo sugiere y
+  notifica a followers).
 - Rafa: archivar facturas abril 2026 (Meshy/Tripo/Suno) →
   `docs/licencias-evidencia/`.
 - Rafa: identificar el generador 2D de sprites/skyboxes/badges
   (ASSET_LICENSES.md §5).
-- Rafa: limpiar los jugadores TestSmoke* que dejó el smoke de producción
-  (`npm run admin:delete-test -- --confirm` en la consola de Railway).
-- H4 (anotados desde H1): reactivar la reconexión del SDK cuando el
-  server implemente `allowReconnection` + `onDrop`; rutas HTTP tipadas
-  de 0.17 para la tabla `matches`.
+- Rafa: limpiar los jugadores TestSmoke*/TestC*/TestD* de la DB de
+  producción (`npm run admin:delete-test -- --confirm` en Railway).
+- H4 (anotados): reactivar reconexión del SDK cuando el server tenga
+  `allowReconnection` + `onDrop`; rutas HTTP tipadas de 0.17 para la
+  tabla `matches`; heavies GLB con `-si` si hace falta más dieta.

@@ -1,5 +1,68 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — H2 CERRADO (`v1.4-portal-ready`): itch.io PUBLICADO
+
+**Bichitos Rumble está publicado en itch.io** con la primera
+monetización real activa: `napsoul.itch.io/bichitos-rumble` — embed
+fullscreen de producción, "$0 or donate" ($2 sugeridos), botón
+"Support This Game" en vivo.
+
+- Rafa completó la tax interview (W-8BEN): payout "Collected by
+  itch.io", Foreign TIN (NIF), convenio España-EE.UU. art. 12(2) →
+  **retención 0 %**. Dos correcciones al vuelo durante la interview:
+  la pantalla del TIN respondida como "No" dejaba el formulario sin 6a
+  ni línea 9 (adiós convenio, 30 % de retención) — el NIF español ES
+  un Foreign TIN válido; y el aviso "DO NOT ENTER VAT" no aplica al
+  NIF de persona física.
+- Publish verificado en vivo: badge PUBLISHED, Run game carga la
+  pantalla de título, Support This Game visible.
+- **Gate H2 cerrado**: dist 96,9 MB con el gate redefinido como
+  "huella inicial ≤ 50 MB" (~1,5 MB reales; los arena packs de 88 MB
+  son lazy per-match — el criterio CrazyGames mide descarga inicial).
+  Lighthouse móvil contra producción: **Perf 71 / SEO 100 / BP 100**
+  (FCP 1,2 s, LCP 2,6 s; TBT 1,5 s = boot de three.js, esperable).
+  OG en WhatsApp ✅ (desde slice 2).
+- Queda en vigilancia: Sentry el 2026-08-20 (cierre formal de los
+  gates H1/H2) y los comentarios/analytics de itch la primera semana.
+- Siguiente hito: **H3 Bichitos Studio** (NEXT_STEPS reescrito).
+
+## 2026-08-18 (noche) — itch.io: borrador completo, a falta del ZIP
+
+Página creada como **borrador** en `napsoul.itch.io/bichitos-rumble`
+(id 4908248) desde el Chrome logueado de Rafa: kind HTML, embed
+fullscreen, mobile+landscape, genre Fighting, 7 tags, descripción,
+disclosure IA (yes + graphics/audio/text/code), pricing "$0 or donate"
+con $2 sugeridos, cover 630x500 y 4 screenshots subidos.
+
+- **Bloqueante encontrado**: el upload del ZIP falla en silencio; el
+  endpoint `upload/prepare` devuelve `"Please verify your email address
+  before uploading a file"` (la UI lo esconde tras un error genérico).
+  El email primario de la cuenta es `rgr93.4@outlook.es`, sin verificar
+  → enviado el correo de verificación; el ZIP queda pendiente de eso.
+- Los uploads de imagen (cover/screenshots) usan otro endpoint sin ese
+  check — por eso sí entraron.
+- Técnica para inputs de fichero dinámicos de itch (no hay
+  `input[type=file]` en el DOM hasta pulsar el botón): click del botón
+  por JS (sin user-activation el diálogo nativo se suprime pero el
+  input queda creado), `aria-label` + estilo visible + `appendChild` a
+  `body` para que entre en el árbol de accesibilidad, y `file_upload`
+  con su ref. Los cambios de formulario NO persisten al navegar: hay
+  que pulsar Save antes de salir (una tanda se perdió y se rehízo).
+- Pendiente Rafa: verificar el email (Outlook), revisar y **publicar**
+  el borrador, y configurar pagos en `/user/settings/seller` para que
+  el botón de donar cobre de verdad.
+
+**Cierre (misma noche)**: email verificado por Rafa → ZIP subido (374 B,
+flag `embed` activado a mano — sin él la página no embebe), release
+status a "In development" + línea "⚠️ Early version" en la descripción
+(petición de Rafa: avisar de que se está puliendo). Verificado en vivo:
+Run game carga la pantalla de título dentro de itch. El editor de
+descripción es **Redactor**: ni el DOM directo ni el teclado sintético
+sincronizan fiable — usar su API (`$(textarea).redactor('code.set',
+html)`). Los clicks por coordenadas de captura van ESCALADOS (~0,75×
+del viewport real): convertir o usar refs. Falta solo: payout mode +
+Publish (Rafa).
+
 ## 2026-08-18 (tarde) — H2 técnico 5/5: la dieta de payload en un día
 
 Cinco slices (PRs #9-#13), todos con verificación visual/e2e y
