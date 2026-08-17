@@ -1,5 +1,43 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-18 (tarde) — H2 técnico 5/5: la dieta de payload en un día
+
+Cinco slices (PRs #9-#13), todos con verificación visual/e2e y
+desplegados a producción el mismo día:
+
+- **dist 239 → 96,9 MB (−59 %)** · JS eager 297 → 258 kB gz (colyseus
+  solo se descarga al pulsar Online) · primera visita de ~64 MB de
+  extras a ~1,5 MB · og-image por fin renderiza en WhatsApp (140 KB).
+- S1 quick-wins: prefetch de 58 MB fuera, árbol muerto de 52 MB a
+  _raw/, /animations (55 MB) y labs fuera del deploy, y el
+  **presupuesto de payload** como gate en check Y en el build de
+  Vercel (ratchet 135→115→100 MB).
+- S2 imágenes: WebP para sprites/skyboxes/grounds (23,9 → 1,6 MB).
+  Trampa evitada: public/images/_raw está GITIGNORADO — los masters
+  movidos ahí iban a perderse en clones limpios; git add -f.
+- S3 GLBs: gltfpack -c -kn (SIN el -si del pipeline de import, que es
+  para sources crudos) sobre los 6 crítters sin meshopt. Sihans
+  6,3 → 0,35 MB (su textura era un PNG de 5,3 MB). Pase visual de
+  los 6: intactos.
+- S4 colyseus lazy + cache: split network/network-events (import type
+  del SDK), enterOnline recibe el binder por parámetro; cache SWR
+  sobre URLs mutables, /assets immutable, 404s reales para assets.
+- S5 SEO: robots, sitemap, canonical, JSON-LD VideoGame.
+
+**Lecciones de e2e pagadas hoy** (3 falsos rojos apilados): los nicks
+fijos colisionan con rows de runs previos en la DB local ("nickname
+taken" parece un fallo del juego → sufijo único por run); page.click
+de Playwright se cuelga con la actionability bajo SwiftShader (usar
+clicks DOM via evaluate); y Vite recarga la página al re-optimizar
+deps dinámicas a mitad de sesión (optimizeDeps.include del SDK). El
+e2e queda determinista para todos los slices futuros.
+
+Pendiente de H2: página de itch.io (Rafa) + revisar la definición del
+gate de 50 MB (la huella inicial ya cumple; el grueso restante son los
+arena packs lazy de 88 MB).
+
+---
+
 ## 2026-08-18 — H1 CERRADO (`v1.3-modern-stack`): Colyseus 0.17 + schema v4
 
 El jefe final de la modernización, con dos salvadas que justifican el

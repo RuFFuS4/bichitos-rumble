@@ -14,33 +14,35 @@ r185, Colyseus 0.17 + schema v4; detalle en
 
 ---
 
-## H2 — Dieta de payload + presencia base (siguiente)
+## H2 — Dieta de payload + presencia base (técnico 5/5 ✅ · 2026-08-18)
 
-Checklist de [`ROADMAP.md §H2`](ROADMAP.md). Meta: dist 239 MB →
-**≤ 50 MB** (gate real de CrazyGames) y primera visita ligera.
+Los 5 slices técnicos completados y desplegados (PRs #9-#13):
+**dist 239 → 96,9 MB (−59 %)** · JS eager 297 → 258 kB gz · primera
+visita ~64 MB → ~1,5 MB de extras.
 
-1. [ ] Quitar el prefetch de los 9 GLBs de `index.html` (−50 MB de
-   primera visita; la estrategia lazy ya existe en `game.ts`/`roster.ts`).
-2. [ ] Mover `tree_jungle_broadleaf.glb` (52 MB, MUERTO — nada lo carga)
-   a `_raw/` (la convención de `clean-dist-raw.mjs` lo excluye del dist).
-3. [ ] Excluir `/animations` (57 MB, tool interno) + entries de dev
-   (tools/calibrate/anim-lab/decor-editor) del build de producción.
-4. [ ] Pase WebP/quantización: sprites (4,4 MB), skyboxes + grounds
-   (~17 MB), favicon 632 KB, og-image → < 600 KB (límite WhatsApp).
-5. [ ] meshopt para sihans (+resize textura 5,3 MB) y crítters sin
-   comprimir; evaluar `-si` para los heavies (sebastian/kermit/kurama).
-6. [ ] Cache: versionar URLs de /models /images /audio (o
-   `stale-while-revalidate`) + excluirlas del catch-all SPA rewrite.
-7. [ ] Colyseus lazy real para offline (split del event-bus — el aviso
-   `INEFFECTIVE_DYNAMIC_IMPORT` de Rolldown apunta al mismo sitio).
-8. [ ] **Presupuesto de payload en CI**: assert postbuild (dist ≤ 50 MB,
-   ningún fichero > 8 MB) — el modo de fallo ya ocurrió dos veces.
-9. [ ] SEO quick-wins: robots.txt, sitemap, canonical, JSON-LD VideoGame.
+1. [x] Prefetch de los 9 GLBs fuera (−58 MB por primera visita).
+2. [x] `tree_jungle_broadleaf.glb` muerto (52 MB) → `_raw/`.
+3. [x] `/animations` (55 MB) + labs fuera del build de producción
+   (`VITE_BUILD_TOOLS=1` los fuerza; dev intacto).
+4. [x] Imágenes: sprites/skyboxes/grounds → WebP (23,9 → 1,6 MB),
+   og-image → JPEG 140 KB (WhatsApp la renderiza), favicon 10 KB.
+   Masters en `_raw/` (¡`images/_raw` está gitignorado — forzados!).
+5. [x] meshopt en los 6 crítters sin comprimir (14,2 → 3,1 MB;
+   sihans 18×). Heavies se quedan (siguiente palanca = `-si`, arriesgado).
+6. [x] Cache: /assets hasheados → immutable; /models /images /audio →
+   `max-age=1d + SWR=7d`; catch-all excluye assets (404 reales).
+7. [x] Colyseus lazy (split network/network-events): el SDK solo se
+   descarga al pulsar Online. `optimizeDeps.include` para dev.
+8. [x] Presupuesto en CI **y en el build de Vercel**: 100 MB total /
+   17 MB por fichero, con ratchet documentado (135→115→100).
+9. [x] SEO: robots.txt, sitemap.xml, canonical, JSON-LD VideoGame.
 10. [ ] **Página en itch.io** embebiendo la URL de producción (segundo
-    canal + botón de donaciones = primera monetización).
+    canal + botón de donaciones = primera monetización). ← RAFA
 
-**Gate de salida H2**: dist ≤ 50 MB · Lighthouse móvil decente · itch.io
-publicado · tarjeta OG renderizando en WhatsApp.
+**Gate de salida H2**: dist ≤ 50 MB (hoy 96,9 — el resto grande son los
+arena packs de 88 MB, lazy per-match; revisar si el gate literal aplica
+o se redefine como "huella inicial ≤ 50", que YA se cumple de sobra) ·
+Lighthouse móvil decente · itch.io publicado · tarjeta OG en WhatsApp ✅.
 
 ---
 

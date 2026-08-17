@@ -38,11 +38,13 @@ import {
   getPortalExitUrl, getPortalReturnUrl, clearPortalContext,
   togglePortalExpanded, hasStartPortal,
 } from './portal';
-import { sendInput, onPlayersChange, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, type Room, type AbilityFiredEvent } from './network';
+// network-events es colyseus-free (imports type-only del SDK) — el SDK
+// real (network.ts) solo entra por import dinámico en connectOnline.
+import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, type Room, type AbilityFiredEvent, type PlayersChangeBinder } from './network-events';
 import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
-import { type OnlineIdentity } from './online-identity';
+import { getDeviceToken, type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
@@ -750,20 +752,20 @@ export class Game {
       this.arena.reset();
       showOverlay('Connecting...');
 
-      const { connectToBrawl, getDefaultServerUrl } = await import('./network');
+      // El ÚNICO punto que carga el SDK de Colyseus (chunk async).
+      const { connectToBrawl, onPlayersChange } = await import('./network');
       // Pass playerId+token if we have an online identity — the server
       // uses this to credit match stats to the right row for the Online
       // Belts (Fase 3 wires the room handler; for now we just attach it
       // to the join options so the handshake carries it).
       const joinOpts: Record<string, unknown> = { critterName };
       if (this.onlineIdentity) {
-        const { getDeviceToken } = await import('./online-identity');
         joinOpts.playerId = this.onlineIdentity.playerId;
         joinOpts.playerToken = getDeviceToken();
         joinOpts.nickname = this.onlineIdentity.nickname;
       }
       const room = await connectToBrawl(getDefaultServerUrl(), joinOpts);
-      this.enterOnline(room);
+      this.enterOnline(room, onPlayersChange);
     } catch (err) {
       console.error('[Game] online connect failed:', err);
       hideOverlay();
@@ -801,7 +803,7 @@ export class Game {
    * Switch to online mode. Disposes local critters, hooks network listeners,
    * and starts rendering remote state. The room must already be connected.
    */
-  public enterOnline(room: Room): void {
+  public enterOnline(room: Room, onPlayersChange: PlayersChangeBinder): void {
     console.log('[Game] entering online mode');
     clearMenuActions();
     this.room = room;

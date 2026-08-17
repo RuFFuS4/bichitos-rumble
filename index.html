@@ -15,6 +15,38 @@
   <link rel="apple-touch-icon" href="/favicon-br.png" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
+  <!-- H2 SEO: canonical (el catch-all SPA responde 200 a cualquier ruta,
+       esto le dice a los crawlers cuál es LA url) + JSON-LD VideoGame. -->
+  <link rel="canonical" href="https://www.bichitosrumble.com/" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    "name": "Bichitos Rumble",
+    "url": "https://www.bichitosrumble.com/",
+    "description": "Headbutt your rivals into the void. Free 4-player web arena brawler — 9 critters with unique abilities, collapsing arenas, online multiplayer, no signup.",
+    "genre": ["Arcade", "Fighting"],
+    "gamePlatform": "Web Browser",
+    "playMode": ["SinglePlayer", "MultiPlayer"],
+    "applicationCategory": "Game",
+    "operatingSystem": "Any",
+    "inLanguage": "en",
+    "isAccessibleForFree": true,
+    "image": "https://www.bichitosrumble.com/og-image.jpg",
+    "author": {
+      "@type": "Person",
+      "name": "Rafael Gómez Rubio",
+      "url": "https://x.com/RGomezR14"
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "EUR",
+      "availability": "https://schema.org/InStock"
+    }
+  }
+  </script>
+
   <!-- Open Graph (Discord, Facebook, Slack, WhatsApp) -->
   <meta property="og:type"        content="website" />
   <meta property="og:site_name"   content="Bichitos Rumble" />
