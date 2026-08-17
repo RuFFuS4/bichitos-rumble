@@ -29,17 +29,35 @@ producto/cuenta que Tripo) o **Meshy AI** (re-rig + librería de
 animaciones stock). Para los crítters ruta Meshy aplican **ambas**
 licencias (mesh origen Tripo + export animado Meshy).
 
+> **✅ Actualización 2026-08-17** — Rafa confirma que tanto **Tripo
+> como Meshy estuvieron bajo plan de pago durante toda la creación del
+> juego** (abril 2026; hoy ninguna de las dos suscripciones está
+> activa). Términos verificados contra la documentación oficial:
+> · **Meshy** ([help center](https://help.meshy.ai/en/articles/9992023-if-i-cancel-my-subscription-will-all-my-models-revert-to-a-cc-by-4-0-license)):
+> los assets generados bajo plan de pago son **propiedad privada
+> completa del usuario y NO revierten a CC BY 4.0 al cancelar** — uso
+> comercial sin atribución, permanente.
+> · **Tripo** ([licensing guide](https://www.tripo3d.ai/game-development/3d-assets-license-game-development)):
+> los planes de pago conceden derechos amplios de uso, modificación,
+> distribución y **monetización** de los outputs generados durante la
+> suscripción; la retención post-cancelación es la práctica declarada,
+> con la recomendación estándar de **archivar evidencia** (factura del
+> plan + fechas de generación + snapshot de los ToS vigentes).
+> **Único deber restante para estas filas: archivar la evidencia**
+> (capturas del historial de facturación de abril 2026 en ambas
+> cuentas) en `docs/licencias-evidencia/` (fuera del bundle del juego).
+
 | Asset | Generator | Account/Tier | Generation date | License terms | Commercial use OK? | Attribution required? |
 |---|---|---|---|---|---|---|
-| `cheeto.glb` | Tripo AI + Tripo Animate | ⚠️ PENDIENTE — verificar en la cuenta | ~2026-04 (anim 2026-04-21) | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
-| `kermit.glb` | Tripo AI + Tripo Animate | ⚠️ PENDIENTE — verificar en la cuenta | ~2026-04 | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
-| `kowalski.glb` | Tripo AI + Tripo Animate | ⚠️ PENDIENTE — verificar en la cuenta | ~2026-04 (anim 2026-04-21) | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
-| `trunk.glb` | Tripo AI + Tripo Animate | ⚠️ PENDIENTE — verificar en la cuenta | ~2026-04 (anim 2026-04-21) | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
-| `shelly.glb` | Tripo AI + Tripo Animate | ⚠️ PENDIENTE — verificar en la cuenta | ~2026-04 | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
-| `kurama.glb` | Tripo AI (mesh) + Meshy AI (rig/anims) | ⚠️ PENDIENTE — verificar en la cuenta | ~2026-04-24 (pipeline Meshy) | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
-| `sebastian.glb` | Tripo AI (mesh) + Meshy AI (rig/anims) | ⚠️ PENDIENTE — verificar en la cuenta | ~2026-04-24+ | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
-| `sihans.glb` | Tripo AI (mesh) + Meshy AI (rig/anims) | ⚠️ PENDIENTE — verificar en la cuenta | ~2026-04-24+ | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
-| `sergei.glb` | Tripo AI (mesh) + Meshy AI (rig/anims) | ⚠️ PENDIENTE — verificar en la cuenta | regen 2026-04-24 | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
+| `cheeto.glb` | Tripo AI + Tripo Animate | Plan de pago (abr 2026) — archivar factura | ~2026-04 (anim 2026-04-21) | Derechos comerciales del plan de pago (ver nota) | ✅ Sí | No |
+| `kermit.glb` | Tripo AI + Tripo Animate | Plan de pago (abr 2026) — archivar factura | ~2026-04 | Derechos comerciales del plan de pago (ver nota) | ✅ Sí | No |
+| `kowalski.glb` | Tripo AI + Tripo Animate | Plan de pago (abr 2026) — archivar factura | ~2026-04 (anim 2026-04-21) | Derechos comerciales del plan de pago (ver nota) | ✅ Sí | No |
+| `trunk.glb` | Tripo AI + Tripo Animate | Plan de pago (abr 2026) — archivar factura | ~2026-04 (anim 2026-04-21) | Derechos comerciales del plan de pago (ver nota) | ✅ Sí | No |
+| `shelly.glb` | Tripo AI + Tripo Animate | Plan de pago (abr 2026) — archivar factura | ~2026-04 | Derechos comerciales del plan de pago (ver nota) | ✅ Sí | No |
+| `kurama.glb` | Tripo AI (mesh) + Meshy AI (rig/anims) | Ambos de pago (abr 2026) — archivar facturas | ~2026-04-24 (pipeline Meshy) | Meshy paid: propiedad completa, no revierte al cancelar | ✅ Sí | No |
+| `sebastian.glb` | Tripo AI (mesh) + Meshy AI (rig/anims) | Ambos de pago (abr 2026) — archivar facturas | ~2026-04-24+ | Meshy paid: propiedad completa, no revierte al cancelar | ✅ Sí | No |
+| `sihans.glb` | Tripo AI (mesh) + Meshy AI (rig/anims) | Ambos de pago (abr 2026) — archivar facturas | ~2026-04-24+ | Meshy paid: propiedad completa, no revierte al cancelar | ✅ Sí | No |
+| `sergei.glb` | Tripo AI (mesh) + Meshy AI (rig/anims) | Ambos de pago (abr 2026) — archivar facturas | regen 2026-04-24 | Meshy paid: propiedad completa, no revierte al cancelar | ✅ Sí | No |
 
 **Nota de verificación**: para los 4 crítters ruta Meshy hay que
 confirmar si el mesh que Meshy animó era el de Tripo (subida propia)
@@ -89,14 +107,20 @@ ARENA_PROMPTS.md). El "generador IA" usado (con budget de prompt de
 
 ## 5 · Música — 3 MP3 de Suno (`public/audio/`)
 
-**Riesgo alto**: los derechos comerciales de Suno **dependen del plan
-bajo el que se generó cada track** (ver riesgos abajo).
+> **✅ Actualización 2026-08-17** — Rafa confirma **suscripción de pago
+> de Suno activa** (también durante la generación en abril 2026).
+> Términos verificados ([Suno Rights & Ownership](https://help.suno.com/en/categories/550145)
+> + [análisis](https://dynamoi.com/learn/ai-music-distribution/suno-commercial-rights-explained)):
+> las canciones creadas bajo Pro/Premier **son propiedad del usuario
+> con derechos comerciales permanentes**, aunque la suscripción
+> termine después — lo que manda es el plan activo **en el momento de
+> crear** el track. Deber restante: archivar factura de abril 2026.
 
 | Asset | Generator | Account/Tier | Generation date | License terms | Commercial use OK? | Attribution required? |
 |---|---|---|---|---|---|---|
-| `intro.mp3` (title / select / waiting loop) | Suno (Advanced: Lyrics + Styles + Title) | ⚠️ PENDIENTE — verificar en la cuenta | ~2026-04 | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
-| `ingame.mp3` (countdown + match loop) | Suno | ⚠️ PENDIENTE — verificar en la cuenta | ~2026-04 | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
-| `special.mp3` (victory stinger) | Suno | ⚠️ PENDIENTE — verificar en la cuenta | ~2026-04 | ⚠️ PENDIENTE — verificar en la cuenta | ⚠️ Sin verificar | ⚠️ Sin verificar |
+| `intro.mp3` (title / select / waiting loop) | Suno (Advanced: Lyrics + Styles + Title) | Plan de pago (activo; también en abr 2026) | ~2026-04 | Propiedad del usuario, derechos comerciales perpetuos | ✅ Sí | No |
+| `ingame.mp3` (countdown + match loop) | Suno | Plan de pago (activo; también en abr 2026) | ~2026-04 | Propiedad del usuario, derechos comerciales perpetuos | ✅ Sí | No |
+| `special.mp3` (victory stinger) | Suno | Plan de pago (activo; también en abr 2026) | ~2026-04 | Propiedad del usuario, derechos comerciales perpetuos | ✅ Sí | No |
 
 ## 6 · SFX sintetizados — código propio
 
@@ -120,42 +144,55 @@ interno (`noindex`) pero **se despliega y se sirve** en
 
 ## ✅ Checklist de acción para Rafa (desbloquea H5)
 
-1. [ ] **Meshy AI** — entrar en la cuenta y registrar aquí: plan
-   activo hoy Y plan bajo el que se generaron Kurama / Sebastian /
-   Sihans / Sergei (~2026-04-24). Pegar en este doc la cita textual
-   de los license terms de ese plan.
-2. [ ] **Tripo AI** — ídem: plan de la cuenta durante abril 2026
-   (generación de los 9 meshes + animaciones Tripo Animate de
-   Cheeto / Kermit / Kowalski / Trunk / Shelly). Pegar cita textual
-   de los términos.
-3. [ ] **Suno** — ídem: plan bajo el que se generaron `intro.mp3`,
-   `ingame.mp3` y `special.mp3`. Pegar cita textual de los términos
-   (sección commercial use).
-4. [ ] **Identificar el generador de imagen 2D** usado para sprites,
+> **Estado 2026-08-17**: los tres frentes grandes (crítters Tripo/Meshy
+> + música Suno) quedaron en verde al confirmarse que se generaron bajo
+> planes de pago. Lo que queda es archivado de evidencia + identificar
+> el generador de los assets 2D.
+
+1. [x] **Meshy AI** — ✅ plan de pago durante abril 2026 (confirmado
+   por Rafa 2026-08-17). Términos verificados: propiedad completa,
+   sin reversión a CC BY al cancelar, sin atribución.
+2. [x] **Tripo AI** — ✅ plan de pago durante abril 2026 (confirmado
+   por Rafa 2026-08-17). Derechos comerciales del plan de pago.
+3. [x] **Suno** — ✅ suscripción de pago (activa hoy y en abril 2026).
+   Derechos comerciales perpetuos sobre los tracks creados bajo plan
+   de pago.
+4. [ ] **Archivar evidencia** (~10 min): capturas/PDF del historial de
+   facturación de abril 2026 de Meshy, Tripo y Suno →
+   `docs/licencias-evidencia/` (carpeta fuera del bundle; los ToS
+   pueden cambiar y la prueba de qué plan estaba activo al generar es
+   lo que sostiene el dossier).
+5. [ ] **Identificar el generador de imagen 2D** usado para sprites,
    favicon, og-image/portada, badges PNG, skyboxes y ground textures
-   (¿Midjourney? ¿DALL·E/ChatGPT? ¿SD local?) y el de los GLBs de
-   cinturones y props de arena. Revisar historial de las cuentas y
-   completar las filas "generador sin registrar".
-5. [ ] Completar **fecha de generación exacta** por asset donde ponga
-   `~` (el historial de cada cuenta las tiene).
-6. [ ] Con todo lo anterior: marcar cada fila `Commercial use OK?`
-   con ✅/❌ real, y decidir remediación para los ❌ (upgrade de plan,
-   regeneración bajo plan de pago, o sustitución del asset).
+   (¿Midjourney? ¿DALL·E/ChatGPT? ¿SD local?) y confirmar que los
+   GLBs de cinturones y props de arena salieron de las mismas cuentas
+   de pago Tripo/Meshy (si es así, heredan el ✅ de arriba).
+6. [ ] Con el punto 5: cerrar las filas pendientes de las secciones
+   2, 3 y 4.
 7. [ ] Actualizar [ROADMAP](ROADMAP.md) H5 cuando el dossier quede
-   en verde.
+   100 % en verde.
 
-### ⚠️ Riesgos ya conocidos (a confirmar contra los términos vigentes)
+### 📌 Decisión de suscripciones futuras (anotada 2026-08-17)
 
-- **Meshy free tier**: licencia los outputs como **CC BY 4.0** —
-  exige **atribución** y los assets pueden quedar en **galería
-  pública**. Si algún crítter se generó/animó en free tier, habría
-  que atribuir a Meshy en el juego o regenerar bajo plan de pago.
-- **Suno free tier**: **NO concede uso comercial** — Suno retiene la
-  propiedad y el uso queda limitado a no comercial. Si los 3 tracks
-  salieron del free tier, monetizar el juego con ellos sería una
-  infracción directa: upgrade + regeneración (o verificación de que
-  el plan de pago cubre tracks generados antes del upgrade — los
-  términos de Suno varían en esto).
-- **Tripo**: términos por tier menos conocidos — no asumir nada;
-  verificar qué concede el plan usado (algunos generadores 3D
-  también publican los outputs free en galería pública).
+Hoy no hay suscripción activa de Meshy ni Tripo, y **no hace falta
+hasta que se generen assets nuevos** (fase H4: crítters/skins/packs
+nuevos). Intención de Rafa: retomar **solo una** de las dos.
+Recomendación registrada: decidir en H4 según lo que pida el pipeline
+— **Tripo** cubrió mesh + animación (Tripo Animate) de la mayoría del
+roster con una sola cuenta, Meshy fue la ruta alternativa de rigging
+para 4 crítters; los términos post-cancelación de Meshy son los más
+explícitos legalmente. Mientras tanto: 0 €/mes en generadores 3D.
+
+### ⚠️ Riesgos residuales
+
+- ~~Meshy free tier CC BY 4.0~~ — **no aplica**: plan de pago
+  confirmado durante la generación.
+- ~~Suno free tier sin uso comercial~~ — **no aplica**: plan de pago
+  confirmado.
+- **Assets 2D con generador sin identificar** (secciones 2-4): es el
+  único frente con incertidumbre real. Si salieron de un tier gratuito
+  de algún generador de imagen, la remediación típica es barata
+  (regenerar bajo plan de pago o sustituir); resolver antes de H5.
+- **Evidencia sin archivar**: hasta completar el punto 4, la
+  confirmación es declarativa. Con las facturas archivadas, el dossier
+  queda defendible.
