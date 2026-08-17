@@ -18,6 +18,12 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+# Toolchain for native modules. better-sqlite3 v13 dropped musl
+# prebuilds (H1 2026-08-17 — caught by the CI server-docker job on its
+# first run), so node-gyp compiles it from source HERE, once. The
+# runtime stage copies the result and stays toolchain-free.
+RUN apk add --no-cache python3 make g++
+
 # Install all deps (including devDeps needed for tsc)
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -27,6 +33,10 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
+# Drop devDeps in place: node_modules now holds ONLY production deps,
+# with the compiled native binary already inside — ready to copy.
+RUN npm prune --omit=dev && npm cache clean --force
+
 # ============ RUNTIME STAGE ============
 FROM node:22-alpine
 
@@ -34,9 +44,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Install ONLY production deps
+# Production node_modules come prebuilt from the builder (no npm ci
+# here — the runtime image never needs a compiler toolchain).
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy compiled output from builder
 COPY --from=builder /app/dist ./dist
