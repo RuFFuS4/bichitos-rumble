@@ -12,6 +12,8 @@
 | `engines.node >= 20.19` | ✅ Añadido a ambos package.json (requisito Vite 8). |
 | Node en runtimes | CI: 22 ✅ · Railway: `node:22-alpine` (Dockerfile) ✅ · Vercel: **24.x** ✅ (verificado por Rafa 2026-08-17 en Settings → Node.js Version). |
 | Bumps menores | ✅ 2026-08-17: gltf-transform 4.4.2, playwright 1.62, gltfpack/meshoptimizer 1.2, sharp 0.35.3, terser 5.50 (cliente) · tsx 4.23, **better-sqlite3 13** (nativo verificado local + job Docker nuevo en CI), @types/better-sqlite3 9.6, @types/node 22.20 (fijado a 22.x = runtime real) (server). Excluidos a propósito: typescript/vite/three/@types/three/colyseus — cada uno es su propio paso. |
+| Lección better-sqlite3 13 | v13 **eliminó los prebuilds musl**: el Dockerfile ahora compila el nativo en el builder stage (apk python3/make/g++ + `npm prune --omit=dev`) y el runtime copia node_modules ya compilado. El job `server-docker` del CI lo cazó en su primer run. |
+| TypeScript | ✅ 2026-08-17: **7.0.2 (compiler nativo Go) en cliente Y server** — la 6.0.3 puente resultó innecesaria: el nativo acepta nuestra config entera incluida `experimentalDecorators` (Colyseus v3). Fallout total: 1 línea (lib.dom nueva tipa `hidden` como boolean\|string). Typecheck ahora casi instantáneo (`npm run check` completo: 7 s). |
 
 ## Superficie three.js real (grep 2026-08-17)
 
