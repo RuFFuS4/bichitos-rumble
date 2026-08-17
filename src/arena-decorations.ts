@@ -246,11 +246,11 @@ export function layoutPackProps(packId: ArenaPackId, seed: number): PropPlacemen
 // --- Asset paths ---------------------------------------------------------
 
 function groundTexturePath(packId: ArenaPackId): string {
-  return `./images/arena-ground/${packId}.png`;
+  return `./images/arena-ground/${packId}.webp`;
 }
 
 function skyboxTexturePath(packId: ArenaPackId): string {
-  return `./images/skyboxes/${packId}.png`;
+  return `./images/skyboxes/${packId}.webp`;
 }
 
 function propGlbPath(packId: ArenaPackId, glbName: string): string {

@@ -21,13 +21,12 @@
   <meta property="og:url"         content="https://www.bichitosrumble.com/" />
   <meta property="og:title"       content="Bichitos Rumble" />
   <meta property="og:description" content="Headbutt your rivals into the void. 4-player web arena brawler — 9 critters, free, no signup." />
-  <!-- TODO(og-image): generate public/og-image.png (1200×628, <5 MB, PNG).
-       Prompt candidate: hero screenshot of 4 critters mid-brawl on the
-       collapsing arena, warm arcade tones, "BICHITOS RUMBLE" text overlay.
-       Until the asset ships this URL 404s and the preview falls back to
-       no-image — not broken, just bland. Replace both og:image and
-       twitter:image once generated. -->
-  <meta property="og:image"        content="https://www.bichitosrumble.com/og-image.png" />
+  <!-- H2 2026-08-18: og-image ahora JPEG de 140 KB — WhatsApp descarta
+       previews por encima de ~600 KB, así que el PNG de 1,9 MB nunca
+       renderizaba tarjeta en el canal de compartir más probable. El
+       master PNG vive en public/_raw/; regenerar con
+       scripts/compress-images.mjs. -->
+  <meta property="og:image"        content="https://www.bichitosrumble.com/og-image.jpg" />
   <meta property="og:image:width"  content="1200" />
   <meta property="og:image:height" content="628" />
   <meta property="og:image:alt"    content="Bichitos Rumble — cartoon arena brawler" />
@@ -38,26 +37,19 @@
   <meta name="twitter:creator"     content="@RGomezR14" />
   <meta name="twitter:title"       content="Bichitos Rumble" />
   <meta name="twitter:description" content="Headbutt your rivals into the void. 4-player web arena brawler for Vibe Jam 2026." />
-  <meta name="twitter:image"       content="https://www.bichitosrumble.com/og-image.png" />
+  <meta name="twitter:image"       content="https://www.bichitosrumble.com/og-image.jpg" />
   <meta name="twitter:image:alt"   content="Bichitos Rumble — cartoon arena brawler" />
 
   <!-- Resource hints — first-paint optimization.
        preload: title-loop music so it plays the instant the user
          clicks through the title (not after a 200ms fetch gap).
-       prefetch: the 9 critter GLBs so the first match doesn't stall
-         at the "Loading Sergei…" step. Browsers lazily fetch these
-         at low priority while the title + menu are idle. Crossorigin
-         matches the `fetch()` call model-loader uses. -->
+       H2 2026-08-18: the blanket prefetch of all 9 critter GLBs
+       (~58 MB on EVERY first visit) is GONE — it contradicted the
+       coded lazy strategy (roster.ts heavyAsset flag +
+       scheduleIdlePreload in game.ts, which already warm the cache
+       intelligently) and blew the portal-distribution budget
+       (CrazyGames gates on ≤50 MB initial footprint). -->
   <link rel="preload"  as="audio" href="/audio/intro.mp3" />
-  <link rel="prefetch" as="fetch" href="/models/critters/sergei.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/trunk.glb"     crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/kurama.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/shelly.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/kermit.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/sihans.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/kowalski.glb"  crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/cheeto.glb"    crossorigin="anonymous" />
-  <link rel="prefetch" as="fetch" href="/models/critters/sebastian.glb" crossorigin="anonymous" />
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -2773,8 +2765,8 @@
        SPRITE ICON SYSTEMS
        -----------------------------------------------------------------
        Two AI-generated sprite sheets power the HUD + ability icons:
-         - /images/hud-icons.png     (4 cols × 6 rows, 256 × 256 per cell)
-         - /images/ability-icons.png (3 cols × 9 rows, ~256 px per cell)
+         - /images/hud-icons.webp     (4 cols × 6 rows, 256 × 256 per cell)
+         - /images/ability-icons.webp (3 cols × 9 rows, ~256 px per cell)
 
        The HUD sheet is authored in HUD_mejorado.png (project root) with
        a 4×6 grid of clean icons + 20 px margin + 20 px gutter. The
@@ -2804,14 +2796,14 @@
     }
 
     .sprite-hud {
-      background-image: url('./images/hud-icons.png');
+      background-image: url('./images/hud-icons.webp');
       /* Grid: 4 cols × 6 rows. Each cell is 1/4 wide and 1/6 tall of
          the image, so scaling the image to 400% × 600% of the element
          makes one cell exactly fill the element. */
       background-size: 400% 600%;
     }
     .sprite-ability {
-      background-image: url('./images/ability-icons.png');
+      background-image: url('./images/ability-icons.webp');
       background-size: 300% 900%;
     }
 
