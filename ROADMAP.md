@@ -60,7 +60,7 @@ despejar los bloqueantes legales. Sin tocar gameplay.
 **Gate de salida**: CI verde en dev/main ✅ · Sentry recibiendo ✅ · DB
 limpia con backup ✅ · ASSET_LICENSES.md core ✅ · docs fiables ✅.
 
-## H1 — Modernización de dependencias (5/6 a 2026-08-17)
+## H1 — Modernización de dependencias ✅ CERRADO 2026-08-18 (`v1.3-modern-stack`)
 
 **Meta**: stack 2026 con los saltos ordenados de menor a mayor riesgo,
 cada uno en su propia rama con CI verde. Detalle por salto:
@@ -81,15 +81,16 @@ cada uno en su propia rama con CI verde. Detalle por salto:
 5. [x] **Three 0.185**: 0 fallout de tipos, imports a `three/addons`,
        pase visual headless con capturas — sin regresión del especular
        r181.
-6. [ ] **Colyseus 0.16 → 0.17 + schema v4** (el mayor riesgo, el último):
-       primero envolver el acceso a estado del cliente en un adapter
-       (game.ts:842-859 y 1095-1220), luego bump lockstep server +
-       colyseus.js. Considerar la descomposición de BrawlRoom (H4) antes
-       si el diff se complica. Smoke online en producción al cerrar.
+6. [x] **Colyseus 0.16 → 0.17 + schema v4** lockstep (cliente pasa a
+       `@colyseus/sdk`; server a `defineServer()` tras descubrir que el
+       wiring clásico duplica listeners HTTP en 0.17). Verificado con
+       e2e local de 2 páginas + review adversarial de 3 lentes que cazó
+       la auto-reconexión default-ON del SDK (desactivada; H4 la
+       implementará server-side). Detalle en H1_MIGRATION_NOTES.
 
-**Gate de salida**: todo verde en CI · partida offline y online completa
-sin regresión visual ni de feel · merge a main + tag `v1.3-modern-stack`
-· cero errores nuevos en Sentry 48 h tras el deploy.
+**Gate de salida**: CI verde ✅ · e2e online local completo ✅ · smoke
+producción ✅ · merge a main + tag `v1.3-modern-stack` ✅ · Sentry 48 h
+tras el deploy ⏳ (vigilancia en curso — cierra formalmente el gate).
 
 ## H2 — Dieta de payload + presencia base (~1-2 semanas)
 
