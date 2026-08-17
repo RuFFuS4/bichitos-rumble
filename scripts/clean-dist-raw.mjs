@@ -34,6 +34,12 @@ import { join } from 'node:path';
 
 const DIST = 'dist';
 const TARGET_NAME = '_raw';
+// H2 2026-08-18 — dev-only subsites that Vite copies verbatim from
+// public/ but production must NOT ship. `animations` is the vendored
+// mesh2motion tool build (57 MB, zero links from the game UI — it was
+// 24 % of the deploy). The tool keeps working in dev (`npm run dev`
+// serves public/ directly); only dist/ loses it.
+const EXTRA_DIRS = ['animations'];
 // Tooling backups created by build-side scripts (e.g. trim-hud-sheet.mjs
 // leaves a *.original.png next to its trimmed output so a second pass
 // can read the original). Runtime never loads these — they sit in
@@ -93,6 +99,10 @@ async function findRawDirs(root) {
 }
 
 const { dirs, files } = await findRawDirs(DIST);
+for (const extra of EXTRA_DIRS) {
+  const p = join(DIST, extra);
+  if (existsSync(p)) dirs.push(p);
+}
 if (dirs.length === 0 && files.length === 0) {
   console.log(`[clean-dist-raw] nothing to clean under ${DIST}/`);
   process.exit(0);

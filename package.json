@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && node scripts/clean-dist-raw.mjs",
+    "build": "tsc && vite build && node scripts/clean-dist-raw.mjs && node scripts/check-payload-budget.mjs",
     "preview": "vite preview",
     "verify:glbs": "node scripts/verify-critter-glbs.mjs",
     "inspect:clips": "node scripts/inspect-clips.mjs",
@@ -22,7 +22,7 @@
     "realign-ability-icons": "node scripts/realign-ability-icons.mjs",
     "compress:audio": "node scripts/compress-audio.mjs",
     "test:smoke": "playwright test",
-    "check": "tsc --noEmit && node scripts/verify-critter-glbs.mjs && node scripts/verify-ability-parity.mjs && vite build && node scripts/clean-dist-raw.mjs",
+    "check": "tsc --noEmit && node scripts/verify-critter-glbs.mjs && node scripts/verify-ability-parity.mjs && vite build && node scripts/clean-dist-raw.mjs && node scripts/check-payload-budget.mjs",
     "doctor": "node scripts/doctor.mjs"
   },
   "dependencies": {

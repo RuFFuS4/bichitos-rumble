@@ -52,12 +52,20 @@ export default defineConfig({
       },
     },
     rolldownOptions: {
+      // H2 2026-08-18: production builds ship ONLY the game. The four
+      // internal lab entries (tools/calibrate/anim-lab/decor-editor)
+      // stay fully usable in dev (`npm run dev` serves them without
+      // build inputs) and can be force-included in a build with
+      // VITE_BUILD_TOOLS=1 (e.g. for a tooling-only deploy). Rationale:
+      // they exposed internal tooling publicly and added weight.
       input: {
-        index:       resolve(import.meta.dirname, 'index.html'),
-        tools:       resolve(import.meta.dirname, 'tools.html'),
-        calibrate:   resolve(import.meta.dirname, 'calibrate.html'),
-        animLab:     resolve(import.meta.dirname, 'anim-lab.html'),
-        decorEditor: resolve(import.meta.dirname, 'decor-editor.html'),
+        index: resolve(import.meta.dirname, 'index.html'),
+        ...(process.env.VITE_BUILD_TOOLS === '1' ? {
+          tools:       resolve(import.meta.dirname, 'tools.html'),
+          calibrate:   resolve(import.meta.dirname, 'calibrate.html'),
+          animLab:     resolve(import.meta.dirname, 'anim-lab.html'),
+          decorEditor: resolve(import.meta.dirname, 'decor-editor.html'),
+        } : {}),
       },
       output: {
         codeSplitting: {
