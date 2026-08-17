@@ -755,22 +755,6 @@
       0%, 100% { opacity: 0.9; }
       50% { opacity: 0.4; }
     }
-    /* Vibe Jam widget badge — injected by widget.js with inline styles.
-       Override with !important to give it more presence: bigger font,
-       bigger padding, gold gradient accent on hover. Still bottom-right
-       but hard to miss. */
-    body > a[href*="vibej.am"] {
-      font-size: 17px !important;
-      padding: 11px 20px !important;
-      letter-spacing: 0.4px !important;
-      box-shadow: 0 -2px 18px rgba(0, 0, 0, 0.35) !important;
-      transition: transform 0.18s ease, background 0.18s !important;
-    }
-    body > a[href*="vibej.am"]:hover {
-      background: #ffdc5c !important;
-      transform: translateY(-2px) !important;
-    }
-
     /* Author signature on the title screen. Bottom-LEFT so it doesn't
        overlap the Vibe Jam 2026 widget badge that sits bottom-right.
        Pill-shaped with a subtle gold border so it reads as a proper
@@ -809,6 +793,27 @@
     }
     .title-signature:hover .handle {
       color: #ffffff;
+    }
+    /* Legal links (Privacy · Terms) — discreet footer line bottom-RIGHT
+       of the title screen (corner freed after the jam widget retired).
+       Deliberately tiny + low-opacity so it reads as fine print. */
+    .legal-links {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      font-size: 11.5px;
+      letter-spacing: 0.6px;
+      color: rgba(255, 220, 92, 0.35);
+      pointer-events: auto;
+      z-index: 5;
+    }
+    .legal-links a {
+      color: rgba(255, 220, 92, 0.55);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .legal-links a:hover {
+      color: #ffdc5c;
     }
     /* Line of control hints at the bottom-center of the title screen.
        Two stacked tiers: primary (WASD/SPACE/J/K/L/R) in the main row,
@@ -2644,6 +2649,11 @@
         font-size: 11.5px;
         padding: 5px 11px;
       }
+      .legal-links {
+        bottom: 12px;
+        right: 12px;
+        font-size: 10.5px;
+      }
       .controls-hint {
         bottom: 22px;
         font-size: 11px;
@@ -2727,6 +2737,7 @@
       /* Title signature (`by @RGomezR14`) — tighten so it doesn't
          eat the bottom of a 340-px-tall match HUD. */
       .title-signature { bottom: 8px; left: 8px; padding: 4px 8px; font-size: 10.5px; }
+      .legal-links { bottom: 10px; right: 10px; font-size: 10px; }
 
       /* Title screen prompts — at 340 px tall the .prompt + the
          .controls-hint + .controls-hint-gamepad + .title-signature
@@ -2948,6 +2959,11 @@
        rel="noopener noreferrer">
       by <span class="handle">@RGomezR14</span>
     </a>
+    <div class="legal-links">
+      <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy</a>
+      &middot;
+      <a href="/terms.html" target="_blank" rel="noopener noreferrer">Terms</a>
+    </div>
   </div>
 
   <div id="character-select" class="full-overlay hidden">
@@ -3092,7 +3108,10 @@
   <div id="portal-warp-overlay" aria-hidden="true"></div>
 
   <script type="module" src="/src/main.ts"></script>
-  <!-- Vibe Coding Game Jam 2026 widget (required for submission) -->
-  <script async src="https://vibej.am/2026/widget.js"></script>
+  <!-- H0 2026-08-16: retirado el widget del Vibe Jam 2026 (era requisito
+       del submit). El script post-jam de la organización quedó roto
+       (SyntaxError servido desde vibejam.com) y además hacía heartbeat
+       de actividad cada 60 s. El sistema de portales in-game (portal.ts)
+       se mantiene aparte. -->
 </body>
 </html>

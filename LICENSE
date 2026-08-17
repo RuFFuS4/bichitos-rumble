@@ -1,0 +1,15 @@
+Bichitos Rumble
+Copyright (c) 2026 Rafael Gómez Rubio (@RGomezR14). All rights reserved.
+
+This repository is proprietary. The source code is made available on
+GitHub for reading and reference purposes only. No permission is
+granted to copy, modify, merge, publish, redistribute, sublicense,
+sell, or otherwise use this software, its assets, or any part of it,
+whether commercially or non-commercially, without prior written
+consent from the copyright holder.
+
+Third-party dependencies retain their own licenses (see package.json
+for the dependency list). The vendored mesh2motion subpackage
+(mesh2motion/) retains its upstream licenses: MIT for code
+(mesh2motion/LICENSE-MIT.MD) and CC0 for bundled animation assets
+(mesh2motion/LICENSE-CC0.MD).

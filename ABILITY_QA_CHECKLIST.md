@@ -7,8 +7,11 @@ Status legend:
 - `[!]` problema detectado / requiere ajuste / NO se cierra antes de la entrega
 - `[~⚠]` implementado con simplificación documentada (versión fiel al espíritu, no idéntica al diseño)
 
-Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish + 2026-04-30 final-L + 2026-04-30 final-polish + 2026-05-01 microfixes + 2026-05-01 BLOQUE FINAL (deadline-day).
+Last updated: v0.11 + K-session 1 + K-refinement + final-K-polish + 2026-04-30 final-L + 2026-04-30 final-polish + 2026-05-01 microfixes + 2026-05-01 BLOQUE FINAL (deadline-day) + 2026-08-16 H0 doc-sync.
 Use `git log --grep abilities` to see the commit trail behind each item.
+
+> **2026-08-16 — consolidated during H0 doc-sync; body statuses reconciled with header passes.**
+> Las secciones per-critter de abajo se escribieron en la era v0.11 y varios items `[!] NO implementado` SÍ se implementaron después, en los passes de 2026-04-30 (final-L / final-polish) y 2026-05-01 (microfixes / BLOQUE FINAL) descritos en el header. Esos items pasan a `[~]`/`[~⚠]` con nota "(shipped … — see header)"; su texto histórico se conserva tal cual. La lista final "Pending [!]" se ha reescrito para reflejar solo lo genuinamente abierto.
 
 > **BLOQUE FINAL pass (2026-05-01 — deadline-day). Todos `[~]` pendientes de validación de Rafa:**
 >
@@ -203,7 +206,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 - [~] **Headbutt** — sin cambios (Rafa: muy bien)
 - [~] **J Fox Dash** — sin cambios mecánicos + `cancelAnimOnEnd: true`. Animación corta al terminar dash.
 - [~] **K Mirror Trick** (IMPLEMENTADO 2026-04-29): durante 1.6 s tras pulsar K, Kurama se vuelve **semi-invisible** (alpha 0.25) Y queda inmune a knockback (`immunityTimer` extendido). El "decoy" se spawna como un clon estático del mesh GLB en la posición de origen (SkeletonUtils.clone + tinted violet alpha 0.4, fade-out 30 % final, dispose automático). Cliente: alpha + decoy + emissive. Server: `immunityTimer = 1.6 s` via `selfBuffOnly + selfImmunityDuration`. **Bot confuse (K-session 1)**: bots offline (`src/bot.ts`) y server (`server/src/sim/bot.ts`) **skipean a Kurama como target** mientras `immunityTimer > 0` — mismo flag que el trick escribe. Otros críters mantienen targeting normal en su immunity post-respawn. Lectura "lost the scent" exacta como Rafa pidió.
-- [!] **L Copycat** — NO implementado. Sustituido temporalmente por `Nine-Tails Frenzy` (la versión actual). El sistema necesario (last-hit tracker + ability dispatch por nombre + restricción de uso único) requiere ~2-3 h de trabajo y schema online nuevo. Documentado para post-entrega. **Marcado [!] explícitamente.**
+- [~] **L Copycat** *(shipped 2026-04-30 final-L + HUD chip 2026-05-01 — see header)* — Histórico v0.11: NO implementado. Sustituido temporalmente por `Nine-Tails Frenzy` (la versión actual). El sistema necesario (last-hit tracker + ability dispatch por nombre + restricción de uso único) requiere ~2-3 h de trabajo y schema online nuevo. Documentado para post-entrega. **Marcado [!] explícitamente.**
 
 ---
 
@@ -213,7 +216,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 - [~⚠] **J Shell Charge** — `duration 0.45 → 0.55`, `impulse 15 → 18`. Más distancia. **Recorte**: no se ocultan visualmente cabeza/patas durante el dash — la inspección de los nodos del GLB muestra que Shelly NO tiene submeshes nombrados separadamente para shell vs cabeza/patas (mesh único `tripo_part_*`). Documentado en checklist.
 - [~⚠] **K Steel Shell** (IMPLEMENTADO): REEMPLAZA el slam. Durante 5 s: rooted (`slowDuringActive: 0`) + `immunityTimer = 5 s` server-authoritative (no recibe knockback online ni offline). Visual: emissive override `0xa8c0d0` (metallic blue-gray). Implementado como `ground_pound` con `selfBuffOnly: true` + `selfImmunityDuration: 5.0` + `selfTintHex: 0xa8c0d0` — sin nuevo AbilityType. Cooldown 12 s.
 - [!] **K cabeza/patas ocultas** — NO posible sin submeshes nombrados. Compensado con el emissive metálico fuerte. Shelly se LEE como "encerrada", aunque la silueta sigue mostrando cabeza/patas.
-- [!] **L Saw Shell rotation** — NO implementado. Rotation animation logic (rotar el GLB sobre Y rápidamente) requiere modificar el animation loop o aplicar una rotación frame-by-frame durante la duración del frenzy. El frenzy tinted actual (verde tank) se mantiene como Berserker Shell con stats ya dispuestos. Marcado [!] para post-entrega.
+- [~] **L Saw Shell rotation** *(shipped 2026-04-30 final-L: spin `glbMesh.rotation.y` 22 rad/s + contact impulse, subido a 90 en final-polish — see header)* — Histórico v0.11: NO implementado. Rotation animation logic (rotar el GLB sobre Y rápidamente) requiere modificar el animation loop o aplicar una rotación frame-by-frame durante la duración del frenzy. El frenzy tinted actual (verde tank) se mantiene como Berserker Shell con stats ya dispuestos. Marcado [!] para post-entrega.
 
 ---
 
@@ -223,7 +226,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 - [~] **J Leap Forward** — sin cambios mecánicos + `cancelAnimOnEnd: true`
 - [~] **K Poison Cloud** — zona slow (rad 5.0 / 2.0 s / 60 % slow) clasificada como `vfxKind: 'poison'` para que el overlay local se active.
 - [~] **K inside-cloud vision (2026-04-29)** — overlay screen-space CSS implementado: `<div id="poison-overlay">` zIndex 15, radial-gradient transparente al centro → toxic-green denso al borde, `mixBlendMode: multiply`, `transition: opacity 0.20s`. main.ts loop comprueba el local critter contra `isInsideZoneOfKind('poison')` cada frame y feed 0/0.85. CSS evita los issues de z-fighting que el skybox tuvo con shader quads.
-- [!] **L Hypnosapo / Toxic Touch** — NO IMPLEMENTADO en v0.11. La L actual sigue siendo el frenzy custom de v0.10 (slow + heavy). Implementar el status "poisoned" + invert input requiere nuevo schema online (status flag en PlayerSchema), código de física para invertir movement input, y VFX en target afectado. Marcado [!] para sesión L dedicada.
+- [~] **L Hypnosapo / Toxic Touch** *(shipped 2026-04-30 final-L: `toxicTouchL` + `confusedTimer` synced + input inversion server-side — see header)* — Histórico v0.11: NO IMPLEMENTADO en v0.11. La L actual sigue siendo el frenzy custom de v0.10 (slow + heavy). Implementar el status "poisoned" + invert input requiere nuevo schema online (status flag en PlayerSchema), código de física para invertir movement input, y VFX en target afectado. Marcado [!] para sesión L dedicada.
 
 ---
 
@@ -232,7 +235,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 - [~] **Headbutt** — sin cambios (Rafa: perfecto)
 - [~] **J Burrow Rush** — sin cambios mecánicos + `cancelAnimOnEnd: true`
 - [~] **K Burrow + Quicksand (2026-04-29 visual layer)** — REEMPLAZA el pound. Sihans hace blink (3.5 u en facing) Y suelta una zona de slow en su POSICIÓN ORIGINAL (radius 3.5, 2.5 s, 50 % slow). Visual mejorado en K-session 1: cuando se dispara el blink con `zoneAtOrigin: true`, Sihans **se vuelve totalmente invisible** durante 0.30 s (alpha 0, distinto del 0.25 ghost de Kurama) + 8 dust-puffs en origen + 8 en destino. Lectura "se hundió en una nube de tierra, sale en otra nube de tierra". Server clamp asegura no aparecer en void.
-- [!] **L Sinkhole con preview / double-tap** — NO implementado. El sistema de targeting con preview + confirmación de doble pulsación requiere un modo de input nuevo y UI de preview. Marcado [!]. La L actual sigue siendo Diggy Rush (frenzy tank earth-tinted) hasta post-entrega.
+- [~⚠] **L Sinkhole con preview / double-tap** *(shipped 2026-04-30 en versión simplificada: cast-offset fijo 4 u delante SIN preview/double-tap, final-L; + REAL HOLE rompiendo fragmentos en final-polish — see header)* — Histórico v0.11: NO implementado. El sistema de targeting con preview + confirmación de doble pulsación requiere un modo de input nuevo y UI de preview. Marcado [!]. La L actual sigue siendo Diggy Rush (frenzy tank earth-tinted) hasta post-entrega.
 
 ---
 
@@ -246,7 +249,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
   - **Schema**: `PlayerSchema.slowTimer: number` añadido. `effectiveSpeed` (cliente + server) multiplica por 0.5 cuando > 0.
   - **Bot**: tag `'ranged'` en `AbilityTag`. Bots offline + online evalúan condición 4..14 u y disparan con 0.022 prob/tick.
   - **Parity**: nuevo branch `kind: 'projectile'` en `verify-ability-parity.mjs` valida speed/ttl/radius/impulse/slowDur/wU/CD bit-for-bit.
-- [!] **L Blizzard / Frozen Floor** — NO IMPLEMENTADO. La L actual (Blizzard frenzy) sigue siendo buff personal. Para zona de hielo deslizante necesito extender el zone system con `slippery: boolean` flag (acceleration × 0.3, control reducido). Marcado [!] para sesión L dedicada.
+- [~] **L Blizzard / Frozen Floor** *(shipped 2026-04-30 final-L: `frozenFloorL` + zona slippery, radius 6 → 8 y duración 5 → 7 s en final-polish — see header)* — Histórico v0.11: NO IMPLEMENTADO. La L actual (Blizzard frenzy) sigue siendo buff personal. Para zona de hielo deslizante necesito extender el zone system con `slippery: boolean` flag (acceleration × 0.3, control reducido). Marcado [!] para sesión L dedicada.
 
 ---
 
@@ -255,7 +258,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 - [~] **Headbutt** — boost ×1.30 (más rápido + más shake)
 - [~] **J Pounce** — sin cambios mecánicos + `cancelAnimOnEnd: true`
 - [~] **K Shadow Step + impact** — blink (v0.10) + knockback radial en destino. **K-session 1 bump (2026-04-29)**: `blinkImpactRadius 2.2 → 2.6`, `blinkImpactForce 28 → 36` (Rafa: "ajustar si se siente débil"). Cheeto NO recibe self-pushback. Mantiene rooting durante blink window.
-- [!] **L Tiger Roar / Cone Pulse** — NO implementado. Cone-shaped repeating knockback durante channeling es una mecánica nueva. La L actual sigue siendo Tiger Rage (frenzy corto y rápido). Marcado [!] post-entrega.
+- [~] **L Tiger Roar / Cone Pulse** *(shipped 2026-04-30 final-L; rediseñado 2026-05-01 BLOQUE FINAL como cono frontal con ondas expansivas + ramp doubling — see header)* — Histórico v0.11: NO implementado. Cone-shaped repeating knockback durante channeling es una mecánica nueva. La L actual sigue siendo Tiger Rage (frenzy corto y rápido). Marcado [!] post-entrega.
 
 ---
 
@@ -264,7 +267,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 - [~] **Headbutt arreglado** — boost ×1.45 (el más alto del roster). Combinado con su mass × 0.75 base y `headbuttForce 16`, el cabezazo de Sebastian ahora es la firma más violenta de las distancias cortas.
 - [~] **J Claw Rush más fuerte** — `impulse 28 → 33`, `massMultiplier 1.4 → 1.7`. Más knockback al cargar.
 - [~⚠] **K Claw Wave (frontal)** — REEMPLAZA el pound radial. Implementado como un **ground_pound direccional con cone**: solo aplica knockback a críters dentro de un cono de ±60° alineado con el facing de Sebastian (radius 3.5, force 38). VFX: el shockwave ring se reemplaza por un **disco semicircular orientado al frente** (custom shader simple — half-disc). Cooldown 6.5 s. **Recorte**: la onda no es un proyectil que viaje; es un cone-restricted instant pound (escala fácil, server-authoritative trivial).
-- [!] **L All-in Side Slash** — NO implementado. La mecánica multi-fase (windup vibrante + side dash con hit detection durante movimiento + miss → self-fail/fall) requiere un mini state-machine de ability y modificación de la integración de física. La L actual sigue siendo Red Claw (frenzy corto). Marcado [!] post-entrega como prioridad.
+- [~] **L All-in Side Slash** *(shipped 2026-04-30 final-L; iterado en final-polish + microfixes y convertido a hold-to-fire con ground preview en 2026-05-01 BLOQUE FINAL — see header)* — Histórico v0.11: NO implementado. La mecánica multi-fase (windup vibrante + side dash con hit detection durante movimiento + miss → self-fail/fall) requiere un mini state-machine de ability y modificación de la integración de física. La L actual sigue siendo Red Claw (frenzy corto). Marcado [!] post-entrega como prioridad.
 
 ---
 
@@ -283,18 +286,27 @@ Bot AI:
 - [~] Tags inalterados (mobility / aoe_push / buff / steel_shell). El nuevo tag `steel_shell` se interpreta como defensive — los bots intentan usarlo cuando reciben golpes, fallback a `aoe_push` si no.
 
 Schema online:
-- [~] AbilityType inalterado — todas las K nuevas reusan `ground_pound` o `blink` con flags adicionales. **Cero cambios de schema** sobre v0.10.
-- [~] Status flags NO añadidos — el `immunityTimer` existente cubre Shelly Steel Shell + Kurama Mirror Trick; no hicimos falta poisoned/slippery porque las habilidades que los necesitaban quedaron diferidas a [!].
+- [~] AbilityType inalterado — todas las K nuevas reusan `ground_pound` o `blink` con flags adicionales. **Cero cambios de schema** sobre v0.10. *(Superado después: K-session 1 añadió `AbilityType: 'projectile'` + `PlayerSchema.slowTimer` — see header.)*
+- [~] Status flags NO añadidos — el `immunityTimer` existente cubre Shelly Steel Shell + Kurama Mirror Trick; no hicimos falta poisoned/slippery porque las habilidades que los necesitaban quedaron diferidas a [!]. *(Superado después: el final-L pass de 2026-04-30 añadió `confusedTimer`, `lastHitTargetCritter` y los flags `slippery/sinkhole/pullForce` en ActiveZone; el BLOQUE FINAL añadió `nickname` — see header.)*
 
-Pending [!] para post-entrega (lista resumen, v0.11):
-1. Sergei mesh bug — fix preventivo aplicado, validar Rafa
-2. Kurama L Copycat (sistema de last-hit + ability dispatch)
-3. Shelly L Saw Shell rotation (rotation animation logic)
-4. Shelly visual hide head/legs (limitación GLB — sin submeshes)
-5. Sihans L Sinkhole con preview/double-tap
-6. Cheeto L Tiger Roar cone pulse (channeling cone repeat)
-7. Sebastian L All-in Side Slash (multi-fase + miss-fail)
-8. Kermit K inside-cloud vision overlay (screen-space mask)
-9. Kermit L poison-touch + inverted controls (status system)
-10. Kowalski K Snowball como proyectil real
-11. Kowalski L Frozen Floor / slippery zone
+Pending — genuinamente abierto (reconciliado 2026-08-16, H0 doc-sync):
+1. **Shelly — hide head/legs (Steel Shell / Saw Shell)** `[!]` — limitación del GLB: sin submeshes nombrados shell vs cabeza/patas; requiere mapping bone→mesh offline (ver K-session 1). Compensado con emissive metálico.
+2. **Sergei mesh bug — validación** — fix root-cause aplicado (`transparent: false` por defecto en `attachGlbMesh`, 2026-04-29); falta que Rafa confirme que el see-through no reaparece.
+3. **Pase de validación manual de Rafa de TODOS los items `[~]`/`[~⚠]`** — los passes finales (final-K, final-L, final-polish, microfixes 05-01, BLOQUE FINAL) entraron sin pase manual completo; smoke offline/online + validación caracter-por-caracter siguen `[ ]` arriba.
+
+<details>
+<summary>Lista v0.11 original (histórica — 9 de sus 11 items acabaron shipped antes de la entrega, ver header)</summary>
+
+1. Sergei mesh bug — fix preventivo aplicado, validar Rafa *(→ sigue abierto como validación, item 2 arriba)*
+2. Kurama L Copycat (sistema de last-hit + ability dispatch) *(shipped 2026-04-30)*
+3. Shelly L Saw Shell rotation (rotation animation logic) *(shipped 2026-04-30)*
+4. Shelly visual hide head/legs (limitación GLB — sin submeshes) *(→ sigue abierto, item 1 arriba)*
+5. Sihans L Sinkhole con preview/double-tap *(shipped 2026-04-30 sin preview/double-tap — `[~⚠]`)*
+6. Cheeto L Tiger Roar cone pulse (channeling cone repeat) *(shipped 2026-04-30 + rediseño 05-01)*
+7. Sebastian L All-in Side Slash (multi-fase + miss-fail) *(shipped 2026-04-30 + hold-to-fire 05-01)*
+8. Kermit K inside-cloud vision overlay (screen-space mask) *(ya estaba implementado el 2026-04-29 — item obsoleto incluso en v0.11)*
+9. Kermit L poison-touch + inverted controls (status system) *(shipped 2026-04-30)*
+10. Kowalski K Snowball como proyectil real *(ya implementado el 2026-04-29, K-session 1 — item obsoleto incluso en v0.11)*
+11. Kowalski L Frozen Floor / slippery zone *(shipped 2026-04-30)*
+
+</details>

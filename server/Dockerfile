@@ -41,6 +41,14 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy compiled output from builder
 COPY --from=builder /app/dist ./dist
 
+# Admin CLI (list/delete/reset/backup players) — plain .mjs, no build step.
+# H0 2026-08-17: this was never copied into the runtime image, so the
+# documented production-DB cleanup commands could not work on Railway
+# (found live: "Cannot find module '/app/scripts/admin-players.mjs'").
+# better-sqlite3 is a production dep, so the CLI runs as-is in the
+# container: `npm run admin:list-players`, `admin:delete-test`, etc.
+COPY scripts ./scripts
+
 # Railway injects PORT; /health responds there (see src/index.ts)
 EXPOSE 2567
 

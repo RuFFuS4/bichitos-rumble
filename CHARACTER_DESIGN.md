@@ -1,40 +1,50 @@
 # Character Design
 
-## Gap entre kits temporales y habilidades definitivas (actualizado 2026-04-23)
+## Estado real post-jam (actualizado 2026-08-16)
 
-IMPORTANTE — lo que hay en el juego ahora **no** es todavía el set final de
-habilidades diseñadas más abajo. Para cerrar el roster completo sin pararnos
-en rediseño por personaje, todos los bichitos comparten 3 factories base:
+Fuente: `BUILD_LOG.md` (entrada 2026-05-01 "BLOQUE FINAL") y
+`ABILITY_QA_CHECKLIST.md` (cabeceras K-session 1 → BLOQUE FINAL).
+Build de referencia: `v1.0-vibejam-submit` (2026-05-01).
 
-- `charge_rush` — dash frontal con impulso + escala de masa/velocidad
-- `ground_pound` — empuje radial con radio, fuerza y windup tunables
-- `frenzy` — buff temporal de velocidad y masa (ultimate, opcional)
+Los bloques finales de la jam (2026-04-29 → 2026-05-01) implementaron
+los kits definitivos de los 9 bichitos: **las 9 L signature existen**
+y ya no queda ningún placeholder Frenzy (salvo Sergei, cuya L ES
+Frenzy por diseño). Sistemas de motor que este doc daba por
+inexistentes y hoy están shipped: proyectiles server-authoritative,
+zonas con flags (`slippery` / `sinkhole` / `pullForce`), stun +
+vulnerable ×4, inversión de input (`confusedTimer` synced), decoys,
+copia de ability (Copycat), destrucción real de fragmentos del arena
+en runtime, hold-to-fire con preview de trayectoria y conos
+direccionales.
 
-Cada personaje recibe un **kit temporal** reutilizando esas factories con
-tuning distinto (impulse/radius/force/cooldown/multipliers) y un nombre
-descriptivo. **Los 9 bichitos tienen ahora sus 3 slots ocupados (J/K/L)**
-tras la tanda del 2026-04-23 que añadió placeholder Frenzy a los 6 que
-aún no tenían ULTI. Solo Sergei coincide con su diseño final; los demás
-siguen siendo cascarón funcional con nombre temático.
+> Nota histórica: hasta el 2026-04-23 todos los kits eran cascarón
+> sobre 3 factories (`charge_rush` / `ground_pound` / `frenzy`) y la
+> tabla de este doc marcaba 6/9 ULTIs como placeholder. Esa tabla
+> queda sustituida por la siguiente. Detalle técnico que sobrevive:
+> las L siguen tipadas como `frenzy` con flags de comportamiento
+> (decisión deliberada para no migrar schema online — ver
+> `ABILITY_QA_CHECKLIST.md`, "Final L pass").
 
-El siguiente bloque de habilidades no debe hacerse a ciegas: esta tabla
-marca exactamente qué sigue siendo placeholder.
+### Tabla de estado real (kits shipped, v1.0-vibejam-submit)
 
-### Tabla de estado real
+| Personaje | Rol | J | K | L (ULTI) | Gap restante vs diseño |
+|-----------|-----|---|---|----------|------------------------|
+| **Sergei** | Balanced | `Gorilla Rush` — dash frontal con burst de masa/velocidad | `Shockwave` — onda expansiva radial (force 68) | `Frenzy` — buff velocidad + masa; mass 5.50 lo hace casi inamovible | Ninguno — alineado con diseño. |
+| **Trunk** | Bruiser | `Trunk Ram` — dash pesado que arrolla (massMult máximo del roster) | `Trunk Slam` — pisotón AoE radius 7 + stun 1.5 s; stunned recibe ×4 knockback (Slam → cabezazo elimina) | `Trunk Grip` — yank frontal range 28 / cono 35° + stun 3.8 s + ×4 vulnerable | Grab-and-throw no existe (Grip acerca y stunnea, no lanza). Stampede RETIRADA. |
+| **Kurama** | Trickster | `Fox Dash` — dash ligero | `Mirror Trick` — decoy clon en el sitio + Kurama casi invisible (alpha 0.08) + escape 7 u atrás; los bots le pierden el rastro | `Copycat` — copia la L del último enemigo golpeado (`lastHitTargetCritter` synced) + chip HUD del target; sin target = fizzle con buff | Ninguno — H2 y ULTI diseñadas existen. |
+| **Shelly** | Tank | `Shell Charge` — dash rodando | `Steel Shell` — 4 s rooted + inmune + anclada (mass ×9999); el atacante rebota | `Saw Shell` — spin del caparazón a 22 rad/s; todo contacto expulsa con impulso 90 | Sin damage-reflect ni Mega Shell rodante; cabeza/patas no se ocultan (limitación GLB). |
+| **Kermit** | Controller | `Leap Forward` — salto impulsado | `Poison Cloud` — zona veneno 10 s con fog-of-war local (dentro de la nube no ves fuera); Kermit inmune | `Toxic Touch` — contacto invierte los controles del target 3 s (`confusedTimer` synced; el server invierte el input) | Hypnosapo shipped como Toxic Touch; falta el speed-buff a víctimas del brief. |
+| **Sihans** | Trapper | `Burrow Rush` — dash excavador | `Burrow` — blink 6.5 u con invisibilidad total 0.3 s + zona quicksand slow en el origen | `Sinkhole` — agujero REAL: mata los fragmentos del arena bajo el disco (`arenaFragmentsKilled`) + pull hacia el centro; centro del mapa protegido | Tunnel solo deja zona en el origen, no en la salida. |
+| **Kowalski** | Mage | `Ice Slide` — dash de panza | `Snowball` — proyectil real server-authoritative; knockback + slow 50 % / 5 s | `Frozen Floor` — zona resbaladiza radius 8 / 7 s (friction ×5, accel ×0.35); owner inmune | Ninguno — Ice Age shipped como Frozen Floor. |
+| **Cheeto** | Assassin | `Pounce` — salto felino | `Shadow Step` — blink al enemigo más cercano (seek 9 u) + golpe radial al aterrizar | `Cone Pulse` — channel rooted 1.8 s; 6 ondas frontales que se expanden con fuerza doblando `min(2^(N-1), 8)`; empuje hacia delante, no radial | Ninguno — Tiger Roar shipped como Cone Pulse frontal. |
+| **Sebastian** | Glass Cannon | `Claw Rush` — dash con pinza | `Claw Wave` — pound frontal cónico ±60° (force 76) con VFX half-disc | `All-in` — hold-to-fire: rooted + preview de trayectoria en el suelo; release = dash frontal; hit = yeet garantizado al void, miss = Sebastian cae al void | Diseño pedía dash LATERAL; la versión final es frontal-only (decisión del BLOQUE FINAL, no un pendiente). |
 
-| Personaje  | Rol temporal | Kit temporal actual (tipos `+ nombre`) | Hab 1 definitiva diseño | Hab 2 definitiva diseño | ULTI definitiva diseño | Gap real |
-|------------|--------------|-----------------------------------------|-------------------------|--------------------------|--------------------------|----------|
-| **Sergei** | Balanced     | CR `Gorilla Rush` + GP `Shockwave` + F `Frenzy` | Charge Rush (dash) | Shockwave (onda área, no stun) | Frenzy (buff velocidad + daño) | **Alineado**. Sergei es el único personaje donde el kit temporal coincide en tipo y sensación con el diseño. |
-| **Trunk**  | Bruiser      | CR `Trunk Ram` + GP `Earthquake` + F `Stampede` | Charge Rush (dash frontal) | **Trunk Grip** (agarra + lanza en dirección — targeted grab) | **Ground Pound** (pisotón con STUN de área) | H2 totalmente placeholder (grab/throw no existe). ULTI real pide STUN — hoy la L es un Frenzy placeholder ("Stampede"). |
-| **Kurama** | Trickster    | CR `Fox Dash` + GP `Mirror Burst` + F `Frenzy` | Charge Rush | **Mirror Trick** (deja copia 2s que absorbe daño) | **Copycat** (copia la ULTI del último enemigo golpeado) | H2 y ULTI totalmente placeholder. No hay sistema de ilusiones ni de copia de abilities; Frenzy se usa como relleno de ULTI. |
-| **Shelly** | Tank         | CR `Shell Charge` + GP `Shell Slam` + F `Frenzy` | Charge Rush (caparazón rodando) | **Shell Shield** (invulnerable + inmóvil + refleja daño) | **Mega Shell** (roda gigante empujando todo) | H2 requiere sistema de invulnerabilidad + reflect. ULTI pide movimiento rodante continuo. Ambos placeholder. Frenzy rellena ULTI. |
-| **Kermit** | Controller   | CR `Leap Forward` + GP `Poison Cloud` + F `Hypnosapo` | Charge Rush (salto con patas) | **Poison Cloud** (nube que oculta visión de los que están dentro) | **Hypnosapo** (invierte controles de enemigos tocados) | H2 comparte nombre pero el efecto real (zona bloqueadora de visión) no está — es sólo knockback radial. ULTI real pide input-inversion — hoy es Frenzy placeholder con el nombre correcto ("Hypnosapo"). |
-| **Sihans** | Trapper      | CR `Burrow Rush` + GP `Tremor` + F `Diggy Rush` | Charge Rush (bajo tierra + emerge) | **Tunnel** (teleport con zonas lentas en entrada/salida) | **Diggy Diggy Hole** (crea hoyo permanente en el mapa) | H2 requiere teleport + efecto de terreno persistente. ULTI pide modificar la mesh del arena en runtime — hoy es Frenzy placeholder ("Diggy Rush"). |
-| **Kowalski** | Mage       | CR `Ice Slide` + GP `Arctic Burst` + F `Blizzard` | Charge Rush (deslizar panza) | **Snowball** (proyectil a distancia con slow 50%) | **Ice Age** (congela suelo área grande, enemigos resbalan) | Sin sistema de proyectiles (H2 placeholder). Sin superficies resbaladizas (ULTI real); hoy L es Frenzy placeholder ("Blizzard"). |
-| **Cheeto** | Assassin     | CR `Pounce` + GP `Paw Stomp` + F `Tiger Rage` | Charge Rush (salto felino) | **Shadow Step** (teleport detrás del enemigo más cercano + golpe) | **Tiger Roar** (empuje cónico, no radial) | H2 requiere target-selection + teleport. ULTI pide cono direccional — hoy L es Frenzy placeholder ("Tiger Rage"). |
-| **Sebastian** | Glass Cannon | CR `Claw Rush` + GP `Big Claw Slam` + F `Red Claw` | Charge Rush (desplazamiento lateral + pinza) | **Claw Sweep** (barrido en abanico frontal) | **Crab Slash** (carga lateral que mata o se cae del mapa) | H1 casi pero no es lateral. H2 pide cono direccional, ahora es radial. ULTI real pide detección "o mato o muero" — hoy L es Frenzy placeholder ("Red Claw"). |
+### Cobertura skeletal (2026-04-21 — snapshot histórico)
 
-### Cobertura skeletal (2026-04-21)
+> Los nombres de abilities citados abajo son los del diseño pre-final
+> (Shell Shield, Hypnosapo, Crab Slash…); los kits shipped usan los
+> nombres de la tabla de estado real de arriba. Los datos de clips y
+> pesos de GLB siguen siendo válidos.
 
 Estados esqueléticos target por bichito: 8 fijos — `idle`, `run`,
 `ability_1`, `ability_2`, `ability_3` (ULTI), `victory`, `defeat`,
@@ -59,12 +69,16 @@ Shell Shield, Sebastian Claw Rush + Crab Slash — suman 4, no 5).
 La capa procedural de `critter-animation.ts` cubre automáticamente
 lo que falta.
 
-### Feel pass log (timing + VFX alineados con clips esqueléticos)
+### Feel pass log (histórico — plan abandonado tras Trunk)
 
-Valores finales post-feel-pass. El orden planificado es
+Valores post-feel-pass de Sergei y Trunk. El orden planificado era
 Sergei → Trunk → Cheeto → Kurama → Shelly → Kermit → Sihans →
-Kowalski → Sebastian. Cada entrada registra: duración real del
-clip, valores de la ability, y VFX/SFX añadidos.
+Kowalski → Sebastian, pero el plan se abandonó tras Trunk: los
+bloques K-session / L-pass / BLOQUE FINAL (2026-04-29 → 05-01)
+hicieron el tuning definitivo de todo el roster directamente. El
+registro real de esos valores vive en `ABILITY_QA_CHECKLIST.md`;
+muchos números de abajo fueron superados después (p. ej. Trunk
+speed 16 / headbuttForce 48 finales).
 
 #### Sergei — feel pass DONE (2026-04-24)
 
@@ -171,53 +185,64 @@ o (b) tocar `critter.ts tickSkeletal` para saltarse el dispatch de
 clip cuando el ability type es `frenzy` y no hay clip explícito.
 Ninguna se aplicó en esta pasada — fuera de scope estrecho.
 
-#### Cheeto — TODO
-#### Kurama — TODO
-#### Shelly — TODO
-#### Kermit — TODO
-#### Sihans — TODO
-#### Kowalski — TODO
-#### Sebastian — TODO
+#### Cheeto / Kurama / Shelly / Kermit / Sihans / Kowalski / Sebastian
 
-### Qué está realmente implementado hoy
+Sin feel pass individual — su tuning definitivo llegó en los bloques
+finales de la jam (ver `ABILITY_QA_CHECKLIST.md`).
 
-- **3 factories base** (`charge_rush`, `ground_pound`, `frenzy`) con per-kit overrides cliente/servidor.
-- **Stats distintivos** por personaje (speed/mass/headbuttForce + per-ability
-  impulse/radius/force/multipliers/cooldown/windUp).
-- **Sensación diferencial entre personajes** lograda por tuning, no por
-  mecánicas únicas.
+### Qué está realmente implementado hoy (2026-08-16)
 
-### Qué NO está implementado todavía
+- **Los 9 kits completos (J/K/L)** con mecánica signature por
+  personaje — ver la tabla de estado real de arriba.
+- **Sistemas de motor** añadidos en los bloques finales de la jam:
+  proyectiles (`src/projectiles.ts` + server), zonas con flags
+  (`slippery` / `sinkhole` / `pullForce`), stun + vulnerable ×4,
+  `confusedTimer` (inversión de input server-side), decoys
+  (SkeletonUtils.clone), Copycat (last-hit tracker + copia de flags
+  L), destrucción de fragmentos del arena en runtime, hold-to-fire
+  con preview de trayectoria, conos direccionales e iconos de estado
+  (`src/hud/status-icons.ts`).
+- **Stats distintivos** por personaje (speed/mass/headbuttForce +
+  per-ability impulse/radius/force/multipliers/cooldown/windUp),
+  centralizados en config.
+- **Paridad cliente/servidor** verificada por
+  `scripts/verify-ability-parity.mjs` (integrado en `npm run check`).
 
-Sistemas mecánicos necesarios para las habilidades definitivas que aún no
-existen en el motor:
+### Qué NO está implementado (real a 2026-08-16)
 
-- **Grab & throw** (Trunk H2): coger un enemigo específico y lanzarlo.
-- **Ilusiones / decoys** (Kurama H2): spawnear copia que recibe daño.
-- **Copia de ability ajena** (Kurama ULTI): instrospección del kit del otro.
-- **Invulnerabilidad + damage reflect** (Shelly H2).
-- **Movimiento continuo controlado** (Shelly ULTI — mega shell rodante).
-- **Zonas de efecto persistente con visión bloqueada** (Kermit H2).
-- **Input inversion** sobre otros jugadores (Kermit ULTI).
-- **Teleport con marcador de terreno persistente** (Sihans H2).
-- **Modificación del arena en runtime** para crear hoyos (Sihans ULTI).
-- **Proyectiles con slow-on-hit** (Kowalski H2).
-- **Superficies alteradas (hielo resbaladizo)** (Kowalski ULTI).
-- **Teleport target-seleccionado** (Cheeto H2).
-- **Conos direccionales** (Cheeto ULTI, Sebastian H2).
-- **Detección de éxito/fallo direccional** (Sebastian ULTI).
+Lo único del diseño original que sigue sin existir:
 
-Cada uno de estos es un bloque de trabajo no trivial. El plan actual es
-NO abrirlos hasta después de animaciones procedurales + sonido/feedback +
-balance real. Este documento debe consultarse antes de entrar a ese
-bloque para no confundir "tengo algo con ese nombre" con "la mecánica
-final está implementada".
+- **Shelly — damage reflect** (Shell Shield del brief): Steel Shell
+  da invulnerabilidad + anclaje y el atacante rebota, pero no se
+  refleja daño/knockback proporcional al recibido.
+- **Shelly — Mega Shell** (roca gigante rodante con movimiento
+  continuo controlado): la L shipped es Saw Shell, un spin estático
+  de contacto, no un roll dirigible.
+- **Shelly — ocultar cabeza/patas** al encerrarse: limitación del
+  GLB (mesh único `tripo_part_*`, sin submeshes nombrados para
+  shell vs extremidades). Compensado con el emissive metálico.
+- **Trunk — grab-and-throw** (agarrar Y LANZAR en una dirección
+  elegida): Trunk Grip acerca + stunnea + expone, pero no lanza.
+- **Sihans — zona de slow en la SALIDA del Tunnel** (el brief pedía
+  entrada y salida; solo se deja en el origen).
+- **Kermit — speed-buff a las víctimas de Hypnosapo** (el brief
+  invertía controles Y aumentaba su velocidad; shipped solo
+  invierte).
+- **SFX signature por personaje** — todo el roster comparte los
+  sintéticos genéricos; el plan Suno sigue pendiente (post-jam).
 
-### Qué hacer si la urgencia dicta avanzar antes
+Todo lo demás que versiones anteriores de este doc listaban como
+inexistente (proyectiles, conos direccionales, superficies
+resbaladizas, input inversion, modificación del arena, copycat,
+decoys, teleports con target) **existe y está shipped** en
+`v1.0-vibejam-submit`.
 
-Priorización natural por complejidad (de menor a mayor coste de
-ingeniería), útil si en algún momento queremos un "primer upgrade"
-real por personaje sin abrir todo el frente:
+### Qué hacer si la urgencia dicta avanzar antes (histórico — jam, superado)
+
+> Esta lista de priorización era para decidir el orden de los
+> upgrades durante la jam. Todos sus puntos se implementaron (o se
+> descartaron conscientemente) en los bloques 2026-04-29 → 05-01.
+> Se conserva como registro de la decisión.
 
 1. **Sergei** — ya está.
 2. **Trunk Ground Pound con stun** — añadir estado `stunned` + timer (pequeña extensión del sistema actual).

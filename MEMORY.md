@@ -294,6 +294,24 @@ Cuarto entry de Vite, dedicado a animaciones. Estructura paralela a
 
 ## Key Decisions (latest at top)
 
+### 2026-08-17 — Post-jam kickoff (H0 saneamiento) + jam result
+
+- **Jam result: #209 / 943** in the 2026 Vibe Coding Game Jam.
+  Submitted 2026-05-01, tag `v1.0-vibejam-submit` (commit `f74f701`).
+- **CRITICAL: Railway server app is GONE** — "Application not found"
+  at `wss://bichitos-rumble-production.up.railway.app` → **online mode
+  DOWN in production**. The SQLite DB (players/belts) is possibly
+  lost. Redeploy pending; needs Rafa's Railway dashboard.
+- **Jam widget removed** from `index.html` / `tools.html` — the org's
+  post-jam `widget.js` broke upstream and heartbeat-pinged users.
+  Client prod on Vercel otherwise fine, console clean.
+- New phase H0-H5 started on branch `claude/infra/h0-saneamiento`.
+  Plan in `ROADMAP.md`, audit in `docs/POST_JAM_AUDIT.md`.
+- New tooling: GitHub Actions CI (client check incl. parity + server
+  tsc + Playwright smoke on push/PR to dev/main); `npm run check` now
+  includes `verify-ability-parity.mjs`; server admin script gained
+  `npm run admin:backup`.
+
 ### 2026-04-23 — Character-select auto-fit + HUD rework + sprites
 
 - **`preview.ts` has a `fitWrapper` inside `holder`** that applies a
@@ -443,6 +461,8 @@ Cuarto entry de Vite, dedicado a animaciones. Estructura paralela a
 
 ## Deployment
 - Public URL: https://www.bichitosrumble.com (custom domain aliased)
+- **Online server: DOWN as of 2026-08-17** — Railway app no longer
+  exists (see Key Decisions 2026-08-17). Redeploy pending.
 - Vercel project: ruffus4s-projects/bichitos-rumble
 - GitHub ↔ Vercel auto-deploy ACTIVE: main → prod, dev → preview
 - vercel.json with SPA rewrite verified working in production
@@ -508,31 +528,38 @@ Future restructure ideas (NOT yet implemented):
 - During "off" frame: opacity 0.15 (was 0.3, now more dramatic)
 
 ## Critter identity (implemented)
-9 playable critters with GLB models generated in Tripo and per-critter
-tuning of the 3 base ability types (`charge_rush`, `ground_pound`,
-`frenzy`). Personalities emerge from stats (speed/mass/headbuttForce) +
-ability tuning + procedural animation + optional skeletal clips.
+9 playable critters with GLB models generated in Tripo. Signature
+kits (J/K/L) SHIPPED in the 2026-04-29 → 05-01 final blocks — no
+placeholders left. Personalities emerge from stats
+(speed/mass/headbuttForce) + ability tuning + procedural animation +
+optional skeletal clips.
 
-| Name | Role | Animal | Kit |
-|------|------|--------|-----|
+| Name | Role | Animal | Kit (J + K + L) |
+|------|------|--------|-----------------|
 | Sergei | Balanced | Gorilla | Gorilla Rush + Shockwave + Frenzy |
-| Trunk | Bruiser | Elephant | Trunk Ram + Earthquake |
-| Kurama | Trickster | Fox | Fox Dash + Mirror Burst + Frenzy |
-| Shelly | Tank | Turtle | Shell Charge + Shell Slam + Frenzy |
-| Kermit | Controller | Frog | Leap Forward + Poison Cloud |
-| Sihans | Trapper | Mole | Burrow Rush + Tremor |
-| Kowalski | Mage | Penguin | Ice Slide + Arctic Burst |
-| Cheeto | Assassin | Tiger | Pounce + Paw Stomp |
-| Sebastian | Glass Cannon | Crab | Claw Rush + Big Claw Slam |
+| Trunk | Bruiser | Elephant | Trunk Ram + Trunk Slam + Trunk Grip |
+| Kurama | Trickster | Fox | Fox Dash + Mirror Trick + Copycat |
+| Shelly | Tank | Turtle | Shell Charge + Steel Shell + Saw Shell |
+| Kermit | Controller | Frog | Leap Forward + Poison Cloud + Toxic Touch |
+| Sihans | Trapper | Mole | Burrow Rush + Sand Trap + Sinkhole |
+| Kowalski | Mage | Penguin | Ice Slide + Snowball + Frozen Floor |
+| Cheeto | Assassin | Tiger | Pounce + Shadow Step + Cone Pulse |
+| Sebastian | Glass Cannon | Crab | Claw Rush + Claw Wave + All-in Side Slash |
+
+Trunk redesign (deadline-day): K = Slam wide AoE (radius 7) + brief
+stun; L = Grip frontal yank (range 28) + stun + ×4 vulnerable.
+Stampede RETIRED.
 
 Rojo/Azul/Verde/Morado are legacy prototypes retained only as internal
 placeholders for lab/debug fallbacks — not shown in character select.
 
-Abilities use base types (charge_rush / ground_pound / frenzy) with
-per-critter overrides via factory functions. Gap between current
-placeholder kits and final signature designs tracked in
-`CHARACTER_DESIGN.md`. `AbilityDef.description` field used for
-character select info pane.
+Abilities reuse the base types (charge_rush / ground_pound / frenzy)
+via factory functions; ALL L ultimates stay type `frenzy` with
+per-critter flags (`sawL`, `conePulseL`, `toxicTouchL`, `frozenFloorL`,
+`sinkholeL`, `copycatL`, `gripK`…) — no new AbilityType, no online
+schema migration. SoT: `src/abilities.ts`; behaviour detail in
+`ABILITY_QA_CHECKLIST.md` header passes. `AbilityDef.description`
+feeds the character-select info pane.
 
 ## Game flow (implemented)
 - title → character_select → countdown → playing → ended
@@ -556,36 +583,24 @@ character select info pane.
 - Capability detection via `hasTouchSupport()` + `isNarrowViewport()` +
   `isLikelyMobile()` (no user-agent sniffing)
 
-## Next Priorities (deadline May 1, 2026 13:37 UTC)
+## Current phase (post-jam H0-H5)
 
-All blocks A/B/C **closed**. Status snapshot as of 2026-04-19:
+Jam shipped 2026-05-01 (`v1.0-vibejam-submit`) — result **#209/943**.
+Current phase: post-jam hitos **H0-H5** (H0 saneamiento in progress).
 
-- **Core game loop**: implemented (offline + online, 9 playable critters).
-- **Online 4P + bot-fill + waiting UX**: implemented.
-- **Audio (SFX + music + crossfade)**: implemented.
-- **Gamepad + touch + keyboard**: implemented.
-- **Skeletal animation loader**: wired; waiting on animated GLBs from
-  user's Mixamo/Blender/Tripo pipeline.
-- **Arena pre-collapse shake + rumble**: implemented (replaces old blink).
-- **Internal dev lab** (`/tools.html` with match recorder, bot control,
-  perf panel, input panel): implemented.
+- Plan: `ROADMAP.md`
+- Real state / findings: `docs/POST_JAM_AUDIT.md`
+- Operational checklist: `NEXT_STEPS.md`
 
-What's left for submission:
-1. User: generate + integrate per-critter skeletal animations (in flight).
-2. User: submit via Google Form before May 1 @ 13:37 UTC.
-3. Me: sign off Phase 4 polish (Lighthouse measurement, cross-device
-   playtest session, screenshots for jam listing, 24h freeze).
-
-## Deferred (post-deadline or if time permits)
-- Full 9-character kits with the signature abilities designed in
-  CHARACTER_DESIGN.md (current kits are placeholders sharing
-  charge_rush/ground_pound/frenzy factories).
+## Deferred (still open — pruned 2026-08-17)
 - `allowReconnection` for online rooms.
-- Matchmaking, login, ranking, chat, rollback.
+- Matchmaking, login, chat, rollback (basic ranking already covered
+  by the online belts leaderboards).
 - Client-side prediction.
 - Warp animation + SFX on portal transition.
-- Stats display in end screen (recorder data already covers this —
-  just need the UI).
 - HUD restructure for mobile (current version OK, not ideal).
 - Additional music tracks (defeat stinger, character select theme).
 - Pattern C collapse (non-radial cuts).
+
+(Removed because they SHIPPED pre-deadline: signature 9-critter kits,
+end-screen stats.)

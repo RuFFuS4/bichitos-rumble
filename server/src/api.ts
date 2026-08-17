@@ -8,16 +8,17 @@
 //
 // Routes:
 //   POST /api/player                 register/claim nickname → { id, nickname, isNew }
-//   POST /api/match/result           (called by BrawlRoom, not by clients)
 //   GET  /api/leaderboard/:beltId    top 10 holders of a belt
 //   GET  /api/leaderboard            all 5 belts top 10s (batch)
 //   GET  /api/player/:id/stats       stats snapshot for one player
 //
 // Anti-cheat posture: the client can register nicknames and request
 // leaderboards freely, but match results are only accepted from the
-// server itself (BrawlRoom → imports recordMatchResult from db.ts directly,
-// never via HTTP). The /api/match/result endpoint exists for potential
-// admin / testing use; in production it's gated by ADMIN_TOKEN.
+// server itself (BrawlRoom imports recordMatchResult from db.ts directly,
+// never via HTTP) — there is deliberately NO HTTP route for match
+// results. (H0 2026-08-16: this header used to document a
+// POST /api/match/result gated by ADMIN_TOKEN that was never
+// implemented; removed to match reality.)
 // ---------------------------------------------------------------------------
 
 import type { IncomingMessage, ServerResponse } from 'http';
