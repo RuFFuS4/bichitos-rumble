@@ -49,8 +49,8 @@ function enableSpriteClassOnLoad(src: string, bodyClass: string): void {
   };
   img.src = src;
 }
-enableSpriteClassOnLoad('./images/hud-icons.png', 'has-hud-sprites');
-enableSpriteClassOnLoad('./images/ability-icons.png', 'has-ability-sprites');
+enableSpriteClassOnLoad('./images/hud-icons.webp', 'has-hud-sprites');
+enableSpriteClassOnLoad('./images/ability-icons.webp', 'has-ability-sprites');
 
 // ---------------------------------------------------------------------------
 // WebGL diagnostic + renderer creation
