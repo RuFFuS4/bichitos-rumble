@@ -115,7 +115,7 @@
   - index.html: ~96 kB / 22 kB gzip
   - main bundle: ~108 kB / 34 kB gzip (game logic + HUD + critter pipeline)
   - three.js chunk: ~628 kB / 158 kB gzip (cached across deploys)
-  - colyseus.js chunk: ~127 kB / 39 kB gzip
+  - colyseus chunk (@colyseus/sdk desde H1): ~115 kB / 35 kB gzip
   - model-loader + critter chunks: ~170 kB combined
   - critter GLBs: ~58 MB total (loaded on demand, browser-cached
     via `Cache-Control: max-age=31536000, immutable` per pack)

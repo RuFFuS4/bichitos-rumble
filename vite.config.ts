@@ -63,7 +63,8 @@ export default defineConfig({
         codeSplitting: {
           groups: [
             { name: 'three',    test: /node_modules[\\/]three[\\/]/,       priority: 20 },
-            { name: 'colyseus', test: /node_modules[\\/]colyseus\.js[\\/]/, priority: 20 },
+            // @colyseus/sdk + @colyseus/schema (client decode) since 0.17.
+            { name: 'colyseus', test: /node_modules[\\/]@colyseus[\\/]/, priority: 20 },
           ],
           // Everything else falls through to Rolldown's default
           // automatic splitting (codeSplitting defaults stay on).

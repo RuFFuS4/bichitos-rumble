@@ -171,16 +171,20 @@ subsystems.
 - `state/AbilityStateSchema.ts` — per-ability state synced to clients
 
 ## Dependencies
-Client (only 3):
-- `three` + `@types/three`
-- `typescript`
-- `vite`
-- `colyseus.js` (runtime) — thin WebSocket client
+Client (runtime, only 3):
+- `three` + `@types/three` (0.185, H1)
+- `@colyseus/sdk` (0.17, H1 — replaces the old `colyseus.js` package) —
+  thin WebSocket client, all SDK surface concentrated in `src/network.ts`
+- `@sentry/browser` (H0 — lazy async chunk, inert without DSN)
+
+Client (build): `typescript` 7 (native compiler) + `vite` 8 (Rolldown).
 
 Server:
-- `colyseus`
-- `@colyseus/schema`
+- `colyseus` 0.17 (`defineServer()` wiring; express 5 arrives
+  transitively for the custom /api routes)
+- `@colyseus/schema` v4
 - `@colyseus/ws-transport`
+- `better-sqlite3` 13 (compiled in the Docker builder stage)
 
 All AI-generated content (Suno audio, Tripo/Meshy models + anims) is
 baked into `public/` — no external API calls from the shipped build.
