@@ -10,12 +10,13 @@
 //   - The raw Room is returned for state access; game.ts reads state directly
 //     via room.state.players (MapSchema) and listens to ability events.
 //
-// H1 (Colyseus 0.17 prep): every SDK-version-specific API (Client, Room
-// type, state callbacks) lives HERE and nowhere else, so the 0.16→0.17
-// bump is a one-file change on the client.
+// H1 (Colyseus 0.17): every SDK-version-specific API (Client, Room type,
+// state callbacks) lives HERE and nowhere else — this file was the whole
+// client-side surface of the 0.16→0.17 bump (colyseus.js → @colyseus/sdk,
+// getStateCallbacks proxies → Callbacks.get with string paths).
 // ---------------------------------------------------------------------------
 
-import { Client, Room, getStateCallbacks } from 'colyseus.js';
+import { Client, Room, Callbacks } from '@colyseus/sdk';
 
 // Re-exported so game.ts (and future consumers) type their room fields
 // without importing the SDK package directly.
@@ -34,9 +35,14 @@ export function onPlayersChange(
     onRemove: (playerState: any, sessionId: string) => void;
   },
 ): void {
-  const $ = getStateCallbacks(room);
-  $((room as any).state).players.onAdd(handlers.onAdd);
-  $((room as any).state).players.onRemove(handlers.onRemove);
+  // This client is schema-blind (no shared schema types — state is read
+  // defensively as plain properties), so the SDK types the map key as
+  // unknown; normalise at the boundary.
+  const callbacks = Callbacks.get(room);
+  callbacks.onAdd('players', (playerState, sessionId) =>
+    handlers.onAdd(playerState, String(sessionId)));
+  callbacks.onRemove('players', (playerState, sessionId) =>
+    handlers.onRemove(playerState, String(sessionId)));
 }
 
 export interface NetworkInput {

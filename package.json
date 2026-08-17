@@ -26,8 +26,8 @@
     "doctor": "node scripts/doctor.mjs"
   },
   "dependencies": {
+    "@colyseus/sdk": "^0.17.43",
     "@sentry/browser": "^10.70.0",
-    "colyseus.js": "^0.16.22",
     "three": "^0.185.1"
   },
   "devDependencies": {

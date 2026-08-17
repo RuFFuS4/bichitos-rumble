@@ -20,13 +20,14 @@
     "admin:backup": "node scripts/admin-players.mjs backup"
   },
   "dependencies": {
-    "@colyseus/schema": "^3.0.0",
-    "@colyseus/ws-transport": "^0.16.0",
+    "@colyseus/schema": "^4.0.30",
+    "@colyseus/ws-transport": "^0.17.13",
     "better-sqlite3": "^13.0.3",
-    "colyseus": "^0.16.0"
+    "colyseus": "^0.17.10"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.20.1",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
