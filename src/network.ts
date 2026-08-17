@@ -1,190 +1,21 @@
 // ---------------------------------------------------------------------------
-// Network client — Colyseus wrapper for online multiplayer mode
+// Network client — el único módulo que INSTANCIA el SDK de Colyseus
 // ---------------------------------------------------------------------------
 //
-// Thin abstraction over the Colyseus SDK. Exposes:
-//   - connectToBrawl(serverUrl): join or create a 'brawl' room
-//   - sendInput(room, payload): send current input to the server each frame
-//   - onPlayersChange(room, handlers): add/remove listeners for the players
-//     MapSchema — the ONLY place that touches the SDK's state-callbacks API
-//   - The raw Room is returned for state access; game.ts reads state directly
-//     via room.state.players (MapSchema) and listens to ability events.
+// H2 slice 4: este fichero quedó reducido a lo que necesita el SDK en
+// runtime (Client, Callbacks) y SOLO se importa dinámicamente
+// (game.ts → connectOnline), así el chunk de @colyseus/sdk sale del
+// grafo eager y un jugador offline no lo descarga jamás. Todo lo
+// compartido estáticamente (interfaces de eventos, wrappers onMessage,
+// sendInput, getDefaultServerUrl, tipo Room) vive en network-events.ts
+// con imports type-only.
 //
-// H1 (Colyseus 0.17): every SDK-version-specific API (Client, Room type,
-// state callbacks) lives HERE and nowhere else — this file was the whole
-// client-side surface of the 0.16→0.17 bump (colyseus.js → @colyseus/sdk,
-// getStateCallbacks proxies → Callbacks.get with string paths).
+// H1 (Colyseus 0.17): la superficie versión-específica del SDK sigue
+// concentrada aquí — el bump 0.16→0.17 fue un cambio de un fichero y
+// el próximo también lo será.
 // ---------------------------------------------------------------------------
 
-import { Client, Room, Callbacks } from '@colyseus/sdk';
-
-// Re-exported so game.ts (and future consumers) type their room fields
-// without importing the SDK package directly.
-export type { Room };
-
-/**
- * Register add/remove listeners on the players MapSchema. `onAdd` also
- * fires for players already present when the listener attaches (SDK
- * behaviour, both v3 proxies and v4 Callbacks) — the caller doesn't need
- * a separate initial sweep.
- */
-export function onPlayersChange(
-  room: Room,
-  handlers: {
-    onAdd: (playerState: any, sessionId: string) => void;
-    onRemove: (playerState: any, sessionId: string) => void;
-  },
-): void {
-  // This client is schema-blind (no shared schema types — state is read
-  // defensively as plain properties), so the SDK types the map key as
-  // unknown; normalise at the boundary.
-  const callbacks = Callbacks.get(room);
-  callbacks.onAdd('players', (playerState, sessionId) =>
-    handlers.onAdd(playerState, String(sessionId)));
-  callbacks.onRemove('players', (playerState, sessionId) =>
-    handlers.onRemove(playerState, String(sessionId)));
-}
-
-export interface NetworkInput {
-  moveX: number;
-  moveZ: number;
-  headbutt: boolean;
-  ability1: boolean;
-  ability2: boolean;
-  ultimate: boolean;
-}
-
-export interface AbilityFiredEvent {
-  sessionId: string;
-  type: 'charge_rush' | 'ground_pound' | 'frenzy' | 'blink';
-  x: number;
-  z: number;
-  rotationY: number;
-}
-
-/**
- * One-shot broadcast from the server when a slow zone (Kermit Poison
- * Cloud / Kowalski Arctic Burst) lands. The server is authoritative
- * for the slow effect itself; this event only carries enough info for
- * clients to render the matching visible disc + ring with the same
- * lifetime so everyone sees the hazard. Caster identity is included
- * for any future "you're standing in your own zone" UI hint.
- */
-export interface ZoneSpawnedEvent {
-  x: number;
-  z: number;
-  radius: number;
-  duration: number;
-  slowMultiplier: number;
-  ownerSid: string;
-  /** 2026-04-30 — Kowalski Frozen Floor slippery flag. */
-  slippery?: boolean;
-  /** 2026-04-30 — Sihans Sinkhole flag. */
-  sinkhole?: boolean;
-}
-
-export function onZoneSpawned(room: Room, cb: (ev: ZoneSpawnedEvent) => void): void {
-  room.onMessage('zoneSpawned', cb);
-}
-
-/**
- * 2026-04-29 K-session — projectile broadcast events. Server emits
- * one `projectileSpawned` per snowball fired, then exactly one of
- * `projectileHit` (if it found a target) or `projectileExpired`
- * (if the TTL ran out / it left the arena). Clients run the same
- * straight-line motion locally so the visual mesh moves smoothly
- * between state patches; server still owns collision.
- */
-export interface ProjectileSpawnedEvent {
-  id: number;
-  ownerSid: string;
-  ownerCritter: string;
-  x: number;
-  z: number;
-  vx: number;
-  vz: number;
-  ttl: number;
-  radius: number;
-}
-
-export interface ProjectileHitEvent {
-  id: number;
-  victimSid: string;
-  x: number;
-  z: number;
-}
-
-export interface ProjectileExpiredEvent {
-  id: number;
-  x: number;
-  z: number;
-}
-
-export function onProjectileSpawned(room: Room, cb: (ev: ProjectileSpawnedEvent) => void): void {
-  room.onMessage('projectileSpawned', cb);
-}
-export function onProjectileHit(room: Room, cb: (ev: ProjectileHitEvent) => void): void {
-  room.onMessage('projectileHit', cb);
-}
-export function onProjectileExpired(room: Room, cb: (ev: ProjectileExpiredEvent) => void): void {
-  room.onMessage('projectileExpired', cb);
-}
-
-/**
- * 2026-04-30 final-polish — Sihans Sinkhole real-hole broadcast.
- * Server picks the fragments inside the sinkhole disc, marks them
- * dead in `arenaSim.alive[]`, and emits this event so clients can
- * knock the same indices out of their local Arena (visual fall +
- * `alive[]` mirror so the local prediction also reads "void here").
- */
-export interface ArenaFragmentsKilledEvent {
-  indices: number[];
-}
-export function onArenaFragmentsKilled(room: Room, cb: (ev: ArenaFragmentsKilledEvent) => void): void {
-  room.onMessage('arenaFragmentsKilled', cb);
-}
-
-/**
- * 2026-05-01 final block — Cheeto Cone Pulse per-pulse broadcast.
- * Server emits one event per pulse so clients can spawn the matching
- * wave VFX (arc of dust puffs + accent ring) at the correct radius.
- * Falls back gracefully if the server is on the older protocol — the
- * `count` / `waveCenter` / `waveThickness` fields default to 0 and
- * the offline-style handler picks sensible defaults.
- */
-export interface LPulseEvent {
-  sessionId: string;
-  x: number;
-  z: number;
-  rotationY: number;
-  radius: number;
-  angleDeg: number;
-  waveCenter?: number;
-  waveThickness?: number;
-  count?: number;
-}
-export function onLPulse(room: Room, cb: (ev: LPulseEvent) => void): void {
-  room.onMessage('lPulse', cb);
-}
-
-/**
- * 2026-05-01 final block — Sebastian All-in charge-start broadcast.
- * Server emits this when a Sebastian player starts holding the L
- * input. Carries the pre-picked dash direction so remote viewers
- * can paint the same trajectory preview the local Sebastian sees.
- */
-export interface LChargeStartEvent {
-  sessionId: string;
-  x: number;
-  z: number;
-  dirX: number;
-  dirZ: number;
-  range: number;
-  maxMs: number;
-}
-export function onLChargeStart(room: Room, cb: (ev: LChargeStartEvent) => void): void {
-  room.onMessage('lChargeStart', cb);
-}
+import { Client, Callbacks, type Room } from '@colyseus/sdk';
 
 export interface JoinBrawlOptions {
   critterName?: string;
@@ -214,45 +45,28 @@ export async function connectToBrawl(serverUrl: string, options: JoinBrawlOption
   return room;
 }
 
-/** Send one input frame to the server. Safe to call every client tick. */
-export function sendInput(room: Room, input: NetworkInput): void {
-  room.send('input', input);
-}
-
-/** Register a handler for remote ability fire events (for VFX). */
-export function onAbilityFired(room: Room, cb: (ev: AbilityFiredEvent) => void): void {
-  room.onMessage('abilityFired', cb);
-}
-
-/** Payload broadcast by BrawlRoom when an Online Belt changes hands. */
-export interface BeltChangedEvent {
-  belt:
-    | 'throne-online'
-    | 'flash-online'
-    | 'ironclad-online'
-    | 'slayer-online'
-    | 'hot-streak-online';
-  nickname: string;
-  playerId: string;
-  value: number;
-}
-
-export function onBeltChanged(room: Room, cb: (ev: BeltChangedEvent) => void): void {
-  room.onMessage('beltChanged', cb);
-}
-
 /**
- * Resolve the server URL to use.
+ * Register add/remove listeners on the players MapSchema. `onAdd` also
+ * fires for players already present when the listener attaches (SDK
+ * behaviour, both v3 proxies and v4 Callbacks) — the caller doesn't need
+ * a separate initial sweep.
  *
- * In dev (import.meta.env.DEV): default to localhost:2567 unless VITE_SERVER_URL
- * is set. This lets us test locally without extra config.
- *
- * In prod: requires VITE_SERVER_URL to be set at build time. If missing,
- * throws — we don't want to fail silently with a bad URL.
+ * game.ts recibe esta función vía el import dinámico y la pasa a
+ * enterOnline (tipo `PlayersChangeBinder` en network-events.ts).
  */
-export function getDefaultServerUrl(): string {
-  const fromEnv = (import.meta.env as Record<string, string | undefined>).VITE_SERVER_URL;
-  if (fromEnv) return fromEnv;
-  if (import.meta.env.DEV) return 'ws://localhost:2567';
-  throw new Error('[Network] VITE_SERVER_URL not set in production build');
+export function onPlayersChange(
+  room: Room,
+  handlers: {
+    onAdd: (playerState: any, sessionId: string) => void;
+    onRemove: (playerState: any, sessionId: string) => void;
+  },
+): void {
+  // This client is schema-blind (no shared schema types — state is read
+  // defensively as plain properties), so the SDK types the map key as
+  // unknown; normalise at the boundary.
+  const callbacks = Callbacks.get(room);
+  callbacks.onAdd('players', (playerState, sessionId) =>
+    handlers.onAdd(playerState, String(sessionId)));
+  callbacks.onRemove('players', (playerState, sessionId) =>
+    handlers.onRemove(playerState, String(sessionId)));
 }

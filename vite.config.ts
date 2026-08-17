@@ -34,6 +34,14 @@ export default defineConfig({
   define: {
     __BUILD_COMMIT__: JSON.stringify(buildCommit),
   },
+  // H2 slice 4: @colyseus/sdk ahora solo entra por import dinámico, así
+  // que el dev server no lo descubre hasta el primer click en Online y
+  // dispara una re-optimización de deps CON RELOAD de página a mitad de
+  // sesión (rompía el flujo del modal de nickname — cazado por el e2e).
+  // Pre-bundlearlo elimina la recarga para dev y para los e2e.
+  optimizeDeps: {
+    include: ['@colyseus/sdk'],
+  },
   build: {
     target: 'es2020',
     outDir: 'dist',
