@@ -2,14 +2,42 @@
 // Network client — Colyseus wrapper for online multiplayer mode
 // ---------------------------------------------------------------------------
 //
-// Thin abstraction over colyseus.js. Exposes:
+// Thin abstraction over the Colyseus SDK. Exposes:
 //   - connectToBrawl(serverUrl): join or create a 'brawl' room
 //   - sendInput(room, payload): send current input to the server each frame
+//   - onPlayersChange(room, handlers): add/remove listeners for the players
+//     MapSchema — the ONLY place that touches the SDK's state-callbacks API
 //   - The raw Room is returned for state access; game.ts reads state directly
 //     via room.state.players (MapSchema) and listens to ability events.
+//
+// H1 (Colyseus 0.17 prep): every SDK-version-specific API (Client, Room
+// type, state callbacks) lives HERE and nowhere else, so the 0.16→0.17
+// bump is a one-file change on the client.
 // ---------------------------------------------------------------------------
 
-import { Client, Room } from 'colyseus.js';
+import { Client, Room, getStateCallbacks } from 'colyseus.js';
+
+// Re-exported so game.ts (and future consumers) type their room fields
+// without importing the SDK package directly.
+export type { Room };
+
+/**
+ * Register add/remove listeners on the players MapSchema. `onAdd` also
+ * fires for players already present when the listener attaches (SDK
+ * behaviour, both v3 proxies and v4 Callbacks) — the caller doesn't need
+ * a separate initial sweep.
+ */
+export function onPlayersChange(
+  room: Room,
+  handlers: {
+    onAdd: (playerState: any, sessionId: string) => void;
+    onRemove: (playerState: any, sessionId: string) => void;
+  },
+): void {
+  const $ = getStateCallbacks(room);
+  $((room as any).state).players.onAdd(handlers.onAdd);
+  $((room as any).state).players.onRemove(handlers.onRemove);
+}
 
 export interface NetworkInput {
   moveX: number;
