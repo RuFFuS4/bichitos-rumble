@@ -22,13 +22,13 @@
   "dependencies": {
     "@colyseus/schema": "^3.0.0",
     "@colyseus/ws-transport": "^0.16.0",
-    "better-sqlite3": "^12.9.0",
+    "better-sqlite3": "^13.0.3",
     "colyseus": "^0.16.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^22.0.0",
-    "tsx": "^4.19.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.12",
     "typescript": "^5.7.0"
   }
 }
