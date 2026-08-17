@@ -12,8 +12,10 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+// three/addons is the canonical path since r150+ (H1: migrated from the
+// legacy three/examples/jsm alias while bumping r172 → r185).
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from 'meshoptimizer';
 
 // ---------------------------------------------------------------------------
