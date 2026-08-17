@@ -1,0 +1,73 @@
+# CI — Bichitos Rumble
+#
+# H0 (2026-08-16): primer pipeline del proyecto. Todos los gates ya
+# existían como rituales manuales (npm run check, parity, server tsc,
+# smoke de Playwright); esto solo los automatiza en push/PR a dev y main.
+#
+# Tres jobs independientes para que un fallo señale su dominio:
+#   client — tsc + verify GLBs + parity cliente/servidor + vite build
+#   server — tsc --noEmit del server Colyseus
+#   smoke  — Playwright chromium contra el dev server (boot regression)
+
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client:
+    name: Client (check + parity)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # npm run check = tsc --noEmit + verify-critter-glbs + parity + vite build + clean-dist-raw
+      - run: npm run check
+
+  server:
+    name: Server (tsc)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  smoke:
+    name: Smoke (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:smoke

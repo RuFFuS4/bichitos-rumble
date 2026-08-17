@@ -13,7 +13,8 @@
     "admin:delete-pattern": "node scripts/admin-players.mjs delete-pattern",
     "admin:delete-before": "node scripts/admin-players.mjs delete-before",
     "admin:delete-test": "node scripts/admin-players.mjs delete-test",
-    "admin:reset-players": "node scripts/admin-players.mjs reset"
+    "admin:reset-players": "node scripts/admin-players.mjs reset",
+    "admin:backup": "node scripts/admin-players.mjs backup"
   },
   "dependencies": {
     "@colyseus/schema": "^3.0.0",

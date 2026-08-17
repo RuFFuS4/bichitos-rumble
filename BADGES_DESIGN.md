@@ -1,10 +1,16 @@
 # Badges Design — Bichitos Rumble
 
-> **Status (2026-04-23)**: the **16 offline belts** (9 Champion + 7 Global)
-> are fully shipped — Fases 0–4 completas en código, solo falta el arte
-> final (Fase 5). Los **5 online belts** están en MVP funcional (backend
-> SQLite + cliente nickname + captura de match-result); faltan la UI
-> leaderboard y el toast de "has tomado el cinturón".
+> **Status (2026-08-16, H0 doc-sync)**: los **16 offline belts** y los
+> **5 online belts** están completos en producción — arte incluido
+> (21 assets generados + thumbnails 3D GLB + viewer). Offline: Fases 0–5
+> done; Online: Fases 1–5 done (tab "Online" en Hall of Belts +
+> holder-change toast). La única fase abierta es la **Fase 6 offline**
+> (tunado de umbrales) — ver plan por fases más abajo.
+>
+> ⚠️ **Aviso (2026-08-16)**: la app del server en Railway ya no existe
+> ("Application not found") — la DB SQLite de online belts
+> (players/player_stats) posiblemente se perdió con ella. Al redesplegar,
+> los 5 leaderboards online pueden arrancar desde cero.
 
 ## Dos sets: Offline (local trophy room) + Online (leaderboard global)
 
@@ -302,20 +308,22 @@ Por trofeo:
     contador `X / 16`.
   - Botón dedicado **🏆 Belts** arriba-derecha del character-select.
   - El grid se recrea en cada open para reflejar stats frescas.
-- **Fase 5** (pendiente) · Generar y colocar los 16 assets en
-  `public/badges/`. Prompts + tabla per-critter ya listos en este
-  mismo doc (sección "Prompt para generación de belts"). Cuando
-  lleguen los PNG, swap el innerHTML de `.badge-toast-icon` y
-  `.belt-icon` por un `<img src="/badges/<id>.png">`. El resto del
-  CSS ya está preparado para esa forma.
-- **Fase 6** · Validación — jugar 5-10 partidas buscando cada logro,
-  ajustar umbrales. VALIDATION_CHECKLIST §21 lista los smoke tests
-  manuales (toast / Hall of Belts / migración v1→v2 / edición
-  directa de localStorage).
-
-Total aproximado restante: **2 horas** de ingeniería (Fase 5 swap
-de assets + Fase 6 tunado de thresholds) + el tiempo externo de
-generación de arte.
+- ✅ **Fase 5** (DONE — 2026-08-16 H0 doc-sync; shipped en el bloque
+  final de la jam) · Arte generado y colocado: **21 assets** (16
+  offline + 5 online) en `public/images/belts/*.png` (2D) y
+  `public/models/belts/*.glb` (3D). Los thumbnails del Hall of Belts
+  son snapshots 3D de los GLB (`src/belt-thumbnail.ts`) y hay un
+  viewer modal 3D click-to-rotate (`src/belt-viewer.ts`).
+- **Fase 6** (⚠️ ÚNICA FASE ABIERTA) · Validación — jugar 5-10
+  partidas buscando cada logro, ajustar umbrales. VALIDATION_CHECKLIST
+  §21 lista los smoke tests manuales (toast / Hall of Belts /
+  migración v1→v2 / edición directa de localStorage). Pendiente de
+  decidir: Champion ¿5 / 8 / 10 wins?, Speedrun ≤ 30 s, Pain
+  Tolerance ≥ 10 hits. Incluye además cerrar el gap del **Slayer
+  Belt** online: la pipeline `kills_vs_humans` existe (crédito
+  last-hitter en el tick loop de `server/src/BrawlRoom.ts` +
+  `recordOnlineBeltStats`), pero queda el `TODO(belts-v2)` en
+  BrawlRoom por verificar/cerrar (auditoría 2026-08-16).
 
 ## Decisiones pendientes (cuando retomemos)
 
@@ -358,6 +366,13 @@ hasta Fase 6 de belts (TODO: `BrawlRoom.physics` → marcar
 `lastHitBy` en el defensor cuando recibe headbutt → al quedarse sin
 vidas, sumar 1 al atacante si era humano). Post-jam o siguiente
 ventana libre.
+
+> **Update 2026-08-16 (H0 doc-sync)**: el párrafo anterior quedó
+> desfasado — el tracking last-hitter YA se implementó en
+> `server/src/BrawlRoom.ts` (las muertes llevan `attackerSid` y se
+> acredita `killsVsHumansThisMatch` si el atacante es humano con
+> identidad online). Queda por verificar/cerrar el comentario
+> `TODO(belts-v2)` residual en BrawlRoom durante la Fase 6.
 
 ## Identidad sin login
 
@@ -453,14 +468,25 @@ para un juego jam (10k jugadores = ~10 MB DB).
 - ✅ **Fase 3** (2026-04-23) — BrawlRoom: `verifyPlayer` en onJoin +
   `playingStartedAtMs` stamp + `recordOnlineBeltStats` en endMatch.
   Guests (sin nickname) juegan normal pero no puntúan.
-- **Fase 4** (pendiente) — Leaderboard UI: tab "Online" en el modal
-  Hall of Belts, mostrar top-10 por cada uno de los 5 belts + quién
-  es el holder actual destacado.
-- **Fase 5** (pendiente) — Toast "🏆 You took the Throne Belt!" al
-  cambiar el holder. Server broadcast en endMatch con los ids de
-  belts que cambiaron.
-- **Fase 6** (post-MVP) — `kills_vs_humans` real via last-hitter
-  tracking en `server/src/sim/physics.ts`. Hoy es 0.
+- ✅ **Fase 4** (DONE — 2026-08-16 H0 doc-sync; shipped en el bloque
+  final de la jam) — Leaderboard UI: tab "Online" en el modal Hall
+  of Belts con top-10 por belt + holder destacado. Vive en
+  `src/hall-of-belts.ts`.
+- ✅ **Fase 5** (DONE — 2026-08-16 H0 doc-sync; shipped en el bloque
+  final de la jam) — Toast de cambio de holder (broadcast
+  `beltChanged` del server en endMatch → toast 3D en cliente). Vive
+  en `src/online-belt-toast.ts`.
+- **Fase 6** (abierta — se pliega en la Fase 6 offline de arriba) —
+  la pipeline `kills_vs_humans` via last-hitter YA existe en
+  `server/src/BrawlRoom.ts` (crédito en el tick loop al morir un
+  humano), pero queda el `TODO(belts-v2)` en BrawlRoom por
+  verificar/cerrar (auditoría 2026-08-16).
+
+> ⚠️ **Aviso (2026-08-16)**: la app de Railway desapareció
+> ("Application not found") y la DB SQLite con `players` /
+> `player_stats` posiblemente se perdió. Si no hay backup, al
+> redesplegar los 5 leaderboards arrancan desde cero
+> (`npm run admin:backup` existe ya para el futuro).
 
 ## Moderación nickname
 
