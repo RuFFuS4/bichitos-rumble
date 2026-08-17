@@ -1,5 +1,44 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-17 (tarde) — H1 al 5/6: TS 7 + Vite 8 + three r185 en un día
+
+Sprint de modernización sobre `dev` (PRs #3-#7, CI verde en todos).
+Solo queda Colyseus 0.17 para cerrar el hito.
+
+- **Pre-vuelo** (#3): `verbatimModuleSyntax` con fallout de UNA línea
+  (la disciplina de `import type` del jam pagó dividendos),
+  `engines.node`, inventario de superficie three (mínima: 2 imports de
+  examples/jsm, sin Clock ni shaders custom).
+- **Bumps menores** (#4): la joya fue better-sqlite3 13 — **eliminó los
+  prebuilds musl** y el job `server-docker` nuevo del CI (añadido en el
+  mismo PR) lo cazó en su PRIMER run antes de que rompiera Railway.
+  Fix: compilar el nativo en el builder stage + `npm prune`, runtime
+  sin toolchain.
+- **TypeScript 7.0.2** (#5): directo al compiler nativo Go, la 6 puente
+  innecesaria — acepta `experimentalDecorators` (Colyseus v3), que era
+  el riesgo mapeado. Fallout: 1 línea (lib.dom tipa `hidden` como
+  boolean|string). `npm run check` completo: 15 → 7 s.
+- **Vite 8.2 Rolldown** (#6): vía 7.3 (limpia). Config nativa:
+  `rolldownOptions` + `output.codeSplitting.groups` (chunks
+  three/colyseus idénticos) + `import.meta.dirname`. Verificado que
+  terser sigue stripeando consolas y que la DCE del camino Sentry
+  sobrevive con y sin DSN. Build 4,9 → 2,9 s.
+- **three r185** (#7): 0 errores de tipos, imports a `three/addons`,
+  pase visual con Playwright headless (capturas archivadas): selector,
+  match, skybox, decor packs (sonda de escena confirmó props cargando)
+  y belts 3D — el cambio de especular r181 no produce regresión.
+  Lección de entorno: headless sin GPU (SwiftShader) corre el juego a
+  cámara lenta por el clamp de dt — el countdown tarda 30+ s; no es un
+  bug del juego, no re-diagnosticar.
+- Grafo del nexo consultado (read-only): la ficha de bichitos-rumble
+  sigue diciendo "terminado · 2026-05-01" — la petición de regeneración
+  ya está en el buzón de la sesión del nexo (mensajería entre sesiones).
+
+Mañana: **Colyseus 0.16 → 0.17 + schema v4** (adapter primero), merge
+`dev`→`main`, tag `v1.3-modern-stack`, Sentry 48 h.
+
+---
+
 ## 2026-08-17 — H0 "Saneamiento" cerrado (`v1.2-clean-base`)
 
 Primer hito de la fase post-jam completado en dos días de sesión.
