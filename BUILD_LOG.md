@@ -1,5 +1,46 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-17 — H0 "Saneamiento" cerrado (`v1.2-clean-base`)
+
+Primer hito de la fase post-jam completado en dos días de sesión.
+Resultado del jam confirmado por el camino: **#209 de 943**.
+
+- **CI estrenado** (GitHub Actions): client `npm run check` (ahora con
+  el parity check integrado) + server tsc + smoke Playwright. Verde
+  desde el primer run.
+- **Producción saneada**: widget del jam retirado (estaba roto
+  upstream y era el único error de consola), Privacy/Terms + LICENSE
+  desplegados, Railway reactivado en plan Hobby tras descubrir que el
+  trial agotado había borrado la app (la DB sobrevivió en el volumen).
+- **La CLI de admin llegó a producción por primera vez**: el Dockerfile
+  multi-stage nunca copiaba `scripts/` — el wipe de DB documentado en
+  el jam era inejecutable. Fix de una línea, DB reseteada a cero por
+  Rafa, primer `admin:backup` de producción escrito.
+- **Sentry en vivo** (decisión: SaaS free tier, no self-hosted):
+  cliente manual tree-shaken a 20 kB gz en chunk async idle-loaded,
+  inerte sin `VITE_SENTRY_DSN`, release = git sha. Lección de bundle:
+  un `import()` dinámico del SDK arrastra el namespace entero (450 kB);
+  el tree-shaking exige un módulo intermedio con imports estáticos.
+  Verificado end-to-end contra el proyecto de Sentry de Rafa (región
+  UE). Vercel Web Analytics activado.
+- **Licencias**: Tripo/Meshy/Suno confirmados de pago durante la
+  creación → crítters y música con derechos comerciales verificados
+  (Meshy no revierte a CC BY al cancelar; Suno concede derechos
+  perpetuos a lo creado bajo plan de pago). ASSET_LICENSES.md es el
+  dossier; flecos: facturas + generador 2D.
+- **Smoke online end-to-end en producción**: identidad v2 (refresh
+  silencioso, multi-tab con prefill, sin autologin), nicknames en
+  sala, partida completa con bot-fill y escritura en player_stats.
+  Confirmado en vivo el gap de backgrounding/reconnect (H4).
+- **Canal nuevo proyecto→nexo**: mensajería entre sesiones de Claude
+  probada con la sesión "Estructura y gobernanza de WorkSpaces"
+  (aviso de fase + petición de regeneración del grafo entregados).
+
+Siguiente: **H1 modernización de dependencias** (checklist en
+NEXT_STEPS.md; pre-vuelo sin dependencias externas).
+
+---
+
 > **🏁 Final VibeJam submission build — f74f701** (2026-05-01).
 > Tagged as `v1.0-vibejam-submit`. No further code changes after this.
 

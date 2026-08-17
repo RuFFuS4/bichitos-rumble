@@ -26,38 +26,39 @@ verificadas (H0 desbloquea H5).
 
 ---
 
-## H0 — Saneamiento y ojos abiertos (~1-2 semanas)
+## H0 — Saneamiento y ojos abiertos ✅ CERRADO 2026-08-17 (`v1.2-clean-base`)
 
 **Meta**: saber qué hay en producción, tener red de seguridad automática y
 despejar los bloqueantes legales. Sin tocar gameplay.
 
-- [ ] **Smoke de producción**: verificar que Vercel/Railway sirven `f74f701+`,
-      consola limpia, Sihans L online con agujero real. (FINAL_JAM_QA §1
-      nunca se ejecutó.)
-- [ ] **Wipe DB Railway**: `admin:list-players` → `admin:reset-players`
-      (comandos documentados en SUBMISSION_CHECKLIST; nunca confirmado).
-- [ ] **CI mínimo** (GitHub Actions): `npm run check` + parity + server tsc
-      + smoke Playwright en push a dev/main. Todo existe; es puro cableado.
-      *El item con mejor valor/hora de toda la auditoría.*
-- [ ] **Parity en `npm run check`** (stopgap de 1 línea hasta H1/H4).
-- [ ] **Observabilidad**: Sentry browser (o equivalente) + Vercel Web
-      Analytics + tabla de contadores diarios server-side. ANTES de migrar
-      nada — es la red de detección de los bumps.
-- [ ] **Dossier legal**: verificar en las cuentas Meshy/Tripo el tier bajo
-      el que se generó cada critter → `ASSET_LICENSES.md`; `LICENSE` en la
-      raíz (decisión: propietario); `/privacy.html` + `/terms.html`
-      estáticos enlazados desde el título.
-- [ ] **Doc-sync** (1-2 h): actualizar CHARACTER_DESIGN, NEXT_STEPS,
-      ABILITY_QA, ONLINE.md, BADGES_DESIGN, MEMORY.md al estado real
-      post-bloque-final. El material fuente está en BUILD_LOG.
-- [ ] **Higiene de repo**: borrar ramas backup/* y de agente ya mergeadas,
-      retirar el widget vibej.am de producción (o autoalojarlo como
-      crédito), borrar scripts muertos.
-- [ ] **Backup SQLite**: subcomando admin con `.backup()` + copia
-      programada fuera del volumen.
+- [x] **Smoke de producción**: cliente Vercel OK; hallazgos: widget del jam
+      roto upstream (retirado) y **Railway desaparecido por trial agotado**
+      → reactivado en plan Hobby (5 $/mes), DB sobrevivió en el volumen.
+      Smoke online end-to-end completo (identidad v2, 2 pestañas misma
+      sala, partida y persistencia).
+- [x] **Wipe DB Railway**: reset total ejecutado por Rafa desde la consola
+      (la CLI de admin llegó a producción con el fix del Dockerfile —
+      `COPY scripts` faltaba desde siempre).
+- [x] **CI mínimo** (GitHub Actions): client check + parity + server tsc +
+      smoke Playwright. Estrenado en verde con el PR #1.
+- [x] **Parity en `npm run check`**.
+- [x] **Observabilidad**: Sentry integrado (chunk async 20 kB gz
+      tree-shaken, lazy en idle, inerte sin `VITE_SENTRY_DSN`, release =
+      git sha) y verificado end-to-end en producción (región UE). Vercel
+      Web Analytics activado. Contadores server-side diferidos a H4
+      (tabla `matches`).
+- [x] **Dossier legal**: Tripo/Meshy/Suno confirmados de pago durante la
+      generación → crítters y música en verde en `ASSET_LICENSES.md`.
+      `LICENSE` propietario + `/privacy.html` + `/terms.html` desplegados.
+      Flecos (no bloquean): archivar facturas, identificar generador 2D.
+- [x] **Doc-sync**: 6 docs sincronizados a la realidad post-bloque-final.
+- [x] **Higiene de repo**: 8 ramas muertas fuera, widget del jam retirado,
+      scripts muertos borrados.
+- [x] **Backup SQLite**: subcomando `admin:backup` desplegado y probado en
+      producción. (Copia programada off-volume: fleco para H4.)
 
-**Gate de salida**: CI verde en dev/main · Sentry recibiendo · DB limpia
-con backup · ASSET_LICENSES.md completo · docs fiables.
+**Gate de salida**: CI verde en dev/main ✅ · Sentry recibiendo ✅ · DB
+limpia con backup ✅ · ASSET_LICENSES.md core ✅ · docs fiables ✅.
 
 ## H1 — Modernización de dependencias (~1-2 semanas)
 

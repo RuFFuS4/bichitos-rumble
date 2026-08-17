@@ -1,90 +1,58 @@
 # Next Steps — Bichitos Rumble
 
-> **Doc operativo de la fase post-jam (reescrito 2026-08-16, pasada de
-> doc-sync del hito H0).** Este archivo es solo la **checklist de trabajo
-> del hito EN CURSO**. El plan completo (H0-H5) vive en
-> [`ROADMAP.md`](ROADMAP.md) y la foto real del proyecto en
+> **Doc operativo de la fase post-jam.** Solo la **checklist del hito EN
+> CURSO**. Plan completo: [`ROADMAP.md`](ROADMAP.md) · foto del proyecto:
 > [`docs/POST_JAM_AUDIT.md`](docs/POST_JAM_AUDIT.md).
 > Al cerrar un hito: tag, y esta checklist se reescribe para el siguiente.
 
-El contenido histórico de la era del jam (roadmap Fases 1-4, barrido de
-mapping de animaciones, tickets bloqueados, notas MCP, etc.) se eliminó
-de este archivo: queda preservado en el historial de git y en
-[`BUILD_LOG.md`](BUILD_LOG.md).
+**H0 Saneamiento: ✅ CERRADO 2026-08-17, tag `v1.2-clean-base`** (detalle
+en [`ROADMAP.md §H0`](ROADMAP.md) y BUILD_LOG). Producción tiene: CI,
+Sentry verificado (región UE), Railway Hobby con DB a cero y backup,
+pack legal desplegado, docs fiables.
 
 ---
 
-## ✅ Resuelto: Railway (2026-08-17)
+## H1 — Modernización de dependencias (en curso)
 
-El "Application not found" era el **trial agotado**. Rafa activó el plan
-Hobby (5 $/mes), el proyecto se reanudó con el **mismo dominio** y **la
-DB sobrevivió** en el volumen. Con el fix del Dockerfile (`COPY scripts`)
-la CLI de admin funciona en producción por primera vez:
+Checklist de [`ROADMAP.md §H1`](ROADMAP.md). Regla: cada salto en su
+propia rama con CI verde; Sentry como red de detección de regresiones
+en producción. Orden de menor a mayor riesgo:
 
-- Wipe ejecutado: 9 jugadores `%test%` borrados desde la consola.
-- Primer backup de producción escrito (`/data/backups/br-online-*.sqlite`).
-- Smoke online end-to-end verificado: identidad v2, nicknames en sala,
-  partida completa y escritura en DB.
+1. [ ] **Pre-vuelo** (sin dependencia de Rafa):
+   - `verbatimModuleSyntax` en ambos tsconfig bajo TS 5.x + arreglar
+     el fallout de imports.
+   - `engines.node >= 20.19` en package.json + verificar versión de
+     Node en Vercel y Railway (requisito Vite 8).
+   - Inventario grep de superficie three: `three/examples|three/addons`,
+     ShaderMaterial custom, color management, `THREE.Clock`.
+2. [ ] **Bumps menores**: gltf-transform, playwright, terser, sharp,
+   tsx, gltfpack/meshoptimizer, better-sqlite3 13, @types/*.
+3. [ ] **TypeScript 5.7 → 6.x** (cliente + server). TS 7 (nativo Go)
+   cuando 6.x quede limpio — no usamos la API del compiler, así que
+   el salto a 7 puede ser directo si el ecosistema acompaña.
+4. [ ] **Vite 6 → 7 → 8** (Rolldown): `rollupOptions` →
+   `rolldownOptions`, revalidar terser/manualChunks/build.target y el
+   define de `__BUILD_COMMIT__`.
+5. [ ] **Three 0.172 → 0.185**: `Clock` → `Timer`, revisar el cambio
+   visual de especular PBR (r181) en los 9 crítters + belts + arenas,
+   `Object3D.dispose()`.
+6. [ ] **Colyseus 0.16 → 0.17 + schema v4** (el mayor riesgo, el
+   último): primero adapter de acceso a estado en el cliente
+   (`game.ts:842-859` y `1095-1220`), luego bump lockstep server +
+   colyseus.js. Smoke online completo tras el bump.
 
-Fleco: quedan ~11 filas basura de la era del jam que no casan con los
-patrones test (`Prueba*`, `asd*`, `123`, `RuFFuS`, `Rgr14`…). Todo en la
-DB es de testing — un `admin:reset-players` la deja impecable (decisión
-de Rafa; comando en [`ONLINE.md`](ONLINE.md)).
-
----
-
-## H0 — Saneamiento (en curso)
-
-Checklist de [`ROADMAP.md §H0`](ROADMAP.md), estado a 2026-08-17:
-
-- [x] **Smoke de producción (cliente)**: Vercel sirve el build post-jam,
-      widget del jam retirado (adiós al único error de consola),
-      Privacy/Terms desplegados y verificados en vivo.
-- [x] **Smoke online end-to-end**: server reactivado, 2 pestañas en la
-      misma sala, identidad v2 completa, partida y persistencia OK.
-- [x] **Wipe DB producción**: `admin:delete-test` ejecutado (9 filas).
-      Fleco opcional: reset total de las ~11 filas basura restantes.
-- [x] **CI mínimo** (GitHub Actions): client check + parity + server tsc
-      + smoke Playwright. Estrenado en verde con el PR #1.
-- [x] **Parity en `npm run check`**.
-- [x] **Observabilidad (código)**: Sentry integrado (decisión de Rafa
-      2026-08-17) — cliente mínimo tree-shaken (20 kB gz) en chunk async
-      cargado en idle, buffer pre-init, release = git sha, inerte sin
-      `VITE_SENTRY_DSN`. Activación pendiente de Rafa: DSN en Vercel +
-      toggle de Web Analytics (ver abajo). Contadores server-side
-      diferidos a H4 (tabla `matches`).
-- [x] **Dossier legal (core)**: Tripo/Meshy/Suno confirmados de pago
-      durante la generación → crítters y música en verde
-      ([`ASSET_LICENSES.md`](ASSET_LICENSES.md)). `LICENSE` + privacy +
-      terms desplegados. Flecos: archivar facturas (evidencia) e
-      identificar el generador 2D de sprites/skyboxes/badges.
-- [x] **Doc-sync** (2026-08-16).
-- [x] **Higiene de repo**: ramas muertas fuera, widget fuera, scripts
-      muertos fuera. Queda una rama backup remota opcional (abajo).
-- [x] **Backup SQLite**: subcomando `admin:backup` desplegado y probado
-      en producción. Fleco: programar copia periódica fuera del volumen.
-
-**Gate de salida H0**: CI verde en dev/main ✅ · observabilidad
-recibiendo ⏳ · DB limpia con backup ✅ · `ASSET_LICENSES.md` core ✅
-(flecos de evidencia) · docs fiables ✅.
-
-→ **Lo único que separa H0 del tag `v1.2-clean-base` es la
-observabilidad.**
+**Gate de salida H1**: todo verde en CI · partida offline y online sin
+regresión visual ni de feel · cero errores nuevos en Sentry tras 48 h
+del deploy.
 
 ---
 
-## Qué necesita Rafa
+## Flecos heredados (no bloquean H1)
 
-- **Activar Sentry** (último bloqueante de H0, ~5 min):
-  1. Cuenta en sentry.io (free) → Create Project → Browser JavaScript
-     → `bichitos-rumble` → copiar el **DSN**.
-  2. Vercel → Settings → Environment Variables →
-     `VITE_SENTRY_DSN` = DSN (Production) → redeploy.
-  3. Vercel → Analytics → **Enable** (Web Analytics).
-- **Archivar evidencia de licencias** (~10 min): facturas de abril 2026
-  de Meshy, Tripo y Suno → `docs/licencias-evidencia/`.
-- **Identificar el generador 2D** de sprites/favicon/og/badges/skyboxes
-  (checklist punto 5 de ASSET_LICENSES.md).
-- Opcional: reset total de la DB (`admin:reset-players -- --confirm
-  --i-know-what-im-doing`) para borrar las ~11 filas basura restantes.
-- Opcional: `git push origin --delete backup/pre-glb-rename-20260427-1940`
+- Rafa: archivar facturas abril 2026 (Meshy/Tripo/Suno) →
+  `docs/licencias-evidencia/` (evidencia del dossier).
+- Rafa: identificar el generador 2D de sprites/skyboxes/badges
+  (checklist §5 de [`ASSET_LICENSES.md`](ASSET_LICENSES.md)).
+- Rafa (opcional): `git push origin --delete backup/pre-glb-rename-20260427-1940`
+- H4: copia programada off-volume de `admin:backup` + tabla `matches`
+  (contadores/retención).
