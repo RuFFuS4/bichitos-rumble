@@ -26,6 +26,17 @@ con $2 sugeridos, cover 630x500 y 4 screenshots subidos.
   el borrador, y configurar pagos en `/user/settings/seller` para que
   el botón de donar cobre de verdad.
 
+**Cierre (misma noche)**: email verificado por Rafa → ZIP subido (374 B,
+flag `embed` activado a mano — sin él la página no embebe), release
+status a "In development" + línea "⚠️ Early version" en la descripción
+(petición de Rafa: avisar de que se está puliendo). Verificado en vivo:
+Run game carga la pantalla de título dentro de itch. El editor de
+descripción es **Redactor**: ni el DOM directo ni el teclado sintético
+sincronizan fiable — usar su API (`$(textarea).redactor('code.set',
+html)`). Los clicks por coordenadas de captura van ESCALADOS (~0,75×
+del viewport real): convertir o usar refs. Falta solo: payout mode +
+Publish (Rafa).
+
 ## 2026-08-18 (tarde) — H2 técnico 5/5: la dieta de payload en un día
 
 Cinco slices (PRs #9-#13), todos con verificación visual/e2e y
