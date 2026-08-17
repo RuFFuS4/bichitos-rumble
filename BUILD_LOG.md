@@ -1,5 +1,31 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-18 (noche) — itch.io: borrador completo, a falta del ZIP
+
+Página creada como **borrador** en `napsoul.itch.io/bichitos-rumble`
+(id 4908248) desde el Chrome logueado de Rafa: kind HTML, embed
+fullscreen, mobile+landscape, genre Fighting, 7 tags, descripción,
+disclosure IA (yes + graphics/audio/text/code), pricing "$0 or donate"
+con $2 sugeridos, cover 630x500 y 4 screenshots subidos.
+
+- **Bloqueante encontrado**: el upload del ZIP falla en silencio; el
+  endpoint `upload/prepare` devuelve `"Please verify your email address
+  before uploading a file"` (la UI lo esconde tras un error genérico).
+  El email primario de la cuenta es `rgr93.4@outlook.es`, sin verificar
+  → enviado el correo de verificación; el ZIP queda pendiente de eso.
+- Los uploads de imagen (cover/screenshots) usan otro endpoint sin ese
+  check — por eso sí entraron.
+- Técnica para inputs de fichero dinámicos de itch (no hay
+  `input[type=file]` en el DOM hasta pulsar el botón): click del botón
+  por JS (sin user-activation el diálogo nativo se suprime pero el
+  input queda creado), `aria-label` + estilo visible + `appendChild` a
+  `body` para que entre en el árbol de accesibilidad, y `file_upload`
+  con su ref. Los cambios de formulario NO persisten al navegar: hay
+  que pulsar Save antes de salir (una tanda se perdió y se rehízo).
+- Pendiente Rafa: verificar el email (Outlook), revisar y **publicar**
+  el borrador, y configurar pagos en `/user/settings/seller` para que
+  el botón de donar cobre de verdad.
+
 ## 2026-08-18 (tarde) — H2 técnico 5/5: la dieta de payload en un día
 
 Cinco slices (PRs #9-#13), todos con verificación visual/e2e y

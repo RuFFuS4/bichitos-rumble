@@ -36,8 +36,14 @@ visita ~64 MB → ~1,5 MB de extras.
 8. [x] Presupuesto en CI **y en el build de Vercel**: 100 MB total /
    17 MB por fichero, con ratchet documentado (135→115→100).
 9. [x] SEO: robots.txt, sitemap.xml, canonical, JSON-LD VideoGame.
-10. [ ] **Página en itch.io** embebiendo la URL de producción (segundo
-    canal + botón de donaciones = primera monetización). ← RAFA
+10. [~] **Página en itch.io**: borrador COMPLETO en
+    `napsoul.itch.io/bichitos-rumble` (HTML embed fullscreen, cover,
+    screenshots, tags, pricing $0-or-donate). Pendiente ← RAFA:
+    1) verificar email de la cuenta (correo enviado a
+    `rgr93.4@outlook.es` — sin verificar itch NO acepta el ZIP del
+    juego), 2) avisar a Claude para subir el ZIP (30 s), 3) revisar y
+    publicar el borrador, 4) configurar pagos en
+    `/user/settings/seller` para que las donaciones cobren.
 
 **Gate de salida H2**: dist ≤ 50 MB (hoy 96,9 — el resto grande son los
 arena packs de 88 MB, lazy per-match; revisar si el gate literal aplica
