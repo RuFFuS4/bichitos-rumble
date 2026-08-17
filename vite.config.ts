@@ -1,5 +1,16 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
+import { execSync } from 'node:child_process';
+
+// Short git sha baked into the bundle as the Sentry `release` id, so a
+// production error report pins the exact deploy that produced it.
+// Fallback 'dev' keeps builds working outside a git checkout (CI
+// tarballs, fresh clones without history).
+let buildCommit = 'dev';
+try {
+  buildCommit = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+    .toString().trim();
+} catch { /* keep 'dev' */ }
 
 // Five HTML entries: the normal game (index), the internal dev/balance
 // tool (tools), the roster calibration lab (calibrate), the animation
@@ -20,6 +31,9 @@ import { resolve } from 'node:path';
 // HUD tweak doesn't invalidate library caches.
 export default defineConfig({
   base: './',
+  define: {
+    __BUILD_COMMIT__: JSON.stringify(buildCommit),
+  },
   build: {
     target: 'es2020',
     outDir: 'dist',

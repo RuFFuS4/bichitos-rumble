@@ -14,62 +14,77 @@ de este archivo: queda preservado en el historial de git y en
 
 ---
 
-## 🔴 BLOQUEANTE: Railway (modo online caído)
+## ✅ Resuelto: Railway (2026-08-17)
 
-La app del servidor en Railway **ya no existe** ("Application not found"
-en `wss://bichitos-rumble-production.up.railway.app`) → **el online está
-caído en producción** y la DB SQLite (players/belts) posiblemente perdida.
-Redeploy pendiente — **necesita el dashboard de Railway de Rafa**.
+El "Application not found" era el **trial agotado**. Rafa activó el plan
+Hobby (5 $/mes), el proyecto se reanudó con el **mismo dominio** y **la
+DB sobrevivió** en el volumen. Con el fix del Dockerfile (`COPY scripts`)
+la CLI de admin funciona en producción por primera vez:
 
-Al redesplegar, en orden:
+- Wipe ejecutado: 9 jugadores `%test%` borrados desde la consola.
+- Primer backup de producción escrito (`/data/backups/br-online-*.sqlite`).
+- Smoke online end-to-end verificado: identidad v2, nicknames en sala,
+  partida completa y escritura en DB.
 
-1. `npm run admin:list-players` → ver qué sobrevivió en la DB.
-2. Si la DB está sucia/corrupta: wipe con `admin:reset-players`.
-3. Programar `npm run admin:backup` (copia fuera del volumen).
-4. Cerrar el smoke online pendiente (Sihans L con agujero real, 2 tabs).
+Fleco: quedan ~11 filas basura de la era del jam que no casan con los
+patrones test (`Prueba*`, `asd*`, `123`, `RuFFuS`, `Rgr14`…). Todo en la
+DB es de testing — un `admin:reset-players` la deja impecable (decisión
+de Rafa; comando en [`ONLINE.md`](ONLINE.md)).
 
 ---
 
 ## H0 — Saneamiento (en curso)
 
-Rama de trabajo: `claude/infra/h0-saneamiento`. Checklist de
-[`ROADMAP.md §H0`](ROADMAP.md), estado a 2026-08-16:
+Checklist de [`ROADMAP.md §H0`](ROADMAP.md), estado a 2026-08-17:
 
-- [x] **Smoke de producción (cliente)**: Vercel sirve el build final en
-      www.bichitosrumble.com, consola limpia tras retirar el widget del
-      jam. ⚠️ La mitad online del smoke queda bloqueada por Railway.
-- [ ] **Wipe DB Railway**: bloqueado por el redeploy (ver arriba).
-- [x] **CI mínimo** (GitHub Actions): `npm run check` + parity + server
-      tsc + smoke Playwright en push/PR a dev/main.
-- [x] **Parity en `npm run check`** (`verify-ability-parity.mjs`).
-- [ ] **Observabilidad**: Sentry browser (o beacon propio) + Vercel Web
-      Analytics + contadores diarios server-side. Pendiente de la
-      decisión de Rafa (ver abajo). ANTES de los bumps de H1.
-- [ ] **Dossier legal**: verificar tiers Meshy/Tripo → `ASSET_LICENSES.md`;
-      `LICENSE` propietario en raíz; `/privacy.html` + `/terms.html`
-      enlazados desde el título. Necesita las cuentas de Rafa.
-- [x] **Doc-sync**: docs actualizados al estado real post-bloque-final
-      (esta pasada, 2026-08-16).
-- [x] **Higiene de repo**: ramas backup/agente ya mergeadas borradas;
-      widget vibej.am retirado de `index.html`/`tools.html` (el widget.js
-      upstream está roto y hacía heartbeat-ping a los usuarios). Queda
-      una rama backup remota opcional (ver "Qué necesita Rafa") y el
-      barrido de scripts muertos.
-- [x] **Backup SQLite**: subcomando `npm run admin:backup` en el script
-      admin del server. (La copia programada depende del redeploy.)
+- [x] **Smoke de producción (cliente)**: Vercel sirve el build post-jam,
+      widget del jam retirado (adiós al único error de consola),
+      Privacy/Terms desplegados y verificados en vivo.
+- [x] **Smoke online end-to-end**: server reactivado, 2 pestañas en la
+      misma sala, identidad v2 completa, partida y persistencia OK.
+- [x] **Wipe DB producción**: `admin:delete-test` ejecutado (9 filas).
+      Fleco opcional: reset total de las ~11 filas basura restantes.
+- [x] **CI mínimo** (GitHub Actions): client check + parity + server tsc
+      + smoke Playwright. Estrenado en verde con el PR #1.
+- [x] **Parity en `npm run check`**.
+- [x] **Observabilidad (código)**: Sentry integrado (decisión de Rafa
+      2026-08-17) — cliente mínimo tree-shaken (20 kB gz) en chunk async
+      cargado en idle, buffer pre-init, release = git sha, inerte sin
+      `VITE_SENTRY_DSN`. Activación pendiente de Rafa: DSN en Vercel +
+      toggle de Web Analytics (ver abajo). Contadores server-side
+      diferidos a H4 (tabla `matches`).
+- [x] **Dossier legal (core)**: Tripo/Meshy/Suno confirmados de pago
+      durante la generación → crítters y música en verde
+      ([`ASSET_LICENSES.md`](ASSET_LICENSES.md)). `LICENSE` + privacy +
+      terms desplegados. Flecos: archivar facturas (evidencia) e
+      identificar el generador 2D de sprites/skyboxes/badges.
+- [x] **Doc-sync** (2026-08-16).
+- [x] **Higiene de repo**: ramas muertas fuera, widget fuera, scripts
+      muertos fuera. Queda una rama backup remota opcional (abajo).
+- [x] **Backup SQLite**: subcomando `admin:backup` desplegado y probado
+      en producción. Fleco: programar copia periódica fuera del volumen.
 
-**Gate de salida H0**: CI verde en dev/main · observabilidad recibiendo ·
-DB limpia con backup · `ASSET_LICENSES.md` completo · docs fiables.
+**Gate de salida H0**: CI verde en dev/main ✅ · observabilidad
+recibiendo ⏳ · DB limpia con backup ✅ · `ASSET_LICENSES.md` core ✅
+(flecos de evidencia) · docs fiables ✅.
+
+→ **Lo único que separa H0 del tag `v1.2-clean-base` es la
+observabilidad.**
 
 ---
 
 ## Qué necesita Rafa
 
-- **Railway dashboard** (crítico): redesplegar el server y comprobar si
-  el volumen/DB sobrevivió. Todo el modo online depende de esto.
-- **Meshy/Tripo**: entrar en las cuentas y verificar bajo qué tier se
-  generó cada critter (bloquea el dossier legal → y la monetización H5).
-- **Decisión de observabilidad**: cuenta Sentry vs beacon de errores
-  self-hosted en el propio server.
-- Opcional: borrar la rama remota de backup ya obsoleta:
-  `git push origin --delete backup/pre-glb-rename-20260427-1940`
+- **Activar Sentry** (último bloqueante de H0, ~5 min):
+  1. Cuenta en sentry.io (free) → Create Project → Browser JavaScript
+     → `bichitos-rumble` → copiar el **DSN**.
+  2. Vercel → Settings → Environment Variables →
+     `VITE_SENTRY_DSN` = DSN (Production) → redeploy.
+  3. Vercel → Analytics → **Enable** (Web Analytics).
+- **Archivar evidencia de licencias** (~10 min): facturas de abril 2026
+  de Meshy, Tripo y Suno → `docs/licencias-evidencia/`.
+- **Identificar el generador 2D** de sprites/favicon/og/badges/skyboxes
+  (checklist punto 5 de ASSET_LICENSES.md).
+- Opcional: reset total de la DB (`admin:reset-players -- --confirm
+  --i-know-what-im-doing`) para borrar las ~11 filas basura restantes.
+- Opcional: `git push origin --delete backup/pre-glb-rename-20260427-1940`
