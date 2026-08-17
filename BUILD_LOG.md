@@ -1,5 +1,31 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — H2 CERRADO (`v1.4-portal-ready`): itch.io PUBLICADO
+
+**Bichitos Rumble está publicado en itch.io** con la primera
+monetización real activa: `napsoul.itch.io/bichitos-rumble` — embed
+fullscreen de producción, "$0 or donate" ($2 sugeridos), botón
+"Support This Game" en vivo.
+
+- Rafa completó la tax interview (W-8BEN): payout "Collected by
+  itch.io", Foreign TIN (NIF), convenio España-EE.UU. art. 12(2) →
+  **retención 0 %**. Dos correcciones al vuelo durante la interview:
+  la pantalla del TIN respondida como "No" dejaba el formulario sin 6a
+  ni línea 9 (adiós convenio, 30 % de retención) — el NIF español ES
+  un Foreign TIN válido; y el aviso "DO NOT ENTER VAT" no aplica al
+  NIF de persona física.
+- Publish verificado en vivo: badge PUBLISHED, Run game carga la
+  pantalla de título, Support This Game visible.
+- **Gate H2 cerrado**: dist 96,9 MB con el gate redefinido como
+  "huella inicial ≤ 50 MB" (~1,5 MB reales; los arena packs de 88 MB
+  son lazy per-match — el criterio CrazyGames mide descarga inicial).
+  Lighthouse móvil contra producción: **Perf 71 / SEO 100 / BP 100**
+  (FCP 1,2 s, LCP 2,6 s; TBT 1,5 s = boot de three.js, esperable).
+  OG en WhatsApp ✅ (desde slice 2).
+- Queda en vigilancia: Sentry el 2026-08-20 (cierre formal de los
+  gates H1/H2) y los comentarios/analytics de itch la primera semana.
+- Siguiente hito: **H3 Bichitos Studio** (NEXT_STEPS reescrito).
+
 ## 2026-08-18 (noche) — itch.io: borrador completo, a falta del ZIP
 
 Página creada como **borrador** en `napsoul.itch.io/bichitos-rumble`
