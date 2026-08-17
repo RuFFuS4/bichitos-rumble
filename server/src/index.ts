@@ -10,9 +10,12 @@
 // BOTH respond to every request → ERR_HTTP_HEADERS_SENT on /api calls.
 //
 // defineServer's `express` hook is the official surface for custom HTTP
-// routes (express 5 already ships inside @colyseus/core — zero new deps).
-// Our zero-dependency api.ts dispatcher is mounted unchanged as the first
+// routes (express 5 already arrives transitively with colyseus 0.17 —
+// via @colyseus/monitor — zero new runtime deps of our own). Our
+// zero-dependency api.ts dispatcher is mounted unchanged as the first
 // middleware: it returns true when it handled the request, false → next().
+// CORS caveat: colyseus's router intercepts OPTIONS preflights before
+// express — see the note in api.ts.
 // ---------------------------------------------------------------------------
 
 import { defineServer, defineRoom } from 'colyseus';
