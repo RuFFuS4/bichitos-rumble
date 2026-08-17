@@ -38,9 +38,7 @@ import {
   getPortalExitUrl, getPortalReturnUrl, clearPortalContext,
   togglePortalExpanded, hasStartPortal,
 } from './portal';
-import type { Room } from 'colyseus.js';
-import { getStateCallbacks } from 'colyseus.js';
-import { sendInput, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, type AbilityFiredEvent } from './network';
+import { sendInput, onPlayersChange, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, type Room, type AbilityFiredEvent } from './network';
 import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
@@ -839,23 +837,24 @@ export class Game {
 
     showOverlay('Waiting for opponent...');
 
-    // Colyseus schema v3: use getStateCallbacks to register listeners.
-    // $ (root callback proxy) mirrors the state tree and supports onAdd/onRemove
-    // that also fires for items ALREADY present when the callback is attached.
-    const $ = getStateCallbacks(room);
-    $(room.state).players.onAdd((playerState: any, sessionId: string) => {
-      this.spawnOnlineCritter(sessionId, playerState);
-    });
-    $(room.state).players.onRemove((_playerState: any, sessionId: string) => {
-      const c = this.onlineCritters.get(sessionId);
-      if (c) {
-        // Clean the floating status emoji DOM node BEFORE disposing —
-        // otherwise a remote disconnect leaves the icon orphaned in the
-        // page until the next phase transition wipes everything.
-        disposeCritterStatus(c);
-        c.dispose();
-        this.onlineCritters.delete(sessionId);
-      }
+    // Player add/remove listeners via the network adapter — the SDK's
+    // state-callbacks API (v3 proxies / v4 Callbacks) lives entirely in
+    // network.ts. onAdd also fires for players already present at attach.
+    onPlayersChange(room, {
+      onAdd: (playerState, sessionId) => {
+        this.spawnOnlineCritter(sessionId, playerState);
+      },
+      onRemove: (_playerState, sessionId) => {
+        const c = this.onlineCritters.get(sessionId);
+        if (c) {
+          // Clean the floating status emoji DOM node BEFORE disposing —
+          // otherwise a remote disconnect leaves the icon orphaned in the
+          // page until the next phase transition wipes everything.
+          disposeCritterStatus(c);
+          c.dispose();
+          this.onlineCritters.delete(sessionId);
+        }
+      },
     });
 
     // Ability fire events → trigger client-side VFX + audio

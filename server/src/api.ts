@@ -125,7 +125,14 @@ export async function handleApiRequest(
   const url = req.url ?? '';
   if (!url.startsWith('/api/')) return false;
 
-  // Handle CORS preflight for the two POST endpoints.
+  // CORS preflight — NOTE (Colyseus 0.17, H1 review): in the
+  // defineServer() wiring, @colyseus/core's router prepends its own
+  // request listener that answers EVERY OPTIONS itself (204 + its
+  // permissive CORS headers), so this branch is effectively dead in
+  // production. Kept as defense-in-depth for any wiring where the
+  // router interception isn't present. If a stricter CORS policy is
+  // ever needed, the override point is matchMaker.controller's CORS
+  // headers, not this file.
   if (req.method === 'OPTIONS') {
     sendJson(res, 204, {});
     return true;

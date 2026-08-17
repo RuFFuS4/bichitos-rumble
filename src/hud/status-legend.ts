@@ -209,7 +209,10 @@ export function initStatusLegend(): void {
 
   btn.addEventListener('click', (ev) => {
     ev.stopPropagation();
-    setOpen(popup.hidden);
+    // Boolean(): TS 7 lib.dom types `hidden` as boolean | string (the
+    // spec's "until-found" state). We only ever write booleans, and
+    // any truthy value means "currently hidden → open it".
+    setOpen(Boolean(popup.hidden));
   });
 
   // Click anywhere outside the popup (and outside the button) closes it.

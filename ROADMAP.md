@@ -60,33 +60,37 @@ despejar los bloqueantes legales. Sin tocar gameplay.
 **Gate de salida**: CI verde en dev/main ✅ · Sentry recibiendo ✅ · DB
 limpia con backup ✅ · ASSET_LICENSES.md core ✅ · docs fiables ✅.
 
-## H1 — Modernización de dependencias (~1-2 semanas)
+## H1 — Modernización de dependencias ✅ CERRADO 2026-08-18 (`v1.3-modern-stack`)
 
 **Meta**: stack 2026 con los saltos ordenados de menor a mayor riesgo,
-cada uno en su propia rama con CI verde.
+cada uno en su propia rama con CI verde. Detalle por salto:
+[`docs/H1_MIGRATION_NOTES.md`](docs/H1_MIGRATION_NOTES.md).
 
-1. [ ] **Pre-vuelo** (barato, hazlo primero): `verbatimModuleSyntax` en
-       ambos tsconfig bajo TS 5.x; `engines.node >= 20.19` + verificar
-       Node de Vercel/Railway; grep-inventario de superficie three
-       (examples/jsm, ShaderMaterial, color management).
-2. [ ] **Bumps menores**: gltf-transform, playwright, terser, sharp, tsx,
-       gltfpack/meshoptimizer, better-sqlite3 13.
-3. [ ] **TypeScript → 6.x** (cliente + server). TS 7.0 (compiler nativo Go,
-       8-12× más rápido) cuando el ecosistema estabilice en 7.1 — o antes
-       si 6.x queda limpio de deprecations y el build no usa la API del
-       compiler (no la usamos).
-4. [ ] **Vite 6 → 7 → 8** (Rolldown): `rollupOptions` → `rolldownOptions`,
-       revalidar terser/manualChunks/build.target.
-5. [ ] **Three 0.172 → 0.185**: `Clock` → `Timer`, revisar el cambio visual
-       de especular PBR (r181) en los 9 critters + belts, `Object3D.dispose()`.
-6. [ ] **Colyseus 0.16 → 0.17 + schema v4** (el mayor riesgo, el último):
-       primero envolver el acceso a estado del cliente en un adapter
-       (game.ts:842-859 y 1095-1220), luego bump lockstep server +
-       colyseus.js. Considerar la descomposición de BrawlRoom (H4) antes
-       si el diff se complica.
+1. [x] **Pre-vuelo**: verbatimModuleSyntax (fallout: 1 línea) ·
+       engines.node ≥ 20.19 · inventario three · Node verificado en los
+       3 runtimes (CI 22, Railway 22-alpine, Vercel 24).
+2. [x] **Bumps menores** + lección better-sqlite3 13 (sin prebuilds
+       musl → compilación en el builder stage del Dockerfile; el job
+       `server-docker` nuevo del CI lo cazó en su primer run).
+3. [x] **TypeScript → 7.0.2 directo** (compiler nativo Go; la 6 puente
+       resultó innecesaria — acepta experimentalDecorators). Fallout:
+       1 línea. `npm run check` 15 → 7 s.
+4. [x] **Vite 8.2 (Rolldown)** con config nativa (`rolldownOptions` +
+       `codeSplitting.groups`, `import.meta.dirname`). Build 4,9 →
+       2,9 s. Terser y DCE de Sentry verificados.
+5. [x] **Three 0.185**: 0 fallout de tipos, imports a `three/addons`,
+       pase visual headless con capturas — sin regresión del especular
+       r181.
+6. [x] **Colyseus 0.16 → 0.17 + schema v4** lockstep (cliente pasa a
+       `@colyseus/sdk`; server a `defineServer()` tras descubrir que el
+       wiring clásico duplica listeners HTTP en 0.17). Verificado con
+       e2e local de 2 páginas + review adversarial de 3 lentes que cazó
+       la auto-reconexión default-ON del SDK (desactivada; H4 la
+       implementará server-side). Detalle en H1_MIGRATION_NOTES.
 
-**Gate de salida**: todo verde en CI · partida offline y online completa
-sin regresión visual ni de feel · deploy de prueba en preview.
+**Gate de salida**: CI verde ✅ · e2e online local completo ✅ · smoke
+producción ✅ · merge a main + tag `v1.3-modern-stack` ✅ · Sentry 48 h
+tras el deploy ⏳ (vigilancia en curso — cierra formalmente el gate).
 
 ## H2 — Dieta de payload + presencia base (~1-2 semanas)
 

@@ -2,14 +2,48 @@
 // Network client — Colyseus wrapper for online multiplayer mode
 // ---------------------------------------------------------------------------
 //
-// Thin abstraction over colyseus.js. Exposes:
+// Thin abstraction over the Colyseus SDK. Exposes:
 //   - connectToBrawl(serverUrl): join or create a 'brawl' room
 //   - sendInput(room, payload): send current input to the server each frame
+//   - onPlayersChange(room, handlers): add/remove listeners for the players
+//     MapSchema — the ONLY place that touches the SDK's state-callbacks API
 //   - The raw Room is returned for state access; game.ts reads state directly
 //     via room.state.players (MapSchema) and listens to ability events.
+//
+// H1 (Colyseus 0.17): every SDK-version-specific API (Client, Room type,
+// state callbacks) lives HERE and nowhere else — this file was the whole
+// client-side surface of the 0.16→0.17 bump (colyseus.js → @colyseus/sdk,
+// getStateCallbacks proxies → Callbacks.get with string paths).
 // ---------------------------------------------------------------------------
 
-import { Client, Room } from 'colyseus.js';
+import { Client, Room, Callbacks } from '@colyseus/sdk';
+
+// Re-exported so game.ts (and future consumers) type their room fields
+// without importing the SDK package directly.
+export type { Room };
+
+/**
+ * Register add/remove listeners on the players MapSchema. `onAdd` also
+ * fires for players already present when the listener attaches (SDK
+ * behaviour, both v3 proxies and v4 Callbacks) — the caller doesn't need
+ * a separate initial sweep.
+ */
+export function onPlayersChange(
+  room: Room,
+  handlers: {
+    onAdd: (playerState: any, sessionId: string) => void;
+    onRemove: (playerState: any, sessionId: string) => void;
+  },
+): void {
+  // This client is schema-blind (no shared schema types — state is read
+  // defensively as plain properties), so the SDK types the map key as
+  // unknown; normalise at the boundary.
+  const callbacks = Callbacks.get(room);
+  callbacks.onAdd('players', (playerState, sessionId) =>
+    handlers.onAdd(playerState, String(sessionId)));
+  callbacks.onRemove('players', (playerState, sessionId) =>
+    handlers.onRemove(playerState, String(sessionId)));
+}
 
 export interface NetworkInput {
   moveX: number;
@@ -166,6 +200,16 @@ export async function connectToBrawl(serverUrl: string, options: JoinBrawlOption
   console.log('[Network] connecting to', serverUrl, 'with options', options);
   const client = new Client(serverUrl);
   const room = await client.joinOrCreate('brawl', options);
+  // H1 review (0.17): the SDK now ships auto-reconnection ENABLED by
+  // default, but our server has no allowReconnection/onDrop support —
+  // a mid-match hard disconnect (server restart, dropped wifi, tab
+  // suspend) would silently retry ~15 times (~1 min) with the match
+  // frozen and no "Disconnected" overlay, because onLeave stops firing
+  // for abnormal closes. Disabling restores the 0.16 semantics: onLeave
+  // fires immediately, the overlay shows, and the server-side
+  // bot-takeover already covers the gameplay half. Revisit in H4 when
+  // allowReconnection lands server-side.
+  room.reconnection.enabled = false;
   console.log('[Network] joined room', room.roomId, 'as', room.sessionId);
   return room;
 }

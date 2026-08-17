@@ -53,6 +53,24 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
 
+  server-docker:
+    name: Server (docker build)
+    # Builds the EXACT image Railway builds (multi-stage node:22-alpine).
+    # Catches native-module breakage (better-sqlite3 prebuilds vs musl)
+    # and Dockerfile drift BEFORE a merge to main triggers the real
+    # deploy. Added in H1 when better-sqlite3 jumped a major.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t bichitos-server-ci ./server
+      # Sanity: the runtime image must be able to load the native module
+      # and the admin CLI (both were production-only failure modes once).
+      # dynamic import() because the server package is ESM; `|| true`
+      # because the CLI exits 1 without a DB and Actions runs pipefail.
+      - run: docker run --rm bichitos-server-ci node -e "import('better-sqlite3').then(() => console.log('better-sqlite3 native OK'))"
+      - run: (docker run --rm bichitos-server-ci node scripts/admin-players.mjs list 2>&1 || true) | grep -q "DB file not found" && echo "admin CLI present OK"
+
   smoke:
     name: Smoke (Playwright)
     runs-on: ubuntu-latest

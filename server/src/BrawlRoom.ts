@@ -19,7 +19,7 @@
 //     match alive. Otherwise the match ends with opponent_left.
 // ---------------------------------------------------------------------------
 
-import { Client, Room } from 'colyseus';
+import { Room, type Client } from 'colyseus';
 import { GameState } from './state/GameState.js';
 import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
@@ -127,7 +127,9 @@ function newInternal(): InternalPlayerData {
   };
 }
 
-export class BrawlRoom extends Room<GameState> {
+// Colyseus 0.17: the Room generic moved to an options-object shape; the
+// `state` class property below provides the typing, so no generic needed.
+export class BrawlRoom extends Room {
   maxClients = MAX_PLAYERS;
   state = new GameState();
 
@@ -299,7 +301,11 @@ export class BrawlRoom extends Room<GameState> {
     }
   }
 
-  onLeave(client: Client, _consented: boolean) {
+  // Colyseus 0.17: the second param is now the WS close code (number),
+  // not the consented boolean. We never read it — every leave (consented
+  // or not) takes the same path: bot-takeover mid-match, slot free
+  // otherwise.
+  onLeave(client: Client, _code: number) {
     const sid = client.sessionId;
     const phase = this.state.phase;
 

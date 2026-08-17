@@ -22,13 +22,13 @@ try {
 // resolve to the built files even though vercel.json rewrites
 // everything else to index.html.
 //
-// manualChunks: Three.js + Colyseus are the two big libraries and they
-// have very different cache lifetimes (Three is rarely updated, Colyseus
-// more often as server protocol evolves). Splitting them out lets the
-// browser keep the Three chunk cached across deploys that only touch
-// game logic, which is what Vite's chunkSizeWarningLimit warning is
-// nudging us toward. The gameplay code stays in the shared chunk so a
-// HUD tweak doesn't invalidate library caches.
+// codeSplitting (Vite 8 / Rolldown — antes manualChunks): Three.js +
+// Colyseus are the two big libraries and they have very different cache
+// lifetimes (Three is rarely updated, Colyseus more often as server
+// protocol evolves). Splitting them out lets the browser keep the Three
+// chunk cached across deploys that only touch game logic. The gameplay
+// code stays in the shared chunk so a HUD tweak doesn't invalidate
+// library caches.
 export default defineConfig({
   base: './',
   define: {
@@ -51,20 +51,23 @@ export default defineConfig({
         pure_funcs: ['console.debug', 'console.log'],
       },
     },
-    rollupOptions: {
+    rolldownOptions: {
       input: {
-        index:       resolve(__dirname, 'index.html'),
-        tools:       resolve(__dirname, 'tools.html'),
-        calibrate:   resolve(__dirname, 'calibrate.html'),
-        animLab:     resolve(__dirname, 'anim-lab.html'),
-        decorEditor: resolve(__dirname, 'decor-editor.html'),
+        index:       resolve(import.meta.dirname, 'index.html'),
+        tools:       resolve(import.meta.dirname, 'tools.html'),
+        calibrate:   resolve(import.meta.dirname, 'calibrate.html'),
+        animLab:     resolve(import.meta.dirname, 'anim-lab.html'),
+        decorEditor: resolve(import.meta.dirname, 'decor-editor.html'),
       },
       output: {
-        manualChunks(id) {
-          if (id.includes('node_modules/three/')) return 'three';
-          if (id.includes('node_modules/colyseus.js/')) return 'colyseus';
-          // Fall through → default chunking for everything else.
-          return undefined;
+        codeSplitting: {
+          groups: [
+            { name: 'three',    test: /node_modules[\\/]three[\\/]/,       priority: 20 },
+            // @colyseus/sdk + @colyseus/schema (client decode) since 0.17.
+            { name: 'colyseus', test: /node_modules[\\/]@colyseus[\\/]/, priority: 20 },
+          ],
+          // Everything else falls through to Rolldown's default
+          // automatic splitting (codeSplitting defaults stay on).
         },
       },
     },
