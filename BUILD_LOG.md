@@ -1,5 +1,29 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — H3 slice 3: decor-editor emite patches + preview sin mentiras
+
+- **decor-editor emite `DecorEditorPatch`**: botones "Copy JSON patch"
+  y "Download patch.json" con el mismo envelope que calibrate/anim-lab
+  — `applyDecorEditor` deja de ser código muerto sin productor. Las 3
+  herramientas cierran ya el mismo bucle tune → patch → apply.
+- **Comentarios de diseño a salvo** (decisión de Rafa): las notas de
+  cluster que vivían DENTRO de los arrays de `DECOR_LAYOUTS` (y que el
+  apply wholesale destruiría) migradas a la cabecera de cada pack como
+  sección "Composición". Los 5 packs quedan como arrays de datos puros;
+  ni una nota perdida (verificado con test contra el fichero real).
+- **Precisión unificada**: snippet TS y JSON redondean a 3 decimales
+  recortados — el MISMO formato que escribe el applier. Snippet, patch
+  y apply producen fuente byte-idéntica; el round-trip por el editor ya
+  no genera churn de diff.
+- **Fix packScale**: la preview del editor aplicaba `fitFactor × scale`
+  omitiendo el `packScale` que el juego SÍ aplica (jungle 1.20 …
+  tundra 1.65) — todo se veía un 20-65 % más pequeño que en producción
+  y se calibraba contra una mentira. Corregido en la preview GLB y en
+  el badge "≈ X u (n× critter)".
+- Verificación: 36 tests (nuevo: apply wholesale contra el
+  arena-decor-layouts.ts real conservando headers) + e2e Playwright
+  (editor → patch → validate → apply dry: 73 props antes y después).
+
 ## 2026-08-19 — H3 slice 2: anim-lab persiste la sesión + divergencia real en calibrate
 
 - **anim-lab**: la sesión entera (row states de todos los critters) se

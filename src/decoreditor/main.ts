@@ -5,7 +5,11 @@
 // MVP visual editor for in-arena decoration placements. Reads the current
 // layout from arena-decor-layouts.ts, renders it top-down, and lets the
 // user click to place / select / adjust / delete props. Final step:
-// "Copy snippet" → paste into arena-decor-layouts.ts.
+// "Copy snippet" → paste into arena-decor-layouts.ts, OR "Copy/Download
+// JSON patch" → `npm run apply-tool-patch` (H3 slice 3 — same
+// DecorEditorPatch envelope as calibrate/anim-lab; the apply replaces
+// the pack's array wholesale, which is why the design notes live in the
+// pack HEADER comments of DECOR_LAYOUTS, never inside the arrays).
 //
 // Sibling of /calibrate.html (roster) and /anim-lab.html (clips). All
 // three pages share the same lab pattern: standalone HTML entry, no
@@ -25,11 +29,12 @@
 //   · undo / redo
 //   · loading the actual GLB props (placeholder cylinders are fast and
 //     legible — the goal is positioning, not visual fidelity)
-//   · auto-write to disk (export only — keeps SoT in code review)
+//   · auto-write to disk (export only — keeps SoT in code review;
+//     the dev-server apply endpoint is H3 slice 4)
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { ARENA_PACK_IDS, type ArenaPackId } from '../arena-decorations';
+import { ARENA_PACK_IDS, getPackDecorScale, type ArenaPackId } from '../arena-decorations';
 import {
   DECOR_LAYOUTS,
   DECOR_TYPES,
@@ -46,6 +51,10 @@ import {
   clearStorage,
   hasStorageKey,
   storageDivergesFromCode,
+  makeToolPatch,
+  copyPatchToClipboard,
+  downloadPatch,
+  type DecorEditorPatch,
 } from '../tools/tool-storage';
 
 // ---------------------------------------------------------------------------
@@ -175,6 +184,8 @@ const localIndicator= qSpan('local-indicator');
 const ctlPreviewGlb = qInput('ctl-preview-glb');
 const btnPreviewIngame = qBtn('btn-preview-ingame');
 const btnExport     = qBtn('btn-export');
+const btnExportJson = qBtn('btn-export-json');
+const btnDownloadJson = qBtn('btn-download-json');
 const exportOut     = qPre('export-out');
 const placementsList= qDiv('placements-list');
 const placementCount= qSpan('placement-count');
@@ -345,7 +356,10 @@ async function rebuildPreviewGroup(): Promise<void> {
         ? Math.max(0.001, rawBbox.max.y - rawBbox.min.y)
         : 1;
       const fitFactor = type.displayHeight / measuredH;
-      mesh.scale.setScalar(fitFactor * p.scale);
+      // packScale MUST match the game (arena-decorations applies it on
+      // top of the fit) — without it the editor preview renders 20-65%
+      // smaller than production and the user calibrates against a lie.
+      mesh.scale.setScalar(fitFactor * p.scale * getPackDecorScale(currentPack));
       mesh.updateMatrixWorld(true);
       const bbox = new THREE.Box3().setFromObject(mesh);
       if (Number.isFinite(bbox.min.y)) mesh.position.y = -bbox.min.y;
@@ -395,11 +409,12 @@ function refreshSelectedInfo(): void {
     return;
   }
   const p = placements[selectedIdx]!;
-  // Show the final approximate height the prop will render at in-game.
-  // displayHeight × placement.scale, with a critter-relative comparison
+  // Show the final approximate height the prop will render at in-game:
+  // displayHeight × placement.scale × packScale (the same multiplier
+  // chain arena-decorations applies), with a critter-relative comparison
   // so the user can eyeball "how tall is this versus a critter (1.7 u)".
   const type = DECOR_TYPES[p.type];
-  const finalH = type ? type.displayHeight * p.scale : null;
+  const finalH = type ? type.displayHeight * p.scale * getPackDecorScale(currentPack) : null;
   const ratioCritter = finalH !== null ? finalH / 1.7 : null;
   const ratioBadge = ratioCritter !== null
     ? ` <span style="opacity:0.65;font-weight:400">≈ ${finalH!.toFixed(2)} u (${ratioCritter.toFixed(1)}× critter)</span>`
@@ -715,16 +730,38 @@ btnPreviewIngame.addEventListener('click', () => {
   }
 });
 
+/** Number formatting shared with the apply-script's `formatNumber`
+ *  (scripts/tool-patch-core.mjs) so the TS snippet and the JSON-patch
+ *  apply produce byte-identical source. Kept in sync by hand. */
+function formatNumberForTs(n: number): string {
+  if (Number.isInteger(n)) return String(n);
+  const s = n.toFixed(3);
+  return s.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
+/** Placements rounded for export: 3 decimals (trimmed) — same
+ *  precision the applier writes, so snippet, JSON and apply agree and
+ *  a round-trip through the editor doesn't churn the diff. */
+function exportPlacements(): DecorEditorPatch['data'][string] {
+  return placements.map((p) => ({
+    r: Number(p.r.toFixed(3)),
+    angle: Number(p.angle.toFixed(3)),
+    rotY: Number(p.rotY.toFixed(3)),
+    scale: Number(p.scale.toFixed(3)),
+    type: p.type,
+  }));
+}
+
 btnExport.addEventListener('click', () => {
   const lines: string[] = [];
   lines.push(`// --- Decor layout export for pack: ${currentPack} ---`);
   lines.push('// Paste inside DECOR_LAYOUTS in src/arena-decor-layouts.ts');
   lines.push('');
   lines.push(`  ${currentPack}: [`);
-  for (const p of placements) {
+  for (const p of exportPlacements()) {
     lines.push(
-      `    { r: ${p.r.toFixed(2)}, angle: ${p.angle.toFixed(2)}, ` +
-        `rotY: ${p.rotY.toFixed(2)}, scale: ${p.scale.toFixed(2)}, ` +
+      `    { r: ${formatNumberForTs(p.r)}, angle: ${formatNumberForTs(p.angle)}, ` +
+        `rotY: ${formatNumberForTs(p.rotY)}, scale: ${formatNumberForTs(p.scale)}, ` +
         `type: ${JSON.stringify(p.type)} },`,
     );
   }
@@ -735,6 +772,20 @@ btnExport.addEventListener('click', () => {
     navigator.clipboard.writeText(out).catch(() => {/* user has the on-screen pre */});
   }
   console.log(out);
+});
+
+btnExportJson.addEventListener('click', async () => {
+  const patch = makeToolPatch<DecorEditorPatch>('decor-editor', { [currentPack]: exportPlacements() });
+  const out = JSON.stringify(patch, null, 2);
+  exportOut.textContent = out;
+  await copyPatchToClipboard(patch);
+  console.log(out);
+});
+
+btnDownloadJson.addEventListener('click', () => {
+  const patch = makeToolPatch<DecorEditorPatch>('decor-editor', { [currentPack]: exportPlacements() });
+  exportOut.textContent = JSON.stringify(patch, null, 2);
+  downloadPatch(patch);
 });
 
 // ---------------------------------------------------------------------------

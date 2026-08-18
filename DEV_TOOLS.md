@@ -79,7 +79,10 @@ el lab se vuelve ilegible para quien entre después.
 
 ### Apply-patch workflow (2026-04-26)
 
-End-to-end loop for `/calibrate` and `/anim-lab` JSON patches —
+End-to-end loop for `/calibrate`, `/anim-lab` and `/decor-editor` JSON
+patches (decor emits since H3 slice 3; its design notes live in the
+pack HEADER comments of `DECOR_LAYOUTS` because the apply replaces each
+pack's array wholesale) —
 designed to remove the manual paste step:
 
   1. Tune in the lab. localStorage holds the working copy so reloads

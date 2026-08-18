@@ -381,3 +381,18 @@ test('hardening: merge against the REAL animation-overrides.ts anchors and round
   assert.match(once, /export function getClipOverrideMeta\(/);
   assert.equal(applyAnimLab(once, patchData), once);
 });
+
+test('decor-editor: wholesale apply against the REAL arena-decor-layouts.ts keeps pack headers', () => {
+  const real = readFileSync(path.join(here, '../../src/arena-decor-layouts.ts'), 'utf8');
+  const out = applyDecorEditor(real, { jungle: [
+    { r: 10.8, angle: 0.55, rotY: 0.3, scale: 1, type: 'palmtall_jungle' },
+  ] });
+  // Design-note headers (outside the arrays since H3 slice 3) survive.
+  assert.ok(out.includes('Templo perdido devorado por la selva'));
+  assert.ok(out.includes('Composición (orden de placements'));
+  // Other packs byte-identical.
+  const tundraBlock = real.slice(real.indexOf('frozen_tundra: ['), real.indexOf('desert_dunes:'));
+  assert.ok(out.includes(tundraBlock));
+  // The replaced pack has exactly the new single placement.
+  assert.match(out.replace(/\r\n/g, '\n'), /jungle: \[\n    \{ r: 10\.8, angle: 0\.55, rotY: 0\.3, scale: 1, type: "palmtall_jungle" \},\n  \]/);
+});
