@@ -28,7 +28,10 @@ import {
 } from '../tool-patch-core.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const fixture = (name) => readFileSync(path.join(here, 'fixtures', name), 'utf8');
+// Fixtures are normalized to LF at load time: git autocrlf may check
+// them out as CRLF and the assertions use literal \n. CRLF handling
+// has its own dedicated test with explicitly-built CRLF input.
+const fixture = (name) => readFileSync(path.join(here, 'fixtures', name), 'utf8').replace(/\r\n/g, '\n');
 
 const ROSTER = fixture('roster-extract.ts.txt');
 const OVERRIDES = fixture('animation-overrides-extract.ts.txt');
