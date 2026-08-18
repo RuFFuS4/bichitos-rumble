@@ -92,6 +92,21 @@ el lab se vuelve ilegible para quien entre después.
 >
 > New internal tools should consume this module from day one.
 
+### Cabina de tuning (afilado slice B)
+
+- **Hotkeys de tiempo** (match lab, fuera de inputs): `F7`/`.` step de
+  un tick (implica pausa — revisar squash/hit-stop frame a frame),
+  `F8` pausa/reanuda, `F9` slow-mo 0.3x toggle, `F10` restart con el
+  mismo seed+lineup. Botón `Step ⏭` en Playback para lo mismo.
+- **Game feel (FEEL)** — sección en Tuning con sliders auto-generados
+  de TODAS las hojas numéricas de `FEEL` (gamefeel.ts, 2 niveles).
+  Mutan el objeto en vivo (cada consumidor lo lee por frame — efecto
+  inmediato sin reload), persisten divergencias en `match-lab:feel`, y
+  exportan como **`feel-patch`** (4º tool type del pipeline): dot-paths
+  `seccion.clave` → número. El apply reescribe SOLO el token numérico
+  en src/gamefeel.ts — los comentarios de tuning sobreviven — y nunca
+  crea claves. Reset FEEL vuelve al baseline autoral.
+
 ### Apply-patch workflow (2026-04-26, one-click desde H3 slice 4)
 
 End-to-end loop for `/calibrate`, `/anim-lab` and `/decor-editor` JSON

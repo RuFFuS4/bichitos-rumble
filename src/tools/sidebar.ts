@@ -23,7 +23,17 @@ import { getPlayableNames } from '../roster';
 import { ARENA_PACK_IDS } from '../arena-decorations';
 import { deriveAnimationPersonality } from '../critter-animation';
 import { clearAllHeldInputs } from '../input';
-import { toolStorageKey, loadFromStorage, saveToStorage } from './tool-storage';
+import {
+  toolStorageKey,
+  loadFromStorage,
+  saveToStorage,
+  clearStorage,
+  makeToolPatch,
+  copyPatchToClipboard,
+  type FeelPatch,
+} from './tool-storage';
+import { FEEL } from '../gamefeel';
+import { applyPatchToSource } from './apply-ui';
 import type { DevApi, BotBehaviourTag, GameplayEvent } from './dev-api';
 
 const NONE = '(none)';
@@ -810,7 +820,44 @@ export function mountLabSidebar(devApi: DevApi): void {
     speedVal.textContent = '1.00';
     persistSetup();
   });
+  button(actionBtns, 'Step ⏭', () => {
+    // Frame-by-frame review of squash / hit-stop / knockback. Stepping
+    // implies pause; the speed UI must reflect the forced 0.
+    devApi.requestStep();
+    speedSlider.value = '0';
+    speedVal.textContent = '0.00';
+  });
   button(actionBtns, 'End Match', () => devApi.endMatch());
+
+  // ---- Time-control hotkeys (afilado slice B) ---------------------------
+  // The whole point of slow-mo is freezing THIS moment - reaching for the
+  // mouse loses it. Guarded against typing contexts; F-keys avoid WASD/JKL.
+  //   F7 / .  step one tick   F8 pause/resume   F9 slow-mo 0.3x toggle
+  //   F10     restart with the same seed + lineup
+  function setSpeedViaHotkey(v: number): void {
+    devApi.setSpeed(v);
+    speedSlider.value = String(v);
+    speedVal.textContent = v.toFixed(2);
+    persistSetup();
+  }
+  window.addEventListener('keydown', (ev) => {
+    const t = ev.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+    if (ev.key === 'F7' || ev.key === '.') {
+      devApi.requestStep();
+      speedSlider.value = '0';
+      speedVal.textContent = '0.00';
+    } else if (ev.key === 'F8') {
+      setSpeedViaHotkey(devApi.getSpeed() === 0 ? 1 : 0);
+    } else if (ev.key === 'F9') {
+      setSpeedViaHotkey(devApi.getSpeed() === 0.3 ? 1 : 0.3);
+    } else if (ev.key === 'F10') {
+      startMatch(/*reuseSeed*/ true);
+    } else {
+      return;
+    }
+    ev.preventDefault();
+  });
 
   // =======================================================================
   // GROUP: OBSERVE --------------------------------------------------------
@@ -927,6 +974,166 @@ export function mountLabSidebar(devApi: DevApi): void {
   // matches to hit every condition. Operates directly on localStorage
   // via DevApi; any action that rewrites the stats blob triggers a
   // page reload so in-memory state stays coherent.
+  // ---- Game feel (FEEL) - live tuner + feel-patch (afilado slice B) -----
+  // Sliders mutate the FEEL object in place; every consumer reads it
+  // call-time per frame, so changes land on the very next frame with no
+  // reload. Divergences vs the authored baseline persist in
+  // localStorage and export as a `feel-patch` (Apply to source rewrites
+  // just the numeric tokens in src/gamefeel.ts - comments survive).
+  const feelSec = section(tuningGroup, 'Game feel (FEEL)', { collapsed: true });
+  const FEEL_STORE_KEY = toolStorageKey('match-lab', 'feel');
+  const FEEL_MUT = FEEL as unknown as Record<string, Record<string, number>>;
+
+  const feelBaseline: Record<string, Record<string, number>> = {};
+  for (const [secName, obj] of Object.entries(FEEL_MUT)) {
+    const leaves: Record<string, number> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      // Nested sub-objects (headbutt.anticipation/...) are skipped: two
+      // levels cover the overwhelming majority of knobs and keep the
+      // feel-patch path format flat. Revisit if a 3-level knob matters.
+      if (typeof v === 'number') leaves[k] = v;
+    }
+    if (Object.keys(leaves).length > 0) feelBaseline[secName] = leaves;
+  }
+
+  const feelChanged = new Map<string, number>();
+
+  function isFeelStore(v: unknown): v is Record<string, number> {
+    return !!v && typeof v === 'object' && !Array.isArray(v)
+      && Object.values(v as Record<string, unknown>).every((x) => typeof x === 'number' && Number.isFinite(x));
+  }
+  const storedFeel = loadFromStorage<Record<string, number>>(FEEL_STORE_KEY, isFeelStore);
+  if (storedFeel) {
+    for (const [path, v] of Object.entries(storedFeel)) {
+      const [sn, k] = path.split('.');
+      if (sn && k && feelBaseline[sn]?.[k] !== undefined) {
+        FEEL_MUT[sn]![k] = v;
+        feelChanged.set(path, v);
+      }
+    }
+  }
+
+  function persistFeel(): void {
+    if (feelChanged.size === 0) clearStorage(FEEL_STORE_KEY);
+    else saveToStorage(FEEL_STORE_KEY, Object.fromEntries(feelChanged));
+  }
+
+  const feelInfo = document.createElement('div');
+  feelInfo.className = 'lab-info';
+  feelSec.appendChild(feelInfo);
+  function refreshFeelInfo(): void {
+    feelInfo.textContent = feelChanged.size === 0
+      ? 'authored gamefeel.ts values'
+      : `⚡ ${feelChanged.size} value${feelChanged.size === 1 ? '' : 's'} diverge from gamefeel.ts`;
+  }
+  refreshFeelInfo();
+
+  const feelRowRefreshers: Array<() => void> = [];
+  for (const [secName, leaves] of Object.entries(feelBaseline)) {
+    const det = document.createElement('details');
+    det.style.cssText = 'margin: 4px 0; padding: 2px 0;';
+    const sum = document.createElement('summary');
+    sum.textContent = secName;
+    sum.style.cssText = 'cursor: pointer; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; user-select: none;';
+    det.appendChild(sum);
+    feelSec.appendChild(det);
+
+    for (const [key, def] of Object.entries(leaves)) {
+      const r = row(det);
+      const label = document.createElement('label');
+      label.textContent = key;
+      label.style.cssText = 'min-width: 118px; font-size: 10px; overflow: hidden; text-overflow: ellipsis;';
+      label.title = `${secName}.${key} - authored: ${def}`;
+      r.appendChild(label);
+
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      // Range heuristic: 0 -> 3x the authored value (negative defaults
+      // get a mirrored range). Zero defaults get 0..1. The number input
+      // has no clamp for out-of-range experiments.
+      const span = def === 0 ? 1 : Math.abs(def) * 3;
+      slider.min = String(def < 0 ? -span : 0);
+      slider.max = String(def < 0 ? 0 : span);
+      slider.step = String(span < 2 ? 0.01 : span < 30 ? 0.1 : 1);
+      slider.style.flex = '1';
+
+      const num = document.createElement('input');
+      num.type = 'number';
+      num.step = slider.step;
+      num.style.cssText = 'width: 58px; text-align: right;';
+
+      const path = `${secName}.${key}`;
+      const applyValue = (v: number, from: 'slider' | 'num'): void => {
+        FEEL_MUT[secName]![key] = v;
+        // Compare at slider resolution so a round-trip back to the
+        // authored value clears the divergence.
+        if (Math.abs(v - def) < Number(slider.step) / 2) {
+          FEEL_MUT[secName]![key] = def;
+          feelChanged.delete(path);
+        } else {
+          feelChanged.set(path, v);
+        }
+        if (from === 'slider') num.value = String(v);
+        else slider.value = String(v);
+        label.style.color = feelChanged.has(path) ? '#ffdc5c' : '';
+        persistFeel();
+        refreshFeelInfo();
+      };
+      slider.addEventListener('input', () => applyValue(parseFloat(slider.value), 'slider'));
+      num.addEventListener('change', () => {
+        const v = parseFloat(num.value);
+        if (Number.isFinite(v)) applyValue(v, 'num');
+      });
+
+      const refresh = (): void => {
+        const cur = FEEL_MUT[secName]![key]!;
+        slider.value = String(cur);
+        num.value = String(cur);
+        label.style.color = feelChanged.has(path) ? '#ffdc5c' : '';
+      };
+      refresh();
+      feelRowRefreshers.push(refresh);
+      if (feelChanged.has(path)) det.open = true;
+
+      r.appendChild(slider);
+      r.appendChild(num);
+    }
+  }
+
+  function buildFeelPatch(): FeelPatch {
+    return makeToolPatch<FeelPatch>('feel-patch', Object.fromEntries(feelChanged));
+  }
+
+  const feelBtns = row(feelSec);
+  button(feelBtns, 'Reset FEEL', () => {
+    for (const path of feelChanged.keys()) {
+      const [sn, k] = path.split('.');
+      if (sn && k && feelBaseline[sn]?.[k] !== undefined) FEEL_MUT[sn]![k] = feelBaseline[sn]![k]!;
+    }
+    feelChanged.clear();
+    persistFeel();
+    feelRowRefreshers.forEach((f) => f());
+    refreshFeelInfo();
+  });
+  button(feelBtns, '📦 Copy patch', async () => {
+    if (feelChanged.size === 0) { feelInfo.textContent = '(nothing diverges - move a slider first)'; return; }
+    await copyPatchToClipboard(buildFeelPatch());
+    feelInfo.textContent = `📦 feel-patch copied (${feelChanged.size} value${feelChanged.size === 1 ? '' : 's'})`;
+  });
+  button(feelBtns, '⚡ Apply to source', async () => {
+    if (feelChanged.size === 0) { feelInfo.textContent = '(nothing diverges - move a slider first)'; return; }
+    const backup = new Map(feelChanged);
+    await applyPatchToSource(buildFeelPatch(), {
+      // The write triggers a Vite full-reload; the tuned values are now
+      // AUTHORED, so the working copy must not resurrect on top of them.
+      onBeforeApply: () => { feelChanged.clear(); clearStorage(FEEL_STORE_KEY); },
+      onApplyFailed: () => {
+        for (const [k, v] of backup) feelChanged.set(k, v);
+        persistFeel();
+      },
+    });
+  }, 'primary');
+
   const badgesSec = section(tuningGroup, 'Badges', { collapsed: true });
   const badgesInfo = document.createElement('div');
   badgesInfo.className = 'lab-info';

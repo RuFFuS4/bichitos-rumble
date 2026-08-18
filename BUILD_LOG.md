@@ -1,5 +1,26 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — Afilado slice B: la cabina de tuning
+
+El corazón de la fase. Dos piezas que se complementan:
+
+- **Control de tiempo**: `F7`/`.` step de UN tick (DevApi.requestStep →
+  el loop del lab consume el dt pendiente por un frame; implica pausa),
+  `F8` pausa, `F9` slow-mo 0.3x, `F10` restart mismo seed. Congelar
+  ESTE impacto y avanzarlo frame a frame por fin es un gesto.
+- **FEEL tuner en vivo + `feel-patch`**: sección auto-generada en
+  Tuning con 66 sliders (todas las hojas numéricas de FEEL — nada que
+  mantener a mano: claves nuevas aparecen solas). Mutan FEEL en
+  runtime (efecto al siguiente frame), persisten en `match-lab:feel`,
+  y salen por el pipeline como 4º tool type: dot-paths → número, el
+  mutador reescribe SOLO el token numérico (comentarios de tuning
+  intactos, nunca crea claves; 42 tests). El bucle completo: congelas
+  un golpe con F7, mueves hit-stop/shake viéndolo, y Apply to source
+  con diff en 2 clicks. El pipeline de H3 pagando dividendos.
+
+E2e: 66 sliders, mutación→storage→endpoint con el diff exacto
+(comentario preservado), hotkeys, restauración tras reload, 0 errores.
+
 ## 2026-08-19 — Afilado slice A: 17 quick-wins de una tacada
 
 Primer slice de la fase de afilado (plan en docs/AFILADO_PLAN.md;

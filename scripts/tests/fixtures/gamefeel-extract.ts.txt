@@ -1,0 +1,26 @@
+// Fixture — realistic extract of src/gamefeel.ts.
+import type { Critter } from './critter';
+
+export const FEEL = {
+  // --- Movement ---
+  movement: {
+    frictionHalfLife: 0.08,   // seconds for velocity to halve
+    maxSpeed: 20,             // raised to let Rojo actually feel fast
+  },
+
+  // --- Collision ---
+  collision: {
+    normalPushForce: 3.0,     // casual bumps are gentle nudges
+    stunnedVulnerability: 4,  // knockback multiplier while stunTimer > 0
+  },
+
+  // --- Camera Shake ---
+  shake: {
+    headbutt: 0.22,           // amplitude when a headbutt connects
+    decay: 0.18,              // how fast the shake fades (seconds)
+  },
+} as const;
+
+export function triggerHitStop(duration: number): void {
+  // helper below the record — must survive applies byte-identical
+}

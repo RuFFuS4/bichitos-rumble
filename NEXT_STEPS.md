@@ -79,9 +79,10 @@ Orden acordado:
    dots + atajos en studio; CLI acepta el nombre de downloadPatch;
    DEV_TOOLS.md al día). Implementado por 5 agentes en paralelo sobre
    ficheros disjuntos, verificado con tsc + 36 tests + e2e.
-2. [ ] **Slice B — cabina de tuning** (picks 2+1): hotkeys
-   pause/slow-mo/step-frame + FEEL tuner en vivo + tool type
-   `feel-patch` en el pipeline.
+2. [x] **Slice B — cabina de tuning**: F7 step-frame / F8 pausa / F9
+   slow-mo / F10 mismo seed + FEEL tuner de 66 sliders auto-generados
+   mutando en vivo + `feel-patch` (4º tool type, 42 tests) con Apply
+   to source. Verificado e2e.
 3. [ ] **Slice C — tuner de habilidades + hitbox** (picks 3+4):
    sliders de AbilityDef del critter vivo + overlay de physicsRadius
    en calibrate con campo en CalibratePatch.

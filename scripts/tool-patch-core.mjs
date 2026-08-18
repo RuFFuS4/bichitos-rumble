@@ -43,12 +43,14 @@ export const SUPPORTED_VERSIONS = {
   'calibrate':    [1],
   'anim-lab':     [1, 2],
   'decor-editor': [1],
+  'feel-patch':   [1],
 };
 
 export const targetByTool = {
   'calibrate':     'src/roster.ts',
   'anim-lab':      'src/animation-overrides.ts',
   'decor-editor':  'src/arena-decor-layouts.ts',
+  'feel-patch':    'src/gamefeel.ts',
 };
 
 /** Keys written as bare TS identifiers must actually be identifiers —
@@ -131,6 +133,16 @@ export function validateToolPatch(patch) {
         }
       }
     }
+  } else if (tool === 'feel-patch') {
+    const PATH_RE = /^[A-Za-z_$][A-Za-z0-9_$]*\.[A-Za-z_$][A-Za-z0-9_$]*$/;
+    for (const [path, v] of Object.entries(data)) {
+      if (!PATH_RE.test(path)) {
+        errors.push(`feel-patch: key "${path}" is not a two-segment dot-path (section.key)`);
+      }
+      if (!isFinite_(v)) {
+        errors.push(`feel-patch: "${path}" is not a finite number`);
+      }
+    }
   } else if (tool === 'decor-editor') {
     for (const [pack, placements] of Object.entries(data)) {
       checkIdent('decor-editor: pack id', pack);
@@ -162,7 +174,72 @@ export function applyPatch(source, patch) {
   if (patch.tool === 'calibrate')    return applyCalibrate(source, patch.data);
   if (patch.tool === 'anim-lab')     return applyAnimLab(source, patch.data);
   if (patch.tool === 'decor-editor') return applyDecorEditor(source, patch.data);
+  if (patch.tool === 'feel-patch')   return applyFeelPatch(source, patch.data);
   throw new Error(`unknown tool: ${patch.tool}`);
+}
+
+// ===========================================================================
+// feel-patch — numeric token rewrite inside the FEEL record
+// ===========================================================================
+
+/**
+ * Rewrite numeric leaves of the `FEEL` record in src/gamefeel.ts.
+ *
+ * Each data key is a two-segment dot-path ("shake.headbutt"). The
+ * mutator locates the section block, then the key's line, and replaces
+ * ONLY the numeric token — the trailing comma and the tuning comment
+ * (the file's institutional memory) survive byte-identical. It never
+ * creates sections or keys: a path missing from source is a hard error
+ * (the tuner only offers leaves that exist).
+ */
+export function applyFeelPatch(source, data) {
+  const anchor = 'export const FEEL';
+  const start = source.indexOf(anchor);
+  if (start < 0) throw new Error('feel-patch: FEEL export not found');
+  const srcMask = codeMask(source);
+  let openBrace = -1;
+  for (let i = start; i < source.length; i++) {
+    if (srcMask[i] === M_CODE && source[i] === '{') { openBrace = i; break; }
+  }
+  if (openBrace < 0) throw new Error('feel-patch: FEEL open brace not found');
+  const close = matchBraceMasked(source, openBrace, srcMask);
+  if (close < 0) throw new Error('feel-patch: FEEL close brace not found');
+
+  let record = source.slice(openBrace, close + 1);
+
+  for (const path of Object.keys(data).sort()) {
+    const [sec, key] = path.split('.');
+    const mask = codeMask(record);
+    const headRe = new RegExp(`(^|\\n)([ \\t]+)${escapeRegex(sec)}:\\s*\\{`, 'g');
+    const heads = [...record.matchAll(headRe)].filter((m) => {
+      const keyIdx = m.index + m[1].length + m[2].length;
+      return mask[keyIdx] === M_CODE;
+    });
+    if (heads.length === 0) throw new Error(`feel-patch: section '${sec}' not found in FEEL`);
+    if (heads.length > 1) throw new Error(`feel-patch: section '${sec}' matches ${heads.length} blocks — refusing to guess`);
+
+    const blockOpen = heads[0].index + heads[0][0].length - 1;
+    const blockClose = matchBraceMasked(record, blockOpen, mask);
+    if (blockClose < 0) throw new Error(`feel-patch: unbalanced braces in section '${sec}'`);
+    const blockText = record.slice(blockOpen + 1, blockClose);
+
+    const lineRe = new RegExp(`(^|\\n)([ \\t]*)${escapeRegex(key)}:\\s*(-?\\d+(?:\\.\\d+)?)`, 'g');
+    const blockMask = codeMask(blockText);
+    const lines = [...blockText.matchAll(lineRe)].filter((m) => {
+      const keyIdx = m.index + m[1].length + m[2].length;
+      return blockMask[keyIdx] === M_CODE;
+    });
+    if (lines.length === 0) throw new Error(`feel-patch: '${path}' not found (or its value is not a plain number)`);
+    if (lines.length > 1) throw new Error(`feel-patch: '${path}' matches ${lines.length} lines — refusing to guess`);
+
+    const lm = lines[0];
+    const numStart = lm.index + lm[0].length - lm[3].length;
+    const numEnd = lm.index + lm[0].length;
+    const merged = blockText.slice(0, numStart) + formatNumber(data[path]) + blockText.slice(numEnd);
+    record = record.slice(0, blockOpen + 1) + merged + record.slice(blockClose);
+  }
+
+  return source.slice(0, openBrace) + record + source.slice(close + 1);
 }
 
 // ===========================================================================

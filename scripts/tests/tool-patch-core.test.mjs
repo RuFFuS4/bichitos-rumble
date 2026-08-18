@@ -396,3 +396,54 @@ test('decor-editor: wholesale apply against the REAL arena-decor-layouts.ts keep
   // The replaced pack has exactly the new single placement.
   assert.match(out.replace(/\r\n/g, '\n'), /jungle: \[\n    \{ r: 10\.8, angle: 0\.55, rotY: 0\.3, scale: 1, type: "palmtall_jungle" \},\n  \]/);
 });
+
+// ===========================================================================
+// feel-patch — numeric token rewrite (afilado slice B)
+// ===========================================================================
+
+import { applyFeelPatch } from '../tool-patch-core.mjs';
+
+const GAMEFEEL = fixture('gamefeel-extract.ts.txt');
+
+test('feel-patch: replaces the numeric token, comment and comma survive', () => {
+  const out = applyFeelPatch(GAMEFEEL, { 'shake.headbutt': 0.35 });
+  assert.match(out, /headbutt: 0\.35,           \/\/ amplitude when a headbutt connects/);
+  // Everything else byte-identical
+  assert.match(out, /decay: 0\.18,              \/\/ how fast the shake fades/);
+  assert.match(out, /frictionHalfLife: 0\.08,/);
+  assert.ok(out.includes('export function triggerHitStop'));
+});
+
+test('feel-patch: integers and multiple paths in one apply', () => {
+  const out = applyFeelPatch(GAMEFEEL, { 'movement.maxSpeed': 24, 'collision.stunnedVulnerability': 3.5 });
+  assert.match(out, /maxSpeed: 24,             \/\/ raised/);
+  assert.match(out, /stunnedVulnerability: 3\.5,  \/\/ knockback/);
+});
+
+test('feel-patch: idempotent on second apply', () => {
+  const data = { 'shake.headbutt': 0.35, 'movement.maxSpeed': 24 };
+  const once = applyFeelPatch(GAMEFEEL, data);
+  assert.equal(applyFeelPatch(once, data), once);
+});
+
+test('feel-patch: unknown section or key throws, never creates', () => {
+  assert.throws(() => applyFeelPatch(GAMEFEEL, { 'nope.headbutt': 1 }), /section 'nope' not found/);
+  assert.throws(() => applyFeelPatch(GAMEFEEL, { 'shake.nope': 1 }), /'shake\.nope' not found/);
+});
+
+test('feel-patch: validate accepts dot-paths and rejects junk', () => {
+  assert.deepEqual(validateToolPatch({ tool: 'feel-patch', version: 1, data: { 'shake.headbutt': 0.3 } }), []);
+  assert.ok(validateToolPatch({ tool: 'feel-patch', version: 1, data: { 'shake': 0.3 } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'feel-patch', version: 1, data: { 'a.b.c': 0.3 } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'feel-patch', version: 1, data: { 'shake.headbutt': 'x' } }).length > 0);
+});
+
+test('feel-patch: merge against the REAL gamefeel.ts anchors and round-trips', () => {
+  const real = readFileSync(path.join(here, '../../src/gamefeel.ts'), 'utf8');
+  const out = applyFeelPatch(real, { 'shake.headbutt': 0.25, 'hitStop.groundPound': 0.12 });
+  const lf = out.replace(/\r\n/g, '\n');
+  assert.match(lf, /headbutt: 0\.25,/);
+  assert.match(lf, /groundPound: 0\.12,\s+\/\/ heavy slam/);
+  assert.ok(out.includes('export function updateCameraShake'));
+  assert.equal(applyFeelPatch(out, { 'shake.headbutt': 0.25, 'hitStop.groundPound': 0.12 }), out);
+});

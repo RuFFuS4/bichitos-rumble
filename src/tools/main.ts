@@ -101,7 +101,10 @@ let lastTime = performance.now();
 function loop(now: number) {
   const raw = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
-  const dt = raw * game.debugSpeedScale;
+  // Step-frame (afilado slice B): a pending step overrides the paused
+  // dt for exactly one frame so systems advance a single fixed tick.
+  const step = devApi.consumeStep();
+  const dt = step > 0 ? step : raw * game.debugSpeedScale;
 
   if (renderer.domElement.width === 0) syncSize(camera, renderer);
 

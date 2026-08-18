@@ -293,6 +293,25 @@ export class DevApi {
     this.logAction('set_speed', { scale });
   }
 
+  // --- Step-frame (afilado slice B) ---------------------------------------
+  // Advance EXACTLY one fixed tick while paused so squash / hit-stop /
+  // knockback can be reviewed frame by frame. The lab loop consumes the
+  // pending step and feeds it as that frame's dt; requesting a step
+  // implies pausing (otherwise the step would drown in real-time dt).
+  private pendingStepDt = 0;
+
+  requestStep(dt: number = 1 / 60): void {
+    if (this.game.debugSpeedScale !== 0) this.setSpeed(0);
+    this.pendingStepDt = dt;
+  }
+
+  /** Called once per rAF by the lab loop. Returns the step dt once, then 0. */
+  consumeStep(): number {
+    const dt = this.pendingStepDt;
+    this.pendingStepDt = 0;
+    return dt;
+  }
+
   getSpeed(): number {
     return this.game.debugSpeedScale;
   }

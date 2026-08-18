@@ -155,7 +155,7 @@ export function storageDivergesFromCode(key: string, codeRef: unknown): boolean 
 // in the lab are emitted. The apply-script merges in-place — entries
 // not in `data` are left untouched in the source file.
 
-export type ToolName = 'calibrate' | 'anim-lab' | 'decor-editor';
+export type ToolName = 'calibrate' | 'anim-lab' | 'decor-editor' | 'feel-patch';
 
 export interface ToolPatchBase {
   tool: ToolName;
@@ -246,7 +246,24 @@ export interface DecorEditorPatch extends ToolPatchBase {
   }>>;
 }
 
-export type ToolPatch = CalibratePatch | AnimLabPatch | DecorEditorPatch;
+/**
+ * `feel-patch`: game-feel value tweaks from the match lab's FEEL tuner
+ * (afilado slice B).
+ *
+ * Maps to the `FEEL` record in src/gamefeel.ts. Keys are two-segment
+ * dot-paths ("shake.headbutt"); values are the new numbers. Sparse:
+ * only leaves the tuner changed vs the authored baseline are emitted.
+ * The apply-script rewrites the numeric token in place — trailing
+ * tuning comments survive — and NEVER creates new keys (the tuner only
+ * offers leaves that already exist in source).
+ */
+export interface FeelPatch extends ToolPatchBase {
+  tool: 'feel-patch';
+  version: 1;
+  data: Record<string, number>;
+}
+
+export type ToolPatch = CalibratePatch | AnimLabPatch | DecorEditorPatch | FeelPatch;
 
 /** Build a fresh ToolPatch envelope with `generated` set to now. The
  *  caller fills `data`. `version` defaults to 1; pass 2 for anim-lab
