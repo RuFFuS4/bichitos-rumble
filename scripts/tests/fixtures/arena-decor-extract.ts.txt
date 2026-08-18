@@ -1,0 +1,13 @@
+// Fixture — realistic extract of src/arena-decor-layouts.ts.
+export const DECOR_LAYOUTS: Record<ArenaPackId, DecorPlacement[]> = {
+  jungle: [
+    // Cluster A — "Palm overgrowth" (NE 1–2h, hero focal, 5 props)
+    { r: 10.80, angle: 0.55, rotY:  0.30, scale: 1.00, type: 'palmtall_jungle' },
+    { r: 11.10, angle: 0.70, rotY:  1.40, scale: 0.95, type: 'palm_jungle'     },
+    { r: 12.40, angle: 0.35, rotY:  2.10, scale: 0.70, type: 'rock_jungle'     },
+  ],
+  desert: [
+    { r: 9.50, angle: 2.10, rotY: 0.00, scale: 1.10, type: 'cactus_desert' },
+    { r: 11.80, angle: 3.90, rotY: 1.05, scale: 0.85, type: 'skull_desert' },
+  ],
+};

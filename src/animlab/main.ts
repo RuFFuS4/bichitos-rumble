@@ -833,6 +833,15 @@ function detectAnimLabVersion(data: AnimLabPatch['data']): 1 | 2 {
   return 1;
 }
 
+/** Number formatting shared with the apply-script's `formatNumber`
+ *  (scripts/tool-patch-core.mjs) so the TS snippet and the JSON-patch
+ *  apply produce byte-identical source. Kept in sync by hand. */
+function formatNumberForTs(n: number): string {
+  if (Number.isInteger(n)) return String(n);
+  const s = n.toFixed(3);
+  return s.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
 /** Render a single value for the TS snippet — same logic as the
  *  apply-script's `formatAnimLabValue`. Kept in sync by hand. */
 function formatAnimLabValueForTs(v: AnimLabStateValue): string {
@@ -841,7 +850,7 @@ function formatAnimLabValueForTs(v: AnimLabStateValue): string {
   const hasLoop = typeof v.loop === 'boolean';
   if (!hasSpeed && !hasLoop) return JSON.stringify(v.clip);
   const parts = [`clip: ${JSON.stringify(v.clip)}`];
-  if (hasSpeed) parts.push(`speed: ${v.speed}`);
+  if (hasSpeed) parts.push(`speed: ${formatNumberForTs(v.speed!)}`);
   if (hasLoop) parts.push(`loop: ${v.loop}`);
   return `{ ${parts.join(', ')} }`;
 }
@@ -853,11 +862,18 @@ btnExport.addEventListener('click', () => {
     return;
   }
   const lines: string[] = [];
-  lines.push('// Paste inside ANIMATION_OVERRIDES in src/animation-overrides.ts');
+  // The snippet REPLACES each critter's whole block when pasted, so it
+  // must carry the authored baseline merged with the session edits —
+  // a session-only snippet would silently drop the authored states the
+  // session didn't touch (same data-loss the JSON merge-apply fixes).
+  lines.push('// Replace each whole `<id>: { ... }` block inside ANIMATION_OVERRIDES');
+  lines.push('// in src/animation-overrides.ts (or use the JSON patch, which merges).');
   for (const id of Object.keys(data)) {
+    const authored = (AUTHORED_BASELINE[id] ?? {}) as Record<string, AnimLabStateValue>;
+    const merged: Record<string, AnimLabStateValue> = { ...authored, ...data[id]! };
     lines.push(`  ${id}: {`);
-    for (const k of Object.keys(data[id]!)) {
-      lines.push(`    ${k}: ${formatAnimLabValueForTs(data[id]![k]!)},`);
+    for (const k of Object.keys(merged)) {
+      lines.push(`    ${k}: ${formatAnimLabValueForTs(merged[k]!)},`);
     }
     lines.push(`  },`);
   }

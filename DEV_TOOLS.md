@@ -66,8 +66,8 @@ el lab se vuelve ilegible para quien entre después.
 >   - localStorage helpers — `loadFromStorage / saveToStorage /
 >     clearStorage / hasStorageKey / storageDivergesFromCode` + key
 >     builder. Consumed by `/decor-editor` (per-pack) and `/calibrate`
->     (per-critter). `/anim-lab` still uses an inline helper (queue
->     deferred — works as-is).
+>     (per-critter). `/anim-lab` does NOT persist its session today —
+>     F5 loses everything (fix queued as H3 slice 2).
 >   - **ToolPatch envelope** + helpers — `makeToolPatch /
 >     copyPatchToClipboard / downloadPatch` and the `CalibratePatch /
 >     AnimLabPatch / DecorEditorPatch` discriminated union. Every lab
@@ -92,16 +92,19 @@ designed to remove the manual paste step:
      npm run apply-tool-patch -- --dry-run # preview the diff first
      npm run apply-tool-patch -- --patch=path/to.json  # alt input
      ```
-  5. The script (`scripts/apply-tool-patch.mjs`) routes by `tool`
-     field:
+  5. The script (`scripts/apply-tool-patch.mjs`, thin CLI over
+     `scripts/tool-patch-core.mjs` — tested by `npm run test:patch`)
+     routes by `tool` field:
        - `calibrate`     → rewrites per-critter `scale / pivotY /
          rotation` in `src/roster.ts`. Sparse: only critters in the
-         patch are touched.
-       - `anim-lab`      → rewrites the entire `ANIMATION_OVERRIDES`
-         record in `src/animation-overrides.ts`. Critters absent
-         from the patch are dropped (not merged) — comments inside
-         the record are also wiped, so re-add doc blocks manually
-         after running the script if they matter.
+         patch are touched. Field-like text inside comments is never
+         rewritten.
+       - `anim-lab`      → sparse MERGE into `ANIMATION_OVERRIDES` in
+         `src/animation-overrides.ts` (H3 slice 1, 2026-08-19).
+         Critters absent from the patch keep their blocks untouched;
+         states absent from a patched critter survive; comments
+         survive. The merge never DELETES an override — to remove
+         one, edit the source by hand.
        - `decor-editor`  → rewrites the per-pack body in
          `src/arena-decor-layouts.ts`. Sparse: packs absent from the
          patch are left untouched.

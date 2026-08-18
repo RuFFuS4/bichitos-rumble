@@ -1,5 +1,37 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — H3 slice 1: patch-core con merge no destructivo
+
+Arranca H3 (Bichitos Studio) con el mapa del tooling hecho por workflow
+(9 lectores + síntesis; plan de 8 slices en la sesión). El slice 1 mata
+el bug más serio del pipeline: **el apply de anim-lab borraba critters**
+(emisor sparse + applier que reescribía `ANIMATION_OVERRIDES` entero,
+con un comentario declarándolo "deliberate" sobre premisa falsa).
+
+- `scripts/tool-patch-core.mjs` NUEVO: mutadores puros (string→string)
+  extraídos del CLI + `validateToolPatch` + diff Myers. Importable por
+  CLI, endpoint del dev-server (slice 4) y tests.
+- **anim-lab = merge textual sparse**: reemplaza estados in-place
+  (comentario trailing intacto), añade estados/bloques, y NUNCA borra.
+  Borrar un override = editar el fuente a mano (tombstones → decisión
+  de Rafa, v3).
+- **Hardening post-review adversarial** (3 lentes → 13 confirmados):
+  máscara tri-estado comentario/código/string para todo el escaneo de
+  llaves y anclas (un `}` en un comentario ya no corrompe nada),
+  validación de identificadores (un id con typo ya no crea bloques
+  duplicados que pisan overrides en runtime), coma automática al
+  apendar tras línea sin coma, EOLs CRLF respetados, estados aparcados
+  en `/* */` tratados como ausentes, y diff Myers para que el review
+  de un merge sparse muestre solo las líneas tocadas.
+- Emisor alineado: el snippet TS de anim-lab ahora emite el bloque
+  COMPLETO (baseline autoral + sesión) para que pegarlo no pierda
+  estados, y formatea `speed` byte-idéntico al applier.
+- **35 tests golden+regresión** (`npm run test:patch`, en `check`),
+  incluido uno contra el `animation-overrides.ts` real (CRLF incluido).
+- Docs mentirosos corregidos: tool-storage decía que solo decor-editor
+  lo usa, que speed/loop son metadata muerta; DEV_TOOLS documentaba el
+  borrado como feature.
+
 ## 2026-08-19 — H2 CERRADO (`v1.4-portal-ready`): itch.io PUBLICADO
 
 **Bichitos Rumble está publicado en itch.io** con la primera
