@@ -56,6 +56,7 @@ import {
   downloadPatch,
   type DecorEditorPatch,
 } from '../tools/tool-storage';
+import { applyPatchToSource } from '../tools/apply-ui';
 
 // ---------------------------------------------------------------------------
 // Scene + ortho top-down camera
@@ -186,6 +187,7 @@ const btnPreviewIngame = qBtn('btn-preview-ingame');
 const btnExport     = qBtn('btn-export');
 const btnExportJson = qBtn('btn-export-json');
 const btnDownloadJson = qBtn('btn-download-json');
+const btnApplySource = qBtn('btn-apply-source');
 const exportOut     = qPre('export-out');
 const placementsList= qDiv('placements-list');
 const placementCount= qSpan('placement-count');
@@ -786,6 +788,19 @@ btnDownloadJson.addEventListener('click', () => {
   const patch = makeToolPatch<DecorEditorPatch>('decor-editor', { [currentPack]: exportPlacements() });
   exportOut.textContent = JSON.stringify(patch, null, 2);
   downloadPatch(patch);
+});
+
+btnApplySource.addEventListener('click', async () => {
+  const patch = makeToolPatch<DecorEditorPatch>('decor-editor', { [currentPack]: exportPlacements() });
+  const appliedPack = currentPack;
+  const backup = placements.map((p) => ({ ...p }));
+  await applyPatchToSource(patch, {
+    // The write triggers a Vite full-reload — clear the working copy
+    // FIRST so the reloaded page boots from the freshly-authored code
+    // instead of resurrecting the (now redundant) local copy.
+    onBeforeApply: () => { clearStorage(toolStorageKey(STORAGE_TOOL, appliedPack)); },
+    onApplyFailed: () => { saveToStorage(toolStorageKey(STORAGE_TOOL, appliedPack), backup); },
+  });
 });
 
 // ---------------------------------------------------------------------------

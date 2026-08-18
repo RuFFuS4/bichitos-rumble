@@ -1,5 +1,33 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — H3 slice 4: "Apply to source" — el bucle de 5-6 pasos muere en 2 clicks
+
+El corazón del hito. `scripts/vite-tool-patch-plugin.mjs` monta dos
+endpoints POST **solo en el dev server** (`apply: 'serve'` — el plugin
+no existe estructuralmente en builds): `/__tool-patch/preview`
+(validate + mutador + diff Myers como JSON) y `/__tool-patch/apply`
+(ídem + write al working tree; commitear sigue siendo acto humano).
+Los targets salen de `targetByTool` — el cliente no elige rutas.
+
+`src/tools/apply-ui.ts` (compartido por los 3 labs): botón "⚡ Apply
+to source" → fetch preview → **modal bloqueante con el diff** (nada se
+escribe sin confirmar) → apply → Vite full-reload y el lab rearranca
+leyendo del código recién autorado.
+
+Detalle fino de secuenciación: el write dispara el full-reload de Vite,
+que compite con la respuesta HTTP — la limpieza de la working copy
+(localStorage) corre ANTES del apply, con backup en memoria como ruta
+de restauración si el apply falla. Por lab: anim-lab borra los
+rowStates de los critters aplicados (+persistSession), calibrate hace
+clearLocalFor por critter, decor limpia la clave del pack.
+
+Verificado e2e con Playwright contra el dev server real: editar
+trunk.idle → modal muestra `+ idle: "Idle"` → confirmar → fichero
+escrito, reload automático, storage a null, la UI muestra el valor
+DESDE el código. Restaurado con git checkout tras el test. El gate de
+H3 ("cambio aplicado a fuente desde el navegador en <1 min con diff
+visible") queda cumplido para las 3 herramientas.
+
 ## 2026-08-19 — H3 slice 3: decor-editor emite patches + preview sin mentiras
 
 - **decor-editor emite `DecorEditorPatch`**: botones "Copy JSON patch"

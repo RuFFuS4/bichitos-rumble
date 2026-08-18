@@ -39,6 +39,7 @@ import {
   hasStorageKey,
   type CalibratePatch,
 } from '../tools/tool-storage';
+import { applyPatchToSource } from '../tools/apply-ui';
 
 // ---------------------------------------------------------------------------
 // localStorage working copy
@@ -390,6 +391,7 @@ const btnRefit = document.getElementById('btn-refit')!;
 const btnExportTS = document.getElementById('btn-export-ts') as HTMLButtonElement;
 const btnExportJSON = document.getElementById('btn-export-json') as HTMLButtonElement;
 const btnDownloadJSON = document.getElementById('btn-download-json') as HTMLButtonElement;
+const btnApplySource = document.getElementById('btn-apply-source') as HTMLButtonElement;
 const exportOut = document.getElementById('export-out')!;
 
 // Optional UI added 2026-04-26: animation pause + camera presets. All
@@ -784,6 +786,26 @@ btnDownloadJSON.addEventListener('click', () => {
   const patch = buildJsonPatch();
   exportOut.textContent = JSON.stringify(patch, null, 2);
   downloadPatch(patch);
+});
+
+btnApplySource.addEventListener('click', async () => {
+  const patch = buildJsonPatch();
+  const appliedIds = Object.keys(patch.data);
+  if (appliedIds.length === 0) {
+    exportOut.textContent = '(nothing diverges from roster.ts — nothing to apply)';
+    return;
+  }
+  const appliedSlots = slots.filter((s) => appliedIds.includes(s.entry.id));
+  await applyPatchToSource(patch, {
+    // The write to roster.ts triggers a Vite full-reload: clear the
+    // applied critters' working copies FIRST so the reloaded page boots
+    // from the freshly-authored values (which now equal them).
+    onBeforeApply: () => { for (const id of appliedIds) clearLocalFor(id); },
+    onApplyFailed: () => {
+      for (const slot of appliedSlots) persistSlot(slot);
+      refreshLocalIndicator();
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------

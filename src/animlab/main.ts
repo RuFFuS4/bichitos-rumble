@@ -72,6 +72,7 @@ import {
   type AnimLabClipMeta,
   type AnimLabStateValue,
 } from '../tools/tool-storage';
+import { applyPatchToSource } from '../tools/apply-ui';
 
 const AUTHORED_BASELINE: Record<string, ClipOverrideMap> = JSON.parse(
   JSON.stringify(ANIMATION_OVERRIDES),
@@ -264,6 +265,7 @@ const btnPreviewAll = document.getElementById('btn-preview-all') as HTMLButtonEl
 const btnExport = document.getElementById('btn-export') as HTMLButtonElement;
 const btnExportJson = document.getElementById('btn-export-json') as HTMLButtonElement;
 const btnDownloadJson = document.getElementById('btn-download-json') as HTMLButtonElement;
+const btnApplySource = document.getElementById('btn-apply-source') as HTMLButtonElement;
 const exportOut = document.getElementById('export-out')!;
 
 // ---------------------------------------------------------------------------
@@ -976,6 +978,37 @@ btnDownloadJson.addEventListener('click', () => {
   const patch = makeToolPatch<AnimLabPatch>('anim-lab', data, version);
   exportOut.textContent = JSON.stringify(patch, null, 2);
   downloadPatch(patch);
+});
+
+btnApplySource.addEventListener('click', async () => {
+  const data = buildAnimLabPatchData();
+  if (Object.keys(data).length === 0) {
+    exportOut.textContent = '(no overrides to apply — tune something first)';
+    return;
+  }
+  const patch = makeToolPatch<AnimLabPatch>('anim-lab', data, detectAnimLabVersion(data));
+  // The write to animation-overrides.ts triggers a Vite full-reload:
+  // drop the applied critters' working copies FIRST (their values now
+  // live in code), keeping an in-memory backup as the failure path.
+  const appliedIds = Object.keys(data);
+  const backup: Record<string, Map<SkeletalState, RowState>> = {};
+  await applyPatchToSource(patch, {
+    onBeforeApply: () => {
+      for (const id of appliedIds) {
+        if (rowStates[id]) backup[id] = rowStates[id]!;
+        delete rowStates[id];
+        delete sessionOverrides[id];
+      }
+      persistSession();
+    },
+    onApplyFailed: () => {
+      for (const id of appliedIds) {
+        if (backup[id]) rowStates[id] = backup[id]!;
+        syncToSession(id);
+      }
+      persistSession();
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------
