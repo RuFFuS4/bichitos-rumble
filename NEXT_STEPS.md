@@ -42,6 +42,13 @@ estudio** con el bucle intención→cambio-aplicado en 1-2 pasos
 aplica a fuente desde el navegador en < 1 min con diff visible · cero
 pérdida de datos al recargar · mesh2motion fuera del repo.
 
+**Decisiones de Rafa (2026-08-19)**: borrar overrides = edición manual
+del fuente (sin tombstones por ahora) · comentarios de DECOR_LAYOUTS →
+docstrings por pack antes de activar el apply JSON (slice 3) ·
+mesh2motion: evict solo working tree, SIN reescritura de historia ·
+match lab: SE EMBEBE como tab del studio (slices 6-7, aunque cueste
+más — unificación completa).
+
 ---
 
 ## Flecos heredados (no bloquean H3)

@@ -1,5 +1,29 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — H3 slice 2: anim-lab persiste la sesión + divergencia real en calibrate
+
+- **anim-lab**: la sesión entera (row states de todos los critters) se
+  autosalva en `anim-lab:overrides` vía tool-storage en el choke point
+  `updateRowState` y se restaura en boot — F5 y el full-reload post
+  apply ya no pierden nada. Se persiste `rowStates` (la INTENCIÓN: una
+  fila AUTO con speed sigue siendo AUTO, no se pinnea al clip resuelto)
+  y tras cada `loadCritter` se re-proyecta la sesión con el resolver
+  vivo. Reset limpia también el storage del critter. Apply/Reset
+  desacoplados del DOM (`currentId` en vez de `.roster-card.active`).
+- **calibrate**: el indicador de divergencia compara VALORES con el
+  mismo epsilon 0.001 del export (antes: existencia de clave → falso
+  positivo permanente tras cualquier edición, aunque volvieras al valor
+  exacto). Tres estados: authored / local en sync / diverge. Y "Re-fit
+  all to target" ahora persiste TODOS los slots (antes un reload
+  revertía el refit de los no seleccionados en silencio).
+- Verificación e2e con Playwright headless contra el dev server real:
+  anim-lab (editar → localStorage → F5 → UI restaurada) y calibrate
+  (authored → nudge = diverge → volver al valor = in sync). El lab de
+  calibrate se selecciona por raycast: sweep de clicks en el canvas.
+- Decisiones de Rafa registradas en NEXT_STEPS: sin tombstones (borrar
+  = editar fuente), comentarios de decor a docstrings (slice 3),
+  mesh2motion sin reescritura de historia, match lab COMO TAB (slice 6-7).
+
 ## 2026-08-19 — H3 slice 1: patch-core con merge no destructivo
 
 Arranca H3 (Bichitos Studio) con el mapa del tooling hecho por workflow

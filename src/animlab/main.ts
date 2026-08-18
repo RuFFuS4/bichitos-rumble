@@ -64,6 +64,10 @@ import {
   makeToolPatch,
   copyPatchToClipboard,
   downloadPatch,
+  toolStorageKey,
+  loadFromStorage,
+  saveToStorage,
+  clearStorage,
   type AnimLabPatch,
   type AnimLabClipMeta,
   type AnimLabStateValue,
@@ -200,6 +204,17 @@ function loadCritter(entry: RosterEntry): void {
   currentlyPlayingState = null;
   currentlyPlayingClip = null;
 
+  // Re-project the session now that the critter's auto-resolver is
+  // live: a restored AUTO row with speed/loop metadata can only
+  // resolve its clip name with a loaded skeletal report. Refresh the
+  // live record afterwards (getClipOverride reads it at play() time).
+  if (rowStates[entryId]) {
+    syncToSession(entryId);
+    const reMerged: ClipOverrideMap = { ...(AUTHORED_BASELINE[entryId] ?? {}), ...(sessionOverrides[entryId] ?? {}) };
+    if (Object.keys(reMerged).length > 0) ANIMATION_OVERRIDES[entryId] = reMerged;
+    else delete ANIMATION_OVERRIDES[entryId];
+  }
+
   refreshAllPanels();
   needsPanelRefresh = true;
 }
@@ -281,12 +296,74 @@ function getRowState(id: string, state: SkeletalState): RowState {
 
 /** Mutate a row's state and rebuild the sessionOverrides projection.
  *  Every UI handler funnels through here — no other surface writes
- *  to `rowStates` directly. */
+ *  to `rowStates` directly. Autosaves the working copy so F5 or a
+ *  post-apply reload doesn't lose the session. */
 function updateRowState(id: string, state: SkeletalState, patch: Partial<RowState>): void {
   const cur = getRowState(id, state);
   const next: RowState = { ...cur, ...patch };
   (rowStates[id] ??= new Map()).set(state, next);
   syncToSession(id);
+  persistSession();
+}
+
+// ---------------------------------------------------------------------------
+// Session persistence — tool-storage working copy
+// ---------------------------------------------------------------------------
+//
+// We persist `rowStates` (not `sessionOverrides`): the row states keep
+// the user's INTENT — an AUTO row with a speed tweak stays AUTO instead
+// of getting pinned to whatever clip the resolver picked when the
+// projection snapshot was taken.
+
+const SESSION_KEY = toolStorageKey('anim-lab', 'overrides');
+
+type PersistedRowStates = Record<string, Record<string, RowState>>;
+
+function isPersistedRowStates(v: unknown): v is PersistedRowStates {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+  for (const states of Object.values(v as Record<string, unknown>)) {
+    if (!states || typeof states !== 'object' || Array.isArray(states)) return false;
+    for (const rs of Object.values(states as Record<string, unknown>)) {
+      const r = rs as Partial<RowState> | null;
+      if (!r || typeof r !== 'object') return false;
+      if (typeof r.clipChoice !== 'string') return false;
+      if (typeof r.speed !== 'number' || !Number.isFinite(r.speed)) return false;
+      if (!(r.loop === null || typeof r.loop === 'boolean')) return false;
+    }
+  }
+  return true;
+}
+
+function persistSession(): void {
+  const blob: PersistedRowStates = {};
+  for (const [id, m] of Object.entries(rowStates)) {
+    if (m.size === 0) continue;
+    blob[id] = Object.fromEntries(m.entries()) as Record<string, RowState>;
+  }
+  if (Object.keys(blob).length === 0) clearStorage(SESSION_KEY);
+  else saveToStorage(SESSION_KEY, blob);
+}
+
+/** Rebuild `rowStates` (+ projections) from localStorage. Runs once at
+ *  boot, before the initial critter load. AUTO rows with metadata get
+ *  their clip re-resolved per critter after each `loadCritter`. */
+function restoreSession(): void {
+  const stored = loadFromStorage<PersistedRowStates>(SESSION_KEY, isPersistedRowStates);
+  if (!stored) return;
+  let restored = 0;
+  for (const [id, states] of Object.entries(stored)) {
+    const m = new Map<SkeletalState, RowState>();
+    for (const [state, rs] of Object.entries(states)) {
+      m.set(state as SkeletalState, { clipChoice: rs.clipChoice, speed: rs.speed, loop: rs.loop });
+    }
+    if (m.size === 0) continue;
+    rowStates[id] = m;
+    syncToSession(id);
+    restored++;
+  }
+  if (restored > 0) {
+    console.info(`[anim-lab] session restored from localStorage (${restored} critter${restored === 1 ? '' : 's'})`);
+  }
 }
 
 /** Project `rowStates[id]` into `sessionOverrides[id]` in the
@@ -631,10 +708,8 @@ btnStop.addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 
 btnApply.addEventListener('click', () => {
-  const activeCard = document.querySelector('.roster-card.active') as HTMLElement | null;
-  const id = activeCard?.dataset.id;
-  if (!id) return;
-  const entry = playableRoster.find((e) => e.id === id);
+  if (!currentId) return;
+  const entry = playableRoster.find((e) => e.id === currentId);
   if (entry) loadCritter(entry);
 });
 
@@ -647,10 +722,8 @@ btnReset.addEventListener('click', () => {
   if (authored && Object.keys(authored).length > 0) {
     ANIMATION_OVERRIDES[currentId] = { ...authored };
   }
-  const activeCard = document.querySelector('.roster-card.active') as HTMLElement | null;
-  const id = activeCard?.dataset.id;
-  if (!id) return;
-  const entry = playableRoster.find((e) => e.id === id);
+  persistSession(); // drop this critter's working copy from storage too
+  const entry = playableRoster.find((e) => e.id === currentId);
   if (entry) loadCritter(entry);
 });
 
@@ -1000,6 +1073,8 @@ if (typeof window !== 'undefined') {
     currentlyPlaying: { state: currentlyPlayingState, clip: currentlyPlayingClip },
   });
 }
+
+restoreSession();
 
 if (playableRoster.length > 0) {
   const first = playableRoster[0]!;

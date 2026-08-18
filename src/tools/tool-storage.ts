@@ -2,10 +2,10 @@
 // tool-storage — small shared helper for /<tool>.html localStorage workflows
 // ---------------------------------------------------------------------------
 //
-// Status: shared (2026-04-25, audited 2026-08-19). Consumed by
-// /decor-editor.html (per-pack layouts) and /calibrate.html
-// (per-critter working copies). /anim-lab.html does NOT persist its
-// session at all today — wiring it up is H3 slice 2.
+// Status: shared (2026-04-25, audited 2026-08-19). Consumed by the
+// three labs: /decor-editor.html (per-pack layouts), /calibrate.html
+// (per-critter working copies) and /anim-lab.html (whole-session row
+// states under `anim-lab:overrides`, H3 slice 2).
 //
 // Why this module exists
 // ----------------------
@@ -28,7 +28,7 @@
 // Examples (real keys in use):
 //   decor-editor:jungle           — the layout for the jungle pack
 //   calibrate:<critterId>         — per-critter calibrate working copy
-//   anim-lab:overrides            — (reserved) anim-lab session overrides
+//   anim-lab:overrides            — anim-lab session row states (all critters)
 //
 // ⚠ `decor-editor:<pack>` is ALSO read by the game side
 // (src/arena-decor-layouts.ts) for the in-game preview bridge — never

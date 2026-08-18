@@ -65,9 +65,10 @@ el lab se vuelve ilegible para quien entre después.
 >
 >   - localStorage helpers — `loadFromStorage / saveToStorage /
 >     clearStorage / hasStorageKey / storageDivergesFromCode` + key
->     builder. Consumed by `/decor-editor` (per-pack) and `/calibrate`
->     (per-critter). `/anim-lab` does NOT persist its session today —
->     F5 loses everything (fix queued as H3 slice 2).
+>     builder. Consumed by `/decor-editor` (per-pack), `/calibrate`
+>     (per-critter) and `/anim-lab` (whole session under
+>     `anim-lab:overrides` — F5 restores the working copy; Reset clears
+>     the current critter from storage too).
 >   - **ToolPatch envelope** + helpers — `makeToolPatch /
 >     copyPatchToClipboard / downloadPatch` and the `CalibratePatch /
 >     AnimLabPatch / DecorEditorPatch` discriminated union. Every lab

@@ -430,9 +430,25 @@ function selectSlot(idx: number): void {
   refreshLocalIndicator();
 }
 
-/** Update the "uses local working copy" hint + Reset button enabled
- *  state so they reflect the currently-selected slot. Called from
- *  selectSlot + every slider tick. */
+/** Whether a slot's CURRENT values actually differ from the authored
+ *  roster.ts ones — same epsilon criterion the export uses
+ *  (`modifiedSlots`). Key-existence alone is a false positive: a
+ *  working copy whose values match code is not a divergence. */
+function slotDivergesFromCode(slot: typeof slots[number]): boolean {
+  const code = getCodeValuesFor(slot.entry.id);
+  if (!code) return false;
+  return (
+    Math.abs(slot.rosterTransform.scale - code.scale) > EPSILON
+    || Math.abs(slot.rosterTransform.pivotY - code.pivotY) > EPSILON
+    || Math.abs(slot.rosterTransform.rotationY - code.rotation) > EPSILON
+  );
+}
+
+/** Update the divergence hint + Reset button enabled state so they
+ *  reflect the currently-selected slot. Called from selectSlot + every
+ *  slider tick. The hint reports VALUE divergence (export criterion);
+ *  the Reset button follows key existence (there may be an in-sync
+ *  local copy worth clearing). */
 function refreshLocalIndicator(): void {
   if (selectedSlotIdx === null) {
     if (localIndicator) {
@@ -444,13 +460,17 @@ function refreshLocalIndicator(): void {
   }
   const slot = slots[selectedSlotIdx]!;
   const has = hasLocalFor(slot.entry.id);
+  const diverges = slotDivergesFromCode(slot);
   if (localIndicator) {
-    if (!has) {
-      localIndicator.textContent = '— using authored roster.ts values';
+    if (diverges) {
+      localIndicator.textContent = '⚠ diverges from roster.ts — Export to keep, Reset to revert';
+      localIndicator.dataset.kind = 'local';
+    } else if (has) {
+      localIndicator.textContent = '— matches roster.ts (local copy in sync)';
       localIndicator.dataset.kind = 'code';
     } else {
-      localIndicator.textContent = '⚠ local working copy active — Reset to revert to roster.ts';
-      localIndicator.dataset.kind = 'local';
+      localIndicator.textContent = '— using authored roster.ts values';
+      localIndicator.dataset.kind = 'code';
     }
   }
   if (btnResetLocal) btnResetLocal.disabled = !has;
@@ -624,11 +644,16 @@ btnRefit.addEventListener('click', () => {
     // Our in-game auto-fit already ran once at GLB load — here we
     // re-apply a fresh one to the new target. Scale from current
     // bindPoseHeight (which reflects the post-fit value = previous
-    // target) to the new target.
+    // target) to the new target. Height scales linearly with the
+    // uniform factor, so tracking bindPoseHeight = target stays exact
+    // across repeated refits.
     const k = target / slot.bindPoseHeight;
     slot.critter.glbMesh.scale.multiplyScalar(k);
     slot.rosterTransform.scale *= k;
     slot.bindPoseHeight = target;
+    // Refit changes every slot's working values — persist them all, or
+    // a reload silently reverts the refit for every unselected slot.
+    persistSlot(slot);
   }
   // Refresh the sidebar if a slot is selected.
   if (selectedSlotIdx !== null) selectSlot(selectedSlotIdx);
