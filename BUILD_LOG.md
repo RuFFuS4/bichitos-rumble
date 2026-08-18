@@ -1,5 +1,47 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — H3 slices 7+8: paridad del match lab + evict de mesh2motion
+
+**Slice 7 — el lab deja de mentir (y de bootear dos juegos)**. Dos
+extracciones de src/main.ts:
+- `src/scene-atmosphere.ts` (clearColor+fog+luces+API de skybox) ROMPE
+  el ciclo arena.ts→main.ts: el lab importaba Game→…→arena→main y
+  ejecutaba TODO main.ts transitivamente — un segundo renderer, un
+  segundo `new Game`, un segundo rAF loop y la dependencia dura de los
+  ids DOM de index.html (la verdadera razón de que tools.html tuviera
+  que clonar el DOM). Ahora el lab bootea UN juego, con la atmósfera
+  de producción y los skyboxes por pack funcionando.
+- `src/frame-ticks.ts`: la lista única de ticks por frame (dust,
+  zones, tickLOffline, projectiles, status icons) compartida por ambos
+  entries — en el lab las habilidades con zonas/proyectiles se
+  congelaban. El overlay de veneno queda en main.ts (presentación DOM).
+- E2e: juego intacto (title, 1 boot, 0 errores); lab con 0 boots de
+  main.ts, 0 errores, y captura renderizando tundra con el rig real.
+- Pendiente (fase de afilado): re-sync del HTML clonado del HUD
+  (timer hero, medallones) — inerte para gameplay.
+
+**Slice 8 — mesh2motion evictado** (decisión de Rafa: working tree
+only, SIN reescritura de historia):
+- Repo hermano `../bichitos-mesh2motion` (git propio, commit a0a0212,
+  553 ficheros). Contratos parametrizados con `BICHITOS_GAME_ROOT`
+  (default `../bichitos-rumble`): copy-game-assets lee los critters
+  del juego; vite buildea a dist/ propio o empuja a public/animations
+  del juego para deploys de tooling.
+- README-INTEGRATION corregido ANTES de mover: el inventario real del
+  fork son 11 ficheros de código con 43 marcadores [BICHITOS-FORK]
+  (la doc declaraba 6) — fuente de verdad: grep BICHITOS-FORK.
+- Juego: fuera mesh2motion/ (552 ficheros) y public/animations/ (build
+  commiteada, 57 MB). **De 996 → 333 ficheros trackeados (−67 %)**.
+  launch.json "animations" apunta al hermano (:5174), enlace del
+  sidebar actualizado, clean-dist-raw conserva el guard, docs al día.
+- Build completo verde + copy-game-assets probado desde el hermano.
+- El .git del juego sigue en ~961 MB — recuperarlo exigiría
+  reescritura de historia (descartada por ahora; git-filter-repo si
+  algún día molesta).
+
+**H3: los 8 slices COMPLETADOS.** Gate: apply desde el navegador <1 min
+con diff ✅ · cero pérdida al recargar ✅ · mesh2motion fuera ✅.
+
 ## 2026-08-19 — H3 slices 5+6: UI kit compartido + Bichitos Studio (shell)
 
 **Slice 5 — lab-theme + lab-kit**: `src/tools/ui/lab-theme.css` (tokens

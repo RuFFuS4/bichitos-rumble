@@ -36,16 +36,18 @@ estudio** con el bucle intención→cambio-aplicado en 1-2 pasos
 5. [x] **studio.html** (slice 6): shell de tabs con iframes lazy
    keep-alive (aislamiento gratis, estado preservado al cambiar de
    tab, standalone pages intactas). Match Lab ya es una tab.
-6. [ ] **Match lab como tab** (slice 7, decisión de Rafa): paridad de
-   loop (runFrame compartido con src/main.ts) y de atmósfera + embed
-   en el studio.
-7. [ ] **Evict mesh2motion** (slice 8): repo hermano, working tree
-   only (sin reescritura de historia), rutas de contrato
-   parametrizadas, doc del fork actualizada (11 ficheros reales).
+6. [x] **Paridad del match lab** (slice 7): scene-atmosphere +
+   frame-ticks compartidos — fin del doble boot (ciclo arena→main
+   roto), habilidades con zonas/proyectiles vivas en el lab, atmósfera
+   de producción. Ya era tab del studio desde el slice 6.
+7. [x] **Evict mesh2motion** (slice 8): repo hermano
+   `../bichitos-mesh2motion` con contratos parametrizados
+   (BICHITOS_GAME_ROOT); el juego pasa de 996 → 333 ficheros
+   trackeados. Sin reescritura de historia (decisión de Rafa).
 
-**Gate de salida H3**: un cambio de calibración/animación/decoración se
-aplica a fuente desde el navegador en < 1 min con diff visible · cero
-pérdida de datos al recargar · mesh2motion fuera del repo.
+**Gate de salida H3 — CUMPLIDO (2026-08-19)**: apply desde el navegador
+en 2 clicks con diff visible ✅ · cero pérdida de datos al recargar ✅ ·
+mesh2motion fuera del repo ✅. Falta: merge a main + tag (cierre formal).
 
 **Decisiones de Rafa (2026-08-19)**: borrar overrides = edición manual
 del fuente (sin tombstones por ahora) · comentarios de DECOR_LAYOUTS →
