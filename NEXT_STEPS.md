@@ -30,10 +30,12 @@ estudio** con el bucle intención→cambio-aplicado en 1-2 pasos
    (`/__tool-patch/preview|apply`) + botón "⚡ Apply to source" con
    modal de diff bloqueante en los 3 labs. Bucle tune→código en
    2 clicks, verificado e2e.
-4. [ ] **UI kit compartido de labs** (slice 5): lab-theme.css + lab-kit
-   (orbit camera, resize, paneles) aplicado in-place a las 3 páginas.
-5. [ ] **studio.html** (slice 6): shell con tabs y contrato
-   mount/unmount por lab (carga lazy, teardown de listeners).
+4. [x] **UI kit compartido de labs** (slice 5): lab-theme.css + lab-kit
+   (orbit/resize con dispose, escapeHtml) en las 3 páginas; decor
+   adopta la paleta común.
+5. [x] **studio.html** (slice 6): shell de tabs con iframes lazy
+   keep-alive (aislamiento gratis, estado preservado al cambiar de
+   tab, standalone pages intactas). Match Lab ya es una tab.
 6. [ ] **Match lab como tab** (slice 7, decisión de Rafa): paridad de
    loop (runFrame compartido con src/main.ts) y de atmósfera + embed
    en el studio.

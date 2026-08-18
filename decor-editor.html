@@ -10,22 +10,19 @@
   <link rel="icon" type="image/png" sizes="any" href="/favicon-br.png" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <title>Bichitos Rumble — Decor Editor</title>
+  <link rel="stylesheet" href="/src/tools/ui/lab-theme.css" />
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #12131a; }
-    canvas { display: block; }
+    /* Page-specific on top of lab-theme.css (H3 slice 5). The old
+     * near-miss palette fork (#1a1f2e / Consolas) was retired — this
+     * page now uses the shared lab tokens. */
+    body { font-size: 13px; }
 
-    body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      color: #e0e4ee;
-      font-size: 13px;
-    }
-
-    /* Top banner */
+    /* Functional top banner (title + usage hints, not the red INTERNAL
+     * strip — this one carries the interaction cheatsheet). */
     .banner {
       position: fixed; top: 0; left: 0; right: 0; height: 40px;
-      background: rgba(10, 12, 22, 0.92);
-      border-bottom: 1px solid #2a2f3d;
+      background: var(--lab-panel);
+      border-bottom: 1px solid var(--lab-border-solid);
       display: flex; align-items: center;
       padding: 0 16px;
       z-index: 10;
@@ -33,97 +30,63 @@
     }
     .banner h1 {
       font-size: 14px; font-weight: 700;
-      color: #ffdc5c; letter-spacing: 0.05em;
+      color: var(--lab-accent); letter-spacing: 0.05em;
       margin-right: 16px;
     }
-    .banner .hint {
-      color: #8b94aa; font-size: 11px;
-    }
+    .banner .hint { color: var(--lab-dim); font-size: 11px; }
     .banner .hint code {
-      background: #1a1f2e; padding: 1px 5px; border-radius: 3px;
-      color: #b8c4dc; font-family: 'Consolas', monospace; font-size: 11px;
+      background: var(--lab-panel-solid); padding: 1px 5px; border-radius: 3px;
+      color: #b8c4dc; font-family: var(--lab-mono); font-size: 11px;
     }
 
-    /* Sidebar (right) */
-    .sidebar {
-      position: fixed; top: 40px; right: 0; bottom: 0;
-      width: 340px;
-      background: rgba(10, 12, 22, 0.92);
-      border-left: 1px solid #2a2f3d;
-      padding: 14px;
-      overflow-y: auto;
-      z-index: 5;
-    }
+    .sidebar { width: 340px; padding: 14px; }
     .sidebar section {
       margin-bottom: 18px;
       padding-bottom: 14px;
-      border-bottom: 1px solid #1f2433;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
     }
     .sidebar section:last-child { border-bottom: none; }
+    /* decor keeps its accent-coloured section headers (denser sidebar). */
     .sidebar h2 {
       font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
-      color: #ffdc5c; margin-bottom: 8px;
+      color: var(--lab-accent); margin: 0 0 8px; opacity: 1;
+      border-top: none; padding-top: 0;
     }
     .row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
     .row label { flex: 0 0 70px; color: #b8c4dc; font-size: 11px; }
     .row select, .row input[type='range'] { flex: 1; }
     .row .v {
-      font-family: 'Consolas', monospace; font-size: 11px;
-      color: #ffdc5c; min-width: 50px; text-align: right;
+      font-family: var(--lab-mono); font-size: 11px;
+      color: var(--lab-accent); min-width: 50px; text-align: right;
     }
-    select, input[type='text'], input[type='number'] {
-      background: #1a1f2e; color: #e0e4ee;
-      border: 1px solid #2a3145; border-radius: 3px;
-      padding: 4px 6px; font-size: 12px;
-    }
-    button {
-      background: #2a3145; color: #e0e4ee;
-      border: 1px solid #3a4358; border-radius: 3px;
-      padding: 6px 12px; font-size: 12px; cursor: pointer;
-      font-family: inherit;
-    }
-    button:hover { background: #3a4358; }
-    button.danger { background: #5a2a2a; border-color: #7a3a3a; }
-    button.danger:hover { background: #7a3a3a; }
-    button.primary { background: #ffdc5c; color: #0a0a18; border-color: #ffdc5c; }
-    button.primary:hover { background: #ffe680; }
 
     .placements-list {
       max-height: 180px; overflow-y: auto;
-      background: #1a1f2e; border: 1px solid #2a3145; border-radius: 3px;
+      background: var(--lab-panel-solid); border: 1px solid var(--lab-border);
+      border-radius: 3px;
       padding: 4px;
     }
     .placement-row {
       display: flex; justify-content: space-between; align-items: center;
       padding: 3px 6px; border-radius: 2px; cursor: pointer;
-      font-family: 'Consolas', monospace; font-size: 11px;
+      font-family: var(--lab-mono); font-size: 11px;
     }
     .placement-row:hover { background: #2a3145; }
-    .placement-row.selected { background: #ffdc5c; color: #0a0a18; }
-    .placement-row .idx { color: #8b94aa; margin-right: 8px; }
+    .placement-row.selected { background: var(--lab-accent); color: #0a0a18; }
+    .placement-row .idx { color: var(--lab-dim); margin-right: 8px; }
     .placement-row.selected .idx { color: #5a4a00; }
 
-    .export-box {
-      max-height: 200px; overflow: auto;
-      background: #0a0c14; color: #b8c4dc;
-      border: 1px solid #2a3145; border-radius: 3px;
-      padding: 8px; font-family: 'Consolas', monospace; font-size: 11px;
-      white-space: pre; word-break: normal;
-    }
-
-    .hint-text {
-      color: #8b94aa; font-size: 10.5px; line-height: 1.4;
-      margin-top: 4px;
-    }
+    /* Snippet/JSON exports stay `pre` (no wrapping) in this lab. */
+    .export-box { white-space: pre; word-break: normal; max-height: 200px; }
   </style>
 </head>
-<body>
+<body class="lab-page">
   <header class="banner">
     <h1>🎨 DECOR EDITOR</h1>
     <span class="hint">click empty arena = place · click prop = select · <code>Del</code> = delete · sliders adjust selected</span>
   </header>
 
-  <aside class="sidebar">
+  <aside class="sidebar lab-panel lab-panel--right">
     <section>
       <h2>Pack</h2>
       <div class="row">

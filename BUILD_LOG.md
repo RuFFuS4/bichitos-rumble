@@ -1,5 +1,30 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — H3 slices 5+6: UI kit compartido + Bichitos Studio (shell)
+
+**Slice 5 — lab-theme + lab-kit**: `src/tools/ui/lab-theme.css` (tokens
++ banner INTERNAL + paneles + botones + form + export-box, scoped bajo
+`.lab-page`) y `src/tools/ui/lab-kit.ts` (orbit camera y resize con
+`dispose()`, escapeHtml). Mueren las copias near-identical de
+anim-lab/calibrate y la paleta fork de decor-editor (adopta el tema —
+cambio consciente). Neto: −451/+403 líneas con 2 ficheros nuevos.
+Verificado con captura + cero errores de consola en los 3 labs.
+
+**Slice 6 — studio.html**: shell de tabs con **iframes lazy
+keep-alive** — decisión de arquitectura DELIBERADA frente al SPA
+mount/unmount que proponía el plan original: aislamiento de
+listeners/estado/globals gratis (anim-lab muta ANIMATION_OVERRIDES
+in-place, decor cuelga listeners de window, sidebar.ts pollea sin
+teardown — nada de eso puede colisionar entre iframes), cambio de tab
+sin recarga preservando el estado completo, las páginas standalone
+siguen siendo first-class (son los src de los iframes), y el
+location.reload() de los badges del match lab solo recarga su tab.
+Tab activa recordada en localStorage, atajos 1-4, botón reload-tab,
+Match Lab incluido como tab (carga solo al abrirla — autostartea un
+match). En el build solo entra con VITE_BUILD_TOOLS=1, con noindex.
+E2e: boot con 1 solo iframe (lazy), editar en Animations → cambiar a
+Decor → volver: la edición sigue SIN reload; tab recordada; 0 errores.
+
 ## 2026-08-19 — H3 slice 4: "Apply to source" — el bucle de 5-6 pasos muere en 2 clicks
 
 El corazón del hito. `scripts/vite-tool-patch-plugin.mjs` monta dos

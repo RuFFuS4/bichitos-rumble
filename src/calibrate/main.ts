@@ -40,6 +40,7 @@ import {
   type CalibratePatch,
 } from '../tools/tool-storage';
 import { applyPatchToSource } from '../tools/apply-ui';
+import { createOrbitCamera, createLabResize, escapeHtml } from '../tools/ui/lab-kit';
 
 // ---------------------------------------------------------------------------
 // localStorage working copy
@@ -812,61 +813,14 @@ btnApplySource.addEventListener('click', async () => {
 // Orbit camera (drag + wheel zoom)
 // ---------------------------------------------------------------------------
 
-let orbitTheta = 0;
-let orbitPhi = 0.4; // slight downward tilt
-let orbitRadius = 14;
-const orbitTarget = new THREE.Vector3(0, 1, 0);
-
-let dragging = false;
-let lastX = 0;
-let lastY = 0;
-
-canvas.addEventListener('pointerdown', (ev) => {
-  dragging = true;
-  lastX = ev.clientX;
-  lastY = ev.clientY;
-  canvas.setPointerCapture(ev.pointerId);
+// Orbit + resize come from the shared lab-kit (H3 slice 5); dispose()
+// handles are the studio shell's unmount contract (slice 6).
+const orbit = createOrbitCamera(canvas, camera, {
+  phi: 0.4, radius: 14, minRadius: 6, maxRadius: 30,
 });
-canvas.addEventListener('pointermove', (ev) => {
-  if (!dragging) return;
-  const dx = ev.clientX - lastX;
-  const dy = ev.clientY - lastY;
-  lastX = ev.clientX;
-  lastY = ev.clientY;
-  orbitTheta -= dx * 0.005;
-  orbitPhi = Math.max(0.05, Math.min(1.35, orbitPhi + dy * 0.003));
-});
-canvas.addEventListener('pointerup', (ev) => {
-  dragging = false;
-  canvas.releasePointerCapture(ev.pointerId);
-});
-canvas.addEventListener('wheel', (ev) => {
-  orbitRadius = Math.max(6, Math.min(30, orbitRadius + ev.deltaY * 0.01));
-  ev.preventDefault();
-}, { passive: false });
 
-function updateCamera(): void {
-  const y = orbitRadius * Math.sin(orbitPhi);
-  const r = orbitRadius * Math.cos(orbitPhi);
-  camera.position.set(
-    orbitTarget.x + r * Math.sin(orbitTheta),
-    orbitTarget.y + y,
-    orbitTarget.z + r * Math.cos(orbitTheta),
-  );
-  camera.lookAt(orbitTarget);
-}
-
-// Camera presets — three named viewpoints tuned to the 3×3 grid + ruler:
-//   · frontal  — slight perspective, full grid in frame, ruler visible.
-//   · cenital  — straight down, useful for spacing checks (less so for
-//     calibration, but handy to see the layout).
-//   · lateral  — from +X (3 o'clock), shows height profile against the
-//     ruler clearly. Best preset for size calibration.
 function setCamera(theta: number, phi: number, radius: number): void {
-  orbitTheta = theta;
-  orbitPhi = phi;
-  orbitRadius = radius;
-  updateCamera();
+  orbit.set(theta, phi, radius);
 }
 btnCamFront?.addEventListener('click', () => setCamera(0,            0.30, 14));
 btnCamTop?.addEventListener('click',   () => setCamera(0,            Math.PI / 2 - 0.05, 14));
@@ -939,22 +893,7 @@ function updateLabels(): void {
 // Animation loop
 // ---------------------------------------------------------------------------
 
-function resize(): void {
-  const sidebarW = 340;
-  const bannerH = 40;
-  const w = window.innerWidth - sidebarW;
-  const h = window.innerHeight - bannerH;
-  renderer.setSize(w, h, false);
-  canvas.style.position = 'fixed';
-  canvas.style.top = `${bannerH}px`;
-  canvas.style.left = '0';
-  canvas.style.width = `${w}px`;
-  canvas.style.height = `${h}px`;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-}
-window.addEventListener('resize', resize);
-resize();
+createLabResize(canvas, renderer, camera, { right: 340, top: 40 });
 
 let prevTime = performance.now();
 function frame(): void {
@@ -979,7 +918,7 @@ function frame(): void {
     }
   }
 
-  updateCamera();
+  orbit.update();
   updateLabels();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -1007,15 +946,3 @@ if (typeof window !== 'undefined') {
 // Util
 // ---------------------------------------------------------------------------
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => {
-    switch (c) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#39;';
-      default: return c;
-    }
-  });
-}

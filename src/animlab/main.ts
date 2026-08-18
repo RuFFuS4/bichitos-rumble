@@ -73,6 +73,7 @@ import {
   type AnimLabStateValue,
 } from '../tools/tool-storage';
 import { applyPatchToSource } from '../tools/apply-ui';
+import { createOrbitCamera, createLabResize, escapeHtml } from '../tools/ui/lab-kit';
 
 const AUTHORED_BASELINE: Record<string, ClipOverrideMap> = JSON.parse(
   JSON.stringify(ANIMATION_OVERRIDES),
@@ -1015,59 +1016,13 @@ btnApplySource.addEventListener('click', async () => {
 // Orbit camera + frame loop
 // ---------------------------------------------------------------------------
 
-let orbitTheta = 0;
-let orbitPhi = 0.35;
-let orbitRadius = 5.5;
-const orbitTarget = new THREE.Vector3(0, 1, 0);
-
-let dragging = false;
-let lastX = 0, lastY = 0;
-canvas.addEventListener('pointerdown', (ev) => {
-  dragging = true; lastX = ev.clientX; lastY = ev.clientY;
-  canvas.setPointerCapture(ev.pointerId);
+// Orbit + resize come from the shared lab-kit (H3 slice 5) — both
+// return dispose() handles, which is the teardown contract the studio
+// shell (slice 6) mounts/unmounts labs with.
+const orbit = createOrbitCamera(canvas, camera, {
+  phi: 0.35, radius: 5.5, minRadius: 2, maxRadius: 14,
 });
-canvas.addEventListener('pointermove', (ev) => {
-  if (!dragging) return;
-  orbitTheta -= (ev.clientX - lastX) * 0.005;
-  orbitPhi = Math.max(0.05, Math.min(1.35, orbitPhi + (ev.clientY - lastY) * 0.003));
-  lastX = ev.clientX; lastY = ev.clientY;
-});
-canvas.addEventListener('pointerup', (ev) => {
-  dragging = false; canvas.releasePointerCapture(ev.pointerId);
-});
-canvas.addEventListener('wheel', (ev) => {
-  orbitRadius = Math.max(2, Math.min(14, orbitRadius + ev.deltaY * 0.01));
-  ev.preventDefault();
-}, { passive: false });
-
-function updateCamera(): void {
-  const y = orbitRadius * Math.sin(orbitPhi);
-  const r = orbitRadius * Math.cos(orbitPhi);
-  camera.position.set(
-    orbitTarget.x + r * Math.sin(orbitTheta),
-    orbitTarget.y + y,
-    orbitTarget.z + r * Math.cos(orbitTheta),
-  );
-  camera.lookAt(orbitTarget);
-}
-
-function resize(): void {
-  const leftW = 180; // roster panel
-  const rightW = 560; // right panel (wider to fit Speed + Loop columns)
-  const bannerH = 40;
-  const w = window.innerWidth - leftW - rightW;
-  const h = window.innerHeight - bannerH;
-  renderer.setSize(Math.max(200, w), Math.max(200, h), false);
-  canvas.style.position = 'fixed';
-  canvas.style.top = `${bannerH}px`;
-  canvas.style.left = `${leftW}px`;
-  canvas.style.width = `${w}px`;
-  canvas.style.height = `${h}px`;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-}
-window.addEventListener('resize', resize);
-resize();
+createLabResize(canvas, renderer, camera, { left: 180, right: 560, top: 40 });
 
 let prevTime = performance.now();
 function frame(): void {
@@ -1087,7 +1042,7 @@ function frame(): void {
     }
   }
 
-  updateCamera();
+  orbit.update();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
@@ -1119,15 +1074,3 @@ if (playableRoster.length > 0) {
 // Util
 // ---------------------------------------------------------------------------
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => {
-    switch (c) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#39;';
-      default: return c;
-    }
-  });
-}
