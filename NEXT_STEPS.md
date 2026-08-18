@@ -46,11 +46,14 @@ pérdida de datos al recargar · mesh2motion fuera del repo.
 
 ## Flecos heredados (no bloquean H3)
 
-- **Sentry** (gates H1/H2): revisar el panel el 2026-08-20; sin errores
-  nuevos de los deploys → gates formalmente cerrados.
+- [x] **Sentry revisado (2026-08-19)**: cero errores reales de los
+  deploys H1/H2 (solo los 2 smoke-tests del H0, ya resueltos → feed a
+  cero). **Gates H1 y H2 formalmente cerrados.**
+- [x] **Devlog de lanzamiento publicado**: "From Vibe Jam to itch.io —
+  Bichitos Rumble is live!" (tipo Major Update or Launch, tag launch,
+  screenshots adjuntos).
 - **itch.io post-publish**: vigilar comentarios/analytics la primera
-  semana; considerar un devlog de lanzamiento (itch lo sugiere y
-  notifica a followers).
+  semana.
 - Rafa: archivar facturas abril 2026 (Meshy/Tripo/Suno) →
   `docs/licencias-evidencia/`.
 - Rafa: identificar el generador 2D de sprites/skyboxes/badges
