@@ -25,7 +25,7 @@ import {
   loadInArenaDecorations,
 } from './arena-decorations';
 import { getDecorLayout } from './arena-decor-layouts';
-import { setSceneSkyboxTexture, setSceneFogColor } from './main';
+import { setSceneSkyboxTexture, setSceneFogColor } from './scene-atmosphere';
 
 // Visual parameters for the pre-collapse shake effect. Applied to
 // `fragmentGroup.position.x/z` ONLY — collisions and `isOnArena` use the

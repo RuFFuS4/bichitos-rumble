@@ -881,9 +881,9 @@ export function mountLabSidebar(devApi: DevApi): void {
   siblingLinks.style.marginTop = '2px';
   siblingLinks.innerHTML =
     'Other internal tools: ' +
-    '<a href="/animations" target="_blank" rel="noopener" ' +
-    'style="color:#ffdc5c;text-decoration:none;">🎬 /animations</a> ' +
-    '<span style="opacity:0.55">(mesh2motion — create clips)</span>' +
+    '<a href="http://localhost:5174/animations/create.html" target="_blank" rel="noopener" ' +
+    'style="color:#ffdc5c;text-decoration:none;">🎬 animations lab</a> ' +
+    '<span style="opacity:0.55">(mesh2motion, repo hermano — arranca su dev server en :5174)</span>' +
     '<br>' +
     '<a href="/anim-lab.html" target="_blank" rel="noopener" ' +
     'style="color:#ffdc5c;text-decoration:none;">🎞️ /anim-lab</a> ' +

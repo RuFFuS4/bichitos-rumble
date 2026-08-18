@@ -9,7 +9,7 @@ el lab se vuelve ilegible para quien entre después.
 > **Sibling tools** — all internal (`noindex`), accessible by URL only,
 > linked from the bottom of this sidebar:
 >
-> 1. [`/animations`](../mesh2motion/README-INTEGRATION.md) —
+> 1. [`animations lab`](../../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano `bichitos-mesh2motion`, dev server `:5174`) —
 >    mesh2motion-based lab for **CREATING** animation clips and
 >    exporting GLBs. Upstream flows (Explore/Retarget) stripped;
 >    only `create.html` ships.
@@ -122,7 +122,7 @@ a fallback when clipboard / Node is unavailable.
 > Full anim-lab design in BUILD_LOG.md §"2026-04-25 Animation
 > Validation Lab". Decor system design in BUILD_LOG.md §"2026-04-25
 > In-arena decor". Full mesh2motion integration notes:
-> [`mesh2motion/README-INTEGRATION.md`](../mesh2motion/README-INTEGRATION.md).
+> [`bichitos-mesh2motion/README-INTEGRATION.md`](../../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano desde H3 slice 8).
 
 ## Propósito
 

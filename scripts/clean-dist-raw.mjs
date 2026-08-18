@@ -35,10 +35,10 @@ import { join } from 'node:path';
 const DIST = 'dist';
 const TARGET_NAME = '_raw';
 // H2 2026-08-18 — dev-only subsites that Vite copies verbatim from
-// public/ but production must NOT ship. `animations` is the vendored
-// mesh2motion tool build (57 MB, zero links from the game UI — it was
-// 24 % of the deploy). The tool keeps working in dev (`npm run dev`
-// serves public/ directly); only dist/ loses it.
+// public/ but production must NOT ship. `animations` (the vendored
+// mesh2motion build) left the repo entirely in H3 slice 8 — the entry
+// stays as a guard in case a tooling deploy pushes a build back into
+// public/animations via BICHITOS_GAME_ROOT.
 const EXTRA_DIRS = ['animations'];
 // Tooling backups created by build-side scripts (e.g. trim-hud-sheet.mjs
 // leaves a *.original.png next to its trimmed output so a second pass
