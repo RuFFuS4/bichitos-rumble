@@ -45,9 +45,10 @@ estudio** con el bucle intención→cambio-aplicado en 1-2 pasos
    (BICHITOS_GAME_ROOT); el juego pasa de 996 → 333 ficheros
    trackeados. Sin reescritura de historia (decisión de Rafa).
 
-**Gate de salida H3 — CUMPLIDO (2026-08-19)**: apply desde el navegador
-en 2 clicks con diff visible ✅ · cero pérdida de datos al recargar ✅ ·
-mesh2motion fuera del repo ✅. Falta: merge a main + tag (cierre formal).
+**H3 CERRADO (2026-08-19)** — tag `v1.5-bichitos-studio` (main 432511b),
+smoke de producción verde (title → vs Bots → match con el loop
+refactorizado, 0 errores). Gate completo: apply en 2 clicks con diff ✅
+· cero pérdida al recargar ✅ · mesh2motion fuera ✅.
 
 **Decisiones de Rafa (2026-08-19)**: borrar overrides = edición manual
 del fuente (sin tombstones por ahora) · comentarios de DECOR_LAYOUTS →
@@ -57,6 +58,14 @@ match lab: SE EMBEBE como tab del studio (slices 6-7, aunque cueste
 más — unificación completa).
 
 ---
+
+## Siguiente fase (planificar al abrir sesión)
+
+La checklist del próximo hito se escribe tras la investigación de la
+fase de afilado — ver "Dirección post-H3" abajo. Candidatos ya
+apuntados: re-sync del HTML del HUD clonado en tools.html, pack picker
+en match lab, revisión de utilidad de cada herramienta con Rafa, e
+investigación de capacidades que se nos hayan pasado.
 
 ## Dirección post-H3 (fijada por Rafa, 2026-08-19)
 

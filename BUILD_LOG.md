@@ -1,5 +1,16 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — H3 CERRADO (`v1.5-bichitos-studio`)
+
+Merge `dev → main` con `--no-ff` (432511b) + tag. **Smoke de
+producción verde**: title → vs Bots → character select → confirm →
+countdown y timer en pantalla con CERO errores de consola — el
+refactor del loop de main.ts (scene-atmosphere + frame-ticks) shippeó
+limpio. itch.io saneado el mismo día: clasificación multiplayer
+completada (1-4 jugadores, server-based) y la cover resubida (se había
+perdido en algún save posterior — vigilar si reaparece el "No Image"
+del dashboard).
+
 ## 2026-08-19 — H3 slices 7+8: paridad del match lab + evict de mesh2motion
 
 **Slice 7 — el lab deja de mentir (y de bootear dos juegos)**. Dos
