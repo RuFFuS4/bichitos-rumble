@@ -127,34 +127,47 @@ SEO 100 / BP 100; FCP 1,2 s, LCP 2,6 s — TBT 1,5 s es el boot de
 three.js, esperable en un juego 3D) · itch.io publicado ✅ · tarjeta OG
 en WhatsApp ✅.
 
-## H3 — Bichitos Studio: tooling unificado (~2-3 semanas)
+## H3 — Bichitos Studio: tooling unificado ✅ (2026-08-19, `v1.5-bichitos-studio`)
 
 **Meta**: las 4-5 herramientas "justas, deficientes y poco usables" se
 convierten en **un solo estudio interno** con el bucle
-intención→cambio-aplicado en 1-2 pasos (hoy: 5-6 pasos manuales).
+intención→cambio-aplicado en 1-2 pasos (antes: 5-6 pasos manuales).
+**Resultado: 8 slices en un día, todos verificados** (detalle por slice
+en BUILD_LOG.md 2026-08-19).
 
-- [ ] **Shell único** (`studio.html`): tabs Match Lab / Animations /
-      Calibrate / Decor sobre UI kit compartido (orbit camera, resize,
-      paneles, tema). Mata ~1.200 líneas de CSS duplicado y el fork de
-      950 líneas de tools.html que ya se rompió una vez por drift.
-- [ ] **Pipeline de patches completo y no destructivo**: todas las tabs
-      emiten ToolPatch; el apply de anim-lab pasa a merge (hoy borra los
-      overrides de critters no tocados — pérdida de datos real);
-      decor-editor emite patch desde la UI (hoy su soporte en
-      apply-tool-patch es código muerto).
-- [ ] **Apply directo desde la UI**: endpoint de apply en el dev-server
-      (plugin de Vite) → botón "Apply to source" con diff previo. Adiós al
-      paso "guarda el JSON en la raíz y corre el script".
-- [ ] **Persistencia uniforme**: tool-storage en todas las tabs (anim-lab
-      hoy pierde la sesión con F5).
-- [ ] **Evict mesh2motion** a repo hermano/submodule (43% de los ficheros
-      trackeados) y documentar el flujo de animación resultante.
-- [ ] Quick-wins ya especificados: pack picker en match lab, indicador de
-      divergencia real en calibrate, snippet TS pegable.
+- [x] Pipeline de patches no destructivo: merge de anim-lab (el apply
+      viejo BORRABA critters), decor-editor emite DecorEditorPatch,
+      validación de identificadores, 36+ tests golden.
+- [x] Persistencia uniforme: anim-lab autosalva la sesión, divergencia
+      por valores en calibrate.
+- [x] **Apply to source**: endpoints dev-only en Vite + modal de diff
+      bloqueante en los 3 labs — tune→código en 2 clicks.
+- [x] UI kit compartido (lab-theme.css + lab-kit con dispose).
+- [x] `studio.html`: shell de tabs con iframes lazy keep-alive.
+- [x] Paridad del match lab: scene-atmosphere + frame-ticks compartidos
+      con src/main.ts — fin del doble boot (el lab ejecutaba main.ts
+      entero transitivamente) y de las habilidades congeladas.
+- [x] Evict de mesh2motion a repo hermano `../bichitos-mesh2motion`
+      (996 → 333 ficheros trackeados, −67 %).
 
-**Gate de salida**: un cambio de calibración/animación/decoración se aplica
-a fuente desde el navegador en < 1 min con diff visible · cero pérdida de
-datos al recargar · mesh2motion fuera del repo.
+**Gate de salida — CUMPLIDO**: cambio aplicado a fuente desde el
+navegador en <1 min con diff visible ✅ · cero pérdida de datos al
+recargar ✅ · mesh2motion fuera del repo ✅. Smoke de producción verde
+tras el deploy (el refactor de main.ts shippeó limpio).
+
+## Interludio — Fase de afilado (2026-08-19, en curso)
+
+Entre H3 y la fase de mecánicas/assets, por decisión de Rafa: hacer las
+herramientas más eficientes, eficaces y útiles ANTES de usarlas a
+fondo. Plan completo con evidencia en
+[`docs/AFILADO_PLAN.md`](docs/AFILADO_PLAN.md); checklist operativa en
+[`NEXT_STEPS.md`](NEXT_STEPS.md). Decisiones marco: tuning
+offline-first (server se sincroniza al final), melón de physicsRadius
+abierto, port de mesh2motion upstream pronto.
+
+Estado: slices A (17 quick-wins) y B (cabina de tuning: step-frame +
+hotkeys + FEEL tuner + `feel-patch`) completados. Pendientes: C (tuner
+de AbilityDef + hitbox visible) y D (port mesh2motion upstream).
 
 ## H4 — Retención y bucle social (~3-4 semanas)
 
