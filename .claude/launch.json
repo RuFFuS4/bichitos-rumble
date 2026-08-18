@@ -4,13 +4,21 @@
     {
       "name": "dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173
     },
     {
       "name": "animations",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "mesh2motion"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "../bichitos-mesh2motion"
+      ],
       "port": 5174
     }
   ]

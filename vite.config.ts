@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
+// Dev-only ToolPatch endpoints (H3 slice 4): `apply: 'serve'` inside the
+// plugin means it is structurally absent from production builds.
+// @ts-expect-error — plain .mjs module, not covered by tsconfig (scripts/)
+import { toolPatchDevPlugin } from './scripts/vite-tool-patch-plugin.mjs';
 
 // Short git sha baked into the bundle as the Sentry `release` id, so a
 // production error report pins the exact deploy that produced it.
@@ -31,6 +35,7 @@ try {
 // library caches.
 export default defineConfig({
   base: './',
+  plugins: [toolPatchDevPlugin()],
   define: {
     __BUILD_COMMIT__: JSON.stringify(buildCommit),
   },
@@ -69,6 +74,7 @@ export default defineConfig({
       input: {
         index: resolve(import.meta.dirname, 'index.html'),
         ...(process.env.VITE_BUILD_TOOLS === '1' ? {
+          studio:      resolve(import.meta.dirname, 'studio.html'),
           tools:       resolve(import.meta.dirname, 'tools.html'),
           calibrate:   resolve(import.meta.dirname, 'calibrate.html'),
           animLab:     resolve(import.meta.dirname, 'anim-lab.html'),

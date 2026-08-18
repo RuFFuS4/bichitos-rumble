@@ -39,6 +39,8 @@ import {
   hasStorageKey,
   type CalibratePatch,
 } from '../tools/tool-storage';
+import { applyPatchToSource } from '../tools/apply-ui';
+import { createOrbitCamera, createLabResize, escapeHtml } from '../tools/ui/lab-kit';
 
 // ---------------------------------------------------------------------------
 // localStorage working copy
@@ -390,6 +392,7 @@ const btnRefit = document.getElementById('btn-refit')!;
 const btnExportTS = document.getElementById('btn-export-ts') as HTMLButtonElement;
 const btnExportJSON = document.getElementById('btn-export-json') as HTMLButtonElement;
 const btnDownloadJSON = document.getElementById('btn-download-json') as HTMLButtonElement;
+const btnApplySource = document.getElementById('btn-apply-source') as HTMLButtonElement;
 const exportOut = document.getElementById('export-out')!;
 
 // Optional UI added 2026-04-26: animation pause + camera presets. All
@@ -430,9 +433,25 @@ function selectSlot(idx: number): void {
   refreshLocalIndicator();
 }
 
-/** Update the "uses local working copy" hint + Reset button enabled
- *  state so they reflect the currently-selected slot. Called from
- *  selectSlot + every slider tick. */
+/** Whether a slot's CURRENT values actually differ from the authored
+ *  roster.ts ones — same epsilon criterion the export uses
+ *  (`modifiedSlots`). Key-existence alone is a false positive: a
+ *  working copy whose values match code is not a divergence. */
+function slotDivergesFromCode(slot: typeof slots[number]): boolean {
+  const code = getCodeValuesFor(slot.entry.id);
+  if (!code) return false;
+  return (
+    Math.abs(slot.rosterTransform.scale - code.scale) > EPSILON
+    || Math.abs(slot.rosterTransform.pivotY - code.pivotY) > EPSILON
+    || Math.abs(slot.rosterTransform.rotationY - code.rotation) > EPSILON
+  );
+}
+
+/** Update the divergence hint + Reset button enabled state so they
+ *  reflect the currently-selected slot. Called from selectSlot + every
+ *  slider tick. The hint reports VALUE divergence (export criterion);
+ *  the Reset button follows key existence (there may be an in-sync
+ *  local copy worth clearing). */
 function refreshLocalIndicator(): void {
   if (selectedSlotIdx === null) {
     if (localIndicator) {
@@ -444,13 +463,17 @@ function refreshLocalIndicator(): void {
   }
   const slot = slots[selectedSlotIdx]!;
   const has = hasLocalFor(slot.entry.id);
+  const diverges = slotDivergesFromCode(slot);
   if (localIndicator) {
-    if (!has) {
-      localIndicator.textContent = '— using authored roster.ts values';
+    if (diverges) {
+      localIndicator.textContent = '⚠ diverges from roster.ts — Export to keep, Reset to revert';
+      localIndicator.dataset.kind = 'local';
+    } else if (has) {
+      localIndicator.textContent = '— matches roster.ts (local copy in sync)';
       localIndicator.dataset.kind = 'code';
     } else {
-      localIndicator.textContent = '⚠ local working copy active — Reset to revert to roster.ts';
-      localIndicator.dataset.kind = 'local';
+      localIndicator.textContent = '— using authored roster.ts values';
+      localIndicator.dataset.kind = 'code';
     }
   }
   if (btnResetLocal) btnResetLocal.disabled = !has;
@@ -624,11 +647,16 @@ btnRefit.addEventListener('click', () => {
     // Our in-game auto-fit already ran once at GLB load — here we
     // re-apply a fresh one to the new target. Scale from current
     // bindPoseHeight (which reflects the post-fit value = previous
-    // target) to the new target.
+    // target) to the new target. Height scales linearly with the
+    // uniform factor, so tracking bindPoseHeight = target stays exact
+    // across repeated refits.
     const k = target / slot.bindPoseHeight;
     slot.critter.glbMesh.scale.multiplyScalar(k);
     slot.rosterTransform.scale *= k;
     slot.bindPoseHeight = target;
+    // Refit changes every slot's working values — persist them all, or
+    // a reload silently reverts the refit for every unselected slot.
+    persistSlot(slot);
   }
   // Refresh the sidebar if a slot is selected.
   if (selectedSlotIdx !== null) selectSlot(selectedSlotIdx);
@@ -761,65 +789,38 @@ btnDownloadJSON.addEventListener('click', () => {
   downloadPatch(patch);
 });
 
+btnApplySource.addEventListener('click', async () => {
+  const patch = buildJsonPatch();
+  const appliedIds = Object.keys(patch.data);
+  if (appliedIds.length === 0) {
+    exportOut.textContent = '(nothing diverges from roster.ts — nothing to apply)';
+    return;
+  }
+  const appliedSlots = slots.filter((s) => appliedIds.includes(s.entry.id));
+  await applyPatchToSource(patch, {
+    // The write to roster.ts triggers a Vite full-reload: clear the
+    // applied critters' working copies FIRST so the reloaded page boots
+    // from the freshly-authored values (which now equal them).
+    onBeforeApply: () => { for (const id of appliedIds) clearLocalFor(id); },
+    onApplyFailed: () => {
+      for (const slot of appliedSlots) persistSlot(slot);
+      refreshLocalIndicator();
+    },
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Orbit camera (drag + wheel zoom)
 // ---------------------------------------------------------------------------
 
-let orbitTheta = 0;
-let orbitPhi = 0.4; // slight downward tilt
-let orbitRadius = 14;
-const orbitTarget = new THREE.Vector3(0, 1, 0);
-
-let dragging = false;
-let lastX = 0;
-let lastY = 0;
-
-canvas.addEventListener('pointerdown', (ev) => {
-  dragging = true;
-  lastX = ev.clientX;
-  lastY = ev.clientY;
-  canvas.setPointerCapture(ev.pointerId);
+// Orbit + resize come from the shared lab-kit (H3 slice 5); dispose()
+// handles are the studio shell's unmount contract (slice 6).
+const orbit = createOrbitCamera(canvas, camera, {
+  phi: 0.4, radius: 14, minRadius: 6, maxRadius: 30,
 });
-canvas.addEventListener('pointermove', (ev) => {
-  if (!dragging) return;
-  const dx = ev.clientX - lastX;
-  const dy = ev.clientY - lastY;
-  lastX = ev.clientX;
-  lastY = ev.clientY;
-  orbitTheta -= dx * 0.005;
-  orbitPhi = Math.max(0.05, Math.min(1.35, orbitPhi + dy * 0.003));
-});
-canvas.addEventListener('pointerup', (ev) => {
-  dragging = false;
-  canvas.releasePointerCapture(ev.pointerId);
-});
-canvas.addEventListener('wheel', (ev) => {
-  orbitRadius = Math.max(6, Math.min(30, orbitRadius + ev.deltaY * 0.01));
-  ev.preventDefault();
-}, { passive: false });
 
-function updateCamera(): void {
-  const y = orbitRadius * Math.sin(orbitPhi);
-  const r = orbitRadius * Math.cos(orbitPhi);
-  camera.position.set(
-    orbitTarget.x + r * Math.sin(orbitTheta),
-    orbitTarget.y + y,
-    orbitTarget.z + r * Math.cos(orbitTheta),
-  );
-  camera.lookAt(orbitTarget);
-}
-
-// Camera presets — three named viewpoints tuned to the 3×3 grid + ruler:
-//   · frontal  — slight perspective, full grid in frame, ruler visible.
-//   · cenital  — straight down, useful for spacing checks (less so for
-//     calibration, but handy to see the layout).
-//   · lateral  — from +X (3 o'clock), shows height profile against the
-//     ruler clearly. Best preset for size calibration.
 function setCamera(theta: number, phi: number, radius: number): void {
-  orbitTheta = theta;
-  orbitPhi = phi;
-  orbitRadius = radius;
-  updateCamera();
+  orbit.set(theta, phi, radius);
 }
 btnCamFront?.addEventListener('click', () => setCamera(0,            0.30, 14));
 btnCamTop?.addEventListener('click',   () => setCamera(0,            Math.PI / 2 - 0.05, 14));
@@ -892,22 +893,7 @@ function updateLabels(): void {
 // Animation loop
 // ---------------------------------------------------------------------------
 
-function resize(): void {
-  const sidebarW = 340;
-  const bannerH = 40;
-  const w = window.innerWidth - sidebarW;
-  const h = window.innerHeight - bannerH;
-  renderer.setSize(w, h, false);
-  canvas.style.position = 'fixed';
-  canvas.style.top = `${bannerH}px`;
-  canvas.style.left = '0';
-  canvas.style.width = `${w}px`;
-  canvas.style.height = `${h}px`;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-}
-window.addEventListener('resize', resize);
-resize();
+createLabResize(canvas, renderer, camera, { right: 340, top: 40 });
 
 let prevTime = performance.now();
 function frame(): void {
@@ -932,7 +918,7 @@ function frame(): void {
     }
   }
 
-  updateCamera();
+  orbit.update();
   updateLabels();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -960,15 +946,3 @@ if (typeof window !== 'undefined') {
 // Util
 // ---------------------------------------------------------------------------
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => {
-    switch (c) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#39;';
-      default: return c;
-    }
-  });
-}

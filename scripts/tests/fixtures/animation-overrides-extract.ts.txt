@@ -1,0 +1,36 @@
+// Fixture — realistic extract of src/animation-overrides.ts. The header
+// prose and helper below the record MUST survive any apply untouched.
+import type { SkeletalState } from './critter-skeletal';
+
+export type ClipOverrideMap = Partial<Record<SkeletalState, unknown>>;
+
+/**
+ * Sparse per-critter overrides. Empty map = pure resolver.
+ */
+export const ANIMATION_OVERRIDES: Record<string, ClipOverrideMap> = {
+  sergei: {
+    ability_1: { clip: "Ability1", speed: 1.8 },
+    ability_2: { clip: "Ability2", speed: 1.5 },
+    fall: { clip: "Fall", loop: true },
+    run: { clip: "Run", speed: 1.3 }, // exact-match tier already picks Run
+    victory: { clip: "Victory", loop: true },
+  },
+
+  trunk: {
+    ability_1: { clip: "Ability1", speed: 3 },
+    // Ground pound doubles as ability_2 — GLB ships no dedicated clip.
+    ability_2: "Ability3GroundPound",
+    fall: { clip: "Fall", speed: 2, loop: true },
+  },
+
+  kermit: {
+    victory: { clip: "Victory", loop: true },
+    fall: { clip: "Fall", loop: true },
+  },
+};
+
+/** Helper kept below the record — must survive applies byte-identical. */
+export function getClipOverride(id: string): string | null {
+  const entry = ANIMATION_OVERRIDES[id];
+  return entry ? 'found' : null;
+}

@@ -9,7 +9,7 @@ el lab se vuelve ilegible para quien entre después.
 > **Sibling tools** — all internal (`noindex`), accessible by URL only,
 > linked from the bottom of this sidebar:
 >
-> 1. [`/animations`](../mesh2motion/README-INTEGRATION.md) —
+> 1. [`animations lab`](../../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano `bichitos-mesh2motion`, dev server `:5174`) —
 >    mesh2motion-based lab for **CREATING** animation clips and
 >    exporting GLBs. Upstream flows (Explore/Retarget) stripped;
 >    only `create.html` ships.
@@ -65,9 +65,10 @@ el lab se vuelve ilegible para quien entre después.
 >
 >   - localStorage helpers — `loadFromStorage / saveToStorage /
 >     clearStorage / hasStorageKey / storageDivergesFromCode` + key
->     builder. Consumed by `/decor-editor` (per-pack) and `/calibrate`
->     (per-critter). `/anim-lab` still uses an inline helper (queue
->     deferred — works as-is).
+>     builder. Consumed by `/decor-editor` (per-pack), `/calibrate`
+>     (per-critter) and `/anim-lab` (whole session under
+>     `anim-lab:overrides` — F5 restores the working copy; Reset clears
+>     the current critter from storage too).
 >   - **ToolPatch envelope** + helpers — `makeToolPatch /
 >     copyPatchToClipboard / downloadPatch` and the `CalibratePatch /
 >     AnimLabPatch / DecorEditorPatch` discriminated union. Every lab
@@ -78,7 +79,10 @@ el lab se vuelve ilegible para quien entre después.
 
 ### Apply-patch workflow (2026-04-26)
 
-End-to-end loop for `/calibrate` and `/anim-lab` JSON patches —
+End-to-end loop for `/calibrate`, `/anim-lab` and `/decor-editor` JSON
+patches (decor emits since H3 slice 3; its design notes live in the
+pack HEADER comments of `DECOR_LAYOUTS` because the apply replaces each
+pack's array wholesale) —
 designed to remove the manual paste step:
 
   1. Tune in the lab. localStorage holds the working copy so reloads
@@ -92,16 +96,19 @@ designed to remove the manual paste step:
      npm run apply-tool-patch -- --dry-run # preview the diff first
      npm run apply-tool-patch -- --patch=path/to.json  # alt input
      ```
-  5. The script (`scripts/apply-tool-patch.mjs`) routes by `tool`
-     field:
+  5. The script (`scripts/apply-tool-patch.mjs`, thin CLI over
+     `scripts/tool-patch-core.mjs` — tested by `npm run test:patch`)
+     routes by `tool` field:
        - `calibrate`     → rewrites per-critter `scale / pivotY /
          rotation` in `src/roster.ts`. Sparse: only critters in the
-         patch are touched.
-       - `anim-lab`      → rewrites the entire `ANIMATION_OVERRIDES`
-         record in `src/animation-overrides.ts`. Critters absent
-         from the patch are dropped (not merged) — comments inside
-         the record are also wiped, so re-add doc blocks manually
-         after running the script if they matter.
+         patch are touched. Field-like text inside comments is never
+         rewritten.
+       - `anim-lab`      → sparse MERGE into `ANIMATION_OVERRIDES` in
+         `src/animation-overrides.ts` (H3 slice 1, 2026-08-19).
+         Critters absent from the patch keep their blocks untouched;
+         states absent from a patched critter survive; comments
+         survive. The merge never DELETES an override — to remove
+         one, edit the source by hand.
        - `decor-editor`  → rewrites the per-pack body in
          `src/arena-decor-layouts.ts`. Sparse: packs absent from the
          patch are left untouched.
@@ -115,7 +122,7 @@ a fallback when clipboard / Node is unavailable.
 > Full anim-lab design in BUILD_LOG.md §"2026-04-25 Animation
 > Validation Lab". Decor system design in BUILD_LOG.md §"2026-04-25
 > In-arena decor". Full mesh2motion integration notes:
-> [`mesh2motion/README-INTEGRATION.md`](../mesh2motion/README-INTEGRATION.md).
+> [`bichitos-mesh2motion/README-INTEGRATION.md`](../../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano desde H3 slice 8).
 
 ## Propósito
 

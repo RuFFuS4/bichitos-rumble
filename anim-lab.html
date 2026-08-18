@@ -10,39 +10,10 @@
   <link rel="icon" type="image/png" sizes="any" href="/favicon-br.png" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <title>Bichitos Rumble — Animation Lab</title>
+  <link rel="stylesheet" href="/src/tools/ui/lab-theme.css" />
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #12131a; }
-    canvas { display: block; }
-
-    body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      color: #e0e4ee;
-    }
-
-    #banner {
-      position: fixed; top: 0; left: 0; right: 0;
-      background: linear-gradient(90deg, #3b0f14, #1a0a10);
-      border-bottom: 1px solid #e74c3c;
-      padding: 8px 14px;
-      font: bold 11px/1 ui-monospace, monospace;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      text-align: center;
-      color: #ffbbb2;
-      z-index: 10;
-    }
-
-    #roster-panel {
-      position: fixed;
-      top: 40px; left: 0; bottom: 0;
-      width: 180px;
-      padding: 12px;
-      background: rgba(14, 16, 26, 0.95);
-      border-right: 1px solid rgba(255,255,255,0.08);
-      overflow-y: auto;
-      z-index: 5;
-    }
+    /* Page-specific on top of lab-theme.css (H3 slice 5). */
+    #roster-panel { width: 180px; padding: 12px; }
     #roster-panel h2 {
       font-size: 10px;
       text-transform: uppercase;
@@ -77,41 +48,14 @@
       font-family: ui-monospace, monospace;
     }
 
-    #right-panel {
-      position: fixed;
-      top: 40px; right: 0; bottom: 0;
-      width: 560px;
-      padding: 16px;
-      background: rgba(14, 16, 26, 0.95);
-      border-left: 1px solid rgba(255,255,255,0.08);
-      overflow-y: auto;
-      z-index: 5;
-    }
-
-    #right-panel h1 {
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      margin-bottom: 4px;
-      color: #ffdc5c;
-    }
+    #right-panel { width: 560px; }
+    #right-panel h1 { margin-bottom: 4px; }
     #right-panel .subtitle {
       font-size: 11px;
       opacity: 0.55;
       margin-bottom: 14px;
       font-family: ui-monospace, monospace;
     }
-
-    #right-panel h2 {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.2em;
-      opacity: 0.6;
-      margin: 18px 0 8px;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      padding-top: 12px;
-    }
-    #right-panel h2:first-of-type { border-top: none; padding-top: 0; }
 
     /* "Now playing" indicator — primary feedback surface */
     .np-box {
@@ -139,31 +83,6 @@
       margin-bottom: 4px;
     }
     .top-pb button { width: auto; }
-
-    button {
-      padding: 7px 10px;
-      background: linear-gradient(180deg, #2a2f3d, #1a1d29);
-      color: #ffdc5c;
-      border: 1px solid rgba(255,220,92,0.35);
-      border-radius: 4px;
-      font: bold 10px/1 ui-monospace, monospace;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      cursor: pointer;
-    }
-    button:hover {
-      background: linear-gradient(180deg, #333849, #222634);
-      border-color: rgba(255,220,92,0.6);
-    }
-    button:active { transform: translateY(1px); }
-    button.secondary {
-      color: #9aa3b5;
-      border-color: rgba(255,255,255,0.15);
-    }
-    button:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-    }
 
     /* Mapping table — the centrepiece. Per-row clip + speed + loop. */
     #mapping-table, #aux-mapping-table {
@@ -204,15 +123,7 @@
     td.status-cell { width: 80px; }
     td.tier-cell { width: 70px; font-size: 10px; opacity: 0.7; }
 
-    #mapping-table select, #aux-mapping-table select {
-      background: #1a1d29;
-      color: #e0e4ee;
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 3px;
-      font: 11px ui-monospace, monospace;
-      padding: 3px 4px;
-      width: 100%;
-    }
+    #mapping-table select, #aux-mapping-table select { width: 100%; }
     #mapping-table select.override,
     #aux-mapping-table select.override {
       border-color: rgba(255,220,92,0.6);
@@ -222,18 +133,8 @@
     /* Per-row speed input — small, tight. Yellow tint when non-1.0. */
     input.speed-input {
       width: 100%;
-      background: #1a1d29;
-      color: #e0e4ee;
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 3px;
-      font: 11px ui-monospace, monospace;
-      padding: 3px 4px;
       text-align: right;
       -moz-appearance: textfield;
-    }
-    input.speed-input::-webkit-outer-spin-button,
-    input.speed-input::-webkit-inner-spin-button {
-      -webkit-appearance: none; margin: 0;
     }
     input.speed-input:focus {
       outline: none;
@@ -246,7 +147,6 @@
 
     /* Per-row loop checkbox */
     input.loop-input {
-      accent-color: #ffdc5c;
       cursor: pointer;
       transform: scale(1.1);
     }
@@ -305,19 +205,6 @@
       margin-bottom: 8px;
     }
     .export-row button { flex: 1 1 30%; }
-
-    .export-box {
-      margin-top: 8px;
-      padding: 10px;
-      background: rgba(0,0,0,0.35);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 4px;
-      font: 10px/1.5 ui-monospace, monospace;
-      color: #b0dfb0;
-      max-height: 160px;
-      overflow: auto;
-      white-space: pre-wrap;
-    }
 
     details.advanced {
       margin-top: 18px;
@@ -378,13 +265,7 @@
     }
     .clip-row.playing { background: rgba(255,220,92,0.08); }
 
-    #viewport-hint {
-      position: fixed;
-      bottom: 14px; left: 196px;
-      font: 11px/1.4 ui-monospace, monospace;
-      color: rgba(255,255,255,0.4);
-      z-index: 2;
-    }
+    #viewport-hint { left: 196px; }
 
     .help {
       font-size: 10.5px;
@@ -400,10 +281,10 @@
     }
   </style>
 </head>
-<body>
-  <div id="banner">INTERNAL · Animation Lab · not for players</div>
+<body class="lab-page">
+  <div id="banner" class="lab-banner">INTERNAL · Animation Lab · not for players</div>
 
-  <div id="roster-panel">
+  <div id="roster-panel" class="lab-panel lab-panel--left">
     <h2>Roster</h2>
     <div id="roster-cards"></div>
     <div class="help" style="margin-top: 14px">
@@ -411,7 +292,7 @@
     </div>
   </div>
 
-  <div id="right-panel">
+  <div id="right-panel" class="lab-panel lab-panel--right">
     <h1 id="selected-name">—</h1>
     <div class="subtitle" id="selected-sub">select a critter</div>
 
@@ -467,6 +348,7 @@
     <div class="export-row">
       <button id="btn-export">📋 Copy TS snippet</button>
       <button id="btn-export-json">📦 Copy JSON patch</button>
+      <button id="btn-apply-source">⚡ Apply to source</button>
       <button id="btn-download-json">💾 Download patch.json</button>
     </div>
     <pre class="export-box" id="export-out">(set overrides, then export)</pre>
@@ -516,7 +398,7 @@
     </details>
   </div>
 
-  <div id="viewport-hint">scroll = zoom · drag = orbit</div>
+  <div id="viewport-hint" class="lab-viewport-hint">scroll = zoom · drag = orbit</div>
 
   <script type="module" src="/src/animlab/main.ts"></script>
 </body>

@@ -64,10 +64,16 @@ import {
   makeToolPatch,
   copyPatchToClipboard,
   downloadPatch,
+  toolStorageKey,
+  loadFromStorage,
+  saveToStorage,
+  clearStorage,
   type AnimLabPatch,
   type AnimLabClipMeta,
   type AnimLabStateValue,
 } from '../tools/tool-storage';
+import { applyPatchToSource } from '../tools/apply-ui';
+import { createOrbitCamera, createLabResize, escapeHtml } from '../tools/ui/lab-kit';
 
 const AUTHORED_BASELINE: Record<string, ClipOverrideMap> = JSON.parse(
   JSON.stringify(ANIMATION_OVERRIDES),
@@ -200,6 +206,17 @@ function loadCritter(entry: RosterEntry): void {
   currentlyPlayingState = null;
   currentlyPlayingClip = null;
 
+  // Re-project the session now that the critter's auto-resolver is
+  // live: a restored AUTO row with speed/loop metadata can only
+  // resolve its clip name with a loaded skeletal report. Refresh the
+  // live record afterwards (getClipOverride reads it at play() time).
+  if (rowStates[entryId]) {
+    syncToSession(entryId);
+    const reMerged: ClipOverrideMap = { ...(AUTHORED_BASELINE[entryId] ?? {}), ...(sessionOverrides[entryId] ?? {}) };
+    if (Object.keys(reMerged).length > 0) ANIMATION_OVERRIDES[entryId] = reMerged;
+    else delete ANIMATION_OVERRIDES[entryId];
+  }
+
   refreshAllPanels();
   needsPanelRefresh = true;
 }
@@ -249,6 +266,7 @@ const btnPreviewAll = document.getElementById('btn-preview-all') as HTMLButtonEl
 const btnExport = document.getElementById('btn-export') as HTMLButtonElement;
 const btnExportJson = document.getElementById('btn-export-json') as HTMLButtonElement;
 const btnDownloadJson = document.getElementById('btn-download-json') as HTMLButtonElement;
+const btnApplySource = document.getElementById('btn-apply-source') as HTMLButtonElement;
 const exportOut = document.getElementById('export-out')!;
 
 // ---------------------------------------------------------------------------
@@ -281,12 +299,74 @@ function getRowState(id: string, state: SkeletalState): RowState {
 
 /** Mutate a row's state and rebuild the sessionOverrides projection.
  *  Every UI handler funnels through here — no other surface writes
- *  to `rowStates` directly. */
+ *  to `rowStates` directly. Autosaves the working copy so F5 or a
+ *  post-apply reload doesn't lose the session. */
 function updateRowState(id: string, state: SkeletalState, patch: Partial<RowState>): void {
   const cur = getRowState(id, state);
   const next: RowState = { ...cur, ...patch };
   (rowStates[id] ??= new Map()).set(state, next);
   syncToSession(id);
+  persistSession();
+}
+
+// ---------------------------------------------------------------------------
+// Session persistence — tool-storage working copy
+// ---------------------------------------------------------------------------
+//
+// We persist `rowStates` (not `sessionOverrides`): the row states keep
+// the user's INTENT — an AUTO row with a speed tweak stays AUTO instead
+// of getting pinned to whatever clip the resolver picked when the
+// projection snapshot was taken.
+
+const SESSION_KEY = toolStorageKey('anim-lab', 'overrides');
+
+type PersistedRowStates = Record<string, Record<string, RowState>>;
+
+function isPersistedRowStates(v: unknown): v is PersistedRowStates {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+  for (const states of Object.values(v as Record<string, unknown>)) {
+    if (!states || typeof states !== 'object' || Array.isArray(states)) return false;
+    for (const rs of Object.values(states as Record<string, unknown>)) {
+      const r = rs as Partial<RowState> | null;
+      if (!r || typeof r !== 'object') return false;
+      if (typeof r.clipChoice !== 'string') return false;
+      if (typeof r.speed !== 'number' || !Number.isFinite(r.speed)) return false;
+      if (!(r.loop === null || typeof r.loop === 'boolean')) return false;
+    }
+  }
+  return true;
+}
+
+function persistSession(): void {
+  const blob: PersistedRowStates = {};
+  for (const [id, m] of Object.entries(rowStates)) {
+    if (m.size === 0) continue;
+    blob[id] = Object.fromEntries(m.entries()) as Record<string, RowState>;
+  }
+  if (Object.keys(blob).length === 0) clearStorage(SESSION_KEY);
+  else saveToStorage(SESSION_KEY, blob);
+}
+
+/** Rebuild `rowStates` (+ projections) from localStorage. Runs once at
+ *  boot, before the initial critter load. AUTO rows with metadata get
+ *  their clip re-resolved per critter after each `loadCritter`. */
+function restoreSession(): void {
+  const stored = loadFromStorage<PersistedRowStates>(SESSION_KEY, isPersistedRowStates);
+  if (!stored) return;
+  let restored = 0;
+  for (const [id, states] of Object.entries(stored)) {
+    const m = new Map<SkeletalState, RowState>();
+    for (const [state, rs] of Object.entries(states)) {
+      m.set(state as SkeletalState, { clipChoice: rs.clipChoice, speed: rs.speed, loop: rs.loop });
+    }
+    if (m.size === 0) continue;
+    rowStates[id] = m;
+    syncToSession(id);
+    restored++;
+  }
+  if (restored > 0) {
+    console.info(`[anim-lab] session restored from localStorage (${restored} critter${restored === 1 ? '' : 's'})`);
+  }
 }
 
 /** Project `rowStates[id]` into `sessionOverrides[id]` in the
@@ -631,10 +711,8 @@ btnStop.addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 
 btnApply.addEventListener('click', () => {
-  const activeCard = document.querySelector('.roster-card.active') as HTMLElement | null;
-  const id = activeCard?.dataset.id;
-  if (!id) return;
-  const entry = playableRoster.find((e) => e.id === id);
+  if (!currentId) return;
+  const entry = playableRoster.find((e) => e.id === currentId);
   if (entry) loadCritter(entry);
 });
 
@@ -647,10 +725,8 @@ btnReset.addEventListener('click', () => {
   if (authored && Object.keys(authored).length > 0) {
     ANIMATION_OVERRIDES[currentId] = { ...authored };
   }
-  const activeCard = document.querySelector('.roster-card.active') as HTMLElement | null;
-  const id = activeCard?.dataset.id;
-  if (!id) return;
-  const entry = playableRoster.find((e) => e.id === id);
+  persistSession(); // drop this critter's working copy from storage too
+  const entry = playableRoster.find((e) => e.id === currentId);
   if (entry) loadCritter(entry);
 });
 
@@ -833,6 +909,15 @@ function detectAnimLabVersion(data: AnimLabPatch['data']): 1 | 2 {
   return 1;
 }
 
+/** Number formatting shared with the apply-script's `formatNumber`
+ *  (scripts/tool-patch-core.mjs) so the TS snippet and the JSON-patch
+ *  apply produce byte-identical source. Kept in sync by hand. */
+function formatNumberForTs(n: number): string {
+  if (Number.isInteger(n)) return String(n);
+  const s = n.toFixed(3);
+  return s.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
 /** Render a single value for the TS snippet — same logic as the
  *  apply-script's `formatAnimLabValue`. Kept in sync by hand. */
 function formatAnimLabValueForTs(v: AnimLabStateValue): string {
@@ -841,7 +926,7 @@ function formatAnimLabValueForTs(v: AnimLabStateValue): string {
   const hasLoop = typeof v.loop === 'boolean';
   if (!hasSpeed && !hasLoop) return JSON.stringify(v.clip);
   const parts = [`clip: ${JSON.stringify(v.clip)}`];
-  if (hasSpeed) parts.push(`speed: ${v.speed}`);
+  if (hasSpeed) parts.push(`speed: ${formatNumberForTs(v.speed!)}`);
   if (hasLoop) parts.push(`loop: ${v.loop}`);
   return `{ ${parts.join(', ')} }`;
 }
@@ -853,11 +938,18 @@ btnExport.addEventListener('click', () => {
     return;
   }
   const lines: string[] = [];
-  lines.push('// Paste inside ANIMATION_OVERRIDES in src/animation-overrides.ts');
+  // The snippet REPLACES each critter's whole block when pasted, so it
+  // must carry the authored baseline merged with the session edits —
+  // a session-only snippet would silently drop the authored states the
+  // session didn't touch (same data-loss the JSON merge-apply fixes).
+  lines.push('// Replace each whole `<id>: { ... }` block inside ANIMATION_OVERRIDES');
+  lines.push('// in src/animation-overrides.ts (or use the JSON patch, which merges).');
   for (const id of Object.keys(data)) {
+    const authored = (AUTHORED_BASELINE[id] ?? {}) as Record<string, AnimLabStateValue>;
+    const merged: Record<string, AnimLabStateValue> = { ...authored, ...data[id]! };
     lines.push(`  ${id}: {`);
-    for (const k of Object.keys(data[id]!)) {
-      lines.push(`    ${k}: ${formatAnimLabValueForTs(data[id]![k]!)},`);
+    for (const k of Object.keys(merged)) {
+      lines.push(`    ${k}: ${formatAnimLabValueForTs(merged[k]!)},`);
     }
     lines.push(`  },`);
   }
@@ -889,63 +981,48 @@ btnDownloadJson.addEventListener('click', () => {
   downloadPatch(patch);
 });
 
+btnApplySource.addEventListener('click', async () => {
+  const data = buildAnimLabPatchData();
+  if (Object.keys(data).length === 0) {
+    exportOut.textContent = '(no overrides to apply — tune something first)';
+    return;
+  }
+  const patch = makeToolPatch<AnimLabPatch>('anim-lab', data, detectAnimLabVersion(data));
+  // The write to animation-overrides.ts triggers a Vite full-reload:
+  // drop the applied critters' working copies FIRST (their values now
+  // live in code), keeping an in-memory backup as the failure path.
+  const appliedIds = Object.keys(data);
+  const backup: Record<string, Map<SkeletalState, RowState>> = {};
+  await applyPatchToSource(patch, {
+    onBeforeApply: () => {
+      for (const id of appliedIds) {
+        if (rowStates[id]) backup[id] = rowStates[id]!;
+        delete rowStates[id];
+        delete sessionOverrides[id];
+      }
+      persistSession();
+    },
+    onApplyFailed: () => {
+      for (const id of appliedIds) {
+        if (backup[id]) rowStates[id] = backup[id]!;
+        syncToSession(id);
+      }
+      persistSession();
+    },
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Orbit camera + frame loop
 // ---------------------------------------------------------------------------
 
-let orbitTheta = 0;
-let orbitPhi = 0.35;
-let orbitRadius = 5.5;
-const orbitTarget = new THREE.Vector3(0, 1, 0);
-
-let dragging = false;
-let lastX = 0, lastY = 0;
-canvas.addEventListener('pointerdown', (ev) => {
-  dragging = true; lastX = ev.clientX; lastY = ev.clientY;
-  canvas.setPointerCapture(ev.pointerId);
+// Orbit + resize come from the shared lab-kit (H3 slice 5) — both
+// return dispose() handles, which is the teardown contract the studio
+// shell (slice 6) mounts/unmounts labs with.
+const orbit = createOrbitCamera(canvas, camera, {
+  phi: 0.35, radius: 5.5, minRadius: 2, maxRadius: 14,
 });
-canvas.addEventListener('pointermove', (ev) => {
-  if (!dragging) return;
-  orbitTheta -= (ev.clientX - lastX) * 0.005;
-  orbitPhi = Math.max(0.05, Math.min(1.35, orbitPhi + (ev.clientY - lastY) * 0.003));
-  lastX = ev.clientX; lastY = ev.clientY;
-});
-canvas.addEventListener('pointerup', (ev) => {
-  dragging = false; canvas.releasePointerCapture(ev.pointerId);
-});
-canvas.addEventListener('wheel', (ev) => {
-  orbitRadius = Math.max(2, Math.min(14, orbitRadius + ev.deltaY * 0.01));
-  ev.preventDefault();
-}, { passive: false });
-
-function updateCamera(): void {
-  const y = orbitRadius * Math.sin(orbitPhi);
-  const r = orbitRadius * Math.cos(orbitPhi);
-  camera.position.set(
-    orbitTarget.x + r * Math.sin(orbitTheta),
-    orbitTarget.y + y,
-    orbitTarget.z + r * Math.cos(orbitTheta),
-  );
-  camera.lookAt(orbitTarget);
-}
-
-function resize(): void {
-  const leftW = 180; // roster panel
-  const rightW = 560; // right panel (wider to fit Speed + Loop columns)
-  const bannerH = 40;
-  const w = window.innerWidth - leftW - rightW;
-  const h = window.innerHeight - bannerH;
-  renderer.setSize(Math.max(200, w), Math.max(200, h), false);
-  canvas.style.position = 'fixed';
-  canvas.style.top = `${bannerH}px`;
-  canvas.style.left = `${leftW}px`;
-  canvas.style.width = `${w}px`;
-  canvas.style.height = `${h}px`;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-}
-window.addEventListener('resize', resize);
-resize();
+createLabResize(canvas, renderer, camera, { left: 180, right: 560, top: 40 });
 
 let prevTime = performance.now();
 function frame(): void {
@@ -965,7 +1042,7 @@ function frame(): void {
     }
   }
 
-  updateCamera();
+  orbit.update();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
@@ -985,6 +1062,8 @@ if (typeof window !== 'undefined') {
   });
 }
 
+restoreSession();
+
 if (playableRoster.length > 0) {
   const first = playableRoster[0]!;
   const firstCard = rosterCards.querySelector<HTMLElement>(`[data-id="${first.id}"]`);
@@ -995,15 +1074,3 @@ if (playableRoster.length > 0) {
 // Util
 // ---------------------------------------------------------------------------
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => {
-    switch (c) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#39;';
-      default: return c;
-    }
-  });
-}

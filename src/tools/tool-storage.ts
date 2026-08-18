@@ -2,10 +2,10 @@
 // tool-storage — small shared helper for /<tool>.html localStorage workflows
 // ---------------------------------------------------------------------------
 //
-// Status: NEW (2026-04-25). Currently used only by /decor-editor.html.
-// /calibrate.html and /anim-lab.html continue to use their own inline
-// implementations until we explicitly opt-in (deferred to avoid
-// regressions on tools that already work).
+// Status: shared (2026-04-25, audited 2026-08-19). Consumed by the
+// three labs: /decor-editor.html (per-pack layouts), /calibrate.html
+// (per-critter working copies) and /anim-lab.html (whole-session row
+// states under `anim-lab:overrides`, H3 slice 2).
 //
 // Why this module exists
 // ----------------------
@@ -25,10 +25,14 @@
 // Key shape (convention):
 //   `<tool-name>:<entity-id>`
 //
-// Examples:
+// Examples (real keys in use):
 //   decor-editor:jungle           — the layout for the jungle pack
-//   calibrate:roster              — (future) calibrate working copy
-//   anim-lab:overrides            — (future) anim-lab session overrides
+//   calibrate:<critterId>         — per-critter calibrate working copy
+//   anim-lab:overrides            — anim-lab session row states (all critters)
+//
+// ⚠ `decor-editor:<pack>` is ALSO read by the game side
+// (src/arena-decor-layouts.ts) for the in-game preview bridge — never
+// rename these namespaces without migrating both sides.
 //
 // Failure modes
 // -------------
@@ -203,11 +207,11 @@ export interface CalibratePatch extends ToolPatchBase {
  *     this when any state has speed/loop set; the source file ends up
  *     mixing the two forms (object only where metadata matters).
  *
- * Speed/loop are TOOLING METADATA only as of 2026-04-27 — the game's
- * runtime resolver path reads `clip` and ignores the rest. /anim-lab
- * uses `playClipByName(clip, loop, speed)` so what the user sees in
- * the lab matches their tuning intent. Promotion to runtime is a
- * Phase-2 change in critter-skeletal.ts.
+ * Speed/loop are LIVE RUNTIME VALUES since the 2026-04-27 promotion:
+ * `SkeletalAnimator` honours `meta.loop` at action setup and applies
+ * `meta.speed` on every `play(state)` (see critter-skeletal.ts and the
+ * header of src/animation-overrides.ts). /anim-lab previews with
+ * `playClipByName(clip, loop, speed)` — same numbers, same behaviour.
  */
 export interface AnimLabClipMeta {
   clip: string;

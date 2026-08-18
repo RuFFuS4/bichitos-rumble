@@ -20,16 +20,10 @@ import {
 import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 import { initOnlineBeltToast } from './online-belt-toast';
-import { updateDustPuffs } from './dust-puff';
-import { tickAbilityZones, isInsideZoneOfKind, tickLOffline, setArenaForAbilities } from './abilities';
-import { tickProjectiles } from './projectiles';
-import {
-  setCritterStatus,
-  updateAllStatusPositions,
-  type CritterStatus,
-} from './hud/status-icons';
+import { isInsideZoneOfKind, setArenaForAbilities } from './abilities';
+import { initSceneAtmosphere } from './scene-atmosphere';
+import { tickSharedGameplay } from './frame-ticks';
 import { initStatusLegend } from './hud/status-legend';
-import type { Critter } from './critter';
 import { getPreviewPackId } from './arena-decor-layouts';
 
 // ---------------------------------------------------------------------------
@@ -83,86 +77,13 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 console.log('[bichitos] Renderer created OK');
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.setClearColor(0x87b0d8); // sky blue — fallback before skydome paints
 document.body.prepend(renderer.domElement);
 
 // Scene
 const scene = new THREE.Scene();
-// Fog keyed to the horizon colour so the skydome blends smoothly with
-// distant geometry instead of clipping to a hard edge. Density 0.008
-// (was 0.012 until 2026-04-27): keeps the void feeling moody while
-// letting the horizon colour bleed into the far frustum.
-scene.fog = new THREE.FogExp2(0xb6d1e8, 0.008);
-
-// ---------------------------------------------------------------------------
-// Sky / pack background
-// ---------------------------------------------------------------------------
-//
-// Final approach (post 4-iteration debug): use Three.js's built-in
-// `scene.background = equirectTexture` skybox path. Three.js renders
-// `scene.background` in a dedicated pre-pass before any geometry, with
-// a built-in shader that maps the equirect onto a virtual cube around
-// the camera. That pre-pass:
-//   · ALWAYS fills 100 % of the framebuffer (no edge leaks, no
-//     grazing-angle seams)
-//   · Has no depth/transparency interactions with scene meshes
-//   · Doesn't need a sphere mesh, doesn't need a screen-space quad,
-//     doesn't need lighting
-//
-// We tried both before:
-//   1. Camera-parented skydome sphere → equirect read as "south-pole
-//      band only" because camera offset.
-//   2. World-anchored sphere + MeshStandardMaterial + emissiveMap →
-//      vertical seams at frame edges where the backdrop quad's
-//      gradient bled through the BackSide sphere at grazing angles.
-// Both are now retired.
-//
-// What stays from the old setup:
-//   · DEFAULT_FOG_COLOR / DEFAULT_CLEAR_COLOR for the renderer clear
-//     colour and FogExp2 colour. Without a textured pack the menu
-//     keeps the original cartoon-blue sky read.
-//   · setSceneFogColor / setSceneSkyboxTexture stay as the public API
-//     so arena.ts doesn't need to change.
-
-const DEFAULT_FOG_COLOR = 0xb6d1e8;
-const DEFAULT_CLEAR_COLOR = 0x87b0d8;
-
-/**
- * Bind the pack's equirect panorama as the scene background, or pass
- * `null` to drop it (menu / no-pack state). Three.js renders this in
- * its built-in skybox pass — guaranteed full-screen coverage, no
- * mesh / depth / transparency stack to worry about.
- *
- * Caller is responsible for ensuring `tex.mapping ===
- * THREE.EquirectangularReflectionMapping` (set in
- * `loadPackSkyboxTexture` so we never have to think about it here).
- */
-export function setSceneSkyboxTexture(tex: THREE.Texture | null): void {
-  if (tex) {
-    if (tex.mapping !== THREE.EquirectangularReflectionMapping) {
-      tex.mapping = THREE.EquirectangularReflectionMapping;
-      tex.needsUpdate = true;
-    }
-    scene.background = tex;
-  } else {
-    scene.background = null;
-  }
-}
-
-/**
- * Retune the global fog colour. FogExp2 uses a Color, so we mutate it in
- * place (no Scene re-assignment needed). Pass `null` to restore the
- * default menu-time horizon colour.
- */
-export function setSceneFogColor(color: number | null): void {
-  const target = color ?? DEFAULT_FOG_COLOR;
-  if (scene.fog && 'color' in scene.fog) {
-    (scene.fog as THREE.FogExp2).color.setHex(target);
-  }
-  // Also tint the clear colour so the 1-frame gap before the skybox
-  // paints isn't jarring (the old default was a fixed sky blue).
-  renderer.setClearColor(color ?? DEFAULT_CLEAR_COLOR);
-}
+// Atmosphere (clear colour + fog + lights + skybox API) is shared with
+// the /tools.html match lab — see src/scene-atmosphere.ts (H3 slice 7).
+initSceneAtmosphere(scene, renderer);
 
 // ---------------------------------------------------------------------------
 // Kermit Poison Cloud — local screen-space overlay
@@ -236,34 +157,6 @@ export function setPoisonOverlayIntensity(t: number): void {
   poisonInner.style.opacity = String(v);
   poisonOuter.style.opacity = String(v);
 }
-
-// Lighting — three-point rig + hemisphere ambient.
-// Sky/ground hemisphere replaces the flat AmbientLight: the top of every
-// critter picks up the cyan sky; the underside catches the warm ground
-// glow — cheap way to sell "outdoors on a floating platform".
-const hemi = new THREE.HemisphereLight(0x9cc7ea, 0x4a3a26, 0.55);
-scene.add(hemi);
-
-// Key: warm sun-angle light. Intensity bumped 1.2 → 1.35 and tinted
-// slightly warmer for the "high-altitude golden hour" reading.
-const dirLight = new THREE.DirectionalLight(0xfff1d4, 1.35);
-dirLight.position.set(8, 25, 12);
-dirLight.castShadow = true;
-dirLight.shadow.mapSize.set(1024, 1024);
-dirLight.shadow.camera.near = 5;
-dirLight.shadow.camera.far = 60;
-dirLight.shadow.camera.left = -18;
-dirLight.shadow.camera.right = 18;
-dirLight.shadow.camera.top = 18;
-dirLight.shadow.camera.bottom = -18;
-dirLight.shadow.bias = -0.002;
-scene.add(dirLight);
-
-// Rim from behind — cool blue backlight so silhouettes separate from the
-// warm sky. No shadow casting (cost we don't need here).
-const rimLight = new THREE.DirectionalLight(0x9fb4e8, 0.55);
-rimLight.position.set(-10, 14, -14);
-scene.add(rimLight);
 
 // Camera — syncSize sets the correct canvas dimensions and aspect ratio
 const camera = createCamera();
@@ -485,29 +378,6 @@ if (btnOnline && !hasServerUrl) {
  *   · standing in a 'sand' zone (and not Sihans herself)
  *                             → 'slowed'
  */
-const EMPTY_STATUS_SET: ReadonlySet<CritterStatus> = new Set();
-function computeCritterStatuses(c: Critter): Set<CritterStatus> {
-  const out = new Set<CritterStatus>();
-  if (c.stunTimer > 0) {
-    out.add('stunned');
-    out.add('vulnerable');
-  }
-  if (c.slowTimer > 0) out.add('frozen');
-  // 2026-04-30 final-L — Toxic Touch confused → poisoned icon.
-  if (c.confusedTimer > 0) out.add('poisoned');
-  if (c.config.name === 'Shelly' && c.selfTintTimer > 0) out.add('steel-shell');
-  if (c.config.name === 'Kurama' && c.invisibilityTimer > 0) out.add('decoy-ghost');
-  // Frenzy slot is ability index 2 in our kits.
-  const frenzy = c.abilityStates[2];
-  if (frenzy?.active && frenzy.windUpLeft <= 0) out.add('frenzy');
-  // Zones — only count enemy zones (caster is exempt by name).
-  if (c.config.name !== 'Kermit' && isInsideZoneOfKind(c.x, c.z, 'poison')) out.add('poisoned');
-  if (c.config.name !== 'Sihans' && isInsideZoneOfKind(c.x, c.z, 'sand')) out.add('slowed');
-  // 2026-04-30 final-L — Frozen Floor: critters in 'ice' zone show frozen.
-  if (c.config.name !== 'Kowalski' && isInsideZoneOfKind(c.x, c.z, 'ice')) out.add('frozen');
-  return out;
-}
-
 // Game loop
 let lastTime = performance.now();
 function loop(now: number) {
@@ -525,32 +395,13 @@ function loop(now: number) {
   // EXCEPT when the offline pause menu is up: if we keep advancing
   // puff lifetimes, an in-flight ring would keep expanding behind the
   // menu and look like gameplay never actually froze.
+  // Gameplay subsystem ticks (dust / zones / L / projectiles / status
+  // icons) — shared with the match lab, see src/frame-ticks.ts.
+  tickSharedGameplay(dt, game, scene, camera, {
+    width: renderer.domElement.clientWidth,
+    height: renderer.domElement.clientHeight,
+  });
   if (!game.isPaused()) {
-    updateDustPuffs(dt);
-    // Ability zones (Kermit Poison Cloud, Sihans Quicksand, Kowalski
-    // legacy Arctic Burst). Same gating as dust puffs — pause should
-    // freeze the slow-zone timer too so a zone doesn't quietly expire
-    // while the menu is up.
-    tickAbilityZones(dt);
-    // 2026-04-30 final-L — per-tick L mechanics (Cone Pulse / Saw /
-    // Toxic Touch contact, Sinkhole pull). Server runs the same
-    // logic in `simulatePlaying`; this branch covers offline.
-    tickLOffline(dt, game.getActiveCritters(), scene);
-    // 2026-04-29 K-session — Kowalski Snowball projectile tick.
-    // Integrates position + sweeps collision (offline) or just
-    // advances the visual mesh (online; collision is server-driven).
-    // Same pause gating as zones: pause freezes the bullets.
-    tickProjectiles(dt, game.getActiveCritters());
-    // 2026-04-29 K-session — Kermit Poison Cloud screen-space overlay.
-    // The local critter inside any 'poison'-kind zone gets a CSS
-    // toxic-green vignette overlay. CSS handles the fade in/out via
-    // a 200 ms transition; we just feed it a 0/1 each frame.
-    //
-    // 2026-04-29 final-K (Rafa: "estar dentro debe dar sensación
-    // real de cegado por veneno") — when the local critter is
-    // inside, every OTHER critter that's outside the cloud gets
-    // its `fadeAlpha` driven down to 0.10 so the viewer can barely
-    // see them. Critters inside the same cloud stay visible.
     const localPos = game.getLocalPlayerPos();
     const insidePoison = !!localPos && localPos.alive
       && isInsideZoneOfKind(localPos.x, localPos.z, 'poison');
@@ -568,30 +419,6 @@ function loop(now: number) {
       }
     } else {
       for (const c of allCritters) c.fadeAlpha = null;
-    }
-    // 2026-04-29 final-K — status icons. Recalculate the active
-    // status set per critter each frame and let the HUD layer
-    // diff/render the emoji glyphs above each head.
-    //
-    // 2026-04-30 final-polish — only run while a match is actually
-    // in play. In title / character_select / countdown / ended /
-    // online-waiting phases the per-critter status computation isn't
-    // useful and worse, can re-add an icon for a winner who's still
-    // alive (e.g. frenzy slot still flagged active during the
-    // celebrate clip). Phase-transition `clearAllCritterStatus()`
-    // calls then keep the DOM clean.
-    if (game.isMatchPlaying()) {
-      for (const c of allCritters) {
-        if (!c.alive) {
-          setCritterStatus(c, EMPTY_STATUS_SET);
-          continue;
-        }
-        setCritterStatus(c, computeCritterStatuses(c));
-      }
-      updateAllStatusPositions(camera, {
-        width: renderer.domElement.clientWidth,
-        height: renderer.domElement.clientHeight,
-      });
     }
   } else {
     // Paused: drop the overlay so the pause menu reads cleanly.

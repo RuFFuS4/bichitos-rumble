@@ -1,0 +1,161 @@
+/* ---------------------------------------------------------------------------
+ * lab-theme — shared look for the internal labs (H3 slice 5)
+ * ---------------------------------------------------------------------------
+ *
+ * One stylesheet for /anim-lab, /calibrate, /decor-editor (and the
+ * studio shell, slice 6). Replaces ~100 duplicated inline lines per
+ * page. Tokens first; components below are scoped under `.lab-page` so
+ * this file can never leak styles into the game.
+ *
+ * decor-editor note: its old palette was a near-miss fork (#1a1f2e vs
+ * #1a1d29, Consolas vs ui-monospace…). It now adopts THIS palette —
+ * a deliberate unification (H3 slice 5), not an accident.
+ * ------------------------------------------------------------------------- */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+.lab-page {
+  --lab-bg: #12131a;
+  --lab-panel: rgba(14, 16, 26, 0.95);
+  --lab-panel-solid: #1a1d29;
+  --lab-border: rgba(255, 255, 255, 0.08);
+  --lab-border-solid: #2a2f3d;
+  --lab-text: #e0e4ee;
+  --lab-dim: #8b94aa;
+  --lab-accent: #ffdc5c;
+  --lab-accent-dim: rgba(255, 220, 92, 0.35);
+  --lab-alert: #e74c3c;
+  --lab-ok: #b0dfb0;
+  --lab-mono: ui-monospace, Consolas, monospace;
+
+  font-family: 'Segoe UI', Arial, sans-serif;
+  color: var(--lab-text);
+}
+
+html:has(.lab-page), .lab-page {
+  width: 100%; height: 100%; overflow: hidden; background: #12131a;
+}
+.lab-page canvas { display: block; }
+
+/* --- INTERNAL warning banner (anim-lab / calibrate) ---------------------- */
+.lab-banner {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: linear-gradient(90deg, #3b0f14, #1a0a10);
+  border-bottom: 1px solid var(--lab-alert);
+  padding: 8px 14px;
+  font: bold 11px/1 var(--lab-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #ffbbb2;
+  z-index: 10;
+}
+
+/* --- Fixed side panels --------------------------------------------------- */
+.lab-panel {
+  position: fixed;
+  top: 40px; bottom: 0;
+  padding: 16px;
+  background: var(--lab-panel);
+  overflow-y: auto;
+  z-index: 5;
+}
+.lab-panel--right { right: 0; border-left: 1px solid var(--lab-border); }
+.lab-panel--left  { left: 0;  border-right: 1px solid var(--lab-border); }
+
+.lab-panel h1 {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  color: var(--lab-accent);
+}
+.lab-panel h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  opacity: 0.55;
+  margin: 18px 0 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 10px;
+}
+.lab-panel h2:first-of-type { border-top: none; padding-top: 0; }
+
+/* --- Buttons ------------------------------------------------------------- */
+/* Base look only — width/margins stay page-level (calibrate stacks them
+ * block-width, anim-lab uses inline buttons). */
+.lab-page button {
+  padding: 7px 10px;
+  background: linear-gradient(180deg, #2a2f3d, #1a1d29);
+  color: var(--lab-accent);
+  border: 1px solid var(--lab-accent-dim);
+  border-radius: 4px;
+  font: bold 10px/1 var(--lab-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.lab-page button:hover {
+  background: linear-gradient(180deg, #333849, #222634);
+  border-color: rgba(255, 220, 92, 0.6);
+}
+.lab-page button:active { transform: translateY(1px); }
+.lab-page button:disabled { opacity: 0.35; cursor: not-allowed; }
+.lab-page button.secondary { color: #9aa3b5; border-color: rgba(255, 255, 255, 0.15); }
+.lab-page button.danger  { color: #ffbbb2; border-color: rgba(231, 76, 60, 0.55); }
+.lab-page button.primary { background: var(--lab-accent); color: #1a1400; border-color: var(--lab-accent); }
+.lab-page button.primary:hover { background: #ffe680; }
+
+/* --- Form elements ------------------------------------------------------- */
+.lab-page select,
+.lab-page input[type='text'],
+.lab-page input[type='number'] {
+  background: var(--lab-panel-solid);
+  color: var(--lab-text);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  font: 11px var(--lab-mono);
+  padding: 3px 5px;
+}
+.lab-page input[type='range'] { accent-color: var(--lab-accent); }
+.lab-page input[type='checkbox'] { accent-color: var(--lab-accent); }
+.lab-page input[type='number']::-webkit-outer-spin-button,
+.lab-page input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+
+/* --- Export box + viewport hint ------------------------------------------ */
+.lab-page .export-box {
+  margin-top: 10px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--lab-border);
+  border-radius: 4px;
+  font: 10px/1.4 var(--lab-mono);
+  color: var(--lab-ok);
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.lab-page .lab-viewport-hint {
+  position: fixed;
+  bottom: 14px; left: 14px;
+  font: 11px/1.4 var(--lab-mono);
+  color: rgba(255, 255, 255, 0.4);
+  z-index: 2;
+}
+.lab-page .hint-text {
+  color: var(--lab-dim);
+  font-size: 10.5px;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+.lab-page .hint-text code, .lab-page .banner-hint code {
+  background: var(--lab-panel-solid);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #b8c4dc;
+  font-family: var(--lab-mono);
+  font-size: 11px;
+}

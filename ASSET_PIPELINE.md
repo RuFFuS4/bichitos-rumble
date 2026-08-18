@@ -318,7 +318,7 @@ and the procedural layer handles 100% of the motion like before.
 ## Preferred tool: `/animations` (Mesh2Motion integrated)
 
 The project ships with an internal **animation lab** at
-[`/animations`](../mesh2motion/README-INTEGRATION.md) based on
+[`animations lab`](../../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano `bichitos-mesh2motion`) based on
 [Mesh2Motion](https://github.com/Mesh2Motion/mesh2motion-app) (MIT code,
 CC0 animation assets). Adaptations we ship:
 
@@ -332,7 +332,7 @@ CC0 animation assets). Adaptations we ship:
 **Workflow per critter**:
 
 1. Open `https://bichitosrumble.com/animations` (or local dev — see
-   `mesh2motion/README-INTEGRATION.md`).
+   `bichitos-mesh2motion/README-INTEGRATION.md`, repo hermano).
 2. Click the critter card. The GLB loads and the suggested rig gets
    preselected.
 3. Adjust the bones inside the mesh (Mesh2Motion's skeleton-fit step).

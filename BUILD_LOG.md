@@ -1,5 +1,180 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — H3 slices 7+8: paridad del match lab + evict de mesh2motion
+
+**Slice 7 — el lab deja de mentir (y de bootear dos juegos)**. Dos
+extracciones de src/main.ts:
+- `src/scene-atmosphere.ts` (clearColor+fog+luces+API de skybox) ROMPE
+  el ciclo arena.ts→main.ts: el lab importaba Game→…→arena→main y
+  ejecutaba TODO main.ts transitivamente — un segundo renderer, un
+  segundo `new Game`, un segundo rAF loop y la dependencia dura de los
+  ids DOM de index.html (la verdadera razón de que tools.html tuviera
+  que clonar el DOM). Ahora el lab bootea UN juego, con la atmósfera
+  de producción y los skyboxes por pack funcionando.
+- `src/frame-ticks.ts`: la lista única de ticks por frame (dust,
+  zones, tickLOffline, projectiles, status icons) compartida por ambos
+  entries — en el lab las habilidades con zonas/proyectiles se
+  congelaban. El overlay de veneno queda en main.ts (presentación DOM).
+- E2e: juego intacto (title, 1 boot, 0 errores); lab con 0 boots de
+  main.ts, 0 errores, y captura renderizando tundra con el rig real.
+- Pendiente (fase de afilado): re-sync del HTML clonado del HUD
+  (timer hero, medallones) — inerte para gameplay.
+
+**Slice 8 — mesh2motion evictado** (decisión de Rafa: working tree
+only, SIN reescritura de historia):
+- Repo hermano `../bichitos-mesh2motion` (git propio, commit a0a0212,
+  553 ficheros). Contratos parametrizados con `BICHITOS_GAME_ROOT`
+  (default `../bichitos-rumble`): copy-game-assets lee los critters
+  del juego; vite buildea a dist/ propio o empuja a public/animations
+  del juego para deploys de tooling.
+- README-INTEGRATION corregido ANTES de mover: el inventario real del
+  fork son 11 ficheros de código con 43 marcadores [BICHITOS-FORK]
+  (la doc declaraba 6) — fuente de verdad: grep BICHITOS-FORK.
+- Juego: fuera mesh2motion/ (552 ficheros) y public/animations/ (build
+  commiteada, 57 MB). **De 996 → 333 ficheros trackeados (−67 %)**.
+  launch.json "animations" apunta al hermano (:5174), enlace del
+  sidebar actualizado, clean-dist-raw conserva el guard, docs al día.
+- Build completo verde + copy-game-assets probado desde el hermano.
+- El .git del juego sigue en ~961 MB — recuperarlo exigiría
+  reescritura de historia (descartada por ahora; git-filter-repo si
+  algún día molesta).
+
+**H3: los 8 slices COMPLETADOS.** Gate: apply desde el navegador <1 min
+con diff ✅ · cero pérdida al recargar ✅ · mesh2motion fuera ✅.
+
+## 2026-08-19 — H3 slices 5+6: UI kit compartido + Bichitos Studio (shell)
+
+**Slice 5 — lab-theme + lab-kit**: `src/tools/ui/lab-theme.css` (tokens
++ banner INTERNAL + paneles + botones + form + export-box, scoped bajo
+`.lab-page`) y `src/tools/ui/lab-kit.ts` (orbit camera y resize con
+`dispose()`, escapeHtml). Mueren las copias near-identical de
+anim-lab/calibrate y la paleta fork de decor-editor (adopta el tema —
+cambio consciente). Neto: −451/+403 líneas con 2 ficheros nuevos.
+Verificado con captura + cero errores de consola en los 3 labs.
+
+**Slice 6 — studio.html**: shell de tabs con **iframes lazy
+keep-alive** — decisión de arquitectura DELIBERADA frente al SPA
+mount/unmount que proponía el plan original: aislamiento de
+listeners/estado/globals gratis (anim-lab muta ANIMATION_OVERRIDES
+in-place, decor cuelga listeners de window, sidebar.ts pollea sin
+teardown — nada de eso puede colisionar entre iframes), cambio de tab
+sin recarga preservando el estado completo, las páginas standalone
+siguen siendo first-class (son los src de los iframes), y el
+location.reload() de los badges del match lab solo recarga su tab.
+Tab activa recordada en localStorage, atajos 1-4, botón reload-tab,
+Match Lab incluido como tab (carga solo al abrirla — autostartea un
+match). En el build solo entra con VITE_BUILD_TOOLS=1, con noindex.
+E2e: boot con 1 solo iframe (lazy), editar en Animations → cambiar a
+Decor → volver: la edición sigue SIN reload; tab recordada; 0 errores.
+
+## 2026-08-19 — H3 slice 4: "Apply to source" — el bucle de 5-6 pasos muere en 2 clicks
+
+El corazón del hito. `scripts/vite-tool-patch-plugin.mjs` monta dos
+endpoints POST **solo en el dev server** (`apply: 'serve'` — el plugin
+no existe estructuralmente en builds): `/__tool-patch/preview`
+(validate + mutador + diff Myers como JSON) y `/__tool-patch/apply`
+(ídem + write al working tree; commitear sigue siendo acto humano).
+Los targets salen de `targetByTool` — el cliente no elige rutas.
+
+`src/tools/apply-ui.ts` (compartido por los 3 labs): botón "⚡ Apply
+to source" → fetch preview → **modal bloqueante con el diff** (nada se
+escribe sin confirmar) → apply → Vite full-reload y el lab rearranca
+leyendo del código recién autorado.
+
+Detalle fino de secuenciación: el write dispara el full-reload de Vite,
+que compite con la respuesta HTTP — la limpieza de la working copy
+(localStorage) corre ANTES del apply, con backup en memoria como ruta
+de restauración si el apply falla. Por lab: anim-lab borra los
+rowStates de los critters aplicados (+persistSession), calibrate hace
+clearLocalFor por critter, decor limpia la clave del pack.
+
+Verificado e2e con Playwright contra el dev server real: editar
+trunk.idle → modal muestra `+ idle: "Idle"` → confirmar → fichero
+escrito, reload automático, storage a null, la UI muestra el valor
+DESDE el código. Restaurado con git checkout tras el test. El gate de
+H3 ("cambio aplicado a fuente desde el navegador en <1 min con diff
+visible") queda cumplido para las 3 herramientas.
+
+## 2026-08-19 — H3 slice 3: decor-editor emite patches + preview sin mentiras
+
+- **decor-editor emite `DecorEditorPatch`**: botones "Copy JSON patch"
+  y "Download patch.json" con el mismo envelope que calibrate/anim-lab
+  — `applyDecorEditor` deja de ser código muerto sin productor. Las 3
+  herramientas cierran ya el mismo bucle tune → patch → apply.
+- **Comentarios de diseño a salvo** (decisión de Rafa): las notas de
+  cluster que vivían DENTRO de los arrays de `DECOR_LAYOUTS` (y que el
+  apply wholesale destruiría) migradas a la cabecera de cada pack como
+  sección "Composición". Los 5 packs quedan como arrays de datos puros;
+  ni una nota perdida (verificado con test contra el fichero real).
+- **Precisión unificada**: snippet TS y JSON redondean a 3 decimales
+  recortados — el MISMO formato que escribe el applier. Snippet, patch
+  y apply producen fuente byte-idéntica; el round-trip por el editor ya
+  no genera churn de diff.
+- **Fix packScale**: la preview del editor aplicaba `fitFactor × scale`
+  omitiendo el `packScale` que el juego SÍ aplica (jungle 1.20 …
+  tundra 1.65) — todo se veía un 20-65 % más pequeño que en producción
+  y se calibraba contra una mentira. Corregido en la preview GLB y en
+  el badge "≈ X u (n× critter)".
+- Verificación: 36 tests (nuevo: apply wholesale contra el
+  arena-decor-layouts.ts real conservando headers) + e2e Playwright
+  (editor → patch → validate → apply dry: 73 props antes y después).
+
+## 2026-08-19 — H3 slice 2: anim-lab persiste la sesión + divergencia real en calibrate
+
+- **anim-lab**: la sesión entera (row states de todos los critters) se
+  autosalva en `anim-lab:overrides` vía tool-storage en el choke point
+  `updateRowState` y se restaura en boot — F5 y el full-reload post
+  apply ya no pierden nada. Se persiste `rowStates` (la INTENCIÓN: una
+  fila AUTO con speed sigue siendo AUTO, no se pinnea al clip resuelto)
+  y tras cada `loadCritter` se re-proyecta la sesión con el resolver
+  vivo. Reset limpia también el storage del critter. Apply/Reset
+  desacoplados del DOM (`currentId` en vez de `.roster-card.active`).
+- **calibrate**: el indicador de divergencia compara VALORES con el
+  mismo epsilon 0.001 del export (antes: existencia de clave → falso
+  positivo permanente tras cualquier edición, aunque volvieras al valor
+  exacto). Tres estados: authored / local en sync / diverge. Y "Re-fit
+  all to target" ahora persiste TODOS los slots (antes un reload
+  revertía el refit de los no seleccionados en silencio).
+- Verificación e2e con Playwright headless contra el dev server real:
+  anim-lab (editar → localStorage → F5 → UI restaurada) y calibrate
+  (authored → nudge = diverge → volver al valor = in sync). El lab de
+  calibrate se selecciona por raycast: sweep de clicks en el canvas.
+- Decisiones de Rafa registradas en NEXT_STEPS: sin tombstones (borrar
+  = editar fuente), comentarios de decor a docstrings (slice 3),
+  mesh2motion sin reescritura de historia, match lab COMO TAB (slice 6-7).
+
+## 2026-08-19 — H3 slice 1: patch-core con merge no destructivo
+
+Arranca H3 (Bichitos Studio) con el mapa del tooling hecho por workflow
+(9 lectores + síntesis; plan de 8 slices en la sesión). El slice 1 mata
+el bug más serio del pipeline: **el apply de anim-lab borraba critters**
+(emisor sparse + applier que reescribía `ANIMATION_OVERRIDES` entero,
+con un comentario declarándolo "deliberate" sobre premisa falsa).
+
+- `scripts/tool-patch-core.mjs` NUEVO: mutadores puros (string→string)
+  extraídos del CLI + `validateToolPatch` + diff Myers. Importable por
+  CLI, endpoint del dev-server (slice 4) y tests.
+- **anim-lab = merge textual sparse**: reemplaza estados in-place
+  (comentario trailing intacto), añade estados/bloques, y NUNCA borra.
+  Borrar un override = editar el fuente a mano (tombstones → decisión
+  de Rafa, v3).
+- **Hardening post-review adversarial** (3 lentes → 13 confirmados):
+  máscara tri-estado comentario/código/string para todo el escaneo de
+  llaves y anclas (un `}` en un comentario ya no corrompe nada),
+  validación de identificadores (un id con typo ya no crea bloques
+  duplicados que pisan overrides en runtime), coma automática al
+  apendar tras línea sin coma, EOLs CRLF respetados, estados aparcados
+  en `/* */` tratados como ausentes, y diff Myers para que el review
+  de un merge sparse muestre solo las líneas tocadas.
+- Emisor alineado: el snippet TS de anim-lab ahora emite el bloque
+  COMPLETO (baseline autoral + sesión) para que pegarlo no pierda
+  estados, y formatea `speed` byte-idéntico al applier.
+- **35 tests golden+regresión** (`npm run test:patch`, en `check`),
+  incluido uno contra el `animation-overrides.ts` real (CRLF incluido).
+- Docs mentirosos corregidos: tool-storage decía que solo decor-editor
+  lo usa, que speed/loop son metadata muerta; DEV_TOOLS documentaba el
+  borrado como feature.
+
 ## 2026-08-19 — H2 CERRADO (`v1.4-portal-ready`): itch.io PUBLICADO
 
 **Bichitos Rumble está publicado en itch.io** con la primera

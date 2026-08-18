@@ -154,35 +154,34 @@ export const DECOR_LAYOUTS: Record<ArenaPackId, DecorPlacement[]> = {
   //   - Densidad ALTA — vegetación masiva en borde, anillo central limpio.
   //   - 16 props (1 en anillo medio). Sprint final 2026-04-26: clusters x2
   //     en masa visual respecto al primer pase, manteniendo legibilidad.
+  //
+  //   Composición (orden de placements — las notas viven AQUÍ porque el
+  //   apply del decor-editor reescribe el array entero):
+  //   - Cluster A "Palm overgrowth" (NE 1–2h, hero focal, 5 props): hero
+  //     palmtall + palm_jungle de soporte + 3 rocks en distintos r.
+  //   - Cluster B "Templo enterrado" (SW 7–8h, totem + sillares, 4 props).
+  //   - Cluster C "Mini bosquecillo asimétrico" (NW 10–11h, 3 props): las
+  //     dos palmeras NO espejean (distintos r y angle apreciables); rock
+  //     al pie da masa visual al cluster.
+  //   - Cluster D "Outpost SE" (5h, palm secundaria + 2 rocks reforzadas).
+  //   - Anillo medio: único prop interior (regla: máx. 1–2 sueltos).
   // ---------------------------------------------------------------------------
   jungle: [
-    // Cluster A — "Palm overgrowth" (NE 1–2h, hero focal, 5 props)
-    // Hero palmtall + palm_jungle de soporte + 3 rocks en distintos r.
     { r: 10.80, angle: 0.55, rotY:  0.30, scale: 1.00, type: 'palmtall_jungle' },
     { r: 11.10, angle: 0.70, rotY:  1.40, scale: 0.95, type: 'palm_jungle'     },
     { r: 11.20, angle: 0.40, rotY:  1.70, scale: 1.10, type: 'rock_jungle'     },
     { r: 10.40, angle: 0.85, rotY:  2.50, scale: 0.90, type: 'rock_jungle'     },
     { r: 10.60, angle: 0.30, rotY:  0.80, scale: 1.05, type: 'rock_jungle'     },
-
-    // Cluster B — "Templo enterrado" (SW 7–8h, totem + sillares, 4 props)
     { r: 10.60, angle: 3.85, rotY: -0.40, scale: 1.00, type: 'totem_jungle'    },
     { r: 11.00, angle: 3.70, rotY:  0.80, scale: 1.00, type: 'rock_jungle'     },
     { r: 10.20, angle: 4.10, rotY:  2.10, scale: 0.95, type: 'rock_jungle'     },
     { r: 10.80, angle: 4.00, rotY:  1.50, scale: 1.10, type: 'rock_jungle'     },
-
-    // Cluster C — "Mini bosquecillo asimétrico" (NW 10–11h, 3 props)
-    // Las dos palmeras NO espejean: distintos r y angle apreciables. Rock
-    // al pie da masa visual al cluster.
     { r: 10.50, angle: 2.30, rotY:  1.20, scale: 1.05, type: 'palm_jungle'     },
     { r: 11.00, angle: 2.65, rotY:  2.00, scale: 0.95, type: 'palm_jungle'     },
     { r: 10.20, angle: 2.50, rotY:  0.40, scale: 0.90, type: 'rock_jungle'     },
-
-    // Cluster D — "Outpost SE" (5h, palm secundaria + 2 rocks reforzadas)
     { r: 10.80, angle: 5.30, rotY:  1.60, scale: 1.00, type: 'palm_jungle'     },
     { r: 11.30, angle: 5.10, rotY:  0.50, scale: 0.95, type: 'rock_jungle'     },
     { r: 10.70, angle: 5.45, rotY:  1.90, scale: 1.05, type: 'rock_jungle'     },
-
-    // Anillo medio — único prop interior (regla: máx. 1–2 sueltos)
     { r:  7.80, angle: 1.55, rotY:  2.30, scale: 0.85, type: 'rock_jungle'     },
   ],
 
@@ -194,32 +193,29 @@ export const DECOR_LAYOUTS: Record<ArenaPackId, DecorPlacement[]> = {
   //     drift al pie del pinar, ice shard entre el iceberg field, low
   //     iceberg en cluster cristalino. Cluster B ahora tiene 4 capas
   //     escalonadas en lugar de 3 (more "field" feeling).
+  //
+  //   Composición (orden de placements):
+  //   - Cluster A "Pinar nevado" (NW 10h, hero orgánico, 3 props con drift).
+  //   - Cluster B "Iceberg field escalonado" (SE 4–5h, 4 props, hero
+  //     mineral): tall + mid + low + ice shard intercalado.
+  //   - Cluster C "Cluster cristalino" (NE 1–2h, 3 props con base de hielo).
+  //   - Accent "Wayfinder solitario" (SW 8h, off-axis intencional).
+  //   - Cluster D "Far iceberg pair" (12h ~N puro, low icebergs distantes).
+  //   - Anillo medio: micro-scatter (low iceberg en zona vacía E).
   // ---------------------------------------------------------------------------
   frozen_tundra: [
-    // Cluster A — "Pinar nevado" (NW 10h, hero orgánico, 3 props con drift)
     { r: 10.70, angle: 2.10, rotY:  0.40, scale: 1.00, type: 'pine_tundra'         },
     { r: 11.00, angle: 2.40, rotY:  1.80, scale: 1.05, type: 'pine_tundra'         },
     { r: 10.30, angle: 2.25, rotY:  2.60, scale: 0.85, type: 'iceberg_tundra'      },
-
-    // Cluster B — "Iceberg field escalonado" (SE 4–5h, 4 props, hero mineral)
-    // tall + mid + low + ice shard intercalado.
     { r: 10.60, angle: 4.65, rotY:  0.80, scale: 1.00, type: 'icebergtall_tundra'  },
     { r: 11.10, angle: 4.85, rotY:  1.50, scale: 1.05, type: 'icebergmid_tundra'   },
     { r: 10.30, angle: 4.45, rotY:  2.70, scale: 0.95, type: 'iceberg_tundra'      },
     { r: 10.90, angle: 4.55, rotY:  0.30, scale: 1.00, type: 'iceshard_tundra'     },
-
-    // Cluster C — "Cluster cristalino" (NE 1–2h, 3 props con base de hielo)
     { r: 11.20, angle: 0.95, rotY:  0.60, scale: 1.00, type: 'iceshard_tundra'     },
     { r: 10.60, angle: 1.20, rotY:  2.40, scale: 1.10, type: 'iceshard_tundra'     },
     { r: 10.40, angle: 1.05, rotY:  1.30, scale: 0.90, type: 'iceberg_tundra'      },
-
-    // Accent — "Wayfinder solitario" (SW 8h, off-axis intencional)
     { r: 10.50, angle: 5.60, rotY: -1.20, scale: 1.00, type: 'signpost_tundra'     },
-
-    // Cluster D — "Far iceberg pair" (12h ~N puro, dos low icebergs distantes)
     { r: 11.40, angle: 1.55, rotY:  0.50, scale: 0.85, type: 'iceberg_tundra'      },
-
-    // Anillo medio — micro-scatter (low iceberg en zona vacía E)
     { r:  7.50, angle: 0.20, rotY:  1.30, scale: 0.90, type: 'iceberg_tundra'      },
   ],
 
@@ -230,24 +226,24 @@ export const DECOR_LAYOUTS: Record<ArenaPackId, DecorPlacement[]> = {
   //     hechos solo dentro de los clusters existentes.
   //   - 3 clusters en triángulo casi equilátero (separación ≥ 90°).
   //   - 11 props totales. Cuadrantes vacíos: NE (~3h) y W (~9h).
+  //
+  //   Composición (orden de placements):
+  //   - Cluster A "Sandstone forest" (N 12h, 4 props, mini-monolitos):
+  //     1 spiretall + 2 spires + bones (alguien intentó llegar y no volvió).
+  //   - Cluster B "Oasis muerto" (SE 4h, 4 props, hero orgánico): palm +
+  //     cactus saguaro + cactus secundario + bones al pie.
+  //   - Cluster C "Wreckage" (SW 8h, 3 props, storytelling abandonado):
+  //     minecart + flag + bones del conductor → mini-escena clara.
   // ---------------------------------------------------------------------------
   desert_dunes: [
-    // Cluster A — "Sandstone forest" (N 12h, 4 props, mini-monolitos)
-    // 1 spiretall + 2 spires + bones (alguien intentó llegar y no volvió).
     { r: 11.00, angle: 1.55, rotY:  0.30, scale: 1.00, type: 'spiretall_desert' },
     { r: 11.40, angle: 1.30, rotY:  1.10, scale: 0.95, type: 'spire_desert'     },
     { r: 10.70, angle: 1.85, rotY:  2.40, scale: 1.05, type: 'spire_desert'     },
     { r: 10.40, angle: 1.55, rotY:  0.70, scale: 1.00, type: 'bones_desert'     },
-
-    // Cluster B — "Oasis muerto" (SE 4h, 4 props, hero orgánico)
-    // palm + cactus saguaro + cactus secundario + bones al pie.
     { r: 10.80, angle: 5.65, rotY: -0.50, scale: 1.00, type: 'palm_desert'      },
     { r: 11.20, angle: 5.95, rotY:  0.70, scale: 1.05, type: 'cactus_desert'    },
     { r: 11.10, angle: 5.40, rotY:  2.20, scale: 0.85, type: 'cactus_desert'    },
     { r: 10.40, angle: 5.45, rotY:  1.40, scale: 1.10, type: 'bones_desert'     },
-
-    // Cluster C — "Wreckage" (SW 8h, 3 props, storytelling abandonado)
-    // minecart + flag + bones del conductor → mini-escena clara.
     { r: 10.60, angle: 3.55, rotY:  2.00, scale: 1.10, type: 'minecart_desert'  },
     { r: 11.00, angle: 3.85, rotY: -1.20, scale: 1.05, type: 'flag_desert'      },
     { r: 10.40, angle: 3.70, rotY:  0.90, scale: 1.00, type: 'bones_desert'     },
@@ -261,37 +257,35 @@ export const DECOR_LAYOUTS: Record<ArenaPackId, DecorPlacement[]> = {
   //   - 17 props (1 en anillo medio). Sprint final: garden y tide
   //     reforzados con starfish + shells extras + coralpink/red en
   //     posiciones intermedias para "caos natural bonito".
+  //
+  //   Composición (orden de placements):
+  //   - Cluster A "Wrecked coast" (NW 10h, 4 props, storytelling).
+  //   - Cluster B "Coral garden" (NE 2h, 5 props, vibrancia máxima).
+  //   - Cluster C "Palm + roca + estrella + shell" (S 6h, hero focal,
+  //     4 props).
+  //   - Tide line IRREGULAR: 3 props dispersos, distintos r y angle dispar.
+  //   - Cluster D "Coral accent" (SW outer 8h): pareja pequeña pink+red
+  //     para conectar visualmente con B.
+  //   - Anillo medio: único accent (starfish en zona SW).
   // ---------------------------------------------------------------------------
   coral_beach: [
-    // Cluster A — "Wrecked coast" (NW 10h, 4 props, storytelling)
     { r: 10.70, angle: 2.00, rotY:  1.50, scale: 1.00, type: 'shipwreck_beach' },
     { r: 11.20, angle: 2.25, rotY:  0.40, scale: 1.10, type: 'boulder_beach'   },
     { r: 10.40, angle: 1.85, rotY:  2.70, scale: 1.00, type: 'shell_beach'     },
     { r: 11.00, angle: 1.95, rotY:  0.20, scale: 1.05, type: 'starfish_beach'  },
-
-    // Cluster B — "Coral garden" (NE 2h, 5 props, vibrancia máxima)
     { r: 10.80, angle: 0.95, rotY:  0.60, scale: 1.00, type: 'coral_beach'     },
     { r: 11.10, angle: 1.15, rotY:  1.80, scale: 1.05, type: 'coralpink_beach' },
     { r: 10.50, angle: 0.70, rotY:  2.30, scale: 1.00, type: 'coralred_beach'  },
     { r: 11.40, angle: 1.30, rotY:  0.90, scale: 0.90, type: 'shell_beach'     },
     { r: 11.00, angle: 0.85, rotY:  1.40, scale: 1.10, type: 'starfish_beach'  },
-
-    // Cluster C — "Palm + roca + estrella + shell" (S 6h, hero focal, 4 props)
     { r: 10.50, angle: 4.70, rotY:  0.20, scale: 1.00, type: 'palm_beach'      },
     { r: 11.00, angle: 4.45, rotY:  1.60, scale: 1.05, type: 'boulder_beach'   },
     { r: 10.30, angle: 4.95, rotY:  2.50, scale: 1.10, type: 'starfish_beach'  },
     { r: 10.80, angle: 4.85, rotY:  0.90, scale: 0.95, type: 'shell_beach'     },
-
-    // Tide line IRREGULAR — 3 props dispersos, distintos r y angle dispar
     { r: 11.50, angle: 3.40, rotY:  1.00, scale: 0.90, type: 'starfish_beach'  },
     { r: 10.90, angle: 5.95, rotY:  2.20, scale: 1.00, type: 'shell_beach'     },
     { r: 11.30, angle: 2.80, rotY:  1.70, scale: 0.95, type: 'shell_beach'     },
-
-    // Cluster D — "Coral accent" (SW outer 8h, mini-cluster del coral garden)
-    // Pareja pequeña de pink+red corals para conectar visualmente con B.
     { r: 11.10, angle: 3.80, rotY:  0.30, scale: 0.90, type: 'coralpink_beach' },
-
-    // Anillo medio — único accent (starfish en zona SW)
     { r:  7.00, angle: 3.20, rotY:  0.80, scale: 0.90, type: 'starfish_beach'  },
   ],
 
@@ -304,35 +298,32 @@ export const DECOR_LAYOUTS: Record<ArenaPackId, DecorPlacement[]> = {
   //   - 15 props (2 en anillo medio). Sprint final: lanterns en ambos lados
   //     de la torii grande, lantern extra en altar sakura, lantern entre
   //     bambúes en cada grove (refuerza simetría parcial).
+  //
+  //   Composición (orden de placements):
+  //   - Cluster A "Ritual gate" (N 12h, 3 props, hero arquitectónico):
+  //     torii grande mira al centro, lanterns flanqueando como entrada.
+  //   - Cluster B "Sakura altar" (S 6h, 4 props, hero orgánico + ritual):
+  //     en S (angle≈4.71), rotY=π hace que las cosas miren al centro.
+  //   - Cluster C "Bamboo grove E" (E 3h, 3 props con lantern interior).
+  //   - Cluster C' "Bamboo grove W" (W 9h, espejo angular de C).
+  //   - Asymmetry breaker: small torii rompe AMBOS ejes (radio + ángulo).
+  //   - Anillo medio: lantern small en SW (off-axis sutil).
   // ---------------------------------------------------------------------------
   kitsune_shrine: [
-    // Cluster A — "Ritual gate" (N 12h, 3 props, hero arquitectónico)
-    // Torii grande mira al centro. Lanterns flanqueando como entrada ritual.
     { r: 11.00, angle: 1.55, rotY:  0.00, scale: 1.00, type: 'toriilarge_shrine'    },
     { r: 10.50, angle: 1.30, rotY:  0.50, scale: 1.05, type: 'lantern_shrine'       },
     { r: 10.50, angle: 1.80, rotY: -0.50, scale: 1.05, type: 'lantern_shrine'       },
-
-    // Cluster B — "Sakura altar" (S 6h, 4 props, hero orgánico + ritual)
-    // En S (angle≈4.71), rotY=π hace que las cosas miren hacia el centro.
     { r: 10.80, angle: 4.71, rotY:  0.00, scale: 1.00, type: 'sakura_shrine'        },
     { r: 11.00, angle: 4.55, rotY:  3.14, scale: 1.05, type: 'kitsunestatue_shrine' },
     { r: 10.50, angle: 4.95, rotY:  3.14, scale: 1.00, type: 'lanternlarge_shrine'  },
     { r: 10.40, angle: 4.55, rotY:  2.80, scale: 0.90, type: 'lantern_shrine'       },
-
-    // Cluster C — "Bamboo grove E" (E 3h, 3 props con lantern interior)
     { r: 10.70, angle: -0.10, rotY:  1.20, scale: 1.00, type: 'bamboo_shrine'       },
     { r: 11.20, angle:  0.15, rotY:  2.50, scale: 1.05, type: 'bamboo_shrine'       },
     { r: 10.40, angle:  0.05, rotY:  1.50, scale: 0.95, type: 'lantern_shrine'      },
-
-    // Cluster C' — "Bamboo grove W" (W 9h, 3 props, espejo angular de C)
     { r: 10.70, angle:  3.05, rotY:  0.70, scale: 1.00, type: 'bamboo_shrine'       },
     { r: 11.20, angle:  3.30, rotY:  2.00, scale: 1.05, type: 'bamboo_shrine'       },
     { r: 10.40, angle:  3.20, rotY:  0.80, scale: 0.95, type: 'lantern_shrine'      },
-
-    // Asymmetry breaker — small torii rompe AMBOS ejes (radio + ángulo).
     { r:  8.50, angle: 2.40, rotY: -0.80, scale: 1.00, type: 'toriismall_shrine'    },
-
-    // Anillo medio — lantern small en SW (más fuera del centro, off-axis sutil).
     { r:  7.80, angle: 5.50, rotY:  1.50, scale: 0.95, type: 'lantern_shrine'       },
   ],
 };

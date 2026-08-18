@@ -18,6 +18,8 @@
 
 import * as THREE from 'three';
 import { createCamera, handleResize, syncSize } from '../camera';
+import { initSceneAtmosphere } from '../scene-atmosphere';
+import { tickSharedGameplay } from '../frame-ticks';
 import { Game } from '../game';
 import { updateCameraShake } from '../gamefeel';
 import { initPreview, tickPreview } from '../preview';
@@ -41,25 +43,15 @@ if (!gl) {
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.setClearColor(0x0a0a18);
 document.body.prepend(renderer.domElement);
 
-// --- Scene + lights --------------------------------------------------------
+// --- Scene + atmosphere (SAME rig as the game — H3 slice 7) ----------------
+// The old lab-only fog/AmbientLight rendered a dark void: what you
+// tuned here did not look like production. initSceneAtmosphere also
+// binds the per-pack skybox/fog setters that arena.ts drives, so pack
+// skyboxes now load in the lab too.
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x0a0a18, 0.018);
-scene.add(new THREE.AmbientLight(0xffffff, 0.35));
-const dir = new THREE.DirectionalLight(0xffeedd, 1.2);
-dir.position.set(8, 25, 12);
-dir.castShadow = true;
-dir.shadow.mapSize.set(1024, 1024);
-dir.shadow.camera.near = 5;
-dir.shadow.camera.far = 60;
-dir.shadow.camera.left = -18;
-dir.shadow.camera.right = 18;
-dir.shadow.camera.top = 18;
-dir.shadow.camera.bottom = -18;
-dir.shadow.bias = -0.002;
-scene.add(dir);
+initSceneAtmosphere(scene, renderer);
 
 // --- Camera ----------------------------------------------------------------
 const camera = createCamera();
@@ -104,6 +96,13 @@ function loop(now: number) {
   if (renderer.domElement.width === 0) syncSize(camera, renderer);
 
   game.update(dt);
+  // Same per-frame gameplay ticks as the real game loop (dust, zones,
+  // offline-L, projectiles, status icons) — abilities with zones or
+  // projectiles used to FREEZE in the lab because these were missing.
+  tickSharedGameplay(dt, game, scene, camera, {
+    width: renderer.domElement.clientWidth,
+    height: renderer.domElement.clientHeight,
+  });
   updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
   renderer.render(scene, camera);
   tickPreview(dt);

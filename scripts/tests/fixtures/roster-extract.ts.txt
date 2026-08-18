@@ -1,0 +1,42 @@
+// Fixture — realistic extract of src/roster.ts (shape frozen for golden
+// tests; NOT compiled). Mirrors the real conventions: shared field
+// lines, comments inside blocks, Math.PI rotations.
+export const ROSTER: RosterEntry[] = [
+  {
+    id: 'sergei',
+    displayName: 'Sergei',
+    glbPath: './models/critters/sergei.glb',
+    baseColor: 0xb5651d,
+    // Meshy AI regen landed 2026-04-24, full 8-clip kit.
+    // scale 0.66 targets the in-game ~1.6u chibi baseline; pivotY back
+    // to 0 (previous 1.335 was for the old Tripo centered mesh).
+    scale: 1.09, rotation: 0, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
+    status: 'playable',
+    role: 'Balanced',
+    tagline: 'Strong and agile. No weakness.',
+  },
+  {
+    id: 'shelly',
+    displayName: 'Shelly',
+    glbPath: './models/critters/shelly.glb',
+    baseColor: 0x2e8b57,
+    scale: 0.82, rotation: Math.PI / 2, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0.4,
+    status: 'playable',
+    role: 'Tank',
+    tagline: 'Slow but unstoppable.',
+  },
+  {
+    id: 'kurama',
+    displayName: 'Kurama',
+    glbPath: './models/critters/kurama.glb',
+    baseColor: 0xff8c00,
+    // rotation: -Math.PI kept from the original Tripo import.
+    scale: 1.2, rotation: -Math.PI, offset: [0, 0, 0],
+    physicsRadius: R, pivotY: 0,
+    status: 'playable',
+    role: 'Trickster',
+    tagline: 'Nine tails, nine problems.',
+  },
+];
