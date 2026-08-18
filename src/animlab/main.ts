@@ -205,6 +205,10 @@ function loadCritter(entry: RosterEntry): void {
   currentId = entryId;
   currentlyPlayingState = null;
   currentlyPlayingClip = null;
+  // loadCritter is the single selection funnel (card click, Apply,
+  // Reset all route here), so persisting the UI state here covers
+  // every path without extra wiring.
+  saveToStorage(UI_KEY, { selectedId: entryId } satisfies AnimLabUiState);
 
   // Re-project the session now that the critter's auto-resolver is
   // live: a restored AUTO row with speed/loop metadata can only
@@ -319,6 +323,21 @@ function updateRowState(id: string, state: SkeletalState, patch: Partial<RowStat
 // projection snapshot was taken.
 
 const SESSION_KEY = toolStorageKey('anim-lab', 'overrides');
+
+// UI-state persistence — which critter is selected. Separate key from
+// the overrides working copy: the `:ui` suffix is the convention the
+// studio shell's dirty-tab indicator uses to tell pure UI state apart
+// from unapplied source edits. Restoring the selection matters most
+// after Apply-to-source: the write triggers a Vite full-reload and,
+// without this, the lab snapped back to the roster head every time.
+const UI_KEY = toolStorageKey('anim-lab', 'ui');
+
+interface AnimLabUiState { selectedId: string }
+
+function isUiState(v: unknown): v is AnimLabUiState {
+  return !!v && typeof v === 'object'
+    && typeof (v as AnimLabUiState).selectedId === 'string';
+}
 
 type PersistedRowStates = Record<string, Record<string, RowState>>;
 
@@ -1065,9 +1084,15 @@ if (typeof window !== 'undefined') {
 restoreSession();
 
 if (playableRoster.length > 0) {
-  const first = playableRoster[0]!;
-  const firstCard = rosterCards.querySelector<HTMLElement>(`[data-id="${first.id}"]`);
-  firstCard?.click();
+  // Restore the last-selected critter (persisted UI state); fall back
+  // to the roster head when the stored id no longer resolves (critter
+  // renamed/removed, or first visit).
+  const ui = loadFromStorage<AnimLabUiState>(UI_KEY, isUiState);
+  const restoredId = ui && playableRoster.some((e) => e.id === ui.selectedId)
+    ? ui.selectedId
+    : playableRoster[0]!.id;
+  const card = rosterCards.querySelector<HTMLElement>(`[data-id="${restoredId}"]`);
+  card?.click();
 }
 
 // ---------------------------------------------------------------------------

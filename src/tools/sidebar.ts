@@ -20,11 +20,80 @@
 // ---------------------------------------------------------------------------
 
 import { getPlayableNames } from '../roster';
+import { ARENA_PACK_IDS } from '../arena-decorations';
 import { deriveAnimationPersonality } from '../critter-animation';
 import { clearAllHeldInputs } from '../input';
+import { toolStorageKey, loadFromStorage, saveToStorage } from './tool-storage';
 import type { DevApi, BotBehaviourTag, GameplayEvent } from './dev-api';
 
 const NONE = '(none)';
+
+/** Sentinel for "no explicit pack" in the Matchup arena selector — keeps
+ *  the normal-play behaviour (uniform roll per match in game.ts). */
+export const RANDOM_PACK = '(random)';
+
+// ---------------------------------------------------------------------------
+// Persisted lab setup — survives the reload-after-apply workflow
+// ---------------------------------------------------------------------------
+// Stored under 'match-lab:setup' via the shared tool-storage helper (same
+// pattern as calibrate / anim-lab / decor-editor). Read by BOTH
+// mountLabSidebar (rehydration) and tools/main.ts (the auto-start match
+// uses the same lineup/seed/pack) — keep loadLabSetup the single entry
+// point so the two consumers can never disagree on key or sanitising.
+
+export interface LabSetup {
+  playerPick: string;
+  /** 3 slots; '' means the slot is empty ('(none)' in the UI). */
+  botPicks: string[];
+  lastSeed: number | null;
+  speedScale: number;
+  /** An ArenaPackId, or RANDOM_PACK. */
+  packPick: string;
+}
+
+const SETUP_KEY = toolStorageKey('match-lab', 'setup');
+
+function defaultLabSetup(): LabSetup {
+  return {
+    playerPick: 'Sergei',
+    botPicks: ['Trunk', 'Kurama', 'Shelly'],
+    lastSeed: null,
+    speedScale: 1,
+    packPick: RANDOM_PACK,
+  };
+}
+
+function isLabSetup(v: unknown): v is LabSetup {
+  if (typeof v !== 'object' || v === null) return false;
+  const s = v as Record<string, unknown>;
+  return typeof s.playerPick === 'string'
+    && Array.isArray(s.botPicks) && s.botPicks.every((b) => typeof b === 'string')
+    && (s.lastSeed === null || typeof s.lastSeed === 'number')
+    && typeof s.speedScale === 'number'
+    && typeof s.packPick === 'string';
+}
+
+/** Load + sanitise the persisted setup. Critter names are re-validated
+ *  against the live roster so a renamed/removed critter degrades to the
+ *  default instead of rendering a <select> with an impossible value. */
+export function loadLabSetup(): LabSetup {
+  const def = defaultLabSetup();
+  const stored = loadFromStorage<LabSetup>(SETUP_KEY, isLabSetup);
+  if (!stored) return def;
+  const names = getPlayableNames();
+  return {
+    playerPick: names.includes(stored.playerPick) ? stored.playerPick : def.playerPick,
+    botPicks: stored.botPicks.slice(0, 3).map((n) => (names.includes(n) ? n : '')),
+    lastSeed: stored.lastSeed,
+    // speedScale 0 (paused) is never restored: a lab that boots frozen
+    // reads as a rendering bug, not as a resumed pause. Range mirrors
+    // the Playback slider (0-2).
+    speedScale: stored.speedScale > 0 && stored.speedScale <= 2 ? stored.speedScale : def.speedScale,
+    packPick: (ARENA_PACK_IDS as readonly string[]).includes(stored.packPick)
+      ? stored.packPick
+      : RANDOM_PACK,
+  };
+}
 
 const ANIM_PARAMS = [
   { key: 'idleBobHz',         min: 0.3, max: 2.0, step: 0.01 },
@@ -252,6 +321,7 @@ const CSS = `
 #lab-sidebar .evt-collapse_batch .evt-type { color: #ff8844; }
 #lab-sidebar .evt-match_started .evt-type { color: #4ade80; }
 #lab-sidebar .evt-match_ended  .evt-type { color: #9aa6c4; }
+#lab-sidebar .evt-moment       .evt-type { color: #ffdc5c; }
 
 #lab-sidebar .lab-bot-row {
   display: grid;
@@ -534,9 +604,25 @@ export function mountLabSidebar(devApi: DevApi): void {
 
   // ---- Shared state -----------------------------------------------------
   const names = getPlayableNames(); // 9 playables
-  let playerPick = 'Sergei';
-  let botPicks: string[] = ['Trunk', 'Kurama', 'Shelly'];
-  let lastSeed: number | null = null;
+  const setup = loadLabSetup();     // rehydrated from 'match-lab:setup'
+  let playerPick = setup.playerPick;
+  let botPicks: string[] = [...setup.botPicks];
+  let lastSeed: number | null = setup.lastSeed;
+  let packPick = setup.packPick;
+
+  /** Snapshot current UI state into localStorage. Call after every
+   *  mutation of the picks/seed above (speed is read live from DevApi
+   *  so speed-changing handlers only need this one call). */
+  function persistSetup(): void {
+    const snapshot: LabSetup = {
+      playerPick,
+      botPicks,
+      lastSeed,
+      speedScale: devApi.getSpeed(),
+      packPick,
+    };
+    saveToStorage(SETUP_KEY, snapshot);
+  }
 
   // =======================================================================
   // GROUP: MATCH SETUP ----------------------------------------------------
@@ -545,10 +631,16 @@ export function mountLabSidebar(devApi: DevApi): void {
 
   // ---- Matchup (collapsed by default — only needed at the start) --------
   const matchup = section(setupGroup, 'Matchup', { collapsed: true });
-  const playerSel = select(matchup, 'Player', names, playerPick, (v) => { playerPick = v; });
-  const bot1Sel = select(matchup, 'Bot 1', [NONE, ...names], botPicks[0] ?? NONE, (v) => { botPicks[0] = v === NONE ? '' : v; });
-  const bot2Sel = select(matchup, 'Bot 2', [NONE, ...names], botPicks[1] ?? NONE, (v) => { botPicks[1] = v === NONE ? '' : v; });
-  const bot3Sel = select(matchup, 'Bot 3', [NONE, ...names], botPicks[2] ?? NONE, (v) => { botPicks[2] = v === NONE ? '' : v; });
+  // `|| NONE` (not `??`): rehydrated botPicks stores '' for empty slots,
+  // and '' is not nullish — `??` would feed the select an invalid value.
+  const playerSel = select(matchup, 'Player', names, playerPick, (v) => { playerPick = v; persistSetup(); });
+  const bot1Sel = select(matchup, 'Bot 1', [NONE, ...names], botPicks[0] || NONE, (v) => { botPicks[0] = v === NONE ? '' : v; persistSetup(); });
+  const bot2Sel = select(matchup, 'Bot 2', [NONE, ...names], botPicks[1] || NONE, (v) => { botPicks[1] = v === NONE ? '' : v; persistSetup(); });
+  const bot3Sel = select(matchup, 'Bot 3', [NONE, ...names], botPicks[2] || NONE, (v) => { botPicks[2] = v === NONE ? '' : v; persistSetup(); });
+  // Arena pack for the NEXT match. Applies on Start/Restart — the running
+  // match keeps its pack (DevApi.startMatch forwards packId to
+  // debugStartOfflineMatch, which rolls randomly when omitted).
+  select(matchup, 'Pack', [RANDOM_PACK, ...ARENA_PACK_IDS], packPick, (v) => { packPick = v; persistSetup(); });
   const matchupBtns = row(matchup);
   button(matchupBtns, 'Start Match', () => startMatch(/*reuseSeed*/ false), 'primary');
   button(matchupBtns, 'Restart Same Seed', () => startMatch(/*reuseSeed*/ true));
@@ -559,21 +651,33 @@ export function mountLabSidebar(devApi: DevApi): void {
     bot1Sel.value = botPicks[0] ?? NONE;
     bot2Sel.value = botPicks[1] ?? NONE;
     bot3Sel.value = botPicks[2] ?? NONE;
+    persistSetup();
   });
   button(matchupBtns, 'Mirror Match', () => {
     botPicks = [playerPick, playerPick, playerPick];
     bot1Sel.value = bot2Sel.value = bot3Sel.value = playerPick;
+    persistSetup();
   });
 
   function currentBotNames(): string[] {
     return botPicks.filter(n => n && n !== NONE);
   }
   function startMatch(reuseSeed: boolean): void {
-    const opts: { seed?: number } = {};
+    // A finalised recording that was never exported would be silently
+    // overwritten (DevApi.startMatch auto-starts a fresh session). Only
+    // finalised sessions warn — see hasUnsavedRecording — so quick
+    // mid-match restart loops stay nag-free.
+    if (devApi.hasUnsavedRecording()
+        && !confirm('Last match recording was never downloaded and will be lost. Start anyway?')) {
+      return;
+    }
+    const opts: { seed?: number; packId?: string } = {};
     if (reuseSeed && lastSeed !== null) opts.seed = lastSeed;
+    if (packPick !== RANDOM_PACK) opts.packId = packPick;
     devApi.startMatch(playerPick, currentBotNames(), opts);
     const info = devApi.getArenaInfo();
     if (info) lastSeed = info.seed;
+    persistSetup();
     refreshAll();
   }
 
@@ -597,12 +701,14 @@ export function mountLabSidebar(devApi: DevApi): void {
     const seed = parseInt(raw, 10) | 0;
     lastSeed = seed;
     devApi.forceSeed(seed);
+    persistSetup();
     refreshArenaPanel();
   });
   button(arenaBtns, 'Replay Last', () => {
     if (lastSeed === null) return;
-    devApi.startMatch(playerPick, currentBotNames(), { seed: lastSeed });
-    refreshAll();
+    // Route through startMatch so the replay honours the pack selector
+    // and the unsaved-recording guard like any other (re)start.
+    startMatch(/*reuseSeed*/ true);
   });
   button(arenaBtns, 'Copy Seed', () => {
     const info = devApi.getArenaInfo();
@@ -669,33 +775,40 @@ export function mountLabSidebar(devApi: DevApi): void {
   speedSlider.min = '0';
   speedSlider.max = '2';
   speedSlider.step = '0.05';
-  speedSlider.value = '1';
+  speedSlider.value = String(setup.speedScale);
   const speedVal = document.createElement('span');
   speedVal.className = 'lab-val';
-  speedVal.textContent = '1.00';
+  speedVal.textContent = setup.speedScale.toFixed(2);
   speedSlider.addEventListener('input', () => {
     const v = parseFloat(speedSlider.value);
     devApi.setSpeed(v);
     speedVal.textContent = v.toFixed(2);
+    persistSetup();
   });
   speedRow.appendChild(speedSlider);
   speedRow.appendChild(speedVal);
+  // Rehydrate the persisted speed into the engine (slider already shows
+  // it). Skipped at 1 so a default boot logs no set_speed lab action.
+  if (setup.speedScale !== 1) devApi.setSpeed(setup.speedScale);
   const actionBtns = row(actions);
   button(actionBtns, 'Pause', () => {
     const next = devApi.getSpeed() === 0 ? 1 : 0;
     devApi.setSpeed(next);
     speedSlider.value = String(next);
     speedVal.textContent = next.toFixed(2);
+    persistSetup();
   });
   button(actionBtns, 'Slow 0.3×', () => {
     devApi.setSpeed(0.3);
     speedSlider.value = '0.3';
     speedVal.textContent = '0.30';
+    persistSetup();
   });
   button(actionBtns, 'Normal 1×', () => {
     devApi.setSpeed(1);
     speedSlider.value = '1';
     speedVal.textContent = '1.00';
+    persistSetup();
   });
   button(actionBtns, 'End Match', () => devApi.endMatch());
 
@@ -710,6 +823,15 @@ export function mountLabSidebar(devApi: DevApi): void {
   recStatus.className = 'lab-info';
   recording.appendChild(recStatus);
   const recBtns = row(recording);
+  button(recBtns, 'Mark moment', () => {
+    // Manual playtest bookmark. pushEvent mirrors into the recording, so
+    // the exported JSON/MD carries the timestamp. Details pin the
+    // recording-relative time because the live log only shows event age.
+    const rec = devApi.getRecording();
+    const t = rec ? ((performance.now() - rec.meta.startedAt) / 1000).toFixed(1) : '?';
+    devApi.pushEvent('moment', 'lab', `t=${t}s`);
+    refreshEventLog();
+  });
   button(recBtns, 'Stop', () => { devApi.stopRecording(); refreshRecordingPanel(); });
   button(recBtns, 'Download JSON', () => devApi.downloadRecordingJSON(), 'primary');
   button(recBtns, 'Download MD', () => devApi.downloadRecordingMD());
@@ -1134,6 +1256,7 @@ export function mountLabSidebar(devApi: DevApi): void {
       `actions  ${rec.actions.length}`,
       `samples  ${rec.snapshots.length}`,
       `outcome  ${rec.outcome.survivor ?? '-'} (${rec.outcome.reason ?? 'pending'})`,
+      `saved    ${rec.downloadedAt ? 'downloaded' : 'NOT downloaded'}`,
     ].join('\n');
   }
 
@@ -1481,6 +1604,7 @@ export function mountLabSidebar(devApi: DevApi): void {
       devApi.setSpeed(v);
       speedSlider.value = String(v);
       speedVal.textContent = v.toFixed(2);
+      persistSetup();
     },
   };
 

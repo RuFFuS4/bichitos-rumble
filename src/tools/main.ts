@@ -27,7 +27,7 @@ import { isLikelyMobile } from '../input';
 import { initTouchInput } from '../input-touch';
 import { initGamepadInput } from '../input-gamepad';
 import { loadMutedState } from '../audio';
-import { mountLabSidebar } from './sidebar';
+import { mountLabSidebar, loadLabSetup, RANDOM_PACK } from './sidebar';
 import { DevApi } from './dev-api';
 
 // --- WebGL sanity check ----------------------------------------------------
@@ -80,8 +80,18 @@ const devApi = new DevApi(game, renderer);
 // Skip the normal title → character-select flow. Drop the title overlay so
 // the canvas + HUD are visible immediately; the sidebar will drive matches.
 game.debugEndMatchImmediately();
-// Kick off a default match so the tool is immediately useful.
-devApi.startMatch('Sergei', ['Trunk', 'Kurama', 'Shelly']);
+// Kick off a match so the tool is immediately useful. Lineup, seed and
+// arena pack come from the persisted lab setup ('match-lab:setup' — the
+// same storage the sidebar rehydrates from) so a reload, e.g. after an
+// Apply-to-source, resumes the exact match being tuned. Reusing lastSeed
+// is deliberate: pressing Start Match rolls a fresh seed and persists it,
+// so reloads are deterministic but new matches are not. First visit falls
+// back to the classic Sergei vs Trunk/Kurama/Shelly with a random arena.
+const labSetup = loadLabSetup();
+const startOpts: { seed?: number; packId?: string } = {};
+if (labSetup.lastSeed !== null) startOpts.seed = labSetup.lastSeed;
+if (labSetup.packPick !== RANDOM_PACK) startOpts.packId = labSetup.packPick;
+devApi.startMatch(labSetup.playerPick, labSetup.botPicks.filter((n) => n !== ''), startOpts);
 
 // --- Mount the sidebar ------------------------------------------------------
 mountLabSidebar(devApi);

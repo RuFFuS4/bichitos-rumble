@@ -25,7 +25,7 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { Critter, CRITTER_PRESETS } from '../critter';
+import { Critter, CRITTER_PRESETS, IN_GAME_TARGET_HEIGHT } from '../critter';
 import { getDisplayRoster, getRosterEntry } from '../roster';
 import type { RosterEntry } from '../roster';
 import {
@@ -96,6 +96,28 @@ function hasLocalFor(critterId: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// UI-position persistence (`calibrate:ui`)
+// ---------------------------------------------------------------------------
+//
+// "Apply to source" triggers a Vite full page reload; without this the
+// user lands back in the lab with nothing selected and has to re-find the
+// critter they were tuning — friction that discourages small applies.
+// We persist the critter ID rather than the slot index: slots stream in
+// on a staggered/idle schedule, so array order isn't a stable contract.
+
+const UI_STORAGE_KEY = toolStorageKey(STORAGE_TOOL, 'ui');
+
+interface CalibrateUiState { selectedId: string; }
+
+function isCalibrateUiState(v: unknown): v is CalibrateUiState {
+  return !!v && typeof v === 'object'
+    && typeof (v as Record<string, unknown>).selectedId === 'string';
+}
+
+const restoredSelectedId: string | null =
+  loadFromStorage<CalibrateUiState>(UI_STORAGE_KEY, isCalibrateUiState)?.selectedId ?? null;
+
+// ---------------------------------------------------------------------------
 // Scene / renderer setup
 // ---------------------------------------------------------------------------
 
@@ -130,13 +152,15 @@ scene.add(gridHelper);
 
 // ---------------------------------------------------------------------------
 // Reference ruler — vertical bar with integer + 0.5 ticks up to 4 u.
-// Yellow tick at 1.7 u marks the in-game target height (mirrors
-// IN_GAME_TARGET_HEIGHT in src/critter.ts). The 1.7 u rectangle on the
-// floor extends across the whole stage so each critter's head can be
-// eyeballed against the same height regardless of grid cell.
+// Yellow tick at IN_GAME_TARGET_HEIGHT marks the in-game target height.
+// The target-height rectangle on the floor extends across the whole
+// stage so each critter's head can be eyeballed against the same height
+// regardless of grid cell.
 // ---------------------------------------------------------------------------
 
-const RULER_TARGET = 1.7; // IN_GAME_TARGET_HEIGHT — keep in sync with critter.ts
+// Imported (not duplicated) so the ruler can never drift from the value
+// the in-game auto-fit actually uses.
+const RULER_TARGET = IN_GAME_TARGET_HEIGHT;
 
 const rulerGroup = new THREE.Group();
 rulerGroup.position.set(-6, 0, -3);
@@ -206,7 +230,7 @@ function addRulerLabel(text: string, world: THREE.Vector3, highlight: boolean): 
 }
 addRulerLabel('0u',   new THREE.Vector3(-5.4, 0,             -3), false);
 addRulerLabel('1u',   new THREE.Vector3(-5.4, 1,             -3), false);
-addRulerLabel('1.7u', new THREE.Vector3(-5.0, RULER_TARGET,  -3), true);
+addRulerLabel(`${RULER_TARGET}u`, new THREE.Vector3(-5.0, RULER_TARGET,  -3), true);
 addRulerLabel('2u',   new THREE.Vector3(-5.4, 2,             -3), false);
 addRulerLabel('3u',   new THREE.Vector3(-5.4, 3,             -3), false);
 addRulerLabel('4u',   new THREE.Vector3(-5.4, 4,             -3), false);
@@ -239,7 +263,11 @@ const slots: Slot[] = [];
 const COLS = 3;
 const CELL = 3.0; // world units between cell centres
 
-const playableRoster = getDisplayRoster().filter((e) => e.status === 'playable');
+// 'wip' is included on purpose: a freshly imported GLB needs calibration
+// BEFORE it's promoted to 'playable' and exposed in character select.
+const calibratableRoster = getDisplayRoster().filter(
+  (e) => e.status === 'playable' || e.status === 'wip',
+);
 
 // Calibrate used to create all 9 Critters synchronously at boot — which
 // kicked off 9 parallel GLB fetches (~56 MB total) and froze the page
@@ -267,10 +295,16 @@ interface PendingSlot {
 }
 const pendingSlots: PendingSlot[] = [];
 
-for (let i = 0; i < playableRoster.length; i++) {
-  const entry = playableRoster[i]!;
+for (let i = 0; i < calibratableRoster.length; i++) {
+  const entry = calibratableRoster[i]!;
   const preset = CRITTER_PRESETS.find((c) => c.name === entry.displayName);
-  if (!preset) continue;
+  if (!preset) {
+    // Used to be a silent `continue`: a roster entry without a matching
+    // CRITTER_PRESETS entry (typical for a just-imported GLB) simply never
+    // appeared in the grid, with no way to tell why.
+    console.warn(`[calibrate] no CRITTER_PRESETS entry for '${entry.displayName}' — slot skipped`);
+    continue;
+  }
 
   const col = i % COLS;
   const row = Math.floor(i / COLS);
@@ -344,6 +378,15 @@ function spawnCritterForSlot(p: PendingSlot): void {
     critter.glbMesh.position.y = p.entry.offset[1] + initial.pivotY;
     critter.glbMesh.rotation.y = initial.rotation;
   }
+  // Restore the pre-reload selection once its slot lands. Deferred to a
+  // microtask because the first slot spawns synchronously during module
+  // evaluation, before selectSlot's DOM element consts exist (TDZ). The
+  // selectedSlotIdx guard keeps a user click made in the meantime from
+  // being clobbered by the restore.
+  if (restoredSelectedId === p.entry.id) {
+    const idx = slots.length - 1;
+    queueMicrotask(() => { if (selectedSlotIdx === null) selectSlot(idx); });
+  }
 }
 
 // First slot: synchronous (no wait — user sees something immediately).
@@ -414,6 +457,9 @@ function selectSlot(idx: number): void {
   selectedSlotIdx = idx;
   const slot = slots[idx];
   if (!slot) return;
+  // Remember the selection (by critter id) so the post-apply reload can
+  // land the user back on the critter they were tuning.
+  saveToStorage(UI_STORAGE_KEY, { selectedId: slot.entry.id });
   // Sliders + numeric inputs enabled + synced with current values.
   [ctlScale, ctlPivot, ctlRot, valScale, valPivot, valRot].forEach((el) => (el.disabled = false));
   ctlScale.value = String(slot.rosterTransform.scale);
@@ -630,7 +676,11 @@ valRot.addEventListener('change', () => {
 
 // Apply-target slider has no rosterTransform behind it (it's a
 // session-only fitting target read by btnRefit), so we just keep the
-// numeric input + slider in sync here.
+// numeric input + slider in sync here. The default is seeded from the
+// shared constant — the value attributes in calibrate.html are static
+// fallbacks and would drift if IN_GAME_TARGET_HEIGHT ever changed.
+ctlTarget.value = String(IN_GAME_TARGET_HEIGHT);
+valTarget.value = IN_GAME_TARGET_HEIGHT.toFixed(2);
 ctlTarget.addEventListener('input', () => { valTarget.value = (+ctlTarget.value).toFixed(2); });
 valTarget.addEventListener('input', () => {
   const v = +valTarget.value;
@@ -653,6 +703,11 @@ btnRefit.addEventListener('click', () => {
     const k = target / slot.bindPoseHeight;
     slot.critter.glbMesh.scale.multiplyScalar(k);
     slot.rosterTransform.scale *= k;
+    // Without this push, the procedural tick re-reads rosterOverride.scale
+    // next frame and reverts the visible mesh — while rosterTransform (and
+    // the persisted working copy below) keep the refit value, so the user
+    // would export numbers they never saw on screen.
+    slot.critter.rosterOverride = { ...slot.critter.rosterOverride, scale: slot.rosterTransform.scale };
     slot.bindPoseHeight = target;
     // Refit changes every slot's working values — persist them all, or
     // a reload silently reverts the refit for every unselected slot.

@@ -59,13 +59,36 @@ más — unificación completa).
 
 ---
 
-## Siguiente fase (planificar al abrir sesión)
+## Fase de afilado (en curso — plan completo en docs/AFILADO_PLAN.md)
 
-La checklist del próximo hito se escribe tras la investigación de la
-fase de afilado — ver "Dirección post-H3" abajo. Candidatos ya
-apuntados: re-sync del HTML del HUD clonado en tools.html, pack picker
-en match lab, revisión de utilidad de cada herramienta con Rafa, e
-investigación de capacidades que se nos hayan pasado.
+**Decisiones de Rafa (2026-08-19)**: (1) tuning **offline-first**, el
+server (server/src/sim/*) se sincroniza al FINAL de la fase — el check
+de paridad de habilidades pasa a modo aviso durante la fase con flag
+explícito y vuelve a bloquear en la sync; (2) el melón de
+physicsRadius per-critter SE ABRE (visible + editable + rebalanceo);
+(3) el port de mesh2motion upstream va PRONTO (tras la cabina de
+tuning, antes de producir clips).
+
+Orden acordado:
+
+1. [x] **Slice A — batch de quick-wins**: los 17 items del plan (pack
+   picker + setup persistente + Mark moment + aviso de recording en el
+   match lab; fix Re-fit + wip + slot persistente en calibrate;
+   duplicar/snap/zoom/ambiente de pack/cabecera-spec en decor; FEEL
+   centralizado (physics/game); check pws en CI; deep-links + dirty
+   dots + atajos en studio; CLI acepta el nombre de downloadPatch;
+   DEV_TOOLS.md al día). Implementado por 5 agentes en paralelo sobre
+   ficheros disjuntos, verificado con tsc + 36 tests + e2e.
+2. [ ] **Slice B — cabina de tuning** (picks 2+1): hotkeys
+   pause/slow-mo/step-frame + FEEL tuner en vivo + tool type
+   `feel-patch` en el pipeline.
+3. [ ] **Slice C — tuner de habilidades + hitbox** (picks 3+4):
+   sliders de AbilityDef del critter vivo + overlay de physicsRadius
+   en calibrate con campo en CalibratePatch.
+4. [ ] **Slice D — port mesh2motion upstream** (pick 8, repo hermano):
+   diff-and-port de los 43 marcadores, probar issue #139 con GLB Tripo.
+5. [ ] Después, según demanda: HUD fuente única (pick 5), salida del
+   animation tuner (pick 7), determinismo+batch runner (pick 6).
 
 ## Dirección post-H3 (fijada por Rafa, 2026-08-19)
 

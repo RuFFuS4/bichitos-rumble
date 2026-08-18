@@ -25,12 +25,14 @@
 // Usage
 // -----
 //   npm run apply-tool-patch                            # uses tool-patch.json
+//     (if absent: falls back to a SINGLE tool-patch-<tool>-<stamp>.json
+//      in the cwd — the filename downloadPatch() emits from the labs)
 //   npm run apply-tool-patch -- --patch=path/to.json    # alt input
 //   npm run apply-tool-patch -- --dry-run               # preview only
 //   npm run apply-tool-patch -- --help
 // ---------------------------------------------------------------------------
 
-import { readFile, writeFile, access } from 'node:fs/promises';
+import { readFile, writeFile, access, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -48,13 +50,14 @@ import {
 const args = process.argv.slice(2);
 const flags = {
   patch: 'tool-patch.json',
+  patchExplicit: false, // true when the user passed --patch= (disables the download-name fallback)
   dryRun: false,
   help: false,
 };
 for (const a of args) {
   if (a === '--dry-run') flags.dryRun = true;
   else if (a === '--help' || a === '-h') flags.help = true;
-  else if (a.startsWith('--patch=')) flags.patch = a.slice('--patch='.length);
+  else if (a.startsWith('--patch=')) { flags.patch = a.slice('--patch='.length); flags.patchExplicit = true; }
   else {
     console.error(`Unknown arg: ${a}`);
     process.exit(2);
@@ -66,6 +69,7 @@ if (flags.help) {
 
 Usage:
   npm run apply-tool-patch                       # reads ./tool-patch.json
+                                                 # (or the single tool-patch-<tool>-<stamp>.json download in the cwd)
   npm run apply-tool-patch -- --patch=foo.json   # alt input
   npm run apply-tool-patch -- --dry-run          # show diff, do not write
 
@@ -88,6 +92,38 @@ const c = {
   dim:   (s) => useColor ? `\x1b[2m${s}\x1b[0m` : s,
   bold:  (s) => useColor ? `\x1b[1m${s}\x1b[0m` : s,
 };
+
+// ---------------------------------------------------------------------------
+// Downloaded-patch fallback
+// ---------------------------------------------------------------------------
+//
+// `downloadPatch()` in src/tools/tool-storage.ts names browser downloads
+// `tool-patch-<tool>-<stamp>.json`, not `tool-patch.json`. When no --patch=
+// was given, the default file is absent, and EXACTLY ONE file matching that
+// pattern sits in the cwd, use it — saves the manual rename after a
+// download. Two or more matches is ambiguous → bail and ask for --patch=.
+
+if (!flags.patchExplicit) {
+  try {
+    await access(path.resolve(process.cwd(), flags.patch));
+  } catch {
+    // Anchor on the timestamp shape downloadPatch emits (ISO 8601 with
+    // [:.] replaced by '-') so unrelated tool-patch-*.json files with
+    // hand-made names don't get silently picked up.
+    const downloadName = /^tool-patch-.+-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/;
+    const candidates = (await readdir(process.cwd())).filter((f) => downloadName.test(f));
+    if (candidates.length === 1) {
+      flags.patch = candidates[0];
+      console.log(c.cyan(`No tool-patch.json found — using downloaded patch: ${candidates[0]}`));
+    } else if (candidates.length > 1) {
+      console.error(c.red(`✗ No tool-patch.json and ${candidates.length} downloaded patches in the cwd:`));
+      for (const f of candidates) console.error(c.red(`    · ${f}`));
+      console.error(c.dim('  Pick one explicitly: npm run apply-tool-patch -- --patch=<file>'));
+      process.exit(1);
+    }
+    // 0 matches → fall through to the normal "cannot read patch" error.
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Load + validate patch

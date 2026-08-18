@@ -83,7 +83,7 @@
 <body class="lab-page">
   <header class="banner">
     <h1>🎨 DECOR EDITOR</h1>
-    <span class="hint">click empty arena = place · click prop = select · <code>Del</code> = delete · sliders adjust selected</span>
+    <span class="hint">click empty = place · click prop = select · drag = move (<code>Shift</code> snap) · wheel = zoom · <code>Del</code> = delete · <code>Ctrl+D</code> = duplicate</span>
   </header>
 
   <aside class="sidebar lab-panel lab-panel--right">
@@ -158,6 +158,10 @@
         Relative multiplier on the type's <code>displayHeight</code>. 1.00 = author intent. The "≈ X u (n× critter)" label above shows the resulting world-space height (critter ≈ 1.7 u).
       </div>
       <div class="row" style="margin-top: 8px">
+        <button id="btn-duplicate" title="Clone the selected prop, nudged +0.15 rad (Ctrl+D)">⧉ Duplicate</button>
+        <button id="btn-face-center" title="Point the prop at the arena centre (sets rotY = angle + π)">◎ Face centre</button>
+      </div>
+      <div class="row">
         <button class="danger" id="btn-delete">Delete (Del)</button>
       </div>
     </section>

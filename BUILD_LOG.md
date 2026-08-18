@@ -1,5 +1,36 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-19 — Afilado slice A: 17 quick-wins de una tacada
+
+Primer slice de la fase de afilado (plan en docs/AFILADO_PLAN.md;
+decisiones de Rafa: tuning offline-first con paridad en modo aviso,
+melón physicsRadius abierto, port mesh2motion pronto). Implementado
+con 5 agentes en paralelo sobre conjuntos de ficheros DISJUNTOS (sin
+worktrees: la exclusividad de ficheros evita colisiones), verificación
+central mía: tsc, 36 tests, diff de gameplay línea a línea, e2e de los
+5 frentes con mutaciones reales.
+
+- Match lab: selector de pack de arena, setup completo persistido y
+  rehidratado (el reload post-apply reproduce la partida: lineup +
+  seed + velocidad), aviso de recording sin descargar, botón "Mark
+  moment" con sección propia en el export MD.
+- Calibrate: fix del Re-fit (el mesh revertía al frame siguiente por
+  el rosterOverride viejo — se exportaban valores nunca vistos),
+  status 'wip' calibrable sin exponer en select, slot persistente,
+  RULER_TARGET importa IN_GAME_TARGET_HEIGHT (adiós 1.7 duplicado).
+- Decor: duplicar (botón/Ctrl+D), wheel-zoom, snap polar con Shift,
+  "Face centre", ambiente del pack (clearColor por fog + skybox con
+  preview GLB), warn de keys inalcanzables en DECOR_TYPES, cabecera
+  reescrita como spec (documentaba features como inexistentes).
+- Gameplay (solo centralización, valores idénticos): bounce de Steel
+  Shell, vulnerabilidad de stun ×4 y shakes del path online a FEEL —
+  con notas honestas del drift restante (fireFrenzy inline).
+- CI: check-pws-parity en npm run check (el header lo exigía, nada lo
+  verificaba). CLI: acepta tool-patch-<tool>-<stamp>.json si es único.
+- Studio: deep-link #tab, indicador ● de working copy sucia por tab,
+  atajos 1-4 reenviados desde dentro de los iframes. DEV_TOOLS.md
+  actualizado al pipeline post-H3.
+
 ## 2026-08-19 — H3 CERRADO (`v1.5-bichitos-studio`)
 
 Merge `dev → main` con `--no-ff` (432511b) + tag. **Smoke de

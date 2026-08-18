@@ -1426,7 +1426,7 @@ export class Game {
     const palette = getCritterVfxPalette(c.config.name);
     if (ev.type === 'charge_rush') {
       applyDashFeedback(c);
-      triggerCameraShake(0.15);
+      triggerCameraShake(FEEL.shake.chargeRush);
       playSoundEffect('abilityFire');
     } else if (ev.type === 'blink') {
       // Cheeto Shadow Step (and any future blink) — origin afterimage
@@ -1486,7 +1486,7 @@ export class Game {
       // as offline. The pulsing emissive glow is still driven by the
       // synced `c.abilityStates[2].active` flag in updateVisuals().
       spawnFrenzyBurst(this.scene, ev.x, ev.z, palette?.frenzy);
-      triggerCameraShake(FEEL.shake.groundPound * 0.55);
+      triggerCameraShake(FEEL.shake.groundPound * FEEL.shake.frenzyFactor);
       playSoundEffect('abilityFire');
     }
   }

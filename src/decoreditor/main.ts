@@ -2,39 +2,53 @@
 // Decor Editor — `/decor-editor.html`
 // ---------------------------------------------------------------------------
 //
-// MVP visual editor for in-arena decoration placements. Reads the current
-// layout from arena-decor-layouts.ts, renders it top-down, and lets the
-// user click to place / select / adjust / delete props. Final step:
-// "Copy snippet" → paste into arena-decor-layouts.ts, OR "Copy/Download
-// JSON patch" → `npm run apply-tool-patch` (H3 slice 3 — same
-// DecorEditorPatch envelope as calibrate/anim-lab; the apply replaces
-// the pack's array wholesale, which is why the design notes live in the
-// pack HEADER comments of DECOR_LAYOUTS, never inside the arrays).
+// Visual editor for in-arena decoration placements. Reads the pack layout
+// from arena-decor-layouts.ts (or the per-pack localStorage working copy),
+// renders it top-down, and lets the user place / select / drag / duplicate /
+// adjust / delete props. Output paths:
+//   · "Copy snippet"       → paste into arena-decor-layouts.ts by hand
+//   · "Copy/Download JSON" → `npm run apply-tool-patch` (H3 slice 3 — same
+//     DecorEditorPatch envelope as calibrate/anim-lab; the apply replaces
+//     the pack's array wholesale, which is why design notes live in the
+//     pack HEADER comments of DECOR_LAYOUTS, never inside the arrays)
+//   · "Apply to source"    → dev-server apply endpoint (H3 slice 4) writes
+//     arena-decor-layouts.ts directly; the localStorage working copy is
+//     cleared first so the post-write reload boots from authored code
 //
 // Sibling of /calibrate.html (roster) and /anim-lab.html (clips). All
 // three pages share the same lab pattern: standalone HTML entry, no
 // Colyseus, no HUD, no physics. Just a focused tool.
 //
-// Scope (deliberately minimal — no overengineering):
-//   · top-down ortho camera
+// Current feature set (this header is the spec — keep it in sync):
+//   · top-down ortho camera with wheel-zoom (half-extent clamped 4–20)
 //   · arena radii circles drawn as wireframes for reference
 //   · click on empty space = add placement (with currently-selected type)
-//   · click on a prop disc = select that placement
+//   · click on a prop disc = select; drag to move (Shift = polar snap)
 //   · sliders for r / angle / rotY / scale + type select for the chosen
+//   · duplicate (button / Ctrl+D) and "face centre" rotY helper
 //   · Delete key or button removes selected
-//   · Export writes a TypeScript snippet to clipboard + a <pre> block
+//   · undo / redo over snapshot history (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
+//   · per-pack localStorage auto-save + last-pack restore across reloads
+//   · optional GLB preview layer with pack ambience (fog-tinted clear
+//     colour always on; equirect skybox while the GLB preview is active)
+//   · "Preview in game" opens the real game reading the working copy
 //
-// NOT in scope (yet):
-//   · drag-to-move (delete + click-new is enough for MVP)
-//   · undo / redo
-//   · loading the actual GLB props (placeholder cylinders are fast and
-//     legible — the goal is positioning, not visual fidelity)
-//   · auto-write to disk (export only — keeps SoT in code review;
-//     the dev-server apply endpoint is H3 slice 4)
+// NOT in scope (deliberately):
+//   · multi-select / marquee — clusters are built one prop at a time
+//     (duplicate + snap cover the dominant workflow)
+//   · editing the DECOR_TYPES catalogue — new props are still authored in
+//     TS; the boot-time suffix check below warns about unreachable keys
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { ARENA_PACK_IDS, getPackDecorScale, type ArenaPackId } from '../arena-decorations';
+import {
+  ARENA_PACK_IDS,
+  getPackDecorScale,
+  getPackFogColor,
+  loadPackSkyboxTexture,
+  type ArenaPackId,
+} from '../arena-decorations';
+import { IN_GAME_TARGET_HEIGHT } from '../critter';
 import {
   DECOR_LAYOUTS,
   DECOR_TYPES,
@@ -76,11 +90,13 @@ scene.add(hemi);
 
 // Top-down ortho camera: world XZ plane mapped 1:1 to the canvas.
 // Frustum width is set to roughly fit the arena (radius 12) plus a margin.
-// We update it in resize() to maintain aspect.
-const VIEW_HALF_EXTENT = 14;     // world units visible from centre to edge (roughly)
+// We update it in resize() to maintain aspect. Mutable (not const) because
+// wheel-zoom scales it — clamped to ZOOM_MIN/MAX_EXTENT, see the wheel
+// listener next to resize().
+let viewHalfExtent = 14;         // world units visible from centre to edge (roughly)
 const camera = new THREE.OrthographicCamera(
-  -VIEW_HALF_EXTENT, VIEW_HALF_EXTENT,
-   VIEW_HALF_EXTENT, -VIEW_HALF_EXTENT,
+  -viewHalfExtent, viewHalfExtent,
+   viewHalfExtent, -viewHalfExtent,
    0.1, 100,
 );
 camera.position.set(0, 50, 0);
@@ -177,6 +193,8 @@ const valSelAngle   = qSpan('val-sel-angle');
 const valSelRotY    = qSpan('val-sel-rotY');
 const valSelScale   = qSpan('val-sel-scale');
 const btnDelete     = qBtn('btn-delete');
+const btnDuplicate  = qBtn('btn-duplicate');
+const btnFaceCenter = qBtn('btn-face-center');
 const btnUndo       = qBtn('btn-undo');
 const btnRedo       = qBtn('btn-redo');
 const historyLabel  = qSpan('history-label');
@@ -377,9 +395,33 @@ function setPreviewMode(on: boolean): void {
   previewMode = on;
   placementsGroup.visible = !on;
   previewGroup.visible = on;
+  refreshAmbience();
   if (on) {
     void rebuildPreviewGroup();
   }
+}
+
+/** Pack ambience. Two layers, deliberately asymmetric:
+ *    · clear colour = pack fog colour, ALWAYS on — cheap colour-judgment
+ *      context (props are tuned against the pack's light, not lab grey);
+ *    · equirect skybox only while the GLB preview is active — behind
+ *      placeholder discs a photo background is noise, not context.
+ *  Texture loads go through arena-decorations' session cache, so pack
+ *  switches after warm-up are free. */
+function refreshAmbience(): void {
+  renderer.setClearColor(getPackFogColor(currentPack));
+  if (!previewMode) {
+    scene.background = null;
+    return;
+  }
+  const pack = currentPack;
+  loadPackSkyboxTexture(pack)
+    .then((tex) => {
+      // Stale-guard: the user may have switched packs or toggled the
+      // preview off while the texture streamed in.
+      if (previewMode && currentPack === pack) scene.background = tex;
+    })
+    .catch(() => { scene.background = null; });   // 404 → fall back to clear colour
 }
 
 // ---------------------------------------------------------------------------
@@ -405,7 +447,7 @@ function rebuildPlacementsList(): void {
 function refreshSelectedInfo(): void {
   if (selectedIdx < 0 || !placements[selectedIdx]) {
     selectedInfo.textContent = '(none — click on a prop to select)';
-    [ctlSelR, ctlSelAngle, ctlSelRotY, ctlSelScale, ctlSelType, btnDelete]
+    [ctlSelR, ctlSelAngle, ctlSelRotY, ctlSelScale, ctlSelType, btnDelete, btnDuplicate, btnFaceCenter]
       .forEach((el) => ((el as HTMLInputElement | HTMLButtonElement | HTMLSelectElement).disabled = true));
     valSelR.textContent = valSelAngle.textContent = valSelRotY.textContent = valSelScale.textContent = '—';
     return;
@@ -414,15 +456,16 @@ function refreshSelectedInfo(): void {
   // Show the final approximate height the prop will render at in-game:
   // displayHeight × placement.scale × packScale (the same multiplier
   // chain arena-decorations applies), with a critter-relative comparison
-  // so the user can eyeball "how tall is this versus a critter (1.7 u)".
+  // so the user can eyeball "how tall is this versus a critter" against
+  // the same IN_GAME_TARGET_HEIGHT the game normalises critters to.
   const type = DECOR_TYPES[p.type];
   const finalH = type ? type.displayHeight * p.scale * getPackDecorScale(currentPack) : null;
-  const ratioCritter = finalH !== null ? finalH / 1.7 : null;
+  const ratioCritter = finalH !== null ? finalH / IN_GAME_TARGET_HEIGHT : null;
   const ratioBadge = ratioCritter !== null
     ? ` <span style="opacity:0.65;font-weight:400">≈ ${finalH!.toFixed(2)} u (${ratioCritter.toFixed(1)}× critter)</span>`
     : '';
   selectedInfo.innerHTML = `<strong>#${selectedIdx}</strong> &middot; ${decorTypeLabel(p.type)}${ratioBadge}`;
-  [ctlSelR, ctlSelAngle, ctlSelRotY, ctlSelScale, ctlSelType, btnDelete]
+  [ctlSelR, ctlSelAngle, ctlSelRotY, ctlSelScale, ctlSelType, btnDelete, btnDuplicate, btnFaceCenter]
     .forEach((el) => ((el as HTMLInputElement | HTMLButtonElement | HTMLSelectElement).disabled = false));
   ctlSelR.value = String(p.r);
   ctlSelAngle.value = String(p.angle);
@@ -451,6 +494,22 @@ function deletePlacement(idx: number): void {
   placements.splice(idx, 1);
   if (selectedIdx === idx) selectedIdx = -1;
   else if (selectedIdx > idx) selectedIdx--;
+  rebuildDiscs();
+  rebuildPlacementsList();
+  refreshSelectedInfo();
+  pushSnapshot();
+}
+
+/** Clone the placement at idx, nudged +0.15 rad so the copy doesn't land
+ *  exactly on top of the original (same r/rotY/scale/type — the dominant
+ *  workflow is building clusters of 3-5 props: clone, then fine-tune).
+ *  The copy becomes the selection so sliders drive it immediately. */
+function duplicatePlacement(idx: number): void {
+  const src = placements[idx];
+  if (!src) return;
+  const copy: DecorPlacement = { ...src, angle: round3(wrapAngle(src.angle + 0.15)) };
+  placements.push(copy);
+  selectedIdx = placements.length - 1;
   rebuildDiscs();
   rebuildPlacementsList();
   refreshSelectedInfo();
@@ -489,6 +548,19 @@ function screenToWorldXZ(ev: MouseEvent): { x: number; z: number } | null {
 
 const DRAG_THRESHOLD_PX = 4;
 const HIT_RADIUS = 0.6;
+// Shift-held polar snap while dragging/placing: 15° angular steps and
+// quarter-unit radii so cluster layouts line up without pixel-hunting.
+const SNAP_ANGLE = Math.PI / 12;
+const SNAP_R = 0.25;
+
+/** Snap (r, angle) to the coarse polar grid. r is re-clamped afterwards
+ *  because rounding can push it back past the playable ring bounds. */
+function snapPolar(r: number, angle: number): { r: number; angle: number } {
+  return {
+    r: Math.min(PLAYABLE_OUTER, Math.max(PLAYABLE_INNER, Math.round(r / SNAP_R) * SNAP_R)),
+    angle: Math.round(angle / SNAP_ANGLE) * SNAP_ANGLE,
+  };
+}
 const PLAYABLE_INNER = FRAG.immuneRadius + 0.3;
 const PLAYABLE_OUTER = FRAG.maxRadius - 0.1;
 
@@ -567,7 +639,8 @@ canvas.addEventListener('pointermove', (ev) => {
   let r = Math.hypot(targetX, targetZ);
   if (r < PLAYABLE_INNER) r = PLAYABLE_INNER;
   if (r > PLAYABLE_OUTER) r = PLAYABLE_OUTER;
-  const angle = Math.atan2(targetZ, targetX);
+  let angle = Math.atan2(targetZ, targetX);
+  if (ev.shiftKey) ({ r, angle } = snapPolar(r, angle));
   const p = placements[gesture.draggedIdx]!;
   p.r = round3(r);
   p.angle = round3(angle);
@@ -603,10 +676,12 @@ canvas.addEventListener('pointerup', (ev) => {
   // Click on empty space → place a new prop with the currently-selected type.
   const wp = screenToWorldXZ(ev);
   if (!wp) return;
-  const r = Math.hypot(wp.x, wp.z);
+  let r = Math.hypot(wp.x, wp.z);
   if (r > PLAYABLE_OUTER) return;            // outside playable arena
   if (r < PLAYABLE_INNER) return;            // too close to centre
-  const angle = Math.atan2(wp.z, wp.x);
+  let angle = Math.atan2(wp.z, wp.x);
+  // Same Shift snap as drag-to-move, so placing directly onto the grid works.
+  if (ev.shiftKey) ({ r, angle } = snapPolar(r, angle));
   const type = ctlType.value || decorTypesForPack(currentPack)[0];
   if (!type) return;
   const newP: DecorPlacement = {
@@ -638,6 +713,9 @@ window.addEventListener('keydown', (ev) => {
 ctlPack.addEventListener('change', () => {
   currentPack = ctlPack.value as ArenaPackId;
   console.info('[decor-editor] switching pack →', currentPack);
+  // Persist the pack choice so the reload that follows an Apply-to-source
+  // (or any browser restart) reopens the pack being worked on.
+  saveToStorage(UI_STATE_KEY, { pack: currentPack } satisfies DecorUiState);
   // Prefer the local working copy when present; fall back to authored
   // code layout. saveLocal() will fire on the next mutation, so we
   // don't overwrite anything just by switching.
@@ -646,6 +724,7 @@ ctlPack.addEventListener('change', () => {
   refreshAllUI();
   resetHistoryToCurrent();
   refreshLocalIndicator();
+  refreshAmbience();
 });
 
 ctlSelR.addEventListener('input', () => {
@@ -701,6 +780,22 @@ ctlSelType.addEventListener('change', () => {
 
 btnDelete.addEventListener('click', () => {
   if (selectedIdx >= 0) deletePlacement(selectedIdx);
+});
+
+btnDuplicate.addEventListener('click', () => {
+  if (selectedIdx >= 0) duplicatePlacement(selectedIdx);
+});
+
+btnFaceCenter.addEventListener('click', () => {
+  const p = placements[selectedIdx];
+  if (!p) return;
+  // rotY = angle + π points the prop's forward (+Z) axis at the arena
+  // centre — the calculation the kitsune_shrine pack header documents
+  // being done by hand. Wrapped so the value stays in the slider range.
+  p.rotY = round3(wrapAngle(p.angle + Math.PI));
+  refreshSelectedInfo();
+  rebuildDiscs();
+  pushSnapshot();
 });
 
 btnUndo.addEventListener('click', () => undo());
@@ -822,20 +917,36 @@ function resize(): void {
   // along whichever axis the canvas is taller in.
   const aspect = w / h;
   if (aspect >= 1) {
-    camera.left   = -VIEW_HALF_EXTENT * aspect;
-    camera.right  =  VIEW_HALF_EXTENT * aspect;
-    camera.top    =  VIEW_HALF_EXTENT;
-    camera.bottom = -VIEW_HALF_EXTENT;
+    camera.left   = -viewHalfExtent * aspect;
+    camera.right  =  viewHalfExtent * aspect;
+    camera.top    =  viewHalfExtent;
+    camera.bottom = -viewHalfExtent;
   } else {
-    camera.left   = -VIEW_HALF_EXTENT;
-    camera.right  =  VIEW_HALF_EXTENT;
-    camera.top    =  VIEW_HALF_EXTENT / aspect;
-    camera.bottom = -VIEW_HALF_EXTENT / aspect;
+    camera.left   = -viewHalfExtent;
+    camera.right  =  viewHalfExtent;
+    camera.top    =  viewHalfExtent / aspect;
+    camera.bottom = -viewHalfExtent / aspect;
   }
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
 resize();
+
+// Wheel-zoom over the ortho frustum half-extent. Multiplicative step so the
+// zoom speed feels uniform across the range; sign-only deltaY because mice
+// and trackpads report wildly different magnitudes. The clamp keeps the
+// arena (radius 12) reachable: min 4 is close enough to read one cluster,
+// max 20 still shows the whole ring with margin.
+const ZOOM_MIN_EXTENT = 4;
+const ZOOM_MAX_EXTENT = 20;
+canvas.addEventListener('wheel', (ev) => {
+  // preventDefault requires { passive: false } — without it the browser
+  // scrolls/zooms the page instead of the arena view.
+  ev.preventDefault();
+  const factor = ev.deltaY > 0 ? 1.1 : 1 / 1.1;
+  viewHalfExtent = Math.min(ZOOM_MAX_EXTENT, Math.max(ZOOM_MIN_EXTENT, viewHalfExtent * factor));
+  resize();
+}, { passive: false });
 
 function frame(): void {
   renderer.render(scene, camera);
@@ -847,8 +958,17 @@ function round3(n: number): number {
   return Math.round(n * 1000) / 1000;
 }
 
+/** Wrap an angle into [-π, π) so duplicate / face-centre results stay
+ *  inside the slider ranges (sliders clamp the DISPLAY, not the value —
+ *  an out-of-range value would silently desync knob and prop). */
+function wrapAngle(a: number): number {
+  const TWO_PI = Math.PI * 2;
+  return ((a + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI;
+}
+
 // ---------------------------------------------------------------------------
-// Undo / Redo — Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z
+// Undo / Redo — Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z (Ctrl+D duplicate rides the
+// same listener: it shares the ctrl/meta + focused-input guards)
 // ---------------------------------------------------------------------------
 //
 // Snapshot-based history of `placements`. Every "real change" pushes a
@@ -946,10 +1066,16 @@ window.addEventListener('keydown', (ev) => {
   if (!(ev.ctrlKey || ev.metaKey)) return;
   const isZ = ev.key.toLowerCase() === 'z';
   const isY = ev.key.toLowerCase() === 'y';
+  const isD = ev.key.toLowerCase() === 'd';
   if (isZ && !ev.shiftKey) {
     if (undo()) ev.preventDefault();
   } else if ((isZ && ev.shiftKey) || isY) {
     if (redo()) ev.preventDefault();
+  } else if (isD && selectedIdx >= 0) {
+    // preventDefault matters: Ctrl+D is the browser's add-bookmark
+    // shortcut, which would steal focus mid-editing.
+    duplicatePlacement(selectedIdx);
+    ev.preventDefault();
   }
 });
 
@@ -976,14 +1102,28 @@ window.addEventListener('keydown', (ev) => {
 //   - quotaExceeded → silently degrade (keep working in-memory).
 //   - corrupt JSON  → fall back to code layout, console.warn once.
 //
-// This pattern is meant to be lifted into a tiny shared module later
-// (calibrate + anim-lab can use the same shape) but we keep it inline
-// here to avoid scope creep on this iteration.
+// The storage plumbing lives in the shared src/tools/tool-storage.ts
+// helpers (same module calibrate + anim-lab use); this section only owns
+// the decor-specific keys, validation and lifecycle.
 
 // Tool name used by tool-storage helpers. Must stay 'decor-editor' so
 // existing browser localStorage entries (and the preview-in-game URL
 // flow that arena-decor-layouts.ts reads) keep working.
 const STORAGE_TOOL = 'decor-editor';
+
+// UI-state persistence ('decor-editor:ui') — separate from the per-pack
+// working copies above because it describes the EDITOR (which pack is
+// open), not layout data, and must survive a "Reset local" of any pack.
+const UI_STATE_KEY = toolStorageKey(STORAGE_TOOL, 'ui');
+
+interface DecorUiState { pack: ArenaPackId }
+
+function isDecorUiState(v: unknown): v is DecorUiState {
+  const pack = (v as { pack?: unknown } | null)?.pack;
+  // Membership check (not just typeof) so a pack renamed/removed in code
+  // can't resurrect from stale storage and crash downstream lookups.
+  return typeof pack === 'string' && (ARENA_PACK_IDS as readonly string[]).includes(pack);
+}
 
 function isDecorPlacementArray(v: unknown): v is DecorPlacement[] {
   if (!Array.isArray(v)) return false;
@@ -1053,7 +1193,39 @@ function resetLocalState(): void {
 // throws silently if boot runs before those bindings exist. Hence:
 // keep the boot block at the very bottom of the file.
 
+// Boot-time catalogue sanity check: a DECOR_TYPES key whose suffix matches
+// no pack never appears in ANY dropdown (decorTypesForPack filters by the
+// '_<packSuffix>' convention), so a typo'd suffix fails silently — the
+// prop just doesn't exist as far as the editor can tell. Warn once here.
+{
+  const reachable = new Set<string>();
+  for (const id of ARENA_PACK_IDS) {
+    for (const key of decorTypesForPack(id)) reachable.add(key);
+  }
+  for (const key of Object.keys(DECOR_TYPES)) {
+    if (!reachable.has(key)) {
+      console.warn(
+        `[decor-editor] DECOR_TYPES key "${key}" matches no pack suffix — `
+        + `it will not appear in any pack's dropdown (check the '_<pack>' suffix)`,
+      );
+    }
+  }
+}
+
+// Restore the last-edited pack BEFORE loading placements — without this
+// the reload that follows every Apply-to-source dumps the user back into
+// the default pack, and that re-navigation friction discourages small,
+// frequent applies (the whole point of the pipeline).
+{
+  const ui = loadFromStorage<DecorUiState>(UI_STATE_KEY, isDecorUiState);
+  if (ui) {
+    currentPack = ui.pack;
+    ctlPack.value = currentPack;
+  }
+}
+
 placements = loadLocalOrCode(currentPack);
 refreshAllUI();
 resetHistoryToCurrent();
 refreshLocalIndicator();
+refreshAmbience();

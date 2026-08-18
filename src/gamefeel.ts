@@ -35,6 +35,8 @@ export const FEEL = {
   collision: {
     normalPushForce: 3.0,     // casual bumps are gentle nudges
     headbuttMultiplier: 3.5,  // headbutt = headbuttForce * this (Rojo: 14*3.5=49)
+    anchoredBounceFactor: 1.4, // × normalPushForce — rebound applied to whoever runs into an anchored critter (Shelly Steel Shell)
+    stunnedVulnerability: 4,  // knockback multiplier while stunTimer > 0 (Trunk Slam/Grip follow-ups)
   },
 
   // --- Charge Rush ---
@@ -98,6 +100,8 @@ export const FEEL = {
   shake: {
     headbutt: 0.22,           // amplitude when a headbutt connects
     groundPound: 0.45,        // stronger, it's a slam
+    chargeRush: 0.15,         // online dash broadcast only — offline fireChargeRush has no shake today (known drift)
+    frenzyFactor: 0.55,       // × groundPound on frenzy activation; abilities.ts fireFrenzy still inlines the same 0.55 — unify when touching that file
     decay: 0.18,              // how fast the shake fades (seconds)
   },
 

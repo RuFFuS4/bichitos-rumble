@@ -64,6 +64,15 @@
       border-bottom: none;
       color: var(--lab-accent);
     }
+    /* Dirty working-copy dot — lit while the tab's lab has unapplied
+     * source edits persisted in localStorage (see refreshDirtyDots). */
+    .studio-tab.dirty::after {
+      content: '●';
+      margin-left: 7px;
+      font-size: 8px;
+      vertical-align: 1px;
+      color: var(--lab-accent);
+    }
     #studio-bar .spacer { flex: 1; }
     #studio-bar .hint {
       font: 10px/1 var(--lab-mono);
@@ -128,6 +137,16 @@
         frame = document.createElement('iframe');
         frame.src = tab.dataset.src;
         frame.title = tab.textContent;
+        // 1-4 forwarding from INSIDE the lab: keydown never crosses a
+        // frame boundary, so the shell's own listener goes dead the
+        // moment focus enters a lab (i.e. almost always). The frames
+        // are same-origin, so we attach the same handler to the iframe
+        // document — on every 'load', because apply-to-source / DevApi
+        // reloads replace the document and drop its listeners.
+        frame.addEventListener('load', () => {
+          try { frame.contentDocument?.addEventListener('keydown', onShortcutKey); }
+          catch { /* cross-origin frame — never expected here */ }
+        });
         iframes.set(tabId, frame);
         frames.appendChild(frame);
       }
@@ -135,6 +154,9 @@
       const hint = document.getElementById('empty-hint');
       if (hint) hint.remove();
       try { localStorage.setItem('studio:active-tab', tabId); } catch { /* private mode */ }
+      // Keep the URL deep-linkable (#<tab>). replaceState instead of
+      // assigning location.hash: no history spam, no hashchange echo.
+      history.replaceState(null, '', `#${tabId}`);
     }
 
     tabs.forEach((t) => t.addEventListener('click', () => activate(t.dataset.tab)));
@@ -145,21 +167,65 @@
       if (frame) frame.contentWindow?.location.reload();
     });
 
-    // 1-4 keyboard switching (ignore keystrokes typed into the iframes —
-    // they never bubble across the frame boundary, so this is safe).
-    document.addEventListener('keydown', (ev) => {
+    // 1-4 keyboard switching. Shared by the shell document AND every
+    // iframe document (attached on iframe load, see activate). The
+    // typing guard matters for the iframes: the labs have number
+    // inputs (anim-lab speed column, decor sliders) — typing "1" in a
+    // field must not switch tabs. No game conflict: the match doesn't
+    // bind digit keys.
+    function isTypingTarget(el) {
+      return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'
+        || el.tagName === 'SELECT' || el.isContentEditable);
+    }
+    function onShortcutKey(ev) {
       const n = Number(ev.key);
-      if (n >= 1 && n <= tabs.length && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      if (n >= 1 && n <= tabs.length && !ev.ctrlKey && !ev.metaKey && !ev.altKey
+          && !isTypingTarget(ev.target)) {
         activate(tabs[n - 1].dataset.tab);
       }
-    });
+    }
+    document.addEventListener('keydown', onShortcutKey);
 
-    // Boot: restore last tab; default to the Animations lab (lightest
-    // useful default — Match Lab autostarts a full match, so it only
-    // loads when explicitly opened).
+    // Dirty-tab indicator: a lab is "dirty" while localStorage holds a
+    // working copy under its tool prefix — source edits not yet applied
+    // to code. Keys with the `:ui` suffix are pure UI state (selection,
+    // view), not edits, so they don't count. Match Lab has no working
+    // copy concept, hence no prefix. The 'storage' event fires on this
+    // window for writes made inside the iframes (other same-origin
+    // browsing contexts), which keeps the dots live without polling.
+    const DIRTY_PREFIXES = { anim: 'anim-lab:', calibrate: 'calibrate:', decor: 'decor-editor:' };
+    function refreshDirtyDots() {
+      for (const t of tabs) {
+        const prefix = DIRTY_PREFIXES[t.dataset.tab];
+        let dirty = false;
+        try {
+          for (let i = 0; prefix && i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith(prefix) && !k.endsWith(':ui')) { dirty = true; break; }
+          }
+        } catch { /* storage disabled — no dots */ }
+        t.classList.toggle('dirty', dirty);
+        t.title = dirty ? 'Lab has a local working copy (unapplied edits)' : '';
+      }
+    }
+    window.addEventListener('storage', refreshDirtyDots);
+    refreshDirtyDots();
+
+    // Boot: the #<tab> deep link wins over the remembered tab; default
+    // to the Animations lab (lightest useful default — Match Lab
+    // autostarts a full match, so it only loads when explicitly opened).
+    const validTab = (id) => !!id && tabs.some((t) => t.dataset.tab === id);
     let last = null;
     try { last = localStorage.getItem('studio:active-tab'); } catch { /* ignore */ }
-    activate(last && tabs.some((t) => t.dataset.tab === last) ? last : 'anim');
+    const fromHash = location.hash.slice(1);
+    activate(validTab(fromHash) ? fromHash : validTab(last) ? last : 'anim');
+
+    // Manual hash edits after boot keep working (activate() uses
+    // replaceState, which doesn't fire hashchange — no echo loop).
+    window.addEventListener('hashchange', () => {
+      const id = location.hash.slice(1);
+      if (validTab(id)) activate(id);
+    });
   </script>
 </body>
 </html>

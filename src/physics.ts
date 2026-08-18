@@ -58,7 +58,7 @@ export function resolveCollisions(critters: Critter[]): void {
         // her reads as "rebote" instead of "nada pasa".
         const aAnchored = isAnchoredCritter(a);
         const bAnchored = isAnchoredCritter(b);
-        const BOUNCE = FEEL.collision.normalPushForce * 1.4;
+        const BOUNCE = FEEL.collision.normalPushForce * FEEL.collision.anchoredBounceFactor;
         if (aAnchored && !bAnchored) {
           b.vx += nx * BOUNCE;
           b.vz += nz * BOUNCE;
@@ -92,14 +92,15 @@ export function resolveCollisions(critters: Critter[]): void {
         const massRatioA = b.effectiveMass / (a.effectiveMass + b.effectiveMass);
         const massRatioB = a.effectiveMass / (a.effectiveMass + b.effectiveMass);
 
-        // 2026-05-01 final — Trunk Grip / Slam vulnerability ×4 on the
-        // stunned side (was ×2 in earlier passes). Trunk's L now leaves
-        // a target stunned for 5 s and a follow-up headbutt should send
-        // them flying, so we crank the modifier. Currently only Trunk
+        // 2026-05-01 final — Trunk Grip / Slam vulnerability boost on
+        // the stunned side (value in FEEL.collision.stunnedVulnerability;
+        // was ×2 in earlier passes). Trunk's L now leaves a target
+        // stunned for 5 s and a follow-up headbutt should send them
+        // flying, so we crank the modifier. Currently only Trunk
         // (Slam K + Grip L) writes `stunTimer > 0`; safe to bump
         // globally without affecting other critters' tunings.
-        const aVuln = a.stunTimer > 0 ? 4 : 1;
-        const bVuln = b.stunTimer > 0 ? 4 : 1;
+        const aVuln = a.stunTimer > 0 ? FEEL.collision.stunnedVulnerability : 1;
+        const bVuln = b.stunTimer > 0 ? FEEL.collision.stunnedVulnerability : 1;
         if (a.isHeadbutting) {
           b.vx += nx * force * massRatioB * bVuln;
           b.vz += nz * force * massRatioB * bVuln;

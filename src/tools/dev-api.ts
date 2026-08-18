@@ -100,7 +100,12 @@ export type EventType =
   | 'collapse_warn'
   | 'collapse_batch'
   | 'match_started'
-  | 'match_ended';
+  | 'match_ended'
+  // Manual playtest bookmark pushed from the lab UI ("Mark moment").
+  // Not emitted by gameplay polling — only by the sidebar button or the
+  // console. Lands in the recording like any other event so exported
+  // JSON/MD carries the timestamp.
+  | 'moment';
 
 export interface GameplayEvent {
   t: number;             // performance.now() at emit
@@ -199,6 +204,10 @@ export interface RecordingOutcome {
 export interface RecordingSession {
   version: 1;
   meta: RecordingMeta;
+  /** ISO timestamp of the last JSON/MD export; null = never exported.
+   *  The sidebar warns before startMatch overwrites a finalised session
+   *  that still has null here. Additive field — version stays 1. */
+  downloadedAt: string | null;
   events: GameplayEvent[];
   actions: LabAction[];
   snapshots: RecordingSnapshot[];
@@ -594,6 +603,7 @@ export class DevApi {
         endedAtIso: null,
         durationSec: null,
       },
+      downloadedAt: null,
       events: [],
       actions: [],
       snapshots: [],
@@ -610,6 +620,17 @@ export class DevApi {
 
   isRecording(): boolean {
     return this.recording !== null && this.recording.meta.endedAt === null;
+  }
+
+  /** True when a FINALISED recording exists that was never exported.
+   *  Drives the sidebar's confirm() before startMatch overwrites the
+   *  session. Live (still-recording) sessions deliberately don't count:
+   *  restarting mid-match is an intentional abandon, and warning there
+   *  would nag every quick iteration loop. */
+  hasUnsavedRecording(): boolean {
+    return this.recording !== null
+      && this.recording.meta.endedAt !== null
+      && this.recording.downloadedAt === null;
   }
 
   hasRecording(): boolean {
@@ -727,6 +748,9 @@ export class DevApi {
   downloadRecordingJSON(): void {
     const rec = this.recording;
     if (!rec) return;
+    // Stamp BEFORE serialising so the exported file self-documents when
+    // it was saved (and hasUnsavedRecording stops warning about it).
+    rec.downloadedAt = new Date().toISOString();
     const name = this.recordingFilename(rec, 'json');
     const blob = new Blob([JSON.stringify(rec, null, 2)], { type: 'application/json' });
     this.triggerDownload(blob, name);
@@ -736,6 +760,7 @@ export class DevApi {
   downloadRecordingMD(): void {
     const rec = this.recording;
     if (!rec) return;
+    rec.downloadedAt = new Date().toISOString();
     const name = this.recordingFilename(rec, 'md');
     const md = buildRecordingSummaryMD(rec);
     const blob = new Blob([md], { type: 'text/markdown' });
@@ -1054,6 +1079,20 @@ export function buildRecordingSummaryMD(rec: RecordingSession): string {
       const tSec = (a.t / 1000).toFixed(2);
       const det = JSON.stringify(a.details);
       lines.push(`| ${tSec} | ${a.matchTime.toFixed(2)} | ${a.type} | \`${det}\` |`);
+    }
+    lines.push('');
+  }
+
+  // Marked moments — manual bookmarks pushed from the lab during playtest.
+  // Timestamps are relative to recording start (same basis as the arena
+  // collapse timeline below).
+  const moments = events.filter(e => e.type === 'moment');
+  if (moments.length > 0) {
+    lines.push('## Marked moments');
+    lines.push('');
+    for (const m of moments) {
+      const tSec = ((m.t - meta.startedAt) / 1000).toFixed(2);
+      lines.push(`- t=${tSec}s${m.details ? ` · ${m.details}` : ''}`);
     }
     lines.push('');
   }
