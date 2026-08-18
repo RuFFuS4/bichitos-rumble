@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="googlebot" content="noindex, nofollow" />
+  <meta name="description" content="Bichitos Studio — unified internal tooling shell." />
+  <link rel="icon" type="image/x-icon" sizes="any" href="/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="any" href="/favicon-br.png" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <title>Bichitos Studio</title>
+  <link rel="stylesheet" href="/src/tools/ui/lab-theme.css" />
+  <style>
+    /* ------------------------------------------------------------------
+     * Bichitos Studio (H3 slice 6) — one shell, four labs.
+     *
+     * Architecture: LAZY KEPT-ALIVE IFRAMES, not SPA mount/unmount.
+     * Each tab hosts its standalone lab page in an iframe created on
+     * first activation and kept alive after. Why iframes:
+     *   · listener/style/global-state isolation for free — the labs
+     *     mutate module globals (ANIMATION_OVERRIDES), hang window
+     *     listeners and poll on intervals; none of it can leak or
+     *     collide across tabs.
+     *   · switching tabs preserves each lab's full state (no reload,
+     *     no re-fetch of GLBs) — plus every lab persists its working
+     *     copy to localStorage anyway (H3 slice 2), same origin here.
+     *   · the standalone pages stay first-class: /anim-lab.html etc.
+     *     keep working solo; the studio just frames them.
+     *   · DevApi's location.reload() (match lab badges) only reloads
+     *     its own iframe instead of nuking every tab.
+     * ------------------------------------------------------------------ */
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+
+    #studio-bar {
+      position: fixed; top: 0; left: 0; right: 0; height: 40px;
+      display: flex; align-items: center; gap: 4px;
+      background: var(--lab-panel);
+      border-bottom: 1px solid var(--lab-border-solid);
+      padding: 0 12px;
+      z-index: 10;
+    }
+    #studio-bar .brand {
+      font: bold 12px/1 var(--lab-mono);
+      letter-spacing: 0.14em;
+      color: var(--lab-accent);
+      margin-right: 14px;
+      user-select: none;
+    }
+    #studio-bar .brand span { opacity: 0.5; }
+    .studio-tab {
+      padding: 6px 14px;
+      margin: 0;
+      border-radius: 5px 5px 0 0;
+      border-bottom: none;
+      background: transparent;
+      border-color: transparent;
+      color: #9aa3b5;
+    }
+    .studio-tab:hover { background: rgba(255,255,255,0.05); border-color: transparent; }
+    .studio-tab.active {
+      background: linear-gradient(180deg, #2a2f3d, #1a1d29);
+      border: 1px solid var(--lab-accent-dim);
+      border-bottom: none;
+      color: var(--lab-accent);
+    }
+    #studio-bar .spacer { flex: 1; }
+    #studio-bar .hint {
+      font: 10px/1 var(--lab-mono);
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0.06em;
+      user-select: none;
+    }
+    #studio-bar .reload-tab {
+      padding: 5px 10px;
+      font-size: 9px;
+    }
+
+    #frames { position: fixed; inset: 40px 0 0 0; }
+    #frames iframe {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      border: 0;
+      display: none;
+      background: var(--lab-bg);
+    }
+    #frames iframe.active { display: block; }
+
+    #empty-hint {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,0.25);
+      font: 12px var(--lab-mono);
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body class="lab-page">
+  <div id="studio-bar">
+    <div class="brand">🐛 BICHITOS <span>STUDIO</span></div>
+    <button class="studio-tab" data-tab="match"     data-src="/tools.html">Match Lab</button>
+    <button class="studio-tab" data-tab="anim"      data-src="/anim-lab.html">Animations</button>
+    <button class="studio-tab" data-tab="calibrate" data-src="/calibrate.html">Calibrate</button>
+    <button class="studio-tab" data-tab="decor"     data-src="/decor-editor.html">Decor</button>
+    <div class="spacer"></div>
+    <div class="hint">1-4 switch · tabs keep state · working copies autosave</div>
+    <button class="reload-tab" id="btn-reload-tab" title="Reload the active tab's iframe">⟳ reload tab</button>
+  </div>
+
+  <div id="frames">
+    <div id="empty-hint">pick a lab ↑</div>
+  </div>
+
+  <script type="module">
+    // Tab state machine: iframes are created on FIRST activation and
+    // kept alive afterwards. localStorage remembers the last tab so a
+    // studio reload drops you where you were.
+    const frames = document.getElementById('frames');
+    const tabs = [...document.querySelectorAll('.studio-tab')];
+    const iframes = new Map(); // tab id → iframe
+
+    function activate(tabId) {
+      const tab = tabs.find((t) => t.dataset.tab === tabId);
+      if (!tab) return;
+      tabs.forEach((t) => t.classList.toggle('active', t === tab));
+      let frame = iframes.get(tabId);
+      if (!frame) {
+        frame = document.createElement('iframe');
+        frame.src = tab.dataset.src;
+        frame.title = tab.textContent;
+        iframes.set(tabId, frame);
+        frames.appendChild(frame);
+      }
+      for (const [id, f] of iframes) f.classList.toggle('active', id === tabId);
+      const hint = document.getElementById('empty-hint');
+      if (hint) hint.remove();
+      try { localStorage.setItem('studio:active-tab', tabId); } catch { /* private mode */ }
+    }
+
+    tabs.forEach((t) => t.addEventListener('click', () => activate(t.dataset.tab)));
+
+    document.getElementById('btn-reload-tab').addEventListener('click', () => {
+      const active = tabs.find((t) => t.classList.contains('active'));
+      const frame = active && iframes.get(active.dataset.tab);
+      if (frame) frame.contentWindow?.location.reload();
+    });
+
+    // 1-4 keyboard switching (ignore keystrokes typed into the iframes —
+    // they never bubble across the frame boundary, so this is safe).
+    document.addEventListener('keydown', (ev) => {
+      const n = Number(ev.key);
+      if (n >= 1 && n <= tabs.length && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        activate(tabs[n - 1].dataset.tab);
+      }
+    });
+
+    // Boot: restore last tab; default to the Animations lab (lightest
+    // useful default — Match Lab autostarts a full match, so it only
+    // loads when explicitly opened).
+    let last = null;
+    try { last = localStorage.getItem('studio:active-tab'); } catch { /* ignore */ }
+    activate(last && tabs.some((t) => t.dataset.tab === last) ? last : 'anim');
+  </script>
+</body>
+</html>

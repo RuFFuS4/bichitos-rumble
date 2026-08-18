@@ -74,6 +74,7 @@ export default defineConfig({
       input: {
         index: resolve(import.meta.dirname, 'index.html'),
         ...(process.env.VITE_BUILD_TOOLS === '1' ? {
+          studio:      resolve(import.meta.dirname, 'studio.html'),
           tools:       resolve(import.meta.dirname, 'tools.html'),
           calibrate:   resolve(import.meta.dirname, 'calibrate.html'),
           animLab:     resolve(import.meta.dirname, 'anim-lab.html'),
