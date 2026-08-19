@@ -107,8 +107,14 @@ Orden acordado:
    CLI + endpoint) + tuner con persistencia que sobrevive F10 y trío
    Copy/Download/Apply. E2e del círculo completo verificado (slider →
    tabla real → reload → derive consume la tabla).
-6. [ ] Después, según demanda: HUD fuente única (pick 5),
-   determinismo+batch runner (pick 6 — LA herramienta Claude-first).
+6. [x] **Slice F — HUD fuente única** (pick 5, 2026-08-20): el HUD
+   in-match extraído a src/hud/hud.partial.html e inyectado por plugin
+   de vite en ambos entries (index −702 líneas, tools −587); el lab
+   gana la familia .lives-* y el preload de sprites compartido.
+   Paridad verificada: 187 propiedades computadas en index, cero
+   diferencias. La clase de drift muere estructuralmente.
+7. [ ] Último pick según demanda: determinismo+batch runner (pick 6 —
+   LA herramienta Claude-first de la directiva dual-surface).
 
 ## Dirección post-H3 (fijada por Rafa, 2026-08-19)
 

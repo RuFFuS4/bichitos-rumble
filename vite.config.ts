@@ -5,6 +5,12 @@ import { execSync } from 'node:child_process';
 // plugin means it is structurally absent from production builds.
 // @ts-expect-error — plain .mjs module, not covered by tsconfig (scripts/)
 import { toolPatchDevPlugin } from './scripts/vite-tool-patch-plugin.mjs';
+// HTML partials (afilado pick 5): replaces `<!-- @partial:hud -->` in any
+// HTML entry with src/hud/hud.partial.html — the single source of the
+// in-match HUD shared by index.html and tools.html. transformIndexHtml
+// applies to every HTML entry automatically (dev and build).
+// @ts-expect-error — plain .mjs module, not covered by tsconfig (scripts/)
+import { htmlPartialsPlugin } from './scripts/vite-html-partials-plugin.mjs';
 
 // Short git sha baked into the bundle as the Sentry `release` id, so a
 // production error report pins the exact deploy that produced it.
@@ -35,7 +41,7 @@ try {
 // library caches.
 export default defineConfig({
   base: './',
-  plugins: [toolPatchDevPlugin()],
+  plugins: [toolPatchDevPlugin(), htmlPartialsPlugin()],
   define: {
     __BUILD_COMMIT__: JSON.stringify(buildCommit),
   },

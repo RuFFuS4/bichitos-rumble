@@ -27,8 +27,14 @@ import { isLikelyMobile } from '../input';
 import { initTouchInput } from '../input-touch';
 import { initGamepadInput } from '../input-gamepad';
 import { loadMutedState } from '../audio';
+import { preloadSpriteSheets } from '../hud/sprite-preload';
 import { mountLabSidebar, loadLabSetup, RANDOM_PACK } from './sidebar';
 import { DevApi } from './dev-api';
+
+// Sprite sheet preload — the lab renders the same HUD partial as the game,
+// so it needs the same body.has-hud-sprites / has-ability-sprites gating or
+// the lives medallions and ability icons fall back to emoji.
+preloadSpriteSheets();
 
 // --- WebGL sanity check ----------------------------------------------------
 const testCanvas = document.createElement('canvas');

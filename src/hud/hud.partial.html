@@ -1,0 +1,751 @@
+<!-- =====================================================================
+     HUD partial — SINGLE SOURCE OF TRUTH for the in-match HUD
+     =====================================================================
+
+     This fragment (one <style> block + the <div id="hud"> markup) is
+     injected into every HTML entry that carries the token
+
+         <!~~ @partial:hud ~~>   (written with real dashes in the entry)
+
+     by scripts/vite-html-partials-plugin.mjs at dev/build time. Today
+     that is index.html (the game) and tools.html (the match lab).
+
+     CONTRACT — edit the HUD HERE, never in the entries:
+       · index.html and tools.html used to each carry a hand-synced copy
+         of this CSS + markup; they diverged three times. This file kills
+         that class of bug: one copy, injected everywhere.
+       · Scope: the in-match HUD only — #hud and its descendants, the
+         four .player-life-corner panels + the .lives-* family, #overlay
+         (countdown), #ability-bar-container + .ability-slot family,
+         #portal-legend, and the .sprite-hud / .sprite-ability icon
+         system (shared HUD/menu infrastructure, needed identically by
+         both entries).
+       · NOT here (entry-specific, stays in each entry): the
+         body:not(.match-active) screen-gating rules, title / select /
+         end / waiting screens, touch controls, portal-warp, belts,
+         badge toast.
+       · The body classes that gate pieces of this CSS
+         (match-active, touch-mode, has-hud-sprites,
+         has-ability-sprites, using-gamepad) are set by runtime code on
+         <body> of whichever entry is running — the rules below work
+         unchanged in every entry.
+       · Cascade note: this <style> lands in <body>, AFTER the entry's
+         <head> styles, so on equal specificity these rules win ties
+         against entry CSS. Keep that in mind before adding rules here
+         that share selectors with entry-only CSS.
+===================================================================== -->
+<style>
+    #hud {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #fff;
+      /* Keep above full-overlays (title/character-select/waiting/end) so
+         the settings buttons (SFX + music toggles) remain reachable on
+         every screen — otherwise the user can't mute before entering a
+         match. The rest of the HUD (alive count, timer, lives) is hidden
+         via the entry's `body:not(.match-active)` gating rules so only
+         the settings cluster actually draws over overlays. */
+      z-index: 20;
+    }
+    #hud-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 12px 20px;
+      font-size: 18px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.7);
+      gap: 16px;
+    }
+    /* Top-center cluster: timer (hero, huge) + alive count underneath.
+       Given more visual weight so it reads from across the arena. */
+    #hud-top-center {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      pointer-events: none;
+    }
+    #hud-timer {
+      font-variant-numeric: tabular-nums;
+      font-size: 44px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      line-height: 1;
+      color: #ffdc5c;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.85), 0 0 14px rgba(255, 220, 92, 0.25);
+    }
+    #hud-alive {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0.8;
+      color: #fff;
+    }
+    /* Right cluster: settings buttons (SFX + music). Lives panel in the center. */
+    #hud-settings {
+      display: flex;
+      gap: 6px;
+      pointer-events: auto;
+    }
+    .settings-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+      -webkit-tap-highlight-color: transparent;
+      padding: 0;
+      line-height: 1;
+    }
+    .settings-btn:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.4); }
+    .settings-btn.muted { opacity: 0.45; }
+    /* Countdown overlay — giant digits with gradient fill + per-number
+       colour (3 red → 2 amber → 1 yellow → GO! green) so the urgency
+       ramps visibly. Digits land with a scale-down pop; GO! adds a
+       shockwave ring pulse. Non-digit overlays ("Get Ready!") keep a
+       calmer, neutral style via the .overlay-text variant. */
+    #overlay {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      font-size: 36px;
+      font-weight: 900;
+      text-shadow: 0 3px 8px rgba(0,0,0,0.8);
+      pointer-events: auto;
+      letter-spacing: 2px;
+    }
+    #overlay .sub {
+      font-size: 18px;
+      margin-top: 8px;
+      opacity: 0.8;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+    }
+    /* Giant digit mode — triggered when the overlay content is a single
+       char from 0-9 (plus GO!). hud/runtime.ts showOverlay toggles the
+       .overlay-digit + .overlay-d-N classes. */
+    #overlay.overlay-digit {
+      font-size: clamp(140px, 22vw, 260px);
+      font-weight: 900;
+      letter-spacing: -4px;
+      line-height: 0.9;
+      filter: drop-shadow(0 6px 20px rgba(0, 0, 0, 0.7));
+    }
+    /* Gradient fills per countdown step — picked to telegraph urgency. */
+    #overlay.overlay-d-3 {
+      background: linear-gradient(180deg, #ff6666 0%, #c92525 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    #overlay.overlay-d-2 {
+      background: linear-gradient(180deg, #ffcc55 0%, #e67e22 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    #overlay.overlay-d-1 {
+      background: linear-gradient(180deg, #ffee77 0%, #f1c40f 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    #overlay.overlay-d-go {
+      background: linear-gradient(180deg, #a7ff55 0%, #1fb256 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: none;
+    }
+    /* Countdown pop: scale IN from big to normal, then a subtle breathe. */
+    #overlay.pop {
+      animation: overlay-pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    }
+    @keyframes overlay-pop {
+      0%   { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+      55%  { transform: translate(-50%, -50%) scale(0.92); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1);    opacity: 1; }
+    }
+    /* GO! additional burst — adds a radial glow ring behind the text. */
+    #overlay.overlay-d-go::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1px;
+      height: 1px;
+      transform: translate(-50%, -50%);
+      box-shadow:
+        0 0 0 0 rgba(167, 255, 85, 0.85),
+        0 0 0 0 rgba(31, 178, 86, 0.55);
+      animation: overlay-go-burst 0.55s ease-out forwards;
+    }
+    @keyframes overlay-go-burst {
+      0%   {
+        box-shadow:
+          0 0 0 0    rgba(167, 255, 85, 0.85),
+          0 0 0 0    rgba(31, 178, 86, 0.55);
+      }
+      100% {
+        box-shadow:
+          0 0 0 180px rgba(167, 255, 85, 0.00),
+          0 0 0 260px rgba(31, 178, 86, 0.00);
+      }
+    }
+    /* Ability cooldown bars */
+    #ability-bar-container {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 16px;
+      pointer-events: none;
+    }
+    .ability-slot {
+      width: 90px;
+      text-align: center;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    /* Per-ability AI icon (only visible when body.has-ability-sprites).
+       Same circular-medallion treatment as the character-select info
+       pane — keeps the visual language consistent between menu and HUD.
+       The `--cd-progress` custom property drives the conic-gradient
+       cooldown overlay (1 = full dim arc, 0 = ready). Updated by
+       `src/hud/runtime.ts:updateAbilityHUD` every frame. */
+    .ability-slot-icon {
+      --icon-size: 48px;
+      --cd-progress: 0;
+      position: relative;
+      margin-bottom: 5px;
+      border-radius: 50%;
+      background-color: rgba(22, 18, 8, 0.65);
+      border: 2px solid rgba(255, 220, 92, 0.8);
+      box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.55),
+        0 0 10px rgba(255, 220, 92, 0.3),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+    }
+    /* Cooldown overlay — sweeps clockwise from 12 o'clock. As progress
+       drops from 1 → 0 the dim arc shrinks, revealing the icon. */
+    .ability-slot-icon::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      pointer-events: none;
+      background: conic-gradient(
+        rgba(0, 0, 0, 0.52) 0deg,
+        rgba(0, 0, 0, 0.52) calc(var(--cd-progress) * 360deg),
+        transparent calc(var(--cd-progress) * 360deg)
+      );
+      transition: background 0.06s linear;
+    }
+    /* Ready-flash glow halo. Hidden until the .ready-flash class
+       triggers the keyframes. Sits BEHIND the icon so the medallion
+       is never obscured during the flash. */
+    .ability-slot-icon::before {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      pointer-events: none;
+      background: radial-gradient(circle,
+        rgba(255, 220, 92, 0.85) 0%,
+        rgba(255, 220, 92, 0.40) 40%,
+        transparent 75%);
+      opacity: 0;
+      z-index: -1;
+    }
+    .ability-slot.active .ability-slot-icon {
+      border-color: #ff8800;
+      box-shadow:
+        0 0 14px #ff8800,
+        inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+    }
+    .ability-slot.on-cooldown .ability-slot-icon {
+      opacity: 0.85;
+      filter: saturate(0.7);
+    }
+    .ability-slot.unavailable .ability-slot-icon {
+      filter: grayscale(1) brightness(0.6);
+    }
+    /* Pop + glow when the cooldown finishes. Class added once on
+       transition and self-removed on animationend by runtime.ts. */
+    .ability-slot-icon.ready-flash {
+      animation: ability-ready-pop 280ms ease-out;
+    }
+    .ability-slot-icon.ready-flash::before {
+      animation: ability-ready-glow 280ms ease-out;
+    }
+    @keyframes ability-ready-pop {
+      0%   { transform: scale(1); }
+      45%  { transform: scale(1.18); }
+      100% { transform: scale(1); }
+    }
+    @keyframes ability-ready-glow {
+      0%   { opacity: 0;    transform: scale(0.7); }
+      45%  { opacity: 1;    transform: scale(1.05); }
+      100% { opacity: 0;    transform: scale(1.40); }
+    }
+    /* Kurama Copycat — solid-colour chip on the L slot tinted with
+       the target critter's base palette + their first letter for
+       quick read. Anchored top-right of the slot icon, sits over the
+       cooldown overlay. Only added when Kurama has a valid
+       lastHitTarget; runtime.ts adds/removes the node accordingly.
+       2026-05-01: replaced sprite portrait with colour disc — the
+       32×32 mini-portrait was hard to recognise mid-fight. */
+    .ability-slot .copycat-target-icon {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 2px solid #ff9933;
+      box-shadow: 0 0 6px rgba(255, 153, 51, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0;
+      line-height: 1;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      z-index: 4;
+      pointer-events: auto;
+      cursor: help;
+    }
+    .ability-key {
+      font-size: 14px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      margin-bottom: 3px;
+    }
+    .ability-name {
+      font-size: 10px;
+      opacity: 0.7;
+      margin-bottom: 4px;
+    }
+    /* Legacy horizontal fill — replaced by the conic-gradient on the
+       icon's `::after` (2026-04-27). Kept in the DOM for back-compat
+       (`runtime.ts` still updates `style.width`) but hidden visually
+       so it doesn't compete with the radial cooldown indicator. */
+    .ability-fill-bg, .ability-fill { display: none; }
+
+    .ability-slot.active .ability-key {
+      color: #ff8800;
+    }
+    .ability-slot.on-cooldown .ability-key {
+      opacity: 0.5;
+    }
+    /* Ability visible but not yet implemented in this mode (e.g. online Bloque A) */
+    .ability-slot.unavailable {
+      opacity: 0.35;
+      position: relative;
+    }
+    .ability-soon-badge {
+      margin-top: 2px;
+      font-size: 8px;
+      font-weight: bold;
+      letter-spacing: 1.2px;
+      color: #ffcc00;
+      text-transform: uppercase;
+    }
+    /* Four per-player life corners — big avatars + hearts below, one
+       per screen corner. Much more readable than the central column
+       the HUD had before: each player's state has its own real-estate. */
+    .player-life-corner {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 12px 12px;
+      background: rgba(10, 10, 24, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(4px);
+      transition: opacity 0.35s;
+      pointer-events: none;
+      z-index: 22;
+    }
+    /* Offsets chosen to dodge the other HUD elements:
+       - TL: below the portal legend (sits at top:58px left:20px when match)
+       - TR: below the settings cluster (SFX/music buttons ~top:12px)
+       - BR: above the Vibe Jam 2026 widget badge (bottom-right pill, ~44px tall)
+       - BL: above the touch joystick / legend baseline */
+    .player-life-corner.corner-tl { top: 118px; left: 18px; }
+    .player-life-corner.corner-tr { top: 72px;  right: 18px; }
+    .player-life-corner.corner-bl { bottom: 24px; left: 18px; }
+    .player-life-corner.corner-br { bottom: 62px; right: 18px; }
+    /* Highlight the LOCAL player's corner so the user finds their own
+       lives at a glance. JS adds .is-local to the right corner. */
+    .player-life-corner.is-local {
+      border-color: rgba(255, 220, 92, 0.7);
+      box-shadow: 0 0 18px rgba(255, 220, 92, 0.35), 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
+    .player-life-corner.is-dead {
+      opacity: 0.35;
+    }
+    .lives-dot {
+      width: 70px;
+      height: 70px;
+      border-radius: 14px;
+      display: inline-block;
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      background-size: cover;
+      background-position: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+      position: relative;
+      overflow: hidden;
+    }
+    /* HUD sprite overlay inside .lives-dot — paints when
+       body.has-hud-sprites is set (see the SPRITE ICON SYSTEMS section
+       down below). The 3D thumbnail (if any) is the background-image;
+       the sprite sits on top, so the sprite wins when the sheet loads.
+       Compound selector (.sprite-hud.lives-avatar-sprite) bumps the
+       specificity to 0,0,2 so it wins over the generic .sprite-hud
+       rule's `width: var(--icon-size, 24px)` — without this the sprite
+       renders 24x24 in the corner of the 70x70 dot. */
+    .sprite-hud.lives-avatar-sprite {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .player-life-corner.is-local .lives-dot {
+      border-color: rgba(255, 220, 92, 0.85);
+      box-shadow: 0 0 14px rgba(255, 220, 92, 0.55), 0 2px 8px rgba(0, 0, 0, 0.65);
+    }
+    .lives-name {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      opacity: 0.85;
+      line-height: 1;
+    }
+    .lives-hearts {
+      color: #e74c3c;
+      font-size: 16px;
+      letter-spacing: 2px;
+      line-height: 1;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+      display: inline-flex;
+      align-items: center;
+      gap: 1px;
+    }
+    /* 2026-05-01 polish — sprite hearts inside the lives row.
+       Sized to roughly match the 16 px font of the emoji fallback so
+       the row height stays the same regardless of which one renders.
+       The fallback-hud / sprite-hud display swap is handled by the
+       generic `.has-hud-sprites` body-class rules further below. */
+    .lives-heart-sprite { --icon-size: 18px; }
+    .lives-heart-emoji  { letter-spacing: 1px; }
+    .lives-bot-badge {
+      font-size: 12px;
+      opacity: 0.8;
+      display: inline-flex;
+      align-items: center;
+    }
+    .lives-bot-sprite { --icon-size: 16px; }
+
+    /* ---------- Portal legend (HUD, top-left under timer) ---------- */
+    #portal-legend {
+      position: absolute;
+      top: 58px;
+      left: 20px;
+      display: none;
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.4px;
+      color: rgba(255,255,255,0.95);
+      text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+      pointer-events: none;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.25);
+      border-radius: 6px;
+      border-left: 2px solid rgba(255,255,255,0.2);
+    }
+    body.match-active #portal-legend { display: block; }
+    .portal-legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .portal-legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 10px currentColor;
+      flex-shrink: 0;
+    }
+    .portal-legend-dot-exit {
+      background: #44ff88;
+      color: #44ff88;
+    }
+    .portal-legend-dot-return {
+      background: #ff8844;
+      color: #ff8844;
+    }
+    .portal-legend-hint {
+      opacity: 0.7;
+      font-size: 12px;
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255,255,255,0.12);
+    }
+    .portal-legend-hint kbd {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.35);
+      border-radius: 3px;
+      padding: 1px 6px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #ffdc5c;
+    }
+
+    /* Portal toggle button (mobile only, match-active only) */
+    #btn-portal-toggle { display: none; }
+    body.touch-mode.match-active #btn-portal-toggle { display: flex; }
+
+    /* ---------- HUD bot badge (lives row) ---------- */
+    .lives-row .lives-bot-badge {
+      font-size: 10px;
+      color: #ffaa44;
+      letter-spacing: 1px;
+      margin-left: 2px;
+      opacity: 0.9;
+    }
+
+    /* ---------- Responsive: short viewports (phones in landscape often
+         peak at ~390px height). HUD subset of the entry-wide compact
+         pass — 2026-05-01 mobile audit: match HUD on phone landscape
+         was a pile of overlapping panels. ---------- */
+    @media (max-height: 520px) {
+      /* Top hero cluster: shrink timer + tighten the spacing so it
+         doesn't clip the lives panels. */
+      #hud-timer { font-size: 28px; }
+      #hud-alive { font-size: 11px; letter-spacing: 1.5px; }
+      #hud-top-center { top: 4px; }
+      #hud-top { padding: 6px 12px; font-size: 14px; }
+
+      /* Lives corners — shrink to a 40 px avatar dot, hide the name
+         label, mini hearts. Bottom corners are HIDDEN entirely
+         because the touch joystick (BL) and the action cluster (BR)
+         own that real estate on touch devices. */
+      .player-life-corner {
+        padding: 5px 6px 6px;
+        gap: 3px;
+      }
+      .player-life-corner.corner-tl { top: 56px; left: 8px; }
+      .player-life-corner.corner-tr { top: 50px; right: 8px; }
+      .player-life-corner.corner-bl,
+      .player-life-corner.corner-br { display: none; }
+      .lives-dot { width: 36px; height: 36px; border-radius: 8px; }
+      .lives-name { font-size: 9px; letter-spacing: 0.8px; }
+      .lives-hearts { font-size: 11px; gap: 0; }
+      .lives-heart-sprite { --icon-size: 12px; }
+
+      /* Ability HUD bar (J/K/L slot row at the bottom): on touch +
+         match-active the touch buttons already cover this role, and
+         the bar collides with the joystick. Hide it. */
+      body.touch-mode.match-active #ability-bar-container { display: none; }
+    }
+
+    /* ---------- Responsive: very narrow (portrait phones that somehow
+         bypass the rotate prompt, or foldables). HUD subset. ---------- */
+    @media (max-width: 520px) {
+      #hud-top { padding: 8px 12px; font-size: 15px; gap: 10px; }
+      .settings-btn { width: 32px; height: 32px; font-size: 14px; }
+    }
+
+    /* -----------------------------------------------------------------
+       SPRITE ICON SYSTEMS
+       -----------------------------------------------------------------
+       Two AI-generated sprite sheets power the HUD + ability icons:
+         - /images/hud-icons.webp     (4 cols × 6 rows, 256 × 256 per cell)
+         - /images/ability-icons.webp (3 cols × 9 rows, ~256 px per cell)
+
+       The HUD sheet is authored in HUD_mejorado.png (project root) with
+       a 4×6 grid of clean icons + 20 px margin + 20 px gutter. The
+       script `scripts/rebuild-hud-sheet.mjs` recomposes it into the
+       runtime sheet: uniform 256×256 cells, zero padding, so the CSS
+       keeps using simple percentage math.
+
+       Visibility is gated by classes on <body>:
+         body.has-hud-sprites     → HUD sprites on, emoji fallbacks hidden
+         body.has-ability-sprites → ability sprites on, emojis hidden
+
+       src/hud/sprite-preload.ts runs a tiny preload that sets the flag
+       only if the image actually loads (onload). If the asset isn't
+       shipped yet or 404s, the classes stay off and the emoji fallbacks
+       remain. That lets the game ship the UI polish progressively
+       without breaking anything.
+
+       NOTE: these classes are consumed outside the in-match HUD too
+       (character-select slot avatars, end-screen crown, waiting-room
+       bot masks). The system lives in this partial because both entries
+       need the exact same copy — it is shared icon infrastructure, and
+       the entries only keep their own screen-specific size overrides
+       (e.g. `#end-screen .end-result-sprite { --icon-size: 56px; }`).
+       ----------------------------------------------------------------- */
+
+    /* Shared base — consumers set --icon-size and pick a position class. */
+    .sprite-hud,
+    .sprite-ability {
+      display: inline-block;
+      flex-shrink: 0;
+      background-repeat: no-repeat;
+      background-size: 100% 100%; /* overridden per sheet below */
+      width: var(--icon-size, 24px);
+      height: var(--icon-size, 24px);
+    }
+
+    .sprite-hud {
+      background-image: url('./images/hud-icons.webp');
+      /* Grid: 4 cols × 6 rows. Each cell is 1/4 wide and 1/6 tall of
+         the image, so scaling the image to 400% × 600% of the element
+         makes one cell exactly fill the element. */
+      background-size: 400% 600%;
+    }
+    .sprite-ability {
+      background-image: url('./images/ability-icons.webp');
+      background-size: 300% 900%;
+    }
+
+    /* Hidden by default; the preload in sprite-preload.ts flips them on
+       once the sheet is confirmed to load. */
+    .sprite-hud, .sprite-ability { display: none; }
+    body.has-hud-sprites     .sprite-hud     { display: inline-block; }
+    body.has-ability-sprites .sprite-ability { display: inline-block; }
+
+    /* Emoji fallback: visible by default, hidden once sprites are live. */
+    body.has-hud-sprites     .sprite-fallback-hud     { display: none; }
+    body.has-ability-sprites .sprite-fallback-ability { display: none; }
+
+    /* ---- HUD sprite positions (col, row → percentage of grid) ----
+       With 4×6 layout: col→0/33.3/66.6/100%, row→0/20/40/60/80/100%. */
+    /* Row 0: Hearts + immunity */
+    .sprite-hud-heart-full    { background-position:   0%   0%; }
+    .sprite-hud-heart-half    { background-position:  33.333%   0%; }
+    .sprite-hud-heart-empty   { background-position:  66.666%   0%; }
+    .sprite-hud-immunity-star { background-position: 100%   0%; }
+    /* Row 1: Critter heads A */
+    .sprite-hud-trunk         { background-position:   0%  20%; }
+    .sprite-hud-kurama        { background-position:  33.333%  20%; }
+    .sprite-hud-sergei        { background-position:  66.666%  20%; }
+    .sprite-hud-shelly        { background-position: 100%  20%; }
+    /* Row 2: Critter heads B */
+    .sprite-hud-kermit        { background-position:   0%  40%; }
+    .sprite-hud-sihans        { background-position:  33.333%  40%; }
+    .sprite-hud-kowalski      { background-position:  66.666%  40%; }
+    .sprite-hud-cheeto        { background-position: 100%  40%; }
+    /* Row 3: Crab + meta */
+    .sprite-hud-sebastian     { background-position:   0%  60%; }
+    .sprite-hud-bot-mask      { background-position:  33.333%  60%; }
+    .sprite-hud-timer         { background-position:  66.666%  60%; }
+    .sprite-hud-skull         { background-position: 100%  60%; }
+    /* Row 4: Trophy + crown + sfx */
+    .sprite-hud-trophy        { background-position:   0%  80%; }
+    .sprite-hud-crown         { background-position:  33.333%  80%; }
+    .sprite-hud-sfx-on        { background-position:  66.666%  80%; }
+    .sprite-hud-sfx-off       { background-position: 100%  80%; }
+    /* Row 5: Music + belts (belts-trophy occupies col 2; col 3 is blank) */
+    .sprite-hud-music-on      { background-position:   0% 100%; }
+    .sprite-hud-music-off     { background-position:  33.333% 100%; }
+    .sprite-hud-belts-trophy  { background-position:  66.666% 100%; }
+    /* Removed in the v2 sheet: life-pill / countdown / scoreboard — all
+       three were CSS declarations without a single consumer in TS/JS,
+       so dropping them breaks nothing. Restore from git if an usage is
+       added later. */
+
+    /* ---- Ability sprite positions (3 cols × 9 rows) ----
+       Columns (J / K / L) → 0%, 50%, 100%
+       Rows (9 critters)   → 0%, 12.5%, 25%, 37.5%, 50%, 62.5%, 75%, 87.5%, 100% */
+    .sprite-ability-trunk-j     { background-position:   0%   0%; }
+    .sprite-ability-trunk-k     { background-position:  50%   0%; }
+    .sprite-ability-trunk-l     { background-position: 100%   0%; }
+    .sprite-ability-kurama-j    { background-position:   0%  12.5%; }
+    .sprite-ability-kurama-k    { background-position:  50%  12.5%; }
+    .sprite-ability-kurama-l    { background-position: 100%  12.5%; }
+    .sprite-ability-sergei-j    { background-position:   0%  25%; }
+    .sprite-ability-sergei-k    { background-position:  50%  25%; }
+    .sprite-ability-sergei-l    { background-position: 100%  25%; }
+    .sprite-ability-shelly-j    { background-position:   0%  37.5%; }
+    .sprite-ability-shelly-k    { background-position:  50%  37.5%; }
+    .sprite-ability-shelly-l    { background-position: 100%  37.5%; }
+    .sprite-ability-kermit-j    { background-position:   0%  50%; }
+    .sprite-ability-kermit-k    { background-position:  50%  50%; }
+    .sprite-ability-kermit-l    { background-position: 100%  50%; }
+    .sprite-ability-sihans-j    { background-position:   0%  62.5%; }
+    .sprite-ability-sihans-k    { background-position:  50%  62.5%; }
+    .sprite-ability-sihans-l    { background-position: 100%  62.5%; }
+    .sprite-ability-kowalski-j  { background-position:   0%  75%; }
+    .sprite-ability-kowalski-k  { background-position:  50%  75%; }
+    .sprite-ability-kowalski-l  { background-position: 100%  75%; }
+    .sprite-ability-cheeto-j    { background-position:   0%  87.5%; }
+    .sprite-ability-cheeto-k    { background-position:  50%  87.5%; }
+    .sprite-ability-cheeto-l    { background-position: 100%  87.5%; }
+    .sprite-ability-sebastian-j { background-position:   0% 100%; }
+    .sprite-ability-sebastian-k { background-position:  50% 100%; }
+    .sprite-ability-sebastian-l { background-position: 100% 100%; }
+</style>
+  <div id="hud">
+    <div id="hud-top">
+      <div id="hud-top-center">
+        <span id="hud-timer">2:00</span>
+        <span id="hud-alive">Alive: 4</span>
+      </div>
+      <div id="hud-settings">
+        <button id="btn-portal-toggle" class="settings-btn touch-only" title="Toggle portals" aria-label="Toggle portals">🌀</button>
+        <button id="btn-sfx" class="settings-btn" title="Disable sound effects" aria-pressed="false">🔊</button>
+        <button id="btn-music" class="settings-btn" title="Disable music" aria-pressed="false">🎶</button>
+      </div>
+    </div>
+    <!-- Four per-player life corners. hud/runtime.ts#initAllLivesHUD
+         populates them by critter index. Empty until match start. -->
+    <div id="player-life-0" class="player-life-corner corner-tl"></div>
+    <div id="player-life-1" class="player-life-corner corner-tr"></div>
+    <div id="player-life-2" class="player-life-corner corner-bl"></div>
+    <div id="player-life-3" class="player-life-corner corner-br"></div>
+    <div id="overlay" style="display:none;"></div>
+    <div id="ability-bar-container"></div>
+    <div id="portal-legend">
+      <div class="portal-legend-row">
+        <span class="portal-legend-dot portal-legend-dot-exit"></span>
+        <span>Vibe Jam Games Multiverse</span>
+      </div>
+      <div id="portal-legend-return" class="portal-legend-row" style="display:none;">
+        <span class="portal-legend-dot portal-legend-dot-return"></span>
+        <span>Return to previous world</span>
+      </div>
+      <div class="portal-legend-hint desktop-only">Press <kbd>P</kbd> to show</div>
+    </div>
+  </div>

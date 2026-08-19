@@ -1,5 +1,36 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-20 — Afilado slice F: HUD fuente única — muere la tercera capa de drift
+
+- **El HUD in-match ya no se copia a mano entre index.html y
+  tools.html**: vive en `src/hud/hud.partial.html` (fuente única, CSS +
+  markup) que un plugin de vite (`scripts/vite-html-partials-plugin.mjs`,
+  transformIndexHtml con refuse-to-guess y watch en dev) inyecta en
+  ambos entries donde está el token `<!-- @partial:hud -->`. index
+  −702 líneas, tools −587.
+- **El drift medido hoy queda muerto**: 14 selectores que solo existían
+  en index (toda la familia `.lives-*` — el lab pintaba las esquinas de
+  vidas SIN estilo — más sprites del HUD) y 11 con cuerpos distintos.
+  El lab además gana el preload de sprites (`src/hud/sprite-preload.ts`
+  compartido, extraído de main.ts): medallones reales, no fallback
+  emoji.
+- **Decisiones de frontera** (refuse-to-guess, anotadas en el partial):
+  `.ability-info-*` NO se movió (es del character select, no del HUD —
+  su divergencia entre entries persiste y es de otra pantalla); gating
+  `body:not(.match-active)` queda entry-specific; el bloque SPRITE ICON
+  SYSTEMS sí se movió entero (las gates `body.has-*-sprites` funcionan
+  igual desde el partial). Cascada auditada: los subconjuntos HUD de
+  las dos @media van al partial para no perder el modo compacto móvil;
+  cero flips de especificidad reales.
+- **Verificado**: tsc limpio, build con presupuesto de payload OK,
+  dist de ambos entries con el HUD inyectado y sin tokens residuales, y
+  paridad de estilos computados contra la línea base pre-refactor:
+  **187 propiedades comprobadas en index.html, cero diferencias** (el
+  juego real queda idéntico); el lab confirmado ganando `.lives-*`
+  estilados + `has-hud-sprites`/`has-ability-sprites` en body.
+- Pick 5 del AFILADO_PLAN cerrado. La lección de H3 slice 7 ("extraer,
+  no portar a mano") aplicada a la última capa espejada que quedaba.
+
 ## 2026-08-20 — Afilado slice E: el animation tuner por fin aterriza en fuente
 
 - **El pipeline sin salida se cierra**: los sliders de Animation
