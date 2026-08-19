@@ -1,5 +1,225 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-20 — Afilado slice G: determinismo + batch runner — el balance deja de ser anécdota
+
+- **Un seed = una partida entera** (src/match-rng.ts, mulberry32): el
+  seed del arena siembra también el PRNG que consumen los 4 rolls de
+  decisión de bot.ts, pickRespawnPos y los drops del countdown. El VFX
+  y el shuffle de menú se quedan con Math.random a propósito. 'Replay
+  Last' pasa de reproducir la arena a reproducir la PARTIDA (solo-bots).
+- **Autopilot** (`devApi.setAutopilot`): el slot player corre con
+  updateBot y el input humano se suprime — un solo escritor; el bloque
+  de portales también se salta (un bot entrando al portal redirigiría
+  la página en mitad de un batch). **Fixed-step**
+  (`devApi.setFixedStep(N)`): N pasos de dt fijo por frame; pausa y
+  requestStep siguen mandando.
+- **Batch runner** (`npm run batch`, scripts/run-match-batch.mjs):
+  playwright headless contra el dev server — N partidas con seeds
+  consecutivos, autopilot + fixed-step, agregación de winrates/HB/
+  caídas por critter en tabla + JSON, `--dump-recordings` (cierra el
+  hueco dual-surface del volcado headless) y `--verify` (mismo seed
+  dos veces con reload entre medias, compara la secuencia completa de
+  eventos).
+- **Dos fixes de integración cazados con el batch real**: (1) bajo
+  SwiftShader headless el render por-frame ahogaba el rAF y la sim
+  corría a 0.125× — render decimado a 1/20 bajo fixed-step y la misma
+  partida pasó de timeout a completarse a ~1.6× de reloj; (2) el
+  timeout del runner era de reloj de pared — ahora espera por PROGRESO
+  del reloj de sim (stall de 20s = colgado), robusto en máquinas
+  lentas. Bonus de debugging: un boot roto resultó ser estado HMR
+  rancio de vite tras el churn de git (stash/branch), no código —
+  reiniciar el dev server antes de culpar al árbol.
+- **Verificado**: tsc limpio, batch real de 2 partidas completas
+  (51s sim, headbutts/caídas/eliminaciones reales en la tabla) y
+  `--verify` → **REPRODUCIBLE: yes, 218 eventos idénticos** entre dos
+  runs con reload. La pregunta '¿está Shelly OP contra pesados?' ya
+  cuesta un comando, no 10 partidas a mano y una hoja de cálculo.
+- Pick 6 cerrado — **la fase de afilado queda completa** (8/8 picks:
+  slices A-G). Habilita el golden sim test headless a futuro.
+
+## 2026-08-20 — Afilado slice F: HUD fuente única — muere la tercera capa de drift
+
+- **El HUD in-match ya no se copia a mano entre index.html y
+  tools.html**: vive en `src/hud/hud.partial.html` (fuente única, CSS +
+  markup) que un plugin de vite (`scripts/vite-html-partials-plugin.mjs`,
+  transformIndexHtml con refuse-to-guess y watch en dev) inyecta en
+  ambos entries donde está el token `<!-- @partial:hud -->`. index
+  −702 líneas, tools −587.
+- **El drift medido hoy queda muerto**: 14 selectores que solo existían
+  en index (toda la familia `.lives-*` — el lab pintaba las esquinas de
+  vidas SIN estilo — más sprites del HUD) y 11 con cuerpos distintos.
+  El lab además gana el preload de sprites (`src/hud/sprite-preload.ts`
+  compartido, extraído de main.ts): medallones reales, no fallback
+  emoji.
+- **Decisiones de frontera** (refuse-to-guess, anotadas en el partial):
+  `.ability-info-*` NO se movió (es del character select, no del HUD —
+  su divergencia entre entries persiste y es de otra pantalla); gating
+  `body:not(.match-active)` queda entry-specific; el bloque SPRITE ICON
+  SYSTEMS sí se movió entero (las gates `body.has-*-sprites` funcionan
+  igual desde el partial). Cascada auditada: los subconjuntos HUD de
+  las dos @media van al partial para no perder el modo compacto móvil;
+  cero flips de especificidad reales.
+- **Verificado**: tsc limpio, build con presupuesto de payload OK,
+  dist de ambos entries con el HUD inyectado y sin tokens residuales, y
+  paridad de estilos computados contra la línea base pre-refactor:
+  **187 propiedades comprobadas en index.html, cero diferencias** (el
+  juego real queda idéntico); el lab confirmado ganando `.lives-*`
+  estilados + `has-hud-sprites`/`has-ability-sprites` en body.
+- Pick 5 del AFILADO_PLAN cerrado. La lección de H3 slice 7 ("extraer,
+  no portar a mano") aplicada a la última capa espejada que quedaba.
+
+## 2026-08-20 — Afilado slice E: el animation tuner por fin aterriza en fuente
+
+- **El pipeline sin salida se cierra**: los sliders de Animation
+  (player) mutaban `animPersonality` en vivo pero todo se re-derivaba
+  de (mass, speed) al reiniciar — cada sesión de tuning se tiraba a la
+  basura. Ahora hay tabla `PERSONALITY_OVERRIDES`
+  (src/animation-personality-overrides.ts, sparse por critter) que
+  `deriveAnimationPersonality` fusiona sobre la fórmula; los llamadores
+  no cambian (config ya lleva name).
+- **`anim-personality` = 5º tool type del pipeline ToolPatch**: applier
+  con merge no destructivo (update de token estilo feel-patch para
+  conservar comentarios byte-identical; insert/append estilo anim-lab),
+  lista cerrada de 7 campos validada, guardia anti-corrupción si el
+  valor existente no es literal numérico plano. CLI + endpoint dev via
+  la tabla compartida targetByTool (el plugin de vite no duplica
+  mapping). 8 tests golden nuevos → 51/51.
+- **Tuner con memoria**: divergencias vs lo autorado persisten en
+  `match-lab:anim-personality` y se reaplican tras restart (detección
+  por identidad del objeto player, no por nombre — un F10 del mismo
+  critter también reconstruye). Store = divergencia vs AUTORADO (lo que
+  hay que reaplicar en vivo); patch = divergencia vs fórmula PURA (lo
+  que debe quedar en la tabla) — distinción deliberada y documentada.
+  Botones 📦/💾/⚡ como el resto de labs; Reset Derived vuelve a lo
+  autorado y limpia solo el critter actual.
+- **Verificado**: tsc limpio, 51/51 tests, e2e del círculo completo —
+  mutación en vivo (Sergei idleBobHz 1.18→1.77) → preview con diff →
+  apply escribiendo la tabla real → append de segundo campo a la
+  entrada existente → HMR reload → el Sergei recién derivado arranca
+  con los valores DE LA TABLA. Residuos de prueba revertidos.
+- Ejecutado con workflow de 2 agentes (core applier+tests / UI
+  sidebar+storage) sobre ficheros disjuntos tras scaffold propio del
+  contrato (tabla + derive). Pick 7 del AFILADO_PLAN cerrado.
+
+## 2026-08-20 — Afilado slice D: port de mesh2motion a upstream 0.185
+
+- **El repo hermano `../bichitos-mesh2motion` se realinea con el
+  upstream moderno** (three 0.185 — la misma línea que el juego —, TS 6,
+  vite 8). Sin historia git compartida con upstream, la estrategia fue:
+  árbol upstream encima + reaplicación manual de los 41 marcadores
+  `[BICHITOS-FORK]` (4 agentes en paralelo sobre ficheros disjuntos).
+  Resultado: 40 vivos (varios adaptados a APIs nuevas), 1 obsoleto
+  (upstream ya desactiva `frustumCulled` en el skeleton helper).
+- **Hallazgo incómodo**: el lab llevaba roto para GLBs comprimidos desde
+  H2 slice 3 (meshopt) — `setMeshoptDecoder` nunca se cableó y nadie
+  cargó un critter desde entonces. Arreglado con marcador nuevo.
+- **Barrido de rutas root-absolute** que rompen bajo base `/animations/`
+  (iconos del nav nuevo, textura de joints, model variations, rig de
+  referencia del retarget) — 9 marcadores nuevos en total.
+- **Probe del issue #139 (pick 8 del afilado): VERDE.** cheeto.glb
+  (Tripo 39 huesos, meshopt) en el retarget Swing-Twist nuevo de
+  upstream: auto-map + bake 76 frames/39 huesos + "retargeting
+  complete" + preview. El pipeline de signature moves queda
+  des-riesgado, y ese subsistema es candidato futuro a reemplazar
+  `BichitosTripoRetargeter` con retargets de más calidad.
+- **Verificación**: build vite OK, 67/67 vitest upstream, tsc en
+  paridad exacta con la línea base upstream (81 errores vs 82 — los
+  markers no añaden ninguno y nuestro guard quita uno), e2e del create
+  flow (Cheeto pre-rigged → "Test animations", 15 mallas activas
+  registradas para export, 162 clips retargeteados, animación avanza
+  con dt manual). Auditado de paso qué critters son Tripo de verdad:
+  cheeto/kowalski/shelly/trunk/kermit (39 huesos) sí; kurama/sebastian/
+  sergei/sihans son rigs de 24 huesos estilo Mixamo (flujo MM normal).
+- Merge `--no-ff` en el main del hermano (`f6d603e`); detalle completo
+  del port en su `PORT_MAP.md`. Pendiente menor: 365 `.webm` heredados
+  (7,9 MB) que 0.185 ya no usa (previews son `.mp4`) — decisión de
+  borrado para Rafa.
+
+## 2026-08-20 — Afilado slice C: el melón de las hitboxes + tuner de habilidades
+
+- **Hitbox visible y editable en calibrate** (decisión de Rafa: melón
+  abierto): anillo rojo a ras de suelo por critter mostrando su
+  `physicsRadius` — la primera vez que el círculo de colisión se VE en
+  una herramienta (Trunk a escala 2.84 y Cheeto golpeaban con el mismo
+  0.55 invisible desde la jam). Slider + toggle + persistencia por
+  critter + campo en CalibratePatch con semántica honesta: solo
+  reescribe la `R` compartida de roster.ts a literal cuando el usuario
+  la movió de verdad (sparse por campo).
+- **Tuner de AbilityDef del critter vivo** en el match lab: sliders
+  auto-generados de todos los campos numéricos de las defs J/K/L.
+  Mutación en vivo (siguiente cast) que sobrevive restarts — las defs
+  son objetos compartidos de CRITTER_ABILITIES, así que los baselines
+  se cachean al primer avistamiento para que un rebuild no blanquee un
+  valor tuneado como autoral. Export JSON agrupado para porte manual:
+  el ToolPatch de abilities se pospone a propósito (las defs nacen de
+  factories con overrides — AFILADO_PLAN pick 3).
+- Verificación: 43 tests (physicsRadius en el mutador de calibrate),
+  e2e completo (raycast → slider → storage → patch → endpoint con la
+  R→literal; tuner con cooldown 4→8 leído de la def real), 0 errores.
+
+## 2026-08-19 — Afilado slice B: la cabina de tuning
+
+El corazón de la fase. Dos piezas que se complementan:
+
+- **Control de tiempo**: `F7`/`.` step de UN tick (DevApi.requestStep →
+  el loop del lab consume el dt pendiente por un frame; implica pausa),
+  `F8` pausa, `F9` slow-mo 0.3x, `F10` restart mismo seed. Congelar
+  ESTE impacto y avanzarlo frame a frame por fin es un gesto.
+- **FEEL tuner en vivo + `feel-patch`**: sección auto-generada en
+  Tuning con 66 sliders (todas las hojas numéricas de FEEL — nada que
+  mantener a mano: claves nuevas aparecen solas). Mutan FEEL en
+  runtime (efecto al siguiente frame), persisten en `match-lab:feel`,
+  y salen por el pipeline como 4º tool type: dot-paths → número, el
+  mutador reescribe SOLO el token numérico (comentarios de tuning
+  intactos, nunca crea claves; 42 tests). El bucle completo: congelas
+  un golpe con F7, mueves hit-stop/shake viéndolo, y Apply to source
+  con diff en 2 clicks. El pipeline de H3 pagando dividendos.
+
+E2e: 66 sliders, mutación→storage→endpoint con el diff exacto
+(comentario preservado), hotkeys, restauración tras reload, 0 errores.
+
+## 2026-08-19 — Afilado slice A: 17 quick-wins de una tacada
+
+Primer slice de la fase de afilado (plan en docs/AFILADO_PLAN.md;
+decisiones de Rafa: tuning offline-first con paridad en modo aviso,
+melón physicsRadius abierto, port mesh2motion pronto). Implementado
+con 5 agentes en paralelo sobre conjuntos de ficheros DISJUNTOS (sin
+worktrees: la exclusividad de ficheros evita colisiones), verificación
+central mía: tsc, 36 tests, diff de gameplay línea a línea, e2e de los
+5 frentes con mutaciones reales.
+
+- Match lab: selector de pack de arena, setup completo persistido y
+  rehidratado (el reload post-apply reproduce la partida: lineup +
+  seed + velocidad), aviso de recording sin descargar, botón "Mark
+  moment" con sección propia en el export MD.
+- Calibrate: fix del Re-fit (el mesh revertía al frame siguiente por
+  el rosterOverride viejo — se exportaban valores nunca vistos),
+  status 'wip' calibrable sin exponer en select, slot persistente,
+  RULER_TARGET importa IN_GAME_TARGET_HEIGHT (adiós 1.7 duplicado).
+- Decor: duplicar (botón/Ctrl+D), wheel-zoom, snap polar con Shift,
+  "Face centre", ambiente del pack (clearColor por fog + skybox con
+  preview GLB), warn de keys inalcanzables en DECOR_TYPES, cabecera
+  reescrita como spec (documentaba features como inexistentes).
+- Gameplay (solo centralización, valores idénticos): bounce de Steel
+  Shell, vulnerabilidad de stun ×4 y shakes del path online a FEEL —
+  con notas honestas del drift restante (fireFrenzy inline).
+- CI: check-pws-parity en npm run check (el header lo exigía, nada lo
+  verificaba). CLI: acepta tool-patch-<tool>-<stamp>.json si es único.
+- Studio: deep-link #tab, indicador ● de working copy sucia por tab,
+  atajos 1-4 reenviados desde dentro de los iframes. DEV_TOOLS.md
+  actualizado al pipeline post-H3.
+
+## 2026-08-19 — H3 CERRADO (`v1.5-bichitos-studio`)
+
+Merge `dev → main` con `--no-ff` (432511b) + tag. **Smoke de
+producción verde**: title → vs Bots → character select → confirm →
+countdown y timer en pantalla con CERO errores de consola — el
+refactor del loop de main.ts (scene-atmosphere + frame-ticks) shippeó
+limpio. itch.io saneado el mismo día: clasificación multiplayer
+completada (1-4 jugadores, server-based) y la cover resubida (se había
+perdido en algún save posterior — vigilar si reaparece el "No Image"
+del dashboard).
+
 ## 2026-08-19 — H3 slices 7+8: paridad del match lab + evict de mesh2motion
 
 **Slice 7 — el lab deja de mentir (y de bootear dos juegos)**. Dos

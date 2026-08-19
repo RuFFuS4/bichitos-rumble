@@ -29,6 +29,18 @@
 //   · decor-editor — per-pack wholesale array replace in
 //                    src/arena-decor-layouts.ts (placements are
 //                    positional; partial merges don't make sense).
+//   · anim-personality — sparse per-critter numeric MERGE into
+//                    PERSONALITY_OVERRIDES
+//                    (src/animation-personality-overrides.ts). Same
+//                    never-delete contract as anim-lab: present fields
+//                    get their numeric token rewritten in place
+//                    (comments survive byte-identical), missing fields
+//                    are appended inside the block, missing critters
+//                    become a new block before the record close. The
+//                    field set is CLOSED (the 7 AnimationPersonality
+//                    keys) — unknown fields are refused, they would
+//                    emit source Partial<AnimationPersonality> cannot
+//                    type.
 //
 // Textual robustness: all brace/anchor scanning is COMMENT- and
 // STRING-AWARE (see codeMask) — a stray `}` inside a `// note` or a
@@ -40,21 +52,33 @@
 // ---------------------------------------------------------------------------
 
 export const SUPPORTED_VERSIONS = {
-  'calibrate':    [1],
-  'anim-lab':     [1, 2],
-  'decor-editor': [1],
+  'calibrate':        [1],
+  'anim-lab':         [1, 2],
+  'decor-editor':     [1],
+  'feel-patch':       [1],
+  'anim-personality': [1],
 };
 
 export const targetByTool = {
-  'calibrate':     'src/roster.ts',
-  'anim-lab':      'src/animation-overrides.ts',
-  'decor-editor':  'src/arena-decor-layouts.ts',
+  'calibrate':        'src/roster.ts',
+  'anim-lab':         'src/animation-overrides.ts',
+  'decor-editor':     'src/arena-decor-layouts.ts',
+  'feel-patch':       'src/gamefeel.ts',
+  'anim-personality': 'src/animation-personality-overrides.ts',
 };
 
 /** Keys written as bare TS identifiers must actually be identifiers —
  *  a typo like `"sergei "` or `"fall-fast"` would otherwise emit
  *  invalid TS or a silently-shadowing duplicate block. */
 const IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/** The CLOSED field set of AnimationPersonality (src/critter-animation.ts).
+ *  Kept in canonical interface order — new blocks are emitted in this
+ *  order so the source reads like the interface, not alphabetically. */
+const PERSONALITY_FIELDS = [
+  'idleBobHz', 'idleBobAmp', 'runBounceHz', 'runBounceAmp',
+  'leanRadians', 'runSwayRadians', 'chargeStretchMult',
+];
 
 // ---------------------------------------------------------------------------
 // Envelope + payload validation
@@ -96,7 +120,7 @@ export function validateToolPatch(patch) {
         errors.push(`calibrate: entry "${id}" is not an object`); continue;
       }
       for (const [k, v] of Object.entries(fields)) {
-        if (!['scale', 'pivotY', 'rotation'].includes(k)) {
+        if (!['scale', 'pivotY', 'rotation', 'physicsRadius'].includes(k)) {
           errors.push(`calibrate: entry "${id}" has unknown field "${k}"`);
         } else if (!isFinite_(v)) {
           errors.push(`calibrate: entry "${id}" field "${k}" is not a finite number`);
@@ -131,6 +155,30 @@ export function validateToolPatch(patch) {
         }
       }
     }
+  } else if (tool === 'feel-patch') {
+    const PATH_RE = /^[A-Za-z_$][A-Za-z0-9_$]*\.[A-Za-z_$][A-Za-z0-9_$]*$/;
+    for (const [path, v] of Object.entries(data)) {
+      if (!PATH_RE.test(path)) {
+        errors.push(`feel-patch: key "${path}" is not a two-segment dot-path (section.key)`);
+      }
+      if (!isFinite_(v)) {
+        errors.push(`feel-patch: "${path}" is not a finite number`);
+      }
+    }
+  } else if (tool === 'anim-personality') {
+    for (const [name, fields] of Object.entries(data)) {
+      checkIdent('anim-personality: critter name', name);
+      if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
+        errors.push(`anim-personality: entry "${name}" is not an object`); continue;
+      }
+      for (const [k, v] of Object.entries(fields)) {
+        if (!PERSONALITY_FIELDS.includes(k)) {
+          errors.push(`anim-personality: entry "${name}" has unknown field "${k}" (valid: ${PERSONALITY_FIELDS.join(', ')})`);
+        } else if (!isFinite_(v)) {
+          errors.push(`anim-personality: entry "${name}" field "${k}" is not a finite number`);
+        }
+      }
+    }
   } else if (tool === 'decor-editor') {
     for (const [pack, placements] of Object.entries(data)) {
       checkIdent('decor-editor: pack id', pack);
@@ -162,7 +210,73 @@ export function applyPatch(source, patch) {
   if (patch.tool === 'calibrate')    return applyCalibrate(source, patch.data);
   if (patch.tool === 'anim-lab')     return applyAnimLab(source, patch.data);
   if (patch.tool === 'decor-editor') return applyDecorEditor(source, patch.data);
+  if (patch.tool === 'feel-patch')   return applyFeelPatch(source, patch.data);
+  if (patch.tool === 'anim-personality') return applyAnimPersonality(source, patch.data);
   throw new Error(`unknown tool: ${patch.tool}`);
+}
+
+// ===========================================================================
+// feel-patch — numeric token rewrite inside the FEEL record
+// ===========================================================================
+
+/**
+ * Rewrite numeric leaves of the `FEEL` record in src/gamefeel.ts.
+ *
+ * Each data key is a two-segment dot-path ("shake.headbutt"). The
+ * mutator locates the section block, then the key's line, and replaces
+ * ONLY the numeric token — the trailing comma and the tuning comment
+ * (the file's institutional memory) survive byte-identical. It never
+ * creates sections or keys: a path missing from source is a hard error
+ * (the tuner only offers leaves that exist).
+ */
+export function applyFeelPatch(source, data) {
+  const anchor = 'export const FEEL';
+  const start = source.indexOf(anchor);
+  if (start < 0) throw new Error('feel-patch: FEEL export not found');
+  const srcMask = codeMask(source);
+  let openBrace = -1;
+  for (let i = start; i < source.length; i++) {
+    if (srcMask[i] === M_CODE && source[i] === '{') { openBrace = i; break; }
+  }
+  if (openBrace < 0) throw new Error('feel-patch: FEEL open brace not found');
+  const close = matchBraceMasked(source, openBrace, srcMask);
+  if (close < 0) throw new Error('feel-patch: FEEL close brace not found');
+
+  let record = source.slice(openBrace, close + 1);
+
+  for (const path of Object.keys(data).sort()) {
+    const [sec, key] = path.split('.');
+    const mask = codeMask(record);
+    const headRe = new RegExp(`(^|\\n)([ \\t]+)${escapeRegex(sec)}:\\s*\\{`, 'g');
+    const heads = [...record.matchAll(headRe)].filter((m) => {
+      const keyIdx = m.index + m[1].length + m[2].length;
+      return mask[keyIdx] === M_CODE;
+    });
+    if (heads.length === 0) throw new Error(`feel-patch: section '${sec}' not found in FEEL`);
+    if (heads.length > 1) throw new Error(`feel-patch: section '${sec}' matches ${heads.length} blocks — refusing to guess`);
+
+    const blockOpen = heads[0].index + heads[0][0].length - 1;
+    const blockClose = matchBraceMasked(record, blockOpen, mask);
+    if (blockClose < 0) throw new Error(`feel-patch: unbalanced braces in section '${sec}'`);
+    const blockText = record.slice(blockOpen + 1, blockClose);
+
+    const lineRe = new RegExp(`(^|\\n)([ \\t]*)${escapeRegex(key)}:\\s*(-?\\d+(?:\\.\\d+)?)`, 'g');
+    const blockMask = codeMask(blockText);
+    const lines = [...blockText.matchAll(lineRe)].filter((m) => {
+      const keyIdx = m.index + m[1].length + m[2].length;
+      return blockMask[keyIdx] === M_CODE;
+    });
+    if (lines.length === 0) throw new Error(`feel-patch: '${path}' not found (or its value is not a plain number)`);
+    if (lines.length > 1) throw new Error(`feel-patch: '${path}' matches ${lines.length} lines — refusing to guess`);
+
+    const lm = lines[0];
+    const numStart = lm.index + lm[0].length - lm[3].length;
+    const numEnd = lm.index + lm[0].length;
+    const merged = blockText.slice(0, numStart) + formatNumber(data[path]) + blockText.slice(numEnd);
+    record = record.slice(0, blockOpen + 1) + merged + record.slice(blockClose);
+  }
+
+  return source.slice(0, openBrace) + record + source.slice(close + 1);
 }
 
 // ===========================================================================
@@ -255,6 +369,12 @@ export function applyCalibrate(source, data) {
     }
     if (typeof fields.rotation === 'number') {
       inner = replaceFieldOutsideComments(inner, /rotation:\s*[^,}\r\n]+/g, `rotation: ${formatRotation(fields.rotation)}`);
+    }
+    if (typeof fields.physicsRadius === 'number') {
+      // Replaces the shared `R` const reference with a per-critter
+      // literal — that IS the point (afilado slice C: the uniform-R
+      // hitbox opened up to per-critter tuning).
+      inner = replaceFieldOutsideComments(inner, /physicsRadius:\s*[^,}\r\n]+/g, `physicsRadius: ${formatNumber(fields.physicsRadius)}`);
     }
     out = out.slice(0, block.start) + inner + out.slice(block.end);
   }
@@ -515,6 +635,157 @@ export function formatAnimLabValue(v) {
   // Defensive: unknown shape — emit as JSON so the source still parses
   // and the user sees something they can hand-edit.
   return JSON.stringify(v);
+}
+
+// ===========================================================================
+// anim-personality — sparse numeric MERGE into PERSONALITY_OVERRIDES
+// ===========================================================================
+
+/**
+ * Merge an AnimPersonalityPatch into the `PERSONALITY_OVERRIDES` record
+ * (src/animation-personality-overrides.ts). Afilado slice E.
+ *
+ * Per critter in the patch (keys are CritterConfig.name, e.g. 'Sergei'):
+ *   · block exists  → per field: rewrite ONLY the numeric token in
+ *     place (feel-patch style — the trailing comma and any tuning
+ *     comment survive byte-identical), or append the field as a new
+ *     line before the block's closing brace.
+ *   · block missing → append a whole new block before the record's
+ *     closing brace, fields in canonical interface order.
+ *
+ * Everything the patch doesn't mention is preserved byte-for-byte and
+ * the merge NEVER deletes a field or an entry — removing an override
+ * stays a manual source edit (same contract as anim-lab).
+ *
+ * Hard errors (no output produced): record/braces not found, critter
+ * anchor ambiguous, field line ambiguous, an existing value that is
+ * not a plain numeric literal (`idleBobHz: BASE * 2` — appending a
+ * duplicate would silently shadow it), an unknown field, or a
+ * non-finite value. A field parked inside a comment is treated as
+ * absent (the live value is appended; the comment survives).
+ */
+export function applyAnimPersonality(source, data) {
+  const anchor = 'export const PERSONALITY_OVERRIDES';
+  const start = source.indexOf(anchor);
+  if (start < 0) throw new Error('anim-personality: PERSONALITY_OVERRIDES export not found');
+  const srcMask = codeMask(source);
+  let openBrace = -1;
+  for (let i = start; i < source.length; i++) {
+    if (srcMask[i] === M_CODE && source[i] === '{') { openBrace = i; break; }
+  }
+  if (openBrace < 0) throw new Error('anim-personality: PERSONALITY_OVERRIDES open brace not found');
+  const close = matchBraceMasked(source, openBrace, srcMask);
+  if (close < 0) throw new Error('anim-personality: PERSONALITY_OVERRIDES close brace not found');
+
+  const eol = detectEol(source);
+  let record = source.slice(openBrace, close + 1);
+
+  for (const name of Object.keys(data).sort()) {
+    const fields = data[name];
+    if (!fields || Object.keys(fields).length === 0) continue;
+    if (!IDENT_RE.test(name)) {
+      throw new Error(`anim-personality: critter name '${name}' is not a valid identifier`);
+    }
+    // Defense in depth (validateToolPatch already refuses these when
+    // the patch arrives through the CLI/endpoint): an unknown field
+    // would emit a line Partial<AnimationPersonality> cannot type.
+    for (const [k, v] of Object.entries(fields)) {
+      if (!PERSONALITY_FIELDS.includes(k)) {
+        throw new Error(`anim-personality: field '${k}' of '${name}' is not an AnimationPersonality field (valid: ${PERSONALITY_FIELDS.join(', ')})`);
+      }
+      if (typeof v !== 'number' || !Number.isFinite(v)) {
+        throw new Error(`anim-personality: field '${k}' of '${name}' is not a finite number`);
+      }
+    }
+    // Canonical interface order (PERSONALITY_FIELDS), not alphabetical —
+    // emitted blocks read like the AnimationPersonality declaration.
+    const orderedFields = PERSONALITY_FIELDS.filter((f) => f in fields);
+
+    const mask = codeMask(record);
+    const entryIndent = detectEntryIndent(record, mask);
+    const headRe = new RegExp(`(^|\\n)(${escapeRegex(entryIndent)})${escapeRegex(name)}:\\s*\\{`, 'g');
+    const matches = [...record.matchAll(headRe)].filter((m) => {
+      const keyIdx = m.index + m[1].length + m[2].length;
+      return mask[keyIdx] === M_CODE;
+    });
+    if (matches.length > 1) {
+      throw new Error(`anim-personality: critter '${name}' matches ${matches.length} blocks — refusing to guess`);
+    }
+
+    if (matches.length === 1) {
+      const m = matches[0];
+      const blockOpen = m.index + m[0].length - 1; // index of '{'
+      const blockClose = matchBraceMasked(record, blockOpen, mask);
+      if (blockClose < 0) throw new Error(`anim-personality: unbalanced braces in block for '${name}'`);
+      const blockText = record.slice(blockOpen + 1, blockClose); // inner text
+      const merged = mergePersonalityFieldsIntoBlock(blockText, fields, orderedFields, m[2], name, eol);
+      record = record.slice(0, blockOpen + 1) + merged + record.slice(blockClose);
+    } else {
+      // New critter — append a block before the record's closing brace.
+      const lines = [`${entryIndent}${name}: {`];
+      for (const f of orderedFields) {
+        lines.push(`${entryIndent}  ${f}: ${formatNumber(fields[f])},`);
+      }
+      lines.push(`${entryIndent}},`);
+      const closeIdx = record.length - 1; // record ends with the code '}'
+      const before = record.slice(0, closeIdx).replace(/\s+$/, '');
+      // Empty record ('{') gets no leading blank line; between blocks
+      // keep the blank-line separator anim-lab uses.
+      const sep = before === '{' ? eol : `${eol}${eol}`;
+      record = `${before}${sep}${lines.join(eol)}${eol}${record.slice(closeIdx)}`;
+    }
+  }
+
+  return source.slice(0, openBrace) + record + source.slice(close + 1);
+}
+
+/**
+ * Merge numeric fields into one critter block's inner text.
+ *
+ * Existing field line → replace ONLY the numeric token (comment
+ * alignment survives byte-identical). Missing field → append before
+ * the closing brace. A field line whose value is not a plain numeric
+ * literal is a hard error — appending would silently shadow it.
+ */
+function mergePersonalityFieldsIntoBlock(blockText, fields, orderedFields, headIndent, name, eol = '\n') {
+  let out = blockText;
+
+  for (const field of orderedFields) {
+    const mask = codeMask(out);
+    const indentMatch = maskedFirstMatch(out, mask, /(^|\n)([ \t]+)[A-Za-z_$]/g, 2);
+    const fieldIndent = indentMatch ?? `${headIndent ?? '  '}  `;
+
+    const lineRe = new RegExp(`(^|\\n)([ \\t]*)${escapeRegex(field)}:`, 'g');
+    const lineMatches = [...out.matchAll(lineRe)].filter((m) => {
+      const keyIdx = m.index + m[1].length + m[2].length;
+      return mask[keyIdx] === M_CODE; // a field "parked" in a comment is absent
+    });
+    if (lineMatches.length > 1) {
+      throw new Error(`anim-personality: field '${field}' of '${name}' matches ${lineMatches.length} lines — refusing to guess`);
+    }
+
+    if (lineMatches.length === 1) {
+      const lm = lineMatches[0];
+      const valueStart = lm.index + lm[0].length; // right after ':'
+      const lineEnd = endOfLine(out, valueStart);
+      // The numeric token must be the WHOLE value (next char ends it):
+      // `idleBobHz: BASE * 2` or `1e-3` must refuse, not half-rewrite.
+      const vm = out.slice(valueStart, lineEnd).match(/^([ \t]*)(-?\d+(?:\.\d+)?)(?=[,\s}/]|$)/);
+      if (!vm) {
+        throw new Error(`anim-personality: field '${field}' of '${name}' is not a plain number — edit src/animation-personality-overrides.ts by hand`);
+      }
+      const numStart = valueStart + vm[1].length;
+      const numEnd = numStart + vm[2].length;
+      out = out.slice(0, numStart) + formatNumber(fields[field]) + out.slice(numEnd);
+    } else {
+      // Append before the closing brace (comma-guard shared with
+      // anim-lab: a last line without one would emit a parse error).
+      out = ensureTrailingCommaOnLastCodeLine(out);
+      const trimmed = out.replace(/\s+$/, '');
+      out = `${trimmed}${eol}${fieldIndent}${field}: ${formatNumber(fields[field])},${eol}${headIndent ?? '  '}`;
+    }
+  }
+  return out;
 }
 
 // ===========================================================================

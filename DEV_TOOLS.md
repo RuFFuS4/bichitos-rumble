@@ -6,6 +6,18 @@ el lab se vuelve ilegible para quien entre después.
 
 ---
 
+> **Studio shell** — `/studio.html` (H3 slice 6) frames the four labs
+> (Match Lab / Animations / Calibrate / Decor) in **lazy kept-alive
+> iframes**: switching tabs preserves each lab's full state, `1-4`
+> switches tab (forwarded from inside the iframes — the shell attaches
+> its listener to each same-origin iframe document on load),
+> `#<tab>` deep-links (e.g. `/studio.html#calibrate`; the hash wins
+> over the remembered tab at boot), a `●` dot on a tab marks a lab
+> with an **unapplied localStorage working copy** (keys under its tool
+> prefix, `:ui` state excluded; live via the `storage` event), and
+> `⟳ reload tab` reloads only the active iframe. The standalone pages
+> below stay first-class — the studio just frames them.
+>
 > **Sibling tools** — all internal (`noindex`), accessible by URL only,
 > linked from the bottom of this sidebar:
 >
@@ -17,10 +29,13 @@ el lab se vuelve ilegible para quien entre después.
 >    lab (added 2026-04-24). Loads the game's real `SkeletalAnimator`
 >    for any roster critter, lists every clip + resolved state + the
 >    tier that won (override / exact / prefix / contains / missing),
->    lets the user play clips manually, override the mapping via
->    dropdowns, and export a pasteable snippet for
->    `src/animation-overrides.ts`. Fills the gap between "generate
->    clips in /animations" and "run clips in the game".
+>    lets the user play clips manually, override the mapping (clip +
+>    speed + loop) via dropdowns, and export as TS snippet, JSON patch
+>    or one-click **Apply to source** into
+>    `src/animation-overrides.ts` (sparse merge, H3 slice 1). Session
+>    working copy in `anim-lab:overrides`; selected critter persisted
+>    in `anim-lab:ui`. Fills the gap between "generate clips in
+>    /animations" and "run clips in the game".
 > 3. `/calibrate.html` — per-critter scale / pivotY / rotation lab
 >    (added 2026-04-24). Not related to animation; silhouette sizing.
 >    Per-critter `localStorage` working copy (`calibrate:<critterId>`)
@@ -77,13 +92,140 @@ el lab se vuelve ilegible para quien entre después.
 >
 > New internal tools should consume this module from day one.
 
-### Apply-patch workflow (2026-04-26)
+### Superficie programática (para Claude/agentes — directiva dual-surface)
+
+Todo lo tunable tiene camino sin navegador. Catálogo actual:
+
+- **Aplicar cambios a fuente**: escribir un ToolPatch JSON y
+  `npm run apply-tool-patch -- --patch=x.json [--dry-run]` (tools:
+  `calibrate` → roster.ts incl. physicsRadius · `anim-lab` → merge de
+  overrides · `decor-editor` → layouts por pack · `feel-patch` →
+  dot-paths de FEEL · `anim-personality` → PERSONALITY_OVERRIDES por
+  critter). Mismos mutadores testeados (`npm run test:patch`) que usan
+  los botones de la UI.
+- **Con dev server vivo**: `POST /__tool-patch/preview|apply` (JSON del
+  patch; preview devuelve el diff estructurado sin escribir).
+- **Módulo puro**: `scripts/tool-patch-core.mjs` exporta
+  applyPatch/validateToolPatch/simpleDiff para scripts ad-hoc.
+- **Estado del juego en vivo**: `window.__game` y `window.__devApi`
+  (match lab) via Playwright — snapshots, startMatch con seed/pack,
+  setSpeed/requestStep, forzar habilidades, bots, recording.
+- **Inspección de assets**: `npm run inspect:clips|parts|bounds`,
+  `verify:glbs`, `check-pws-parity`.
+- **Batch runner headless** (afilado slice G — LA herramienta
+  Claude-first): con el dev server vivo,
+  `npm run batch -- --matches=20 --seed=1 --player=Shelly --bots=Trunk,Sergei,Kurama --speed=8`
+  corre N partidas solo-bots deterministas (autopilot del slot player)
+  y agrega winrates/headbutts/caídas por critter + tabla y JSON
+  (`--out`, def `.tmp/batch-results.json`). `--verify` corre el mismo
+  seed dos veces (con reload entre medias) y compara la secuencia de
+  eventos completa → `REPRODUCIBLE: yes/no`. `--dump-recordings=dir`
+  vuelca la RecordingSession completa de cada partida (cierra el hueco
+  del volcado headless).
+
+Hueco conocido restante (AFILADO_PLAN): applier de ability-tuner
+(export JSON manual → falta ToolPatch a CRITTER_ABILITIES).
+
+### Cabina de tuning (afilado slice B)
+
+- **Hotkeys de tiempo** (match lab, fuera de inputs): `F7`/`.` step de
+  un tick (implica pausa — revisar squash/hit-stop frame a frame),
+  `F8` pausa/reanuda, `F9` slow-mo 0.3x toggle, `F10` restart con el
+  mismo seed+lineup. Botón `Step ⏭` en Playback para lo mismo.
+- **Game feel (FEEL)** — sección en Tuning con sliders auto-generados
+  de TODAS las hojas numéricas de `FEEL` (gamefeel.ts, 2 niveles).
+  Mutan el objeto en vivo (cada consumidor lo lee por frame — efecto
+  inmediato sin reload), persisten divergencias en `match-lab:feel`, y
+  exportan como **`feel-patch`** (4º tool type del pipeline): dot-paths
+  `seccion.clave` → número. El apply reescribe SOLO el token numérico
+  en src/gamefeel.ts — los comentarios de tuning sobreviven — y nunca
+  crea claves. Reset FEEL vuelve al baseline autoral.
+
+### Tuner de habilidades + hitbox visible (afilado slice C)
+
+- **Calibrate**: anillo rojo a ras de suelo por critter = su
+  `physicsRadius` real (el círculo de colisión que usa el juego).
+  Toggle "Show hitbox rings", slider "Hitbox r" (0.2-1.2), persistencia
+  por critter, y el campo entra en CalibratePatch/snippet SOLO al
+  divergir (si no, se conserva la `R` compartida de roster.ts).
+- **Match lab → Abilities (player)**: sliders auto-generados de todos
+  los campos numéricos de las defs J/K/L del critter jugador. Mutan la
+  def en vivo (aplica en el siguiente cast y sobrevive restarts — las
+  defs son objetos compartidos de CRITTER_ABILITIES; baselines
+  cacheados al primer avistamiento). Sin ToolPatch todavía
+  (deliberado): "Copy JSON" agrupa lo tuneado por critter para portarlo
+  a mano a los overrides de abilities.ts.
+
+### Salida del animation tuner (afilado slice E)
+
+El tuner de Animation (player) dejó de ser un pipeline sin salida:
+
+- **Tabla `PERSONALITY_OVERRIDES`** en
+  src/animation-personality-overrides.ts — excepciones autoradas por
+  critter (sparse) que `deriveAnimationPersonality` fusiona sobre la
+  fórmula (mass, speed). Tabla vacía = habla la fórmula.
+- **Persistencia de sesión**: las divergencias de sliders vs lo autorado
+  se guardan en `match-lab:anim-personality` y se reaplican tras F10 /
+  cambio de player (detección por identidad de objeto, 4 Hz).
+- **`anim-personality`** (5º tool type): data = por critter, campos que
+  divergen de la fórmula PURA (así los overrides ya autorados re-emiten
+  y la tabla queda autoconsistente). Merge no destructivo: nunca borra
+  campos ni entradas — volver un campo al valor derivado exacto lo omite
+  del patch y la entrada vieja sobrevive (borrado = edición manual).
+  Botones 📦 Copy / 💾 Download / ⚡ Apply to source; "Reset Derived"
+  vuelve a lo autorado y limpia la divergencia del critter actual.
+
+### Determinismo + batch runner (afilado slice G)
+
+- **Un seed = una partida entera**: el seed del arena siembra también
+  el PRNG de la partida (src/match-rng.ts, mulberry32) que consumen los
+  rolls de decisión de los bots, el respawn y los drops del countdown.
+  El VFX (puffs, tumbles) sigue con Math.random — no afecta al
+  resultado. 'Replay Last' ahora reproduce la PARTIDA, no solo la arena
+  (solo-bots; con humano el input no se reproduce).
+- **DevApi**: `setAutopilot(on)` (el slot player pasa a updateBot, el
+  input humano se suprime — un solo escritor), `setFixedStep(N, dt)`
+  (N pasos de dt fijo por frame, render decimado 1/20 bajo fixed-step
+  para que SwiftShader no ahogue la sim; pausa y requestStep siguen
+  mandando).
+- **CLI**: `npm run batch` (ver Superficie programática). El fin de
+  partida se espera por PROGRESO del reloj de sim, no por timeout de
+  reloj de pared (robusto en máquinas lentas).
+
+### Apply-patch workflow (2026-04-26, one-click desde H3 slice 4)
 
 End-to-end loop for `/calibrate`, `/anim-lab` and `/decor-editor` JSON
 patches (decor emits since H3 slice 3; its design notes live in the
 pack HEADER comments of `DECOR_LAYOUTS` because the apply replaces each
 pack's array wholesale) —
-designed to remove the manual paste step:
+designed to remove the manual paste step.
+
+#### Botón "Apply to source" (dev server — el flujo por defecto)
+
+Con `npm run dev` corriendo, cada lab tiene un botón **⚡ Apply to
+source** que cierra el círculo sin tocar ficheros a mano:
+
+  1. El lab hace `POST /__tool-patch/preview` con el ToolPatch. El
+     endpoint vive en `scripts/vite-tool-patch-plugin.mjs` (montado
+     con `apply: 'serve'` — **solo existe en el dev server**), valida
+     con el MISMO `validateToolPatch` del CLI y ejecuta los mutadores
+     puros de `scripts/tool-patch-core.mjs`. Nunca escribe fuera de
+     los tres ficheros target conocidos (el cliente no elige rutas).
+  2. `src/tools/apply-ui.ts` muestra el diff devuelto en un modal
+     BLOQUEANTE — nada se escribe hasta confirmar.
+  3. Al confirmar: el lab limpia su working copy de localStorage
+     ANTES del write (hook `onBeforeApply`; el write dispara un
+     full-reload de Vite que compite con la respuesta HTTP — si el
+     apply falla, `onApplyFailed` restaura la copia) y hace
+     `POST /__tool-patch/apply`.
+  4. El server escribe el fichero fuente en el **working tree** (commit
+     sigue siendo acto humano: `git diff` + commit) y Vite recarga la
+     página, que arranca ya desde el código recién aplicado.
+
+En una build de producción los endpoints no existen (no hay server
+code) — el fetch da 404 y el modal lo explica: usa el flujo CLI.
+
+#### Flujo CLI (fallback / builds / batch)
 
   1. Tune in the lab. localStorage holds the working copy so reloads
      don't lose anything.
@@ -246,33 +388,41 @@ priorizan el flujo "arranca partida → observa → itera".
 │  Gameplay    [▾]   │  ← default expandido
 │  Playback    [▸]   │
 └────────────────────┘
-┌─ OBSERVE ──────────┐  (verde)   paneles live read-only
-│  Recording   [▾]   │  ← default expandido
-│  Performance [▾]   │  ← default expandido
-│  Input       [▸]   │
-│  Player info [▸]   │
-└────────────────────┘
-┌─ TUNING ───────────┐  (amarillo) ajustes de grano fino
-│  Animation   [▸]   │
-└────────────────────┘
+┌─ OBSERVE ────────────┐  (verde)   paneles live read-only
+│  Recording      [▾]  │  ← default expandido
+│  Performance    [▾]  │  ← default expandido
+│  Skeletal clips [▸]  │
+│  Input          [▸]  │
+│  Player info    [▸]  │
+└──────────────────────┘
+┌─ TUNING ─────────────┐  (amarillo) ajustes de grano fino
+│  Animation      [▸]  │
+│  Badges         [▸]  │
+│  P/W/S stats    [▸]  │
+│  Critter parts  [▸]  │
+└──────────────────────┘
 ```
 
 `[▾]` = expanded por defecto · `[▸]` = collapsed por defecto.
 
 ### Qué cubre cada panel
 
-| Panel       | Contenido                                                              |
-|-------------|------------------------------------------------------------------------|
-| Matchup     | Player + 3 bots dropdown · Start / Restart same seed / Randomize / Mirror |
-| Arena       | Seed · pattern · batches · Force Seed / Replay Last / Copy Seed       |
-| Bots        | Dropdown por bot + dropdown bulk "All bots"                            |
-| Gameplay    | Cooldowns live + Reset CDs + Force J/K/L + TP player/bots + event log  |
-| Playback    | Speed slider · Pause / Slow 0.3× / Normal 1× / End Match               |
-| Recording   | Estado + Stop / Download JSON / Download MD / Clear                    |
-| Performance | FPS · frameMs · drawCalls · triangles · geo · tex · critters · fragments |
-| Input       | Move vector · held actions · teclas activas · gamepads                 |
-| Player info | Readout verbose de stats del player actual                             |
-| Animation   | 7 sliders sobre `animPersonality` + Reset Derived + Copy Values        |
+| Panel          | Contenido                                                              |
+|----------------|------------------------------------------------------------------------|
+| Matchup        | Player + 3 bots dropdown · Start / Restart same seed / Randomize / Mirror |
+| Arena          | Seed · pattern · batches · Force Seed / Replay Last / Copy Seed       |
+| Bots           | Dropdown por bot + dropdown bulk "All bots"                            |
+| Gameplay       | Cooldowns live + Reset CDs + Force J/K/L + TP player/bots + event log  |
+| Playback       | Speed slider · Pause / Slow 0.3× / Normal 1× / End Match               |
+| Recording      | Estado + Stop / Download JSON / Download MD / Clear                    |
+| Performance    | FPS · frameMs · drawCalls · triangles · geo · tex · critters · fragments |
+| Skeletal clips | Clips del GLB del player, play por clip · Stop playback · Refresh — cierra el pipeline Mesh2Motion/Tripo: verifica que un GLB re-exportado riggea y que el resolver fuzzy asigna el estado correcto |
+| Input          | Move vector · held actions · teclas activas · gamepads                 |
+| Player info    | Readout verbose de stats del player actual                             |
+| Animation (player) | 7 sliders sobre `animPersonality` + Reset Derived + Copy Values    |
+| Badges         | Cinturones sin jugar 20 partidas: Unlock all / Lock all / Trigger toast demo / Clear ALL stats — opera sobre localStorage vía DevApi; lo que reescribe el blob recarga la página |
+| P/W/S stats    | Tabla read-only de la tupla Power/Weight/Speed (-2..+2) por critter y los números derivados — se rebalancea editando `src/pws-stats.ts` |
+| Critter parts  | Sliders live por hueso del critter elegido (a 0 = ocultar la parte, p.ej. "hide in shell" de Shelly) · Reset bones — solo con partida activa |
 
 ### Defaults y heurística de colapso
 
@@ -513,9 +663,16 @@ quien entre a añadir hooks online lo vea.
 | Fichero                      | Rol                                          |
 |------------------------------|----------------------------------------------|
 | `tools.html`                 | Entry point del lab (noindex, internal)      |
+| `studio.html`                | Shell con tabs (iframes kept-alive) de los 4 labs |
 | `src/tools/main.ts`          | Bootstrap: escena, renderer, Game, DevApi    |
 | `src/tools/dev-api.ts`       | Debug surface única (snapshots + mutaciones) |
 | `src/tools/sidebar.ts`       | DOM de los paneles                           |
+| `src/tools/tool-storage.ts`  | localStorage helpers + envelope ToolPatch    |
+| `src/tools/apply-ui.ts`      | Modal de diff + POST a `/__tool-patch/*` (Apply to source) |
+| `src/tools/ui/lab-kit.ts`    | Helpers compartidos de los labs (orbit cam, resize, escapeHtml) |
+| `scripts/vite-tool-patch-plugin.mjs` | Endpoints dev-only `/__tool-patch/preview·apply` |
+| `scripts/tool-patch-core.mjs`| Mutadores puros + validación (compartidos CLI/endpoint) |
+| `scripts/apply-tool-patch.mjs` | CLI sobre tool-patch-core (`npm run apply-tool-patch`) |
 | `src/bot.ts`                 | Lee `debugBotBehaviour` cada frame           |
 | `src/critter.ts`             | Campo `debugBotBehaviour: BotBehaviourTag`   |
 | `src/input.ts`               | Exports `getHeldKeyCodes` + `getHeldActionsSnapshot` |

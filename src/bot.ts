@@ -1,6 +1,7 @@
 import { Critter } from './critter';
 import { activateAbility, canActivateAbility, findAbilityByTag } from './abilities';
 import { FEEL } from './gamefeel';
+import { matchRng } from './match-rng';
 
 /**
  * Placeholder bot AI: chase the nearest alive critter, headbutt when close,
@@ -9,6 +10,9 @@ import { FEEL } from './gamefeel';
  * Respects `bot.debugBotBehaviour` so the /tools.html dev lab can isolate
  * behaviour components without touching this file. In production all bots
  * run with the default 'normal' tag and this code path is a no-op extra.
+ *
+ * Decision rolls use matchRng() (seeded per match) so a seeded offline
+ * match replays the same bot decisions — see src/match-rng.ts.
  *
  * Behaviour modes:
  *   - normal       : full AI (chase + headbutt + abilities)
@@ -106,7 +110,7 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
     nearestDist > 3.0 &&
     nearestDist < 6.0
   ) {
-    if (Math.random() < 0.02 * aggroMul) {
+    if (matchRng() < 0.02 * aggroMul) {
       activateAbility(mobilityAbility, bot);
     }
   }
@@ -114,7 +118,7 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
   // --- AoE push ability: use when surrounded
   const aoeAbility = findAbilityByTag(bot.abilityStates, 'aoe_push');
   if (aoeAbility && canActivateAbility(aoeAbility) && nearbyCount >= 2) {
-    if (Math.random() < 0.015 * aggroMul) {
+    if (matchRng() < 0.015 * aggroMul) {
       activateAbility(aoeAbility, bot);
     }
   }
@@ -130,7 +134,7 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
     // Cone gate: only fire if the target is roughly in front of us
     // (within ±35° of our movement vector). nx,nz already point at
     // the target, so we just need to face it before firing.
-    if (Math.random() < 0.022 * aggroMul) {
+    if (matchRng() < 0.022 * aggroMul) {
       activateAbility(rangedAbility, bot);
     }
   }
@@ -138,7 +142,7 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
   // --- Buff ability (e.g. Frenzy): activate when close to an enemy
   const buffAbility = findAbilityByTag(bot.abilityStates, 'buff');
   if (buffAbility && canActivateAbility(buffAbility) && nearestDist < 3.5) {
-    if (Math.random() < 0.008 * aggroMul) {
+    if (matchRng() < 0.008 * aggroMul) {
       activateAbility(buffAbility, bot);
     }
   }

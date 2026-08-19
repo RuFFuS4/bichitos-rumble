@@ -20,11 +20,93 @@
 // ---------------------------------------------------------------------------
 
 import { getPlayableNames } from '../roster';
-import { deriveAnimationPersonality } from '../critter-animation';
+import { ARENA_PACK_IDS } from '../arena-decorations';
+import { deriveAnimationPersonality, type AnimationPersonality } from '../critter-animation';
+import { CRITTER_PRESETS } from '../critter';
 import { clearAllHeldInputs } from '../input';
+import {
+  toolStorageKey,
+  loadFromStorage,
+  saveToStorage,
+  clearStorage,
+  makeToolPatch,
+  copyPatchToClipboard,
+  downloadPatch,
+  type FeelPatch,
+  type AnimPersonalityPatch,
+} from './tool-storage';
+import { FEEL } from '../gamefeel';
+import { applyPatchToSource } from './apply-ui';
 import type { DevApi, BotBehaviourTag, GameplayEvent } from './dev-api';
 
 const NONE = '(none)';
+
+/** Sentinel for "no explicit pack" in the Matchup arena selector — keeps
+ *  the normal-play behaviour (uniform roll per match in game.ts). */
+export const RANDOM_PACK = '(random)';
+
+// ---------------------------------------------------------------------------
+// Persisted lab setup — survives the reload-after-apply workflow
+// ---------------------------------------------------------------------------
+// Stored under 'match-lab:setup' via the shared tool-storage helper (same
+// pattern as calibrate / anim-lab / decor-editor). Read by BOTH
+// mountLabSidebar (rehydration) and tools/main.ts (the auto-start match
+// uses the same lineup/seed/pack) — keep loadLabSetup the single entry
+// point so the two consumers can never disagree on key or sanitising.
+
+export interface LabSetup {
+  playerPick: string;
+  /** 3 slots; '' means the slot is empty ('(none)' in the UI). */
+  botPicks: string[];
+  lastSeed: number | null;
+  speedScale: number;
+  /** An ArenaPackId, or RANDOM_PACK. */
+  packPick: string;
+}
+
+const SETUP_KEY = toolStorageKey('match-lab', 'setup');
+
+function defaultLabSetup(): LabSetup {
+  return {
+    playerPick: 'Sergei',
+    botPicks: ['Trunk', 'Kurama', 'Shelly'],
+    lastSeed: null,
+    speedScale: 1,
+    packPick: RANDOM_PACK,
+  };
+}
+
+function isLabSetup(v: unknown): v is LabSetup {
+  if (typeof v !== 'object' || v === null) return false;
+  const s = v as Record<string, unknown>;
+  return typeof s.playerPick === 'string'
+    && Array.isArray(s.botPicks) && s.botPicks.every((b) => typeof b === 'string')
+    && (s.lastSeed === null || typeof s.lastSeed === 'number')
+    && typeof s.speedScale === 'number'
+    && typeof s.packPick === 'string';
+}
+
+/** Load + sanitise the persisted setup. Critter names are re-validated
+ *  against the live roster so a renamed/removed critter degrades to the
+ *  default instead of rendering a <select> with an impossible value. */
+export function loadLabSetup(): LabSetup {
+  const def = defaultLabSetup();
+  const stored = loadFromStorage<LabSetup>(SETUP_KEY, isLabSetup);
+  if (!stored) return def;
+  const names = getPlayableNames();
+  return {
+    playerPick: names.includes(stored.playerPick) ? stored.playerPick : def.playerPick,
+    botPicks: stored.botPicks.slice(0, 3).map((n) => (names.includes(n) ? n : '')),
+    lastSeed: stored.lastSeed,
+    // speedScale 0 (paused) is never restored: a lab that boots frozen
+    // reads as a rendering bug, not as a resumed pause. Range mirrors
+    // the Playback slider (0-2).
+    speedScale: stored.speedScale > 0 && stored.speedScale <= 2 ? stored.speedScale : def.speedScale,
+    packPick: (ARENA_PACK_IDS as readonly string[]).includes(stored.packPick)
+      ? stored.packPick
+      : RANDOM_PACK,
+  };
+}
 
 const ANIM_PARAMS = [
   { key: 'idleBobHz',         min: 0.3, max: 2.0, step: 0.01 },
@@ -252,6 +334,7 @@ const CSS = `
 #lab-sidebar .evt-collapse_batch .evt-type { color: #ff8844; }
 #lab-sidebar .evt-match_started .evt-type { color: #4ade80; }
 #lab-sidebar .evt-match_ended  .evt-type { color: #9aa6c4; }
+#lab-sidebar .evt-moment       .evt-type { color: #ffdc5c; }
 
 #lab-sidebar .lab-bot-row {
   display: grid;
@@ -534,9 +617,25 @@ export function mountLabSidebar(devApi: DevApi): void {
 
   // ---- Shared state -----------------------------------------------------
   const names = getPlayableNames(); // 9 playables
-  let playerPick = 'Sergei';
-  let botPicks: string[] = ['Trunk', 'Kurama', 'Shelly'];
-  let lastSeed: number | null = null;
+  const setup = loadLabSetup();     // rehydrated from 'match-lab:setup'
+  let playerPick = setup.playerPick;
+  let botPicks: string[] = [...setup.botPicks];
+  let lastSeed: number | null = setup.lastSeed;
+  let packPick = setup.packPick;
+
+  /** Snapshot current UI state into localStorage. Call after every
+   *  mutation of the picks/seed above (speed is read live from DevApi
+   *  so speed-changing handlers only need this one call). */
+  function persistSetup(): void {
+    const snapshot: LabSetup = {
+      playerPick,
+      botPicks,
+      lastSeed,
+      speedScale: devApi.getSpeed(),
+      packPick,
+    };
+    saveToStorage(SETUP_KEY, snapshot);
+  }
 
   // =======================================================================
   // GROUP: MATCH SETUP ----------------------------------------------------
@@ -545,10 +644,16 @@ export function mountLabSidebar(devApi: DevApi): void {
 
   // ---- Matchup (collapsed by default — only needed at the start) --------
   const matchup = section(setupGroup, 'Matchup', { collapsed: true });
-  const playerSel = select(matchup, 'Player', names, playerPick, (v) => { playerPick = v; });
-  const bot1Sel = select(matchup, 'Bot 1', [NONE, ...names], botPicks[0] ?? NONE, (v) => { botPicks[0] = v === NONE ? '' : v; });
-  const bot2Sel = select(matchup, 'Bot 2', [NONE, ...names], botPicks[1] ?? NONE, (v) => { botPicks[1] = v === NONE ? '' : v; });
-  const bot3Sel = select(matchup, 'Bot 3', [NONE, ...names], botPicks[2] ?? NONE, (v) => { botPicks[2] = v === NONE ? '' : v; });
+  // `|| NONE` (not `??`): rehydrated botPicks stores '' for empty slots,
+  // and '' is not nullish — `??` would feed the select an invalid value.
+  const playerSel = select(matchup, 'Player', names, playerPick, (v) => { playerPick = v; persistSetup(); });
+  const bot1Sel = select(matchup, 'Bot 1', [NONE, ...names], botPicks[0] || NONE, (v) => { botPicks[0] = v === NONE ? '' : v; persistSetup(); });
+  const bot2Sel = select(matchup, 'Bot 2', [NONE, ...names], botPicks[1] || NONE, (v) => { botPicks[1] = v === NONE ? '' : v; persistSetup(); });
+  const bot3Sel = select(matchup, 'Bot 3', [NONE, ...names], botPicks[2] || NONE, (v) => { botPicks[2] = v === NONE ? '' : v; persistSetup(); });
+  // Arena pack for the NEXT match. Applies on Start/Restart — the running
+  // match keeps its pack (DevApi.startMatch forwards packId to
+  // debugStartOfflineMatch, which rolls randomly when omitted).
+  select(matchup, 'Pack', [RANDOM_PACK, ...ARENA_PACK_IDS], packPick, (v) => { packPick = v; persistSetup(); });
   const matchupBtns = row(matchup);
   button(matchupBtns, 'Start Match', () => startMatch(/*reuseSeed*/ false), 'primary');
   button(matchupBtns, 'Restart Same Seed', () => startMatch(/*reuseSeed*/ true));
@@ -559,21 +664,33 @@ export function mountLabSidebar(devApi: DevApi): void {
     bot1Sel.value = botPicks[0] ?? NONE;
     bot2Sel.value = botPicks[1] ?? NONE;
     bot3Sel.value = botPicks[2] ?? NONE;
+    persistSetup();
   });
   button(matchupBtns, 'Mirror Match', () => {
     botPicks = [playerPick, playerPick, playerPick];
     bot1Sel.value = bot2Sel.value = bot3Sel.value = playerPick;
+    persistSetup();
   });
 
   function currentBotNames(): string[] {
     return botPicks.filter(n => n && n !== NONE);
   }
   function startMatch(reuseSeed: boolean): void {
-    const opts: { seed?: number } = {};
+    // A finalised recording that was never exported would be silently
+    // overwritten (DevApi.startMatch auto-starts a fresh session). Only
+    // finalised sessions warn — see hasUnsavedRecording — so quick
+    // mid-match restart loops stay nag-free.
+    if (devApi.hasUnsavedRecording()
+        && !confirm('Last match recording was never downloaded and will be lost. Start anyway?')) {
+      return;
+    }
+    const opts: { seed?: number; packId?: string } = {};
     if (reuseSeed && lastSeed !== null) opts.seed = lastSeed;
+    if (packPick !== RANDOM_PACK) opts.packId = packPick;
     devApi.startMatch(playerPick, currentBotNames(), opts);
     const info = devApi.getArenaInfo();
     if (info) lastSeed = info.seed;
+    persistSetup();
     refreshAll();
   }
 
@@ -597,12 +714,14 @@ export function mountLabSidebar(devApi: DevApi): void {
     const seed = parseInt(raw, 10) | 0;
     lastSeed = seed;
     devApi.forceSeed(seed);
+    persistSetup();
     refreshArenaPanel();
   });
   button(arenaBtns, 'Replay Last', () => {
     if (lastSeed === null) return;
-    devApi.startMatch(playerPick, currentBotNames(), { seed: lastSeed });
-    refreshAll();
+    // Route through startMatch so the replay honours the pack selector
+    // and the unsaved-recording guard like any other (re)start.
+    startMatch(/*reuseSeed*/ true);
   });
   button(arenaBtns, 'Copy Seed', () => {
     const info = devApi.getArenaInfo();
@@ -669,35 +788,79 @@ export function mountLabSidebar(devApi: DevApi): void {
   speedSlider.min = '0';
   speedSlider.max = '2';
   speedSlider.step = '0.05';
-  speedSlider.value = '1';
+  speedSlider.value = String(setup.speedScale);
   const speedVal = document.createElement('span');
   speedVal.className = 'lab-val';
-  speedVal.textContent = '1.00';
+  speedVal.textContent = setup.speedScale.toFixed(2);
   speedSlider.addEventListener('input', () => {
     const v = parseFloat(speedSlider.value);
     devApi.setSpeed(v);
     speedVal.textContent = v.toFixed(2);
+    persistSetup();
   });
   speedRow.appendChild(speedSlider);
   speedRow.appendChild(speedVal);
+  // Rehydrate the persisted speed into the engine (slider already shows
+  // it). Skipped at 1 so a default boot logs no set_speed lab action.
+  if (setup.speedScale !== 1) devApi.setSpeed(setup.speedScale);
   const actionBtns = row(actions);
   button(actionBtns, 'Pause', () => {
     const next = devApi.getSpeed() === 0 ? 1 : 0;
     devApi.setSpeed(next);
     speedSlider.value = String(next);
     speedVal.textContent = next.toFixed(2);
+    persistSetup();
   });
   button(actionBtns, 'Slow 0.3×', () => {
     devApi.setSpeed(0.3);
     speedSlider.value = '0.3';
     speedVal.textContent = '0.30';
+    persistSetup();
   });
   button(actionBtns, 'Normal 1×', () => {
     devApi.setSpeed(1);
     speedSlider.value = '1';
     speedVal.textContent = '1.00';
+    persistSetup();
+  });
+  button(actionBtns, 'Step ⏭', () => {
+    // Frame-by-frame review of squash / hit-stop / knockback. Stepping
+    // implies pause; the speed UI must reflect the forced 0.
+    devApi.requestStep();
+    speedSlider.value = '0';
+    speedVal.textContent = '0.00';
   });
   button(actionBtns, 'End Match', () => devApi.endMatch());
+
+  // ---- Time-control hotkeys (afilado slice B) ---------------------------
+  // The whole point of slow-mo is freezing THIS moment - reaching for the
+  // mouse loses it. Guarded against typing contexts; F-keys avoid WASD/JKL.
+  //   F7 / .  step one tick   F8 pause/resume   F9 slow-mo 0.3x toggle
+  //   F10     restart with the same seed + lineup
+  function setSpeedViaHotkey(v: number): void {
+    devApi.setSpeed(v);
+    speedSlider.value = String(v);
+    speedVal.textContent = v.toFixed(2);
+    persistSetup();
+  }
+  window.addEventListener('keydown', (ev) => {
+    const t = ev.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+    if (ev.key === 'F7' || ev.key === '.') {
+      devApi.requestStep();
+      speedSlider.value = '0';
+      speedVal.textContent = '0.00';
+    } else if (ev.key === 'F8') {
+      setSpeedViaHotkey(devApi.getSpeed() === 0 ? 1 : 0);
+    } else if (ev.key === 'F9') {
+      setSpeedViaHotkey(devApi.getSpeed() === 0.3 ? 1 : 0.3);
+    } else if (ev.key === 'F10') {
+      startMatch(/*reuseSeed*/ true);
+    } else {
+      return;
+    }
+    ev.preventDefault();
+  });
 
   // =======================================================================
   // GROUP: OBSERVE --------------------------------------------------------
@@ -710,6 +873,15 @@ export function mountLabSidebar(devApi: DevApi): void {
   recStatus.className = 'lab-info';
   recording.appendChild(recStatus);
   const recBtns = row(recording);
+  button(recBtns, 'Mark moment', () => {
+    // Manual playtest bookmark. pushEvent mirrors into the recording, so
+    // the exported JSON/MD carries the timestamp. Details pin the
+    // recording-relative time because the live log only shows event age.
+    const rec = devApi.getRecording();
+    const t = rec ? ((performance.now() - rec.meta.startedAt) / 1000).toFixed(1) : '?';
+    devApi.pushEvent('moment', 'lab', `t=${t}s`);
+    refreshEventLog();
+  });
   button(recBtns, 'Stop', () => { devApi.stopRecording(); refreshRecordingPanel(); });
   button(recBtns, 'Download JSON', () => devApi.downloadRecordingJSON(), 'primary');
   button(recBtns, 'Download MD', () => devApi.downloadRecordingMD());
@@ -756,9 +928,57 @@ export function mountLabSidebar(devApi: DevApi): void {
   const tuningGroup = group(root, 'Tuning', 'tuning');
 
   // ---- Animation tuner (collapsed — occasional tweaking) ----------------
+  // Sliders mutate player.animPersonality in place — the procedural
+  // layer reads it per frame, so changes land immediately. Two baselines
+  // matter (afilado slice E):
+  //   - AUTHORED = derive(player.config): formula + PERSONALITY_OVERRIDES
+  //     (config.name routes through the table). A fresh Critter boots
+  //     with these; the per-field divergence indicator and the persisted
+  //     working copy compare against AUTHORED.
+  //   - PURE = derive({ mass, speed }) without name: the raw formula.
+  //     The exported anim-personality patch compares against PURE — see
+  //     buildAnimPersonalityPatch.
+  // Divergences persist per critter in localStorage and reapply onto the
+  // freshly-derived animPersonality after every restart / pick change
+  // (object-identity check at 4 Hz — refreshAnimTuner).
   const anim = section(tuningGroup, 'Animation (player)', { collapsed: true });
+  const ANIM_STORE_KEY = toolStorageKey('match-lab', 'anim-personality');
+  type AnimStore = Record<string, Partial<Record<AnimKey, number>>>;
+  const ANIM_KEY_SET = new Set<string>(ANIM_PARAMS.map((p) => p.key));
+  function isAnimStore(v: unknown): v is AnimStore {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+    return Object.values(v as Record<string, unknown>).every((e) =>
+      !!e && typeof e === 'object' && !Array.isArray(e)
+      && Object.entries(e as Record<string, unknown>).every(
+        ([k, x]) => ANIM_KEY_SET.has(k) && typeof x === 'number' && Number.isFinite(x),
+      ));
+  }
+  const animStore: AnimStore = loadFromStorage<AnimStore>(ANIM_STORE_KEY, isAnimStore) ?? {};
+  /** AUTHORED personality of the current player. Always a fresh derive
+   *  result, never an alias of the live mutable object. */
+  let animAuthored: AnimationPersonality | null = null;
+  let animTunerPlayer: unknown = null;
+
+  function persistAnimStore(): void {
+    if (Object.keys(animStore).length === 0) clearStorage(ANIM_STORE_KEY);
+    else saveToStorage(ANIM_STORE_KEY, animStore);
+  }
+
+  const animInfo = document.createElement('div');
+  animInfo.className = 'lab-info';
+  anim.appendChild(animInfo);
+  function refreshAnimInfo(): void {
+    const name = devApi.game.player?.config.name ?? '(no player)';
+    const own = Object.keys(animStore[name] ?? {}).length;
+    const critters = Object.keys(animStore).length;
+    animInfo.textContent = critters === 0
+      ? `${name} — authored values (formula + overrides table)`
+      : `⚡ ${name} — ${own} field${own === 1 ? '' : 's'} diverge · working copy spans ${critters} critter${critters === 1 ? '' : 's'}`;
+  }
+
   const sliders = new Map<AnimKey, HTMLInputElement>();
   const valueLabels = new Map<AnimKey, HTMLSpanElement>();
+  const fieldLabels = new Map<AnimKey, HTMLLabelElement>();
   for (const p of ANIM_PARAMS) {
     const rowEl = row(anim);
     const l = document.createElement('label');
@@ -776,35 +996,454 @@ export function mountLabSidebar(devApi: DevApi): void {
       const v = parseFloat(slider.value);
       val.textContent = v.toFixed(3);
       const player = devApi.game.player;
-      if (player?.animPersonality) {
-        player.animPersonality[p.key] = v;
+      if (!player?.animPersonality) return;
+      player.animPersonality[p.key] = v;
+      if (!animAuthored) return;
+      // Divergence bookkeeping vs the AUTHORED value. Round-tripping a
+      // slider back within half a step snaps to authored and clears the
+      // entry — same resolution rule as the FEEL tuner.
+      const name = player.config.name;
+      if (Math.abs(v - animAuthored[p.key]) < p.step / 2) {
+        player.animPersonality[p.key] = animAuthored[p.key];
+        const entry = animStore[name];
+        if (entry) {
+          delete entry[p.key];
+          if (Object.keys(entry).length === 0) delete animStore[name];
+        }
+      } else {
+        (animStore[name] ??= {})[p.key] = v;
       }
+      l.style.color = animStore[name]?.[p.key] !== undefined ? '#ffdc5c' : '';
+      persistAnimStore();
+      refreshAnimInfo();
     });
     rowEl.appendChild(slider);
     rowEl.appendChild(val);
     sliders.set(p.key, slider);
     valueLabels.set(p.key, val);
+    fieldLabels.set(p.key, l);
   }
+
+  /** 4 Hz hook (same mechanism as refreshAbilityTuner, but on object
+   *  IDENTITY): every restart builds a new Critter whose animPersonality
+   *  was freshly derived (AUTHORED), so the persisted divergences must
+   *  reapply on top. A name check alone would miss same-critter
+   *  restarts. */
+  function refreshAnimTuner(): void {
+    const player = devApi.game.player ?? null;
+    if (player === animTunerPlayer) return;
+    animTunerPlayer = player;
+    if (!player) { animAuthored = null; refreshAnimInfo(); return; }
+    animAuthored = deriveAnimationPersonality(player.config);
+    const stored = animStore[player.config.name];
+    if (stored) Object.assign(player.animPersonality, stored);
+    syncSlidersFromPlayer();
+    refreshAnimInfo();
+  }
+
+  /**
+   * Patch data (contract in tool-storage.ts): per critter with a working
+   * copy, every field whose CURRENT value diverges from the PURE
+   * baseline — derive({ mass, speed }) WITHOUT name, i.e. the formula
+   * with no overrides table. Comparing against PURE instead of AUTHORED
+   * keeps already-authored overrides that still diverge inside the
+   * patch, so the applier's merge leaves a self-consistent table.
+   * Never-delete corollary: a field tuned back to exactly its derived
+   * value is OMITTED from the patch and any old PERSONALITY_OVERRIDES
+   * entry for it survives — removing an override is a deliberate manual
+   * edit in src/animation-personality-overrides.ts.
+   */
+  function buildAnimPersonalityPatch(): AnimPersonalityPatch {
+    const data: AnimPersonalityPatch['data'] = {};
+    for (const [name, stored] of Object.entries(animStore)) {
+      const cfg = CRITTER_PRESETS.find((c) => c.name === name);
+      if (!cfg) continue; // renamed/removed critter — stale entry, skip
+      const pure = deriveAnimationPersonality({ mass: cfg.mass, speed: cfg.speed });
+      const authored = deriveAnimationPersonality(cfg);
+      const entry: AnimPersonalityPatch['data'][string] = {};
+      for (const p of ANIM_PARAMS) {
+        const cur = stored[p.key] ?? authored[p.key];
+        if (Math.abs(cur - pure[p.key]) >= p.step / 2) entry[p.key] = cur;
+      }
+      if (Object.keys(entry).length > 0) data[name] = entry;
+    }
+    return makeToolPatch<AnimPersonalityPatch>('anim-personality', data);
+  }
+
   const animBtns = row(anim);
   button(animBtns, 'Reset Derived', () => {
     const player = devApi.game.player;
     if (!player) return;
-    player.animPersonality = deriveAnimationPersonality(player.config);
+    // derive(config) includes the overrides table (config.name), so this
+    // resets to the AUTHORED values — not the raw formula — and drops
+    // the persisted divergence for THIS critter only.
+    animAuthored = deriveAnimationPersonality(player.config);
+    player.animPersonality = { ...animAuthored };
+    delete animStore[player.config.name];
+    persistAnimStore();
     syncSlidersFromPlayer();
+    refreshAnimInfo();
   });
-  button(animBtns, 'Copy Values', () => {
-    const player = devApi.game.player;
-    if (!player) return;
-    navigator.clipboard
-      .writeText(JSON.stringify(player.animPersonality, null, 2))
-      .catch(() => {});
+  button(animBtns, '📦 Copy patch', async () => {
+    const patch = buildAnimPersonalityPatch();
+    if (Object.keys(patch.data).length === 0) {
+      animInfo.textContent = '(nothing diverges from the formula — move a slider first)';
+      return;
+    }
+    await copyPatchToClipboard(patch);
+    const n = Object.keys(patch.data).length;
+    animInfo.textContent = `📦 anim-personality patch copied (${n} critter${n === 1 ? '' : 's'})`;
   });
+  button(animBtns, '💾 Download', () => {
+    const patch = buildAnimPersonalityPatch();
+    if (Object.keys(patch.data).length === 0) {
+      animInfo.textContent = '(nothing diverges from the formula — move a slider first)';
+      return;
+    }
+    downloadPatch(patch);
+  });
+  button(animBtns, '⚡ Apply to source', async () => {
+    const patch = buildAnimPersonalityPatch();
+    if (Object.keys(patch.data).length === 0) {
+      animInfo.textContent = '(nothing diverges from the formula — move a slider first)';
+      return;
+    }
+    const backup: AnimStore = JSON.parse(JSON.stringify(animStore)) as AnimStore;
+    await applyPatchToSource(patch, {
+      // The write triggers a Vite full-reload; the tuned values are now
+      // AUTHORED (merged into PERSONALITY_OVERRIDES), so the working
+      // copy must not resurrect on top of them.
+      onBeforeApply: () => {
+        for (const k of Object.keys(animStore)) delete animStore[k];
+        clearStorage(ANIM_STORE_KEY);
+      },
+      onApplyFailed: () => {
+        Object.assign(animStore, backup);
+        persistAnimStore();
+      },
+    });
+  }, 'primary');
+  refreshAnimTuner(); // player already exists (auto-start precedes mount)
 
   // ---- Badges (collapsed — BADGES_DESIGN testing) ----------------------
   // Lets us unlock / lock / reset the belt system without playing 20+
   // matches to hit every condition. Operates directly on localStorage
   // via DevApi; any action that rewrites the stats blob triggers a
   // page reload so in-memory state stays coherent.
+  // ---- Game feel (FEEL) - live tuner + feel-patch (afilado slice B) -----
+  // Sliders mutate the FEEL object in place; every consumer reads it
+  // call-time per frame, so changes land on the very next frame with no
+  // reload. Divergences vs the authored baseline persist in
+  // localStorage and export as a `feel-patch` (Apply to source rewrites
+  // just the numeric tokens in src/gamefeel.ts - comments survive).
+  const feelSec = section(tuningGroup, 'Game feel (FEEL)', { collapsed: true });
+  const FEEL_STORE_KEY = toolStorageKey('match-lab', 'feel');
+  const FEEL_MUT = FEEL as unknown as Record<string, Record<string, number>>;
+
+  const feelBaseline: Record<string, Record<string, number>> = {};
+  for (const [secName, obj] of Object.entries(FEEL_MUT)) {
+    const leaves: Record<string, number> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      // Nested sub-objects (headbutt.anticipation/...) are skipped: two
+      // levels cover the overwhelming majority of knobs and keep the
+      // feel-patch path format flat. Revisit if a 3-level knob matters.
+      if (typeof v === 'number') leaves[k] = v;
+    }
+    if (Object.keys(leaves).length > 0) feelBaseline[secName] = leaves;
+  }
+
+  const feelChanged = new Map<string, number>();
+
+  function isFeelStore(v: unknown): v is Record<string, number> {
+    return !!v && typeof v === 'object' && !Array.isArray(v)
+      && Object.values(v as Record<string, unknown>).every((x) => typeof x === 'number' && Number.isFinite(x));
+  }
+  const storedFeel = loadFromStorage<Record<string, number>>(FEEL_STORE_KEY, isFeelStore);
+  if (storedFeel) {
+    for (const [path, v] of Object.entries(storedFeel)) {
+      const [sn, k] = path.split('.');
+      if (sn && k && feelBaseline[sn]?.[k] !== undefined) {
+        FEEL_MUT[sn]![k] = v;
+        feelChanged.set(path, v);
+      }
+    }
+  }
+
+  function persistFeel(): void {
+    if (feelChanged.size === 0) clearStorage(FEEL_STORE_KEY);
+    else saveToStorage(FEEL_STORE_KEY, Object.fromEntries(feelChanged));
+  }
+
+  const feelInfo = document.createElement('div');
+  feelInfo.className = 'lab-info';
+  feelSec.appendChild(feelInfo);
+  function refreshFeelInfo(): void {
+    feelInfo.textContent = feelChanged.size === 0
+      ? 'authored gamefeel.ts values'
+      : `⚡ ${feelChanged.size} value${feelChanged.size === 1 ? '' : 's'} diverge from gamefeel.ts`;
+  }
+  refreshFeelInfo();
+
+  const feelRowRefreshers: Array<() => void> = [];
+  for (const [secName, leaves] of Object.entries(feelBaseline)) {
+    const det = document.createElement('details');
+    det.style.cssText = 'margin: 4px 0; padding: 2px 0;';
+    const sum = document.createElement('summary');
+    sum.textContent = secName;
+    sum.style.cssText = 'cursor: pointer; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; user-select: none;';
+    det.appendChild(sum);
+    feelSec.appendChild(det);
+
+    for (const [key, def] of Object.entries(leaves)) {
+      const r = row(det);
+      const label = document.createElement('label');
+      label.textContent = key;
+      label.style.cssText = 'min-width: 118px; font-size: 10px; overflow: hidden; text-overflow: ellipsis;';
+      label.title = `${secName}.${key} - authored: ${def}`;
+      r.appendChild(label);
+
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      // Range heuristic: 0 -> 3x the authored value (negative defaults
+      // get a mirrored range). Zero defaults get 0..1. The number input
+      // has no clamp for out-of-range experiments.
+      const span = def === 0 ? 1 : Math.abs(def) * 3;
+      slider.min = String(def < 0 ? -span : 0);
+      slider.max = String(def < 0 ? 0 : span);
+      slider.step = String(span < 2 ? 0.01 : span < 30 ? 0.1 : 1);
+      slider.style.flex = '1';
+
+      const num = document.createElement('input');
+      num.type = 'number';
+      num.step = slider.step;
+      num.style.cssText = 'width: 58px; text-align: right;';
+
+      const path = `${secName}.${key}`;
+      const applyValue = (v: number, from: 'slider' | 'num'): void => {
+        FEEL_MUT[secName]![key] = v;
+        // Compare at slider resolution so a round-trip back to the
+        // authored value clears the divergence.
+        if (Math.abs(v - def) < Number(slider.step) / 2) {
+          FEEL_MUT[secName]![key] = def;
+          feelChanged.delete(path);
+        } else {
+          feelChanged.set(path, v);
+        }
+        if (from === 'slider') num.value = String(v);
+        else slider.value = String(v);
+        label.style.color = feelChanged.has(path) ? '#ffdc5c' : '';
+        persistFeel();
+        refreshFeelInfo();
+      };
+      slider.addEventListener('input', () => applyValue(parseFloat(slider.value), 'slider'));
+      num.addEventListener('change', () => {
+        const v = parseFloat(num.value);
+        if (Number.isFinite(v)) applyValue(v, 'num');
+      });
+
+      const refresh = (): void => {
+        const cur = FEEL_MUT[secName]![key]!;
+        slider.value = String(cur);
+        num.value = String(cur);
+        label.style.color = feelChanged.has(path) ? '#ffdc5c' : '';
+      };
+      refresh();
+      feelRowRefreshers.push(refresh);
+      if (feelChanged.has(path)) det.open = true;
+
+      r.appendChild(slider);
+      r.appendChild(num);
+    }
+  }
+
+  function buildFeelPatch(): FeelPatch {
+    return makeToolPatch<FeelPatch>('feel-patch', Object.fromEntries(feelChanged));
+  }
+
+  const feelBtns = row(feelSec);
+  button(feelBtns, 'Reset FEEL', () => {
+    for (const path of feelChanged.keys()) {
+      const [sn, k] = path.split('.');
+      if (sn && k && feelBaseline[sn]?.[k] !== undefined) FEEL_MUT[sn]![k] = feelBaseline[sn]![k]!;
+    }
+    feelChanged.clear();
+    persistFeel();
+    feelRowRefreshers.forEach((f) => f());
+    refreshFeelInfo();
+  });
+  button(feelBtns, '📦 Copy patch', async () => {
+    if (feelChanged.size === 0) { feelInfo.textContent = '(nothing diverges - move a slider first)'; return; }
+    await copyPatchToClipboard(buildFeelPatch());
+    feelInfo.textContent = `📦 feel-patch copied (${feelChanged.size} value${feelChanged.size === 1 ? '' : 's'})`;
+  });
+  button(feelBtns, '⚡ Apply to source', async () => {
+    if (feelChanged.size === 0) { feelInfo.textContent = '(nothing diverges - move a slider first)'; return; }
+    const backup = new Map(feelChanged);
+    await applyPatchToSource(buildFeelPatch(), {
+      // The write triggers a Vite full-reload; the tuned values are now
+      // AUTHORED, so the working copy must not resurrect on top of them.
+      onBeforeApply: () => { feelChanged.clear(); clearStorage(FEEL_STORE_KEY); },
+      onApplyFailed: () => {
+        for (const [k, v] of backup) feelChanged.set(k, v);
+        persistFeel();
+      },
+    });
+  }, 'primary');
+
+  // ---- Abilities (player) — live AbilityDef tuner (afilado slice C) -----
+  // Sliders mutate the player's `abilityStates[i].def` in place. Two
+  // facts shape this panel:
+  //   1. defs are SHARED module objects (CRITTER_ABILITIES) — activation
+  //     reads def.cooldown/def.force per use, so edits land on the next
+  //     cast and SURVIVE restarts (same def object). Baselines are
+  //     cached module-side on first sight so a rebuild after mutation
+  //     can't launder a tuned value into "authored".
+  //   2. defs are built by factories with per-critter overrides, so
+  //     there is NO ToolPatch path yet (deliberate — see AFILADO_PLAN
+  //     pick 3): export is a JSON summary for manual porting into the
+  //     CRITTER_ABILITIES overrides.
+  const abilitiesSec = section(tuningGroup, 'Abilities (player)', { collapsed: true });
+  const abilityInfo = document.createElement('div');
+  abilityInfo.className = 'lab-info';
+  abilitiesSec.appendChild(abilityInfo);
+  const abilityRowsHost = document.createElement('div');
+  abilitiesSec.appendChild(abilityRowsHost);
+
+  const abilityBaseline = new Map<string, number>(); // critter:slot:key → authored
+  const abilityChanged = new Map<string, number>();  // critter:slot:key → current
+  let abilityTunerCritter: string | null = null;
+
+  function refreshAbilityInfo(): void {
+    const n = abilityChanged.size;
+    const who = abilityTunerCritter ?? '(none)';
+    abilityInfo.textContent = n === 0
+      ? `${who} — authored defs. Edits apply on next cast and survive restarts.`
+      : `⚡ ${who} — ${n} def value${n === 1 ? '' : 's'} tuned (export = manual port)`;
+  }
+
+  function rebuildAbilityTuner(): void {
+    const player = devApi.game.player;
+    abilityRowsHost.textContent = '';
+    abilityTunerCritter = player?.config.name ?? null;
+    if (!player || player.abilityStates.length === 0) {
+      refreshAbilityInfo();
+      return;
+    }
+    const slotKeys = ['J', 'K', 'L'];
+    player.abilityStates.forEach((st, slotIdx) => {
+      const defRec = st.def as unknown as Record<string, number>;
+      const det = document.createElement('details');
+      det.style.cssText = 'margin: 4px 0; padding: 2px 0;';
+      const sum = document.createElement('summary');
+      sum.textContent = `${slotKeys[slotIdx] ?? slotIdx} · ${st.def.name}`;
+      sum.style.cssText = 'cursor: pointer; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; user-select: none;';
+      det.appendChild(sum);
+      abilityRowsHost.appendChild(det);
+
+      for (const [k, v] of Object.entries(st.def)) {
+        if (typeof v !== 'number') continue;
+        const bKey = `${abilityTunerCritter}:${slotIdx}:${k}`;
+        if (!abilityBaseline.has(bKey)) abilityBaseline.set(bKey, v);
+        const base = abilityBaseline.get(bKey)!;
+
+        const r = row(det);
+        const label = document.createElement('label');
+        label.textContent = k;
+        label.style.cssText = 'min-width: 118px; font-size: 10px; overflow: hidden; text-overflow: ellipsis;';
+        label.title = `${st.def.name}.${k} — authored: ${base}`;
+        r.appendChild(label);
+
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        const span = base === 0 ? 1 : Math.abs(base) * 3;
+        slider.min = String(base < 0 ? -span : 0);
+        slider.max = String(base < 0 ? 0 : span);
+        slider.step = String(span < 2 ? 0.01 : span < 30 ? 0.1 : 1);
+        slider.style.flex = '1';
+
+        const num = document.createElement('input');
+        num.type = 'number';
+        num.step = slider.step;
+        num.style.cssText = 'width: 58px; text-align: right;';
+
+        const applyValue = (nv: number, from: 'slider' | 'num'): void => {
+          if (!Number.isFinite(nv)) return;
+          defRec[k] = nv;
+          if (Math.abs(nv - base) < Number(slider.step) / 2) {
+            defRec[k] = base;
+            abilityChanged.delete(bKey);
+          } else {
+            abilityChanged.set(bKey, nv);
+          }
+          if (from === 'slider') num.value = String(nv);
+          else slider.value = String(nv);
+          label.style.color = abilityChanged.has(bKey) ? '#ffdc5c' : '';
+          refreshAbilityInfo();
+        };
+        slider.addEventListener('input', () => applyValue(parseFloat(slider.value), 'slider'));
+        num.addEventListener('change', () => applyValue(parseFloat(num.value), 'num'));
+
+        const cur = defRec[k]!;
+        slider.value = String(cur);
+        num.value = String(cur);
+        label.style.color = abilityChanged.has(bKey) ? '#ffdc5c' : '';
+        if (abilityChanged.has(bKey)) det.open = true;
+
+        r.appendChild(slider);
+        r.appendChild(num);
+      }
+    });
+    refreshAbilityInfo();
+  }
+
+  /** 4 Hz hook: rebuild when the player critter changes (new match with
+   *  a different pick). Cheap name check; rebuild only on change. */
+  function refreshAbilityTuner(): void {
+    const name = devApi.game.player?.config.name ?? null;
+    if (name !== abilityTunerCritter) rebuildAbilityTuner();
+  }
+
+  const abilityBtns = row(abilitiesSec);
+  button(abilityBtns, 'Reset defs', () => {
+    // Restores EVERY tuned def (all critters — defs are shared module
+    // objects, so a bot using the tuned critter is affected too).
+    const player = devApi.game.player;
+    for (const [bKey, ] of abilityChanged) {
+      const [critterName, slotStr, k] = bKey.split(':');
+      const slotIdx = Number(slotStr);
+      // The def object is reachable through ANY critter of that name —
+      // the player's states cover the common case; other critters'
+      // tuned defs restore too because the object is shared.
+      const states = player?.config.name === critterName
+        ? player.abilityStates
+        : devApi.game.getActiveCritters().find((c) => c.config.name === critterName)?.abilityStates;
+      const def = states?.[slotIdx]?.def as unknown as Record<string, number> | undefined;
+      const base = abilityBaseline.get(bKey);
+      if (def && base !== undefined && k) def[k] = base;
+    }
+    abilityChanged.clear();
+    rebuildAbilityTuner();
+  });
+  button(abilityBtns, '📦 Copy JSON', async () => {
+    if (abilityChanged.size === 0) {
+      abilityInfo.textContent = '(nothing tuned — move a slider first)';
+      return;
+    }
+    // Grouped for manual porting into CRITTER_ABILITIES overrides:
+    // { "Sergei": { "0.cooldown": 3.5 } } — slot index + field.
+    const grouped: Record<string, Record<string, number>> = {};
+    for (const [bKey, v] of abilityChanged) {
+      const [critterName, slotStr, k] = bKey.split(':');
+      (grouped[critterName!] ??= {})[`${slotStr}.${k}`] = v;
+    }
+    const json = JSON.stringify(grouped, null, 2);
+    try { await navigator.clipboard.writeText(json); } catch { /* pre fallback below */ }
+    abilityInfo.textContent = `📦 copied — paste into CRITTER_ABILITIES overrides (abilities.ts) by hand`;
+    console.log('[ability-tuner]', json);
+  });
+
+  rebuildAbilityTuner();
+
   const badgesSec = section(tuningGroup, 'Badges', { collapsed: true });
   const badgesInfo = document.createElement('div');
   badgesInfo.className = 'lab-info';
@@ -1134,6 +1773,7 @@ export function mountLabSidebar(devApi: DevApi): void {
       `actions  ${rec.actions.length}`,
       `samples  ${rec.snapshots.length}`,
       `outcome  ${rec.outcome.survivor ?? '-'} (${rec.outcome.reason ?? 'pending'})`,
+      `saved    ${rec.downloadedAt ? 'downloaded' : 'NOT downloaded'}`,
     ].join('\n');
   }
 
@@ -1438,11 +2078,15 @@ export function mountLabSidebar(devApi: DevApi): void {
   function syncSlidersFromPlayer(): void {
     const player = devApi.game.player;
     if (!player?.animPersonality) return;
+    const stored = animStore[player.config.name];
     for (const p of ANIM_PARAMS) {
       const slider = sliders.get(p.key)!;
       const v = player.animPersonality[p.key];
       slider.value = String(v);
       valueLabels.get(p.key)!.textContent = (+v).toFixed(3);
+      // Per-field divergence indicator — yellow while the persisted
+      // working copy carries a value for this field.
+      fieldLabels.get(p.key)!.style.color = stored?.[p.key] !== undefined ? '#ffdc5c' : '';
     }
   }
 
@@ -1460,6 +2104,8 @@ export function mountLabSidebar(devApi: DevApi): void {
     refreshInfoPanel();
     refreshBotsPanel();
     refreshRecordingPanel();
+    refreshAbilityTuner();
+    refreshAnimTuner();
   }, 250);
   // First paint
   setTimeout(() => {
@@ -1481,6 +2127,7 @@ export function mountLabSidebar(devApi: DevApi): void {
       devApi.setSpeed(v);
       speedSlider.value = String(v);
       speedVal.textContent = v.toFixed(2);
+      persistSetup();
     },
   };
 

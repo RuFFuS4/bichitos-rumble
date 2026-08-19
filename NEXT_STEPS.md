@@ -45,9 +45,10 @@ estudio** con el bucle intención→cambio-aplicado en 1-2 pasos
    (BICHITOS_GAME_ROOT); el juego pasa de 996 → 333 ficheros
    trackeados. Sin reescritura de historia (decisión de Rafa).
 
-**Gate de salida H3 — CUMPLIDO (2026-08-19)**: apply desde el navegador
-en 2 clicks con diff visible ✅ · cero pérdida de datos al recargar ✅ ·
-mesh2motion fuera del repo ✅. Falta: merge a main + tag (cierre formal).
+**H3 CERRADO (2026-08-19)** — tag `v1.5-bichitos-studio` (main 432511b),
+smoke de producción verde (title → vs Bots → match con el loop
+refactorizado, 0 errores). Gate completo: apply en 2 clicks con diff ✅
+· cero pérdida al recargar ✅ · mesh2motion fuera ✅.
 
 **Decisiones de Rafa (2026-08-19)**: borrar overrides = edición manual
 del fuente (sin tombstones por ahora) · comentarios de DECOR_LAYOUTS →
@@ -57,6 +58,73 @@ match lab: SE EMBEBE como tab del studio (slices 6-7, aunque cueste
 más — unificación completa).
 
 ---
+
+## Fase de afilado (en curso — plan completo en docs/AFILADO_PLAN.md)
+
+**Decisiones de Rafa (2026-08-19)**: (1) tuning **offline-first**, el
+server (server/src/sim/*) se sincroniza al FINAL de la fase — el check
+de paridad de habilidades pasa a modo aviso durante la fase con flag
+explícito y vuelve a bloquear en la sync; (2) el melón de
+physicsRadius per-critter SE ABRE (visible + editable + rebalanceo);
+(3) el port de mesh2motion upstream va PRONTO (tras la cabina de
+tuning, antes de producir clips).
+
+Orden acordado:
+
+1. [x] **Slice A — batch de quick-wins**: los 17 items del plan (pack
+   picker + setup persistente + Mark moment + aviso de recording en el
+   match lab; fix Re-fit + wip + slot persistente en calibrate;
+   duplicar/snap/zoom/ambiente de pack/cabecera-spec en decor; FEEL
+   centralizado (physics/game); check pws en CI; deep-links + dirty
+   dots + atajos en studio; CLI acepta el nombre de downloadPatch;
+   DEV_TOOLS.md al día). Implementado por 5 agentes en paralelo sobre
+   ficheros disjuntos, verificado con tsc + 36 tests + e2e.
+2. [x] **Slice B — cabina de tuning**: F7 step-frame / F8 pausa / F9
+   slow-mo / F10 mismo seed + FEEL tuner de 66 sliders auto-generados
+   mutando en vivo + `feel-patch` (4º tool type, 42 tests) con Apply
+   to source. Verificado e2e.
+3. [x] **Slice C — tuner de habilidades + hitbox**: anillos de
+   physicsRadius en calibrate (slider + persistencia + campo sparse en
+   CalibratePatch que solo reescribe la R compartida al divergir) +
+   tuner de AbilityDef del critter vivo en el match lab (defs mutadas
+   en vivo, baselines cacheados, Copy JSON para porte manual — sin
+   ToolPatch deliberadamente). 43 tests, e2e verde.
+4. [x] **Slice D — port mesh2motion upstream** (pick 8, repo hermano,
+   2026-08-19): árbol upstream 0.185 encima + 40/41 marcadores
+   reaplicados (1 obsoleto) por 4 agentes + integración manual
+   (create.html, package sin wrangler, tsconfig, meshopt decoder — el
+   lab llevaba roto para GLBs comprimidos desde H2 y el port lo
+   destapó — y barrido de rutas root-absolute). Verificado: build,
+   67/67 vitest, e2e create flow (Cheeto pre-rigged → 162 clips) y
+   **probe issue #139 OK**: GLB Tripo en el retarget Swing-Twist nuevo
+   de upstream (auto-map + bake + preview) → pipeline de signature
+   moves des-riesgado. Merge --no-ff en main del hermano (f6d603e).
+   Detalle: PORT_MAP.md del repo hermano. Los 365 .webm heredados
+   (7,9 MB) que 0.185 ya no usaba se borraron a continuación (11c4692).
+5. [x] **Slice E — salida del animation tuner** (pick 7, 2026-08-20):
+   tabla PERSONALITY_OVERRIDES consultada por derive + 5º tool type
+   `anim-personality` (merge no destructivo, 8 tests golden → 51/51,
+   CLI + endpoint) + tuner con persistencia que sobrevive F10 y trío
+   Copy/Download/Apply. E2e del círculo completo verificado (slider →
+   tabla real → reload → derive consume la tabla).
+6. [x] **Slice F — HUD fuente única** (pick 5, 2026-08-20): el HUD
+   in-match extraído a src/hud/hud.partial.html e inyectado por plugin
+   de vite en ambos entries (index −702 líneas, tools −587); el lab
+   gana la familia .lives-* y el preload de sprites compartido.
+   Paridad verificada: 187 propiedades computadas en index, cero
+   diferencias. La clase de drift muere estructuralmente.
+7. [x] **Slice G — determinismo + batch runner** (pick 6, 2026-08-20):
+   un seed = una partida entera (match-rng sembrado con el seed del
+   arena; bots/respawn/drops), autopilot del slot player, fixed-step
+   con render decimado, y `npm run batch` (playwright headless):
+   winrates agregados + `--verify` → REPRODUCIBLE: yes con 218
+   eventos idénticos. Cierra el hueco dual-surface del match runner
+   headless y el volcado de recordings.
+
+**FASE DE AFILADO COMPLETA** (8/8 picks, slices A-G). Siguiente etapa
+según la dirección post-H3: mecánicas y assets a fondo. Hueco menor
+que queda del dual-surface: applier de ability-tuner (ToolPatch a
+CRITTER_ABILITIES).
 
 ## Dirección post-H3 (fijada por Rafa, 2026-08-19)
 

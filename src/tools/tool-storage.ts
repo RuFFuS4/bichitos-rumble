@@ -155,7 +155,7 @@ export function storageDivergesFromCode(key: string, codeRef: unknown): boolean 
 // in the lab are emitted. The apply-script merges in-place — entries
 // not in `data` are left untouched in the source file.
 
-export type ToolName = 'calibrate' | 'anim-lab' | 'decor-editor';
+export type ToolName = 'calibrate' | 'anim-lab' | 'decor-editor' | 'feel-patch' | 'anim-personality';
 
 export interface ToolPatchBase {
   tool: ToolName;
@@ -179,6 +179,9 @@ export interface CalibratePatch extends ToolPatchBase {
     scale?: number;
     pivotY?: number;
     rotation?: number;
+    /** Per-critter hitbox radius (afilado slice C). Replaces the shared
+     *  `R` const reference in roster.ts with a literal when applied. */
+    physicsRadius?: number;
   }>;
 }
 
@@ -246,7 +249,58 @@ export interface DecorEditorPatch extends ToolPatchBase {
   }>>;
 }
 
-export type ToolPatch = CalibratePatch | AnimLabPatch | DecorEditorPatch;
+/**
+ * `feel-patch`: game-feel value tweaks from the match lab's FEEL tuner
+ * (afilado slice B).
+ *
+ * Maps to the `FEEL` record in src/gamefeel.ts. Keys are two-segment
+ * dot-paths ("shake.headbutt"); values are the new numbers. Sparse:
+ * only leaves the tuner changed vs the authored baseline are emitted.
+ * The apply-script rewrites the numeric token in place — trailing
+ * tuning comments survive — and NEVER creates new keys (the tuner only
+ * offers leaves that already exist in source).
+ */
+export interface FeelPatch extends ToolPatchBase {
+  tool: 'feel-patch';
+  version: 1;
+  data: Record<string, number>;
+}
+
+/**
+ * `anim-personality`: per-critter procedural-animation overrides from
+ * the match lab's Animation tuner (afilado slice E).
+ *
+ * Maps to `PERSONALITY_OVERRIDES` in
+ * src/animation-personality-overrides.ts. Keys are `CritterConfig.name`
+ * values ('Sergei'); values are sparse partials over the 7 numeric
+ * `AnimationPersonality` fields (see src/critter-animation.ts). Doubly
+ * sparse: only critters the tuner touched, and per critter only the
+ * fields whose value diverges from the PURE derived baseline — the
+ * (mass, speed) formula with NO overrides table — so an already-
+ * authored override that still diverges re-emits and survives the
+ * merge. The apply-script rewrites fields inside existing entries,
+ * adds missing fields, and appends new entries at the end of the
+ * record. It NEVER deletes: a field tuned back to its exact derived
+ * value simply drops out of the patch and any old table entry stays —
+ * removing an override is a manual edit, on purpose (same never-delete
+ * contract as animation-overrides.ts). Tuning comments in the target
+ * file survive application.
+ */
+export interface AnimPersonalityPatch extends ToolPatchBase {
+  tool: 'anim-personality';
+  version: 1;
+  data: Record<string, {
+    idleBobHz?: number;
+    idleBobAmp?: number;
+    runBounceHz?: number;
+    runBounceAmp?: number;
+    leanRadians?: number;
+    runSwayRadians?: number;
+    chargeStretchMult?: number;
+  }>;
+}
+
+export type ToolPatch = CalibratePatch | AnimLabPatch | DecorEditorPatch | FeelPatch | AnimPersonalityPatch;
 
 /** Build a fresh ToolPatch envelope with `generated` set to now. The
  *  caller fills `data`. `version` defaults to 1; pass 2 for anim-lab

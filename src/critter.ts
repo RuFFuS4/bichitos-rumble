@@ -161,7 +161,7 @@ const HEAD_RADIUS = 0.55;
  * Physics-agnostic: this scales the visible mesh only. Hitboxes come from
  * `physicsRadius` on the roster entry and aren't affected.
  */
-const IN_GAME_TARGET_HEIGHT = 1.7;
+export const IN_GAME_TARGET_HEIGHT = 1.7;
 
 export class Critter {
   mesh: THREE.Group;

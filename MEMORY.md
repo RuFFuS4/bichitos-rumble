@@ -4,9 +4,11 @@
 
 ### Decor layouts por pack (autorizados 2026-04-26)
 
-- Los 5 packs tienen layouts authored en `DECOR_LAYOUTS` (52 placements
-  totales): jungle 11, frozen_tundra 9, desert_dunes 8, coral_beach 13,
-  kitsune_shrine 11.
+- Los 5 packs tienen layouts authored en `DECOR_LAYOUTS` (73 placements
+  totales tras el sprint final: jungle 16, frozen_tundra 13,
+  desert_dunes 11, coral_beach 18, kitsune_shrine 15 — actualizado
+  2026-08-19; las notas de diseño de los clusters viven en el HEADER
+  de cada pack desde H3 slice 3, nunca dentro de los arrays).
 - Diseño: ver §"5 pack decor layouts populated" en BUILD_LOG.md
   2026-04-26 — concepto, clusters, separación angular, heroes por pack.
 - **Bug fix relacionado**: `Arena.findFragmentAt` ahora hace pasada
@@ -19,9 +21,9 @@
 
 - **SoT real**: `src/arena-decor-layouts.ts` — `DECOR_TYPES` (catálogo
   de prop types con GLB path + scaleBase) y `DECOR_LAYOUTS[packId]`
-  (array literal por pack). Sólo `jungle` poblado con seed authored
-  (11 props); otros 4 packs vacíos a la espera de diseño manual via
-  editor.
+  (array literal por pack). Los 5 packs poblados (73 props totales;
+  párrafo anterior desactualizado de la era jam — corregido
+  2026-08-19).
 - **Runtime**: `Arena.applyPack()` carga los placements via
   `loadInArenaDecorations()` y reparenta cada mesh al fragment que
   lo contiene (`Arena.findFragmentAt(x,z)` + `host.attach(mesh)`).

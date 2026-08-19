@@ -30,6 +30,7 @@
 
 import type { Critter } from './critter';
 import { FEEL } from './gamefeel';
+import { PERSONALITY_OVERRIDES } from './animation-personality-overrides';
 
 export interface AnimationPersonality {
   /** Idle breathing rate (Hz). Heavier critters breathe slower. */
@@ -50,7 +51,9 @@ export interface AnimationPersonality {
 
 /**
  * Derive animation parameters from a critter's gameplay stats. No new
- * config fields needed — personality is a pure function of (mass, speed).
+ * config fields needed — personality is a pure function of (mass, speed),
+ * plus any hand-tuned exceptions from PERSONALITY_OVERRIDES (keyed by
+ * `config.name`, sparse — see animation-personality-overrides.ts).
  *
  * Heavy (mass ≥ 1.3): slow deep breathing, heavy footfalls, small lean, tiny sway.
  * Light (mass ≤ 0.85): fast shallow breathing, snappy bounce, big lean, lively sway.
@@ -58,7 +61,7 @@ export interface AnimationPersonality {
  * Slow (speed ≤ 8):  sedate cadence, minimal lean.
  */
 export function deriveAnimationPersonality(
-  config: { mass: number; speed: number },
+  config: { mass: number; speed: number; name?: string },
 ): AnimationPersonality {
   const m = config.mass;
   const s = config.speed;
@@ -80,7 +83,7 @@ export function deriveAnimationPersonality(
 
   const chargeStretchMult = 0.6 + (sRel - 6) * 0.09;
 
-  return {
+  const derived: AnimationPersonality = {
     idleBobHz,
     idleBobAmp,
     runBounceHz,
@@ -89,6 +92,10 @@ export function deriveAnimationPersonality(
     runSwayRadians,
     chargeStretchMult,
   };
+
+  // Authored exceptions win over the formula (sparse per-field).
+  const overrides = config.name ? PERSONALITY_OVERRIDES[config.name] : undefined;
+  return overrides ? { ...derived, ...overrides } : derived;
 }
 
 const BODY_BASE_Y = 0.5;

@@ -26,25 +26,10 @@ import { tickSharedGameplay } from './frame-ticks';
 import { initStatusLegend } from './hud/status-legend';
 import { getPreviewPackId } from './arena-decor-layouts';
 
-// ---------------------------------------------------------------------------
-// Sprite sheet preload — enables `.sprite-hud-*` / `.sprite-ability-*` CSS
-// classes only if their backing images actually load. If either sheet 404s
-// (asset not shipped yet), the body class never gets added and the emoji
-// fallbacks stay visible. See the SPRITE ICON SYSTEMS section of index.html.
-// ---------------------------------------------------------------------------
-function enableSpriteClassOnLoad(src: string, bodyClass: string): void {
-  const img = new Image();
-  img.onload = () => document.body.classList.add(bodyClass);
-  img.onerror = () => {
-    // Silent: the body class stays off, emoji fallbacks take over. Log
-    // once in debug so we know when polish isn't visible because the
-    // image hasn't been committed yet.
-    console.debug('[sprites] sheet not available, using emoji fallback:', src);
-  };
-  img.src = src;
-}
-enableSpriteClassOnLoad('./images/hud-icons.webp', 'has-hud-sprites');
-enableSpriteClassOnLoad('./images/ability-icons.webp', 'has-ability-sprites');
+// Sprite sheet preload — shared with the /tools.html lab entry (both render
+// the same HUD partial). See src/hud/sprite-preload.ts for the rationale.
+import { preloadSpriteSheets } from './hud/sprite-preload';
+preloadSpriteSheets();
 
 // ---------------------------------------------------------------------------
 // WebGL diagnostic + renderer creation

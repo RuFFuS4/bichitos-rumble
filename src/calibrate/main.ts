@@ -25,7 +25,7 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { Critter, CRITTER_PRESETS } from '../critter';
+import { Critter, CRITTER_PRESETS, IN_GAME_TARGET_HEIGHT } from '../critter';
 import { getDisplayRoster, getRosterEntry } from '../roster';
 import type { RosterEntry } from '../roster';
 import {
@@ -66,6 +66,9 @@ interface LocalCalibrate {
   scale: number;
   pivotY: number;
   rotation: number;
+  /** Optional for backward-compat with working copies saved before the
+   *  hitbox melon opened (afilado slice C). */
+  physicsRadius?: number;
 }
 
 function isLocalCalibrate(v: unknown): v is LocalCalibrate {
@@ -73,7 +76,8 @@ function isLocalCalibrate(v: unknown): v is LocalCalibrate {
   const o = v as Record<string, unknown>;
   return typeof o.scale === 'number'
     && typeof o.pivotY === 'number'
-    && typeof o.rotation === 'number';
+    && typeof o.rotation === 'number'
+    && (o.physicsRadius === undefined || typeof o.physicsRadius === 'number');
 }
 
 function saveLocalFor(critterId: string, t: LocalCalibrate): void {
@@ -94,6 +98,34 @@ function clearLocalFor(critterId: string): void {
 function hasLocalFor(critterId: string): boolean {
   return hasStorageKey(toolStorageKey(STORAGE_TOOL, critterId));
 }
+
+// ---------------------------------------------------------------------------
+// UI-position persistence (`calibrate:ui`)
+// ---------------------------------------------------------------------------
+//
+// "Apply to source" triggers a Vite full page reload; without this the
+// user lands back in the lab with nothing selected and has to re-find the
+// critter they were tuning — friction that discourages small applies.
+// We persist the critter ID rather than the slot index: slots stream in
+// on a staggered/idle schedule, so array order isn't a stable contract.
+
+const UI_STORAGE_KEY = toolStorageKey(STORAGE_TOOL, 'ui');
+
+interface CalibrateUiState { selectedId: string; }
+
+function isCalibrateUiState(v: unknown): v is CalibrateUiState {
+  return !!v && typeof v === 'object'
+    && typeof (v as Record<string, unknown>).selectedId === 'string';
+}
+
+const restoredSelectedId: string | null =
+  loadFromStorage<CalibrateUiState>(UI_STORAGE_KEY, isCalibrateUiState)?.selectedId ?? null;
+
+// Hitbox ring visibility (afilado slice C). Module-level `let` instead
+// of reading the checkbox: the first slot spawns during module
+// evaluation, before the DOM-ref consts below exist (same TDZ dance as
+// the selection restore). The checkbox listener keeps it in sync.
+let hitboxRingsVisible = true;
 
 // ---------------------------------------------------------------------------
 // Scene / renderer setup
@@ -130,13 +162,15 @@ scene.add(gridHelper);
 
 // ---------------------------------------------------------------------------
 // Reference ruler — vertical bar with integer + 0.5 ticks up to 4 u.
-// Yellow tick at 1.7 u marks the in-game target height (mirrors
-// IN_GAME_TARGET_HEIGHT in src/critter.ts). The 1.7 u rectangle on the
-// floor extends across the whole stage so each critter's head can be
-// eyeballed against the same height regardless of grid cell.
+// Yellow tick at IN_GAME_TARGET_HEIGHT marks the in-game target height.
+// The target-height rectangle on the floor extends across the whole
+// stage so each critter's head can be eyeballed against the same height
+// regardless of grid cell.
 // ---------------------------------------------------------------------------
 
-const RULER_TARGET = 1.7; // IN_GAME_TARGET_HEIGHT — keep in sync with critter.ts
+// Imported (not duplicated) so the ruler can never drift from the value
+// the in-game auto-fit actually uses.
+const RULER_TARGET = IN_GAME_TARGET_HEIGHT;
 
 const rulerGroup = new THREE.Group();
 rulerGroup.position.set(-6, 0, -3);
@@ -206,7 +240,7 @@ function addRulerLabel(text: string, world: THREE.Vector3, highlight: boolean): 
 }
 addRulerLabel('0u',   new THREE.Vector3(-5.4, 0,             -3), false);
 addRulerLabel('1u',   new THREE.Vector3(-5.4, 1,             -3), false);
-addRulerLabel('1.7u', new THREE.Vector3(-5.0, RULER_TARGET,  -3), true);
+addRulerLabel(`${RULER_TARGET}u`, new THREE.Vector3(-5.0, RULER_TARGET,  -3), true);
 addRulerLabel('2u',   new THREE.Vector3(-5.4, 2,             -3), false);
 addRulerLabel('3u',   new THREE.Vector3(-5.4, 3,             -3), false);
 addRulerLabel('4u',   new THREE.Vector3(-5.4, 4,             -3), false);
@@ -228,10 +262,14 @@ interface Slot {
   worldPos: THREE.Vector3;
   label: HTMLDivElement;
   bindPoseHeight: number | null; // reported by Critter once GLB loads
+  /** Ground ring visualising physicsRadius — the collision circle the
+   *  game actually uses (critter.radius getter). Unit radius, scaled. */
+  hitboxRing: THREE.LineLoop;
   rosterTransform: {
     scale: number;
     pivotY: number;
     rotationY: number;
+    physicsRadius: number;
   };
 }
 
@@ -239,7 +277,11 @@ const slots: Slot[] = [];
 const COLS = 3;
 const CELL = 3.0; // world units between cell centres
 
-const playableRoster = getDisplayRoster().filter((e) => e.status === 'playable');
+// 'wip' is included on purpose: a freshly imported GLB needs calibration
+// BEFORE it's promoted to 'playable' and exposed in character select.
+const calibratableRoster = getDisplayRoster().filter(
+  (e) => e.status === 'playable' || e.status === 'wip',
+);
 
 // Calibrate used to create all 9 Critters synchronously at boot — which
 // kicked off 9 parallel GLB fetches (~56 MB total) and froze the page
@@ -267,10 +309,16 @@ interface PendingSlot {
 }
 const pendingSlots: PendingSlot[] = [];
 
-for (let i = 0; i < playableRoster.length; i++) {
-  const entry = playableRoster[i]!;
+for (let i = 0; i < calibratableRoster.length; i++) {
+  const entry = calibratableRoster[i]!;
   const preset = CRITTER_PRESETS.find((c) => c.name === entry.displayName);
-  if (!preset) continue;
+  if (!preset) {
+    // Used to be a silent `continue`: a roster entry without a matching
+    // CRITTER_PRESETS entry (typical for a just-imported GLB) simply never
+    // appeared in the grid, with no way to tell why.
+    console.warn(`[calibrate] no CRITTER_PRESETS entry for '${entry.displayName}' — slot skipped`);
+    continue;
+  }
 
   const col = i % COLS;
   const row = Math.floor(i / COLS);
@@ -305,6 +353,23 @@ for (let i = 0; i < playableRoster.length; i++) {
 // a growing delay so the page is interactive and the network has
 // headroom. With 9 critters at 180 ms stagger the last lands at ~1.6 s,
 // but the page is fully responsive from frame one.
+/** Unit-radius XZ circle slightly above the ground; scaled per slot to
+ *  the working physicsRadius. Red so it never reads as the (yellow)
+ *  target-height reference. */
+function makeHitboxRing(): THREE.LineLoop {
+  const SEG = 48;
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i < SEG; i++) {
+    const a = (i / SEG) * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a), 0, Math.sin(a)));
+  }
+  const geom = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({ color: 0xe74c3c, transparent: true, opacity: 0.85 });
+  const ring = new THREE.LineLoop(geom, mat);
+  ring.position.y = 0.02; // avoid z-fighting with the grid
+  return ring;
+}
+
 function spawnCritterForSlot(p: PendingSlot): void {
   if (!p.preset) return;
   const critter = new Critter(p.preset, scene);
@@ -320,9 +385,16 @@ function spawnCritterForSlot(p: PendingSlot): void {
     pivotY: p.entry.pivotY,
     rotation: p.entry.rotation,
   };
+  const initialRadius = local?.physicsRadius ?? p.entry.physicsRadius;
   // Push the initial transform into the rosterOverride so procedural
   // animation tick doesn't clobber the loaded values.
   critter.rosterOverride = { ...critter.rosterOverride, scale: initial.scale, pivotY: initial.pivotY, rotation: initial.rotation };
+  // Hitbox ring: the game's collision circle made visible. Sits on the
+  // holder (positioned, unscaled) so critter mesh scale can't distort it.
+  const hitboxRing = makeHitboxRing();
+  hitboxRing.scale.setScalar(initialRadius);
+  hitboxRing.visible = hitboxRingsVisible;
+  p.holder.add(hitboxRing);
   slots.push({
     entry: p.entry,
     holder: p.holder,
@@ -330,10 +402,12 @@ function spawnCritterForSlot(p: PendingSlot): void {
     worldPos: p.worldPos,
     label: p.label,
     bindPoseHeight: null,
+    hitboxRing,
     rosterTransform: {
       scale: initial.scale,
       pivotY: initial.pivotY,
       rotationY: initial.rotation,
+      physicsRadius: initialRadius,
     },
   });
   // If the GLB is already bound to glbMesh by here (synchronous code path),
@@ -343,6 +417,15 @@ function spawnCritterForSlot(p: PendingSlot): void {
     critter.glbMesh.scale.setScalar(initial.scale);
     critter.glbMesh.position.y = p.entry.offset[1] + initial.pivotY;
     critter.glbMesh.rotation.y = initial.rotation;
+  }
+  // Restore the pre-reload selection once its slot lands. Deferred to a
+  // microtask because the first slot spawns synchronously during module
+  // evaluation, before selectSlot's DOM element consts exist (TDZ). The
+  // selectedSlotIdx guard keeps a user click made in the meantime from
+  // being clobbered by the restore.
+  if (restoredSelectedId === p.entry.id) {
+    const idx = slots.length - 1;
+    queueMicrotask(() => { if (selectedSlotIdx === null) selectSlot(idx); });
   }
 }
 
@@ -407,6 +490,17 @@ const btnCamSide = document.getElementById('btn-cam-side') as HTMLButtonElement 
 // added in calibrate.html below the transform sliders. Querying with
 // getElementById + null guards keeps the JS from breaking if the markup
 // is rolled back / customised in the future.
+const ctlHitbox = document.getElementById('ctl-hitbox') as HTMLInputElement;
+const valHitbox = document.getElementById('val-hitbox') as HTMLInputElement;
+const chkHitbox = document.getElementById('chk-hitbox') as HTMLInputElement | null;
+if (chkHitbox) {
+  hitboxRingsVisible = chkHitbox.checked;
+  chkHitbox.addEventListener('change', () => {
+    hitboxRingsVisible = chkHitbox.checked;
+    for (const slot of slots) slot.hitboxRing.visible = hitboxRingsVisible;
+  });
+}
+
 const localIndicator = document.getElementById('local-indicator');
 const btnResetLocal = document.getElementById('btn-reset-local') as HTMLButtonElement | null;
 
@@ -414,8 +508,13 @@ function selectSlot(idx: number): void {
   selectedSlotIdx = idx;
   const slot = slots[idx];
   if (!slot) return;
+  // Remember the selection (by critter id) so the post-apply reload can
+  // land the user back on the critter they were tuning.
+  saveToStorage(UI_STORAGE_KEY, { selectedId: slot.entry.id });
   // Sliders + numeric inputs enabled + synced with current values.
-  [ctlScale, ctlPivot, ctlRot, valScale, valPivot, valRot].forEach((el) => (el.disabled = false));
+  [ctlScale, ctlPivot, ctlRot, ctlHitbox, valScale, valPivot, valRot, valHitbox].forEach((el) => (el.disabled = false));
+  ctlHitbox.value = String(slot.rosterTransform.physicsRadius);
+  valHitbox.value = slot.rosterTransform.physicsRadius.toFixed(3);
   ctlScale.value = String(slot.rosterTransform.scale);
   ctlPivot.value = String(slot.rosterTransform.pivotY);
   ctlRot.value = String(slot.rosterTransform.rotationY);
@@ -444,6 +543,7 @@ function slotDivergesFromCode(slot: typeof slots[number]): boolean {
     Math.abs(slot.rosterTransform.scale - code.scale) > EPSILON
     || Math.abs(slot.rosterTransform.pivotY - code.pivotY) > EPSILON
     || Math.abs(slot.rosterTransform.rotationY - code.rotation) > EPSILON
+    || Math.abs(slot.rosterTransform.physicsRadius - code.physicsRadius) > EPSILON
   );
 }
 
@@ -492,10 +592,13 @@ if (btnResetLocal) {
       scale: slot.entry.scale,
       pivotY: slot.entry.pivotY,
       rotation: slot.entry.rotation,
+      physicsRadius: slot.entry.physicsRadius,
     };
     slot.rosterTransform.scale = code.scale;
     slot.rosterTransform.pivotY = code.pivotY;
     slot.rosterTransform.rotationY = code.rotation;
+    slot.rosterTransform.physicsRadius = code.physicsRadius!;
+    slot.hitboxRing.scale.setScalar(code.physicsRadius!);
     slot.critter.rosterOverride = {
       ...slot.critter.rosterOverride,
       scale: code.scale,
@@ -557,6 +660,7 @@ function persistSlot(slot: typeof slots[number]): void {
     scale: slot.rosterTransform.scale,
     pivotY: slot.rosterTransform.pivotY,
     rotation: slot.rosterTransform.rotationY,
+    physicsRadius: slot.rosterTransform.physicsRadius,
   });
   if (selectedSlotIdx !== null && slots[selectedSlotIdx] === slot) {
     refreshLocalIndicator();
@@ -606,7 +710,20 @@ function applyRot(v: number, source: 'slider' | 'num'): void {
   persistSlot(slot);
 }
 
+function applyHitbox(v: number, source: 'slider' | 'num'): void {
+  if (selectedSlotIdx === null) return;
+  const slot = slots[selectedSlotIdx]!;
+  if (!Number.isFinite(v)) return;
+  slot.rosterTransform.physicsRadius = v;
+  slot.hitboxRing.scale.setScalar(v);
+  if (source !== 'slider') ctlHitbox.value = String(v);
+  if (source !== 'num')    valHitbox.value = v.toFixed(3);
+  persistSlot(slot);
+}
+
 ctlScale.addEventListener('input', () => applyScale(+ctlScale.value, 'slider'));
+ctlHitbox.addEventListener('input', () => applyHitbox(+ctlHitbox.value, 'slider'));
+valHitbox.addEventListener('change', () => applyHitbox(+valHitbox.value, 'num'));
 ctlPivot.addEventListener('input', () => applyPivot(+ctlPivot.value, 'slider'));
 ctlRot.addEventListener('input',   () => applyRot(+ctlRot.value,   'slider'));
 
@@ -630,7 +747,11 @@ valRot.addEventListener('change', () => {
 
 // Apply-target slider has no rosterTransform behind it (it's a
 // session-only fitting target read by btnRefit), so we just keep the
-// numeric input + slider in sync here.
+// numeric input + slider in sync here. The default is seeded from the
+// shared constant — the value attributes in calibrate.html are static
+// fallbacks and would drift if IN_GAME_TARGET_HEIGHT ever changed.
+ctlTarget.value = String(IN_GAME_TARGET_HEIGHT);
+valTarget.value = IN_GAME_TARGET_HEIGHT.toFixed(2);
 ctlTarget.addEventListener('input', () => { valTarget.value = (+ctlTarget.value).toFixed(2); });
 valTarget.addEventListener('input', () => {
   const v = +valTarget.value;
@@ -653,6 +774,11 @@ btnRefit.addEventListener('click', () => {
     const k = target / slot.bindPoseHeight;
     slot.critter.glbMesh.scale.multiplyScalar(k);
     slot.rosterTransform.scale *= k;
+    // Without this push, the procedural tick re-reads rosterOverride.scale
+    // next frame and reverts the visible mesh — while rosterTransform (and
+    // the persisted working copy below) keep the refit value, so the user
+    // would export numbers they never saw on screen.
+    slot.critter.rosterOverride = { ...slot.critter.rosterOverride, scale: slot.rosterTransform.scale };
     slot.bindPoseHeight = target;
     // Refit changes every slot's working values — persist them all, or
     // a reload silently reverts the refit for every unselected slot.
@@ -682,12 +808,18 @@ interface CalibrateValues {
   scale: number;
   pivotY: number;
   rotation: number;
+  physicsRadius: number;
 }
 
 function getCodeValuesFor(id: string): CalibrateValues | null {
   const entry = getRosterEntry(slotsByIdLookup(id) ?? '');
   if (!entry) return null;
-  return { scale: entry.scale, pivotY: entry.pivotY, rotation: entry.rotation };
+  return {
+    scale: entry.scale,
+    pivotY: entry.pivotY,
+    rotation: entry.rotation,
+    physicsRadius: entry.physicsRadius,
+  };
 }
 
 function slotsByIdLookup(id: string): string | null {
@@ -707,11 +839,13 @@ function modifiedSlots(): Array<{ slot: typeof slots[number]; current: Calibrate
       scale: slot.rosterTransform.scale,
       pivotY: slot.rosterTransform.pivotY,
       rotation: slot.rosterTransform.rotationY,
+      physicsRadius: slot.rosterTransform.physicsRadius,
     };
     const diff =
       Math.abs(current.scale - code.scale) > EPSILON
       || Math.abs(current.pivotY - code.pivotY) > EPSILON
-      || Math.abs(current.rotation - code.rotation) > EPSILON;
+      || Math.abs(current.rotation - code.rotation) > EPSILON
+      || Math.abs(current.physicsRadius - code.physicsRadius) > EPSILON;
     if (diff) out.push({ slot, current, code });
   }
   return out;
@@ -740,14 +874,19 @@ function buildTsSnippet(): string {
   lines.push('// --- Calibrate export — paste each block inside the');
   lines.push('//     matching RosterEntry in src/roster.ts ---');
   lines.push('');
-  for (const { slot, current } of mods) {
+  for (const { slot, current, code } of mods) {
     lines.push(`// ${slot.entry.displayName} (id: '${slot.entry.id}')`);
     lines.push(
       `    scale: ${current.scale.toFixed(3)}, rotation: ${formatRotation(current.rotation)}, ` +
       `offset: [0, 0, 0],`,
     );
+    // Keep the shared `R` const unless the hitbox actually diverged —
+    // a per-critter literal is a deliberate act, not snippet noise.
+    const pr = Math.abs(current.physicsRadius - code.physicsRadius) > EPSILON
+      ? current.physicsRadius.toFixed(3)
+      : 'R';
     lines.push(
-      `    physicsRadius: R, pivotY: ${current.pivotY.toFixed(3)},`,
+      `    physicsRadius: ${pr}, pivotY: ${current.pivotY.toFixed(3)},`,
     );
     lines.push('');
   }
@@ -756,12 +895,17 @@ function buildTsSnippet(): string {
 
 function buildJsonPatch(): CalibratePatch {
   const data: CalibratePatch['data'] = {};
-  for (const { slot, current } of modifiedSlots()) {
+  for (const { slot, current, code } of modifiedSlots()) {
     data[slot.entry.id] = {
       scale: +current.scale.toFixed(4),
       pivotY: +current.pivotY.toFixed(4),
       rotation: +current.rotation.toFixed(4),
     };
+    // Sparse per field: only rewrite the shared `R` reference into a
+    // literal when the user actually moved this critter's hitbox.
+    if (Math.abs(current.physicsRadius - code.physicsRadius) > EPSILON) {
+      data[slot.entry.id]!.physicsRadius = +current.physicsRadius.toFixed(4);
+    }
   }
   return makeToolPatch<CalibratePatch>('calibrate', data);
 }

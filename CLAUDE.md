@@ -80,6 +80,20 @@ First validate the game loop with a local/simulated prototype:
 5. **Branch discipline**: work in feature branches off `dev`; merge to `dev` only when the slice is complete; merge `dev` to `main` only when a functional block is stable and playable; avoid massive unintegrated changes. See "Git workflow" for naming and merge policy.
 6. **Document decisions**: important decisions in BUILD_LOG.md; structural changes noted
 
+## Tooling: dual-surface principle (directiva de Rafa, 2026-08-20)
+
+Every tuning tool/capability ships with TWO surfaces from day one:
+- **UI** (labs/studio) for humans.
+- **Programmatic** (CLI / ToolPatch / dev-server endpoint / importable
+  module) for Claude and agents — so an agent can inspect or change
+  values with its own judgment as efficiently as a human with sliders.
+
+If only one surface can exist, the programmatic one comes first (the UI
+is a view on top). Current agent surface is catalogued in DEV_TOOLS.md
+§"Superficie programática"; keep it updated when adding capabilities.
+Known gaps (tracked in docs/AFILADO_PLAN.md): ability-tuner applier,
+headless recording dump, headless match runner.
+
 ## Coding rules
 - Keep code modular and typed
 - Prefer simple architecture
