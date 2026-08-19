@@ -66,6 +66,9 @@ interface LocalCalibrate {
   scale: number;
   pivotY: number;
   rotation: number;
+  /** Optional for backward-compat with working copies saved before the
+   *  hitbox melon opened (afilado slice C). */
+  physicsRadius?: number;
 }
 
 function isLocalCalibrate(v: unknown): v is LocalCalibrate {
@@ -73,7 +76,8 @@ function isLocalCalibrate(v: unknown): v is LocalCalibrate {
   const o = v as Record<string, unknown>;
   return typeof o.scale === 'number'
     && typeof o.pivotY === 'number'
-    && typeof o.rotation === 'number';
+    && typeof o.rotation === 'number'
+    && (o.physicsRadius === undefined || typeof o.physicsRadius === 'number');
 }
 
 function saveLocalFor(critterId: string, t: LocalCalibrate): void {
@@ -116,6 +120,12 @@ function isCalibrateUiState(v: unknown): v is CalibrateUiState {
 
 const restoredSelectedId: string | null =
   loadFromStorage<CalibrateUiState>(UI_STORAGE_KEY, isCalibrateUiState)?.selectedId ?? null;
+
+// Hitbox ring visibility (afilado slice C). Module-level `let` instead
+// of reading the checkbox: the first slot spawns during module
+// evaluation, before the DOM-ref consts below exist (same TDZ dance as
+// the selection restore). The checkbox listener keeps it in sync.
+let hitboxRingsVisible = true;
 
 // ---------------------------------------------------------------------------
 // Scene / renderer setup
@@ -252,10 +262,14 @@ interface Slot {
   worldPos: THREE.Vector3;
   label: HTMLDivElement;
   bindPoseHeight: number | null; // reported by Critter once GLB loads
+  /** Ground ring visualising physicsRadius — the collision circle the
+   *  game actually uses (critter.radius getter). Unit radius, scaled. */
+  hitboxRing: THREE.LineLoop;
   rosterTransform: {
     scale: number;
     pivotY: number;
     rotationY: number;
+    physicsRadius: number;
   };
 }
 
@@ -339,6 +353,23 @@ for (let i = 0; i < calibratableRoster.length; i++) {
 // a growing delay so the page is interactive and the network has
 // headroom. With 9 critters at 180 ms stagger the last lands at ~1.6 s,
 // but the page is fully responsive from frame one.
+/** Unit-radius XZ circle slightly above the ground; scaled per slot to
+ *  the working physicsRadius. Red so it never reads as the (yellow)
+ *  target-height reference. */
+function makeHitboxRing(): THREE.LineLoop {
+  const SEG = 48;
+  const pts: THREE.Vector3[] = [];
+  for (let i = 0; i < SEG; i++) {
+    const a = (i / SEG) * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(a), 0, Math.sin(a)));
+  }
+  const geom = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({ color: 0xe74c3c, transparent: true, opacity: 0.85 });
+  const ring = new THREE.LineLoop(geom, mat);
+  ring.position.y = 0.02; // avoid z-fighting with the grid
+  return ring;
+}
+
 function spawnCritterForSlot(p: PendingSlot): void {
   if (!p.preset) return;
   const critter = new Critter(p.preset, scene);
@@ -354,9 +385,16 @@ function spawnCritterForSlot(p: PendingSlot): void {
     pivotY: p.entry.pivotY,
     rotation: p.entry.rotation,
   };
+  const initialRadius = local?.physicsRadius ?? p.entry.physicsRadius;
   // Push the initial transform into the rosterOverride so procedural
   // animation tick doesn't clobber the loaded values.
   critter.rosterOverride = { ...critter.rosterOverride, scale: initial.scale, pivotY: initial.pivotY, rotation: initial.rotation };
+  // Hitbox ring: the game's collision circle made visible. Sits on the
+  // holder (positioned, unscaled) so critter mesh scale can't distort it.
+  const hitboxRing = makeHitboxRing();
+  hitboxRing.scale.setScalar(initialRadius);
+  hitboxRing.visible = hitboxRingsVisible;
+  p.holder.add(hitboxRing);
   slots.push({
     entry: p.entry,
     holder: p.holder,
@@ -364,10 +402,12 @@ function spawnCritterForSlot(p: PendingSlot): void {
     worldPos: p.worldPos,
     label: p.label,
     bindPoseHeight: null,
+    hitboxRing,
     rosterTransform: {
       scale: initial.scale,
       pivotY: initial.pivotY,
       rotationY: initial.rotation,
+      physicsRadius: initialRadius,
     },
   });
   // If the GLB is already bound to glbMesh by here (synchronous code path),
@@ -450,6 +490,17 @@ const btnCamSide = document.getElementById('btn-cam-side') as HTMLButtonElement 
 // added in calibrate.html below the transform sliders. Querying with
 // getElementById + null guards keeps the JS from breaking if the markup
 // is rolled back / customised in the future.
+const ctlHitbox = document.getElementById('ctl-hitbox') as HTMLInputElement;
+const valHitbox = document.getElementById('val-hitbox') as HTMLInputElement;
+const chkHitbox = document.getElementById('chk-hitbox') as HTMLInputElement | null;
+if (chkHitbox) {
+  hitboxRingsVisible = chkHitbox.checked;
+  chkHitbox.addEventListener('change', () => {
+    hitboxRingsVisible = chkHitbox.checked;
+    for (const slot of slots) slot.hitboxRing.visible = hitboxRingsVisible;
+  });
+}
+
 const localIndicator = document.getElementById('local-indicator');
 const btnResetLocal = document.getElementById('btn-reset-local') as HTMLButtonElement | null;
 
@@ -461,7 +512,9 @@ function selectSlot(idx: number): void {
   // land the user back on the critter they were tuning.
   saveToStorage(UI_STORAGE_KEY, { selectedId: slot.entry.id });
   // Sliders + numeric inputs enabled + synced with current values.
-  [ctlScale, ctlPivot, ctlRot, valScale, valPivot, valRot].forEach((el) => (el.disabled = false));
+  [ctlScale, ctlPivot, ctlRot, ctlHitbox, valScale, valPivot, valRot, valHitbox].forEach((el) => (el.disabled = false));
+  ctlHitbox.value = String(slot.rosterTransform.physicsRadius);
+  valHitbox.value = slot.rosterTransform.physicsRadius.toFixed(3);
   ctlScale.value = String(slot.rosterTransform.scale);
   ctlPivot.value = String(slot.rosterTransform.pivotY);
   ctlRot.value = String(slot.rosterTransform.rotationY);
@@ -490,6 +543,7 @@ function slotDivergesFromCode(slot: typeof slots[number]): boolean {
     Math.abs(slot.rosterTransform.scale - code.scale) > EPSILON
     || Math.abs(slot.rosterTransform.pivotY - code.pivotY) > EPSILON
     || Math.abs(slot.rosterTransform.rotationY - code.rotation) > EPSILON
+    || Math.abs(slot.rosterTransform.physicsRadius - code.physicsRadius) > EPSILON
   );
 }
 
@@ -538,10 +592,13 @@ if (btnResetLocal) {
       scale: slot.entry.scale,
       pivotY: slot.entry.pivotY,
       rotation: slot.entry.rotation,
+      physicsRadius: slot.entry.physicsRadius,
     };
     slot.rosterTransform.scale = code.scale;
     slot.rosterTransform.pivotY = code.pivotY;
     slot.rosterTransform.rotationY = code.rotation;
+    slot.rosterTransform.physicsRadius = code.physicsRadius!;
+    slot.hitboxRing.scale.setScalar(code.physicsRadius!);
     slot.critter.rosterOverride = {
       ...slot.critter.rosterOverride,
       scale: code.scale,
@@ -603,6 +660,7 @@ function persistSlot(slot: typeof slots[number]): void {
     scale: slot.rosterTransform.scale,
     pivotY: slot.rosterTransform.pivotY,
     rotation: slot.rosterTransform.rotationY,
+    physicsRadius: slot.rosterTransform.physicsRadius,
   });
   if (selectedSlotIdx !== null && slots[selectedSlotIdx] === slot) {
     refreshLocalIndicator();
@@ -652,7 +710,20 @@ function applyRot(v: number, source: 'slider' | 'num'): void {
   persistSlot(slot);
 }
 
+function applyHitbox(v: number, source: 'slider' | 'num'): void {
+  if (selectedSlotIdx === null) return;
+  const slot = slots[selectedSlotIdx]!;
+  if (!Number.isFinite(v)) return;
+  slot.rosterTransform.physicsRadius = v;
+  slot.hitboxRing.scale.setScalar(v);
+  if (source !== 'slider') ctlHitbox.value = String(v);
+  if (source !== 'num')    valHitbox.value = v.toFixed(3);
+  persistSlot(slot);
+}
+
 ctlScale.addEventListener('input', () => applyScale(+ctlScale.value, 'slider'));
+ctlHitbox.addEventListener('input', () => applyHitbox(+ctlHitbox.value, 'slider'));
+valHitbox.addEventListener('change', () => applyHitbox(+valHitbox.value, 'num'));
 ctlPivot.addEventListener('input', () => applyPivot(+ctlPivot.value, 'slider'));
 ctlRot.addEventListener('input',   () => applyRot(+ctlRot.value,   'slider'));
 
@@ -737,12 +808,18 @@ interface CalibrateValues {
   scale: number;
   pivotY: number;
   rotation: number;
+  physicsRadius: number;
 }
 
 function getCodeValuesFor(id: string): CalibrateValues | null {
   const entry = getRosterEntry(slotsByIdLookup(id) ?? '');
   if (!entry) return null;
-  return { scale: entry.scale, pivotY: entry.pivotY, rotation: entry.rotation };
+  return {
+    scale: entry.scale,
+    pivotY: entry.pivotY,
+    rotation: entry.rotation,
+    physicsRadius: entry.physicsRadius,
+  };
 }
 
 function slotsByIdLookup(id: string): string | null {
@@ -762,11 +839,13 @@ function modifiedSlots(): Array<{ slot: typeof slots[number]; current: Calibrate
       scale: slot.rosterTransform.scale,
       pivotY: slot.rosterTransform.pivotY,
       rotation: slot.rosterTransform.rotationY,
+      physicsRadius: slot.rosterTransform.physicsRadius,
     };
     const diff =
       Math.abs(current.scale - code.scale) > EPSILON
       || Math.abs(current.pivotY - code.pivotY) > EPSILON
-      || Math.abs(current.rotation - code.rotation) > EPSILON;
+      || Math.abs(current.rotation - code.rotation) > EPSILON
+      || Math.abs(current.physicsRadius - code.physicsRadius) > EPSILON;
     if (diff) out.push({ slot, current, code });
   }
   return out;
@@ -795,14 +874,19 @@ function buildTsSnippet(): string {
   lines.push('// --- Calibrate export — paste each block inside the');
   lines.push('//     matching RosterEntry in src/roster.ts ---');
   lines.push('');
-  for (const { slot, current } of mods) {
+  for (const { slot, current, code } of mods) {
     lines.push(`// ${slot.entry.displayName} (id: '${slot.entry.id}')`);
     lines.push(
       `    scale: ${current.scale.toFixed(3)}, rotation: ${formatRotation(current.rotation)}, ` +
       `offset: [0, 0, 0],`,
     );
+    // Keep the shared `R` const unless the hitbox actually diverged —
+    // a per-critter literal is a deliberate act, not snippet noise.
+    const pr = Math.abs(current.physicsRadius - code.physicsRadius) > EPSILON
+      ? current.physicsRadius.toFixed(3)
+      : 'R';
     lines.push(
-      `    physicsRadius: R, pivotY: ${current.pivotY.toFixed(3)},`,
+      `    physicsRadius: ${pr}, pivotY: ${current.pivotY.toFixed(3)},`,
     );
     lines.push('');
   }
@@ -811,12 +895,17 @@ function buildTsSnippet(): string {
 
 function buildJsonPatch(): CalibratePatch {
   const data: CalibratePatch['data'] = {};
-  for (const { slot, current } of modifiedSlots()) {
+  for (const { slot, current, code } of modifiedSlots()) {
     data[slot.entry.id] = {
       scale: +current.scale.toFixed(4),
       pivotY: +current.pivotY.toFixed(4),
       rotation: +current.rotation.toFixed(4),
     };
+    // Sparse per field: only rewrite the shared `R` reference into a
+    // literal when the user actually moved this critter's hitbox.
+    if (Math.abs(current.physicsRadius - code.physicsRadius) > EPSILON) {
+      data[slot.entry.id]!.physicsRadius = +current.physicsRadius.toFixed(4);
+    }
   }
   return makeToolPatch<CalibratePatch>('calibrate', data);
 }

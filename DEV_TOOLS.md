@@ -107,6 +107,21 @@ el lab se vuelve ilegible para quien entre después.
   en src/gamefeel.ts — los comentarios de tuning sobreviven — y nunca
   crea claves. Reset FEEL vuelve al baseline autoral.
 
+### Tuner de habilidades + hitbox visible (afilado slice C)
+
+- **Calibrate**: anillo rojo a ras de suelo por critter = su
+  `physicsRadius` real (el círculo de colisión que usa el juego).
+  Toggle "Show hitbox rings", slider "Hitbox r" (0.2-1.2), persistencia
+  por critter, y el campo entra en CalibratePatch/snippet SOLO al
+  divergir (si no, se conserva la `R` compartida de roster.ts).
+- **Match lab → Abilities (player)**: sliders auto-generados de todos
+  los campos numéricos de las defs J/K/L del critter jugador. Mutan la
+  def en vivo (aplica en el siguiente cast y sobrevive restarts — las
+  defs son objetos compartidos de CRITTER_ABILITIES; baselines
+  cacheados al primer avistamiento). Sin ToolPatch todavía
+  (deliberado): "Copy JSON" agrupa lo tuneado por critter para portarlo
+  a mano a los overrides de abilities.ts.
+
 ### Apply-patch workflow (2026-04-26, one-click desde H3 slice 4)
 
 End-to-end loop for `/calibrate`, `/anim-lab` and `/decor-editor` JSON

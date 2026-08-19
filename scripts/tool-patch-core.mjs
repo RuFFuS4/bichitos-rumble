@@ -98,7 +98,7 @@ export function validateToolPatch(patch) {
         errors.push(`calibrate: entry "${id}" is not an object`); continue;
       }
       for (const [k, v] of Object.entries(fields)) {
-        if (!['scale', 'pivotY', 'rotation'].includes(k)) {
+        if (!['scale', 'pivotY', 'rotation', 'physicsRadius'].includes(k)) {
           errors.push(`calibrate: entry "${id}" has unknown field "${k}"`);
         } else if (!isFinite_(v)) {
           errors.push(`calibrate: entry "${id}" field "${k}" is not a finite number`);
@@ -332,6 +332,12 @@ export function applyCalibrate(source, data) {
     }
     if (typeof fields.rotation === 'number') {
       inner = replaceFieldOutsideComments(inner, /rotation:\s*[^,}\r\n]+/g, `rotation: ${formatRotation(fields.rotation)}`);
+    }
+    if (typeof fields.physicsRadius === 'number') {
+      // Replaces the shared `R` const reference with a per-critter
+      // literal — that IS the point (afilado slice C: the uniform-R
+      // hitbox opened up to per-critter tuning).
+      inner = replaceFieldOutsideComments(inner, /physicsRadius:\s*[^,}\r\n]+/g, `physicsRadius: ${formatNumber(fields.physicsRadius)}`);
     }
     out = out.slice(0, block.start) + inner + out.slice(block.end);
   }

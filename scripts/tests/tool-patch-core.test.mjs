@@ -447,3 +447,15 @@ test('feel-patch: merge against the REAL gamefeel.ts anchors and round-trips', (
   assert.ok(out.includes('export function updateCameraShake'));
   assert.equal(applyFeelPatch(out, { 'shake.headbutt': 0.25, 'hitStop.groundPound': 0.12 }), out);
 });
+
+// ===========================================================================
+// calibrate physicsRadius (afilado slice C)
+// ===========================================================================
+
+test('calibrate: physicsRadius replaces the shared R reference with a literal', () => {
+  const out = applyCalibrate(ROSTER, { shelly: { physicsRadius: 0.68 } });
+  assert.match(out, /id: 'shelly',[\s\S]*?physicsRadius: 0\.68, pivotY: 0\.4,/);
+  // Other critters keep the shared const
+  assert.match(out, /id: 'sergei',[\s\S]*?physicsRadius: R, pivotY: 0,/);
+  assert.deepEqual(validateToolPatch({ tool: 'calibrate', version: 1, data: { x: { physicsRadius: 0.6 } } }), []);
+});

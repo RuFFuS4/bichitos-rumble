@@ -83,9 +83,12 @@ Orden acordado:
    slow-mo / F10 mismo seed + FEEL tuner de 66 sliders auto-generados
    mutando en vivo + `feel-patch` (4º tool type, 42 tests) con Apply
    to source. Verificado e2e.
-3. [ ] **Slice C — tuner de habilidades + hitbox** (picks 3+4):
-   sliders de AbilityDef del critter vivo + overlay de physicsRadius
-   en calibrate con campo en CalibratePatch.
+3. [x] **Slice C — tuner de habilidades + hitbox**: anillos de
+   physicsRadius en calibrate (slider + persistencia + campo sparse en
+   CalibratePatch que solo reescribe la R compartida al divergir) +
+   tuner de AbilityDef del critter vivo en el match lab (defs mutadas
+   en vivo, baselines cacheados, Copy JSON para porte manual — sin
+   ToolPatch deliberadamente). 43 tests, e2e verde.
 4. [ ] **Slice D — port mesh2motion upstream** (pick 8, repo hermano):
    diff-and-port de los 43 marcadores, probar issue #139 con GLB Tripo.
 5. [ ] Después, según demanda: HUD fuente única (pick 5), salida del

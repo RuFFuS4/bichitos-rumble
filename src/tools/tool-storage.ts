@@ -179,6 +179,9 @@ export interface CalibratePatch extends ToolPatchBase {
     scale?: number;
     pivotY?: number;
     rotation?: number;
+    /** Per-critter hitbox radius (afilado slice C). Replaces the shared
+     *  `R` const reference in roster.ts with a literal when applied. */
+    physicsRadius?: number;
   }>;
 }
 

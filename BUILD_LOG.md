@@ -1,5 +1,27 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-20 — Afilado slice C: el melón de las hitboxes + tuner de habilidades
+
+- **Hitbox visible y editable en calibrate** (decisión de Rafa: melón
+  abierto): anillo rojo a ras de suelo por critter mostrando su
+  `physicsRadius` — la primera vez que el círculo de colisión se VE en
+  una herramienta (Trunk a escala 2.84 y Cheeto golpeaban con el mismo
+  0.55 invisible desde la jam). Slider + toggle + persistencia por
+  critter + campo en CalibratePatch con semántica honesta: solo
+  reescribe la `R` compartida de roster.ts a literal cuando el usuario
+  la movió de verdad (sparse por campo).
+- **Tuner de AbilityDef del critter vivo** en el match lab: sliders
+  auto-generados de todos los campos numéricos de las defs J/K/L.
+  Mutación en vivo (siguiente cast) que sobrevive restarts — las defs
+  son objetos compartidos de CRITTER_ABILITIES, así que los baselines
+  se cachean al primer avistamiento para que un rebuild no blanquee un
+  valor tuneado como autoral. Export JSON agrupado para porte manual:
+  el ToolPatch de abilities se pospone a propósito (las defs nacen de
+  factories con overrides — AFILADO_PLAN pick 3).
+- Verificación: 43 tests (physicsRadius en el mutador de calibrate),
+  e2e completo (raycast → slider → storage → patch → endpoint con la
+  R→literal; tuner con cooldown 4→8 leído de la def real), 0 errores.
+
 ## 2026-08-19 — Afilado slice B: la cabina de tuning
 
 El corazón de la fase. Dos piezas que se complementan:

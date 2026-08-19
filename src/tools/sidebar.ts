@@ -1134,6 +1134,160 @@ export function mountLabSidebar(devApi: DevApi): void {
     });
   }, 'primary');
 
+  // ---- Abilities (player) — live AbilityDef tuner (afilado slice C) -----
+  // Sliders mutate the player's `abilityStates[i].def` in place. Two
+  // facts shape this panel:
+  //   1. defs are SHARED module objects (CRITTER_ABILITIES) — activation
+  //     reads def.cooldown/def.force per use, so edits land on the next
+  //     cast and SURVIVE restarts (same def object). Baselines are
+  //     cached module-side on first sight so a rebuild after mutation
+  //     can't launder a tuned value into "authored".
+  //   2. defs are built by factories with per-critter overrides, so
+  //     there is NO ToolPatch path yet (deliberate — see AFILADO_PLAN
+  //     pick 3): export is a JSON summary for manual porting into the
+  //     CRITTER_ABILITIES overrides.
+  const abilitiesSec = section(tuningGroup, 'Abilities (player)', { collapsed: true });
+  const abilityInfo = document.createElement('div');
+  abilityInfo.className = 'lab-info';
+  abilitiesSec.appendChild(abilityInfo);
+  const abilityRowsHost = document.createElement('div');
+  abilitiesSec.appendChild(abilityRowsHost);
+
+  const abilityBaseline = new Map<string, number>(); // critter:slot:key → authored
+  const abilityChanged = new Map<string, number>();  // critter:slot:key → current
+  let abilityTunerCritter: string | null = null;
+
+  function refreshAbilityInfo(): void {
+    const n = abilityChanged.size;
+    const who = abilityTunerCritter ?? '(none)';
+    abilityInfo.textContent = n === 0
+      ? `${who} — authored defs. Edits apply on next cast and survive restarts.`
+      : `⚡ ${who} — ${n} def value${n === 1 ? '' : 's'} tuned (export = manual port)`;
+  }
+
+  function rebuildAbilityTuner(): void {
+    const player = devApi.game.player;
+    abilityRowsHost.textContent = '';
+    abilityTunerCritter = player?.config.name ?? null;
+    if (!player || player.abilityStates.length === 0) {
+      refreshAbilityInfo();
+      return;
+    }
+    const slotKeys = ['J', 'K', 'L'];
+    player.abilityStates.forEach((st, slotIdx) => {
+      const defRec = st.def as unknown as Record<string, number>;
+      const det = document.createElement('details');
+      det.style.cssText = 'margin: 4px 0; padding: 2px 0;';
+      const sum = document.createElement('summary');
+      sum.textContent = `${slotKeys[slotIdx] ?? slotIdx} · ${st.def.name}`;
+      sum.style.cssText = 'cursor: pointer; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; user-select: none;';
+      det.appendChild(sum);
+      abilityRowsHost.appendChild(det);
+
+      for (const [k, v] of Object.entries(st.def)) {
+        if (typeof v !== 'number') continue;
+        const bKey = `${abilityTunerCritter}:${slotIdx}:${k}`;
+        if (!abilityBaseline.has(bKey)) abilityBaseline.set(bKey, v);
+        const base = abilityBaseline.get(bKey)!;
+
+        const r = row(det);
+        const label = document.createElement('label');
+        label.textContent = k;
+        label.style.cssText = 'min-width: 118px; font-size: 10px; overflow: hidden; text-overflow: ellipsis;';
+        label.title = `${st.def.name}.${k} — authored: ${base}`;
+        r.appendChild(label);
+
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        const span = base === 0 ? 1 : Math.abs(base) * 3;
+        slider.min = String(base < 0 ? -span : 0);
+        slider.max = String(base < 0 ? 0 : span);
+        slider.step = String(span < 2 ? 0.01 : span < 30 ? 0.1 : 1);
+        slider.style.flex = '1';
+
+        const num = document.createElement('input');
+        num.type = 'number';
+        num.step = slider.step;
+        num.style.cssText = 'width: 58px; text-align: right;';
+
+        const applyValue = (nv: number, from: 'slider' | 'num'): void => {
+          if (!Number.isFinite(nv)) return;
+          defRec[k] = nv;
+          if (Math.abs(nv - base) < Number(slider.step) / 2) {
+            defRec[k] = base;
+            abilityChanged.delete(bKey);
+          } else {
+            abilityChanged.set(bKey, nv);
+          }
+          if (from === 'slider') num.value = String(nv);
+          else slider.value = String(nv);
+          label.style.color = abilityChanged.has(bKey) ? '#ffdc5c' : '';
+          refreshAbilityInfo();
+        };
+        slider.addEventListener('input', () => applyValue(parseFloat(slider.value), 'slider'));
+        num.addEventListener('change', () => applyValue(parseFloat(num.value), 'num'));
+
+        const cur = defRec[k]!;
+        slider.value = String(cur);
+        num.value = String(cur);
+        label.style.color = abilityChanged.has(bKey) ? '#ffdc5c' : '';
+        if (abilityChanged.has(bKey)) det.open = true;
+
+        r.appendChild(slider);
+        r.appendChild(num);
+      }
+    });
+    refreshAbilityInfo();
+  }
+
+  /** 4 Hz hook: rebuild when the player critter changes (new match with
+   *  a different pick). Cheap name check; rebuild only on change. */
+  function refreshAbilityTuner(): void {
+    const name = devApi.game.player?.config.name ?? null;
+    if (name !== abilityTunerCritter) rebuildAbilityTuner();
+  }
+
+  const abilityBtns = row(abilitiesSec);
+  button(abilityBtns, 'Reset defs', () => {
+    // Restores EVERY tuned def (all critters — defs are shared module
+    // objects, so a bot using the tuned critter is affected too).
+    const player = devApi.game.player;
+    for (const [bKey, ] of abilityChanged) {
+      const [critterName, slotStr, k] = bKey.split(':');
+      const slotIdx = Number(slotStr);
+      // The def object is reachable through ANY critter of that name —
+      // the player's states cover the common case; other critters'
+      // tuned defs restore too because the object is shared.
+      const states = player?.config.name === critterName
+        ? player.abilityStates
+        : devApi.game.getActiveCritters().find((c) => c.config.name === critterName)?.abilityStates;
+      const def = states?.[slotIdx]?.def as unknown as Record<string, number> | undefined;
+      const base = abilityBaseline.get(bKey);
+      if (def && base !== undefined && k) def[k] = base;
+    }
+    abilityChanged.clear();
+    rebuildAbilityTuner();
+  });
+  button(abilityBtns, '📦 Copy JSON', async () => {
+    if (abilityChanged.size === 0) {
+      abilityInfo.textContent = '(nothing tuned — move a slider first)';
+      return;
+    }
+    // Grouped for manual porting into CRITTER_ABILITIES overrides:
+    // { "Sergei": { "0.cooldown": 3.5 } } — slot index + field.
+    const grouped: Record<string, Record<string, number>> = {};
+    for (const [bKey, v] of abilityChanged) {
+      const [critterName, slotStr, k] = bKey.split(':');
+      (grouped[critterName!] ??= {})[`${slotStr}.${k}`] = v;
+    }
+    const json = JSON.stringify(grouped, null, 2);
+    try { await navigator.clipboard.writeText(json); } catch { /* pre fallback below */ }
+    abilityInfo.textContent = `📦 copied — paste into CRITTER_ABILITIES overrides (abilities.ts) by hand`;
+    console.log('[ability-tuner]', json);
+  });
+
+  rebuildAbilityTuner();
+
   const badgesSec = section(tuningGroup, 'Badges', { collapsed: true });
   const badgesInfo = document.createElement('div');
   badgesInfo.className = 'lab-info';
@@ -1790,6 +1944,7 @@ export function mountLabSidebar(devApi: DevApi): void {
     refreshInfoPanel();
     refreshBotsPanel();
     refreshRecordingPanel();
+    refreshAbilityTuner();
   }, 250);
   // First paint
   setTimeout(() => {
