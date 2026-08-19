@@ -99,8 +99,8 @@ Orden acordado:
    **probe issue #139 OK**: GLB Tripo en el retarget Swing-Twist nuevo
    de upstream (auto-map + bake + preview) → pipeline de signature
    moves des-riesgado. Merge --no-ff en main del hermano (f6d603e).
-   Detalle: PORT_MAP.md del repo hermano. Pendiente menor: borrar 365
-   .webm heredados (7,9 MB) que 0.185 ya no usa.
+   Detalle: PORT_MAP.md del repo hermano. Los 365 .webm heredados
+   (7,9 MB) que 0.185 ya no usaba se borraron a continuación (11c4692).
 5. [ ] Después, según demanda: HUD fuente única (pick 5), salida del
    animation tuner (pick 7), determinismo+batch runner (pick 6).
 
