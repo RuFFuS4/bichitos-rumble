@@ -1,5 +1,39 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-20 — Afilado slice D: port de mesh2motion a upstream 0.185
+
+- **El repo hermano `../bichitos-mesh2motion` se realinea con el
+  upstream moderno** (three 0.185 — la misma línea que el juego —, TS 6,
+  vite 8). Sin historia git compartida con upstream, la estrategia fue:
+  árbol upstream encima + reaplicación manual de los 41 marcadores
+  `[BICHITOS-FORK]` (4 agentes en paralelo sobre ficheros disjuntos).
+  Resultado: 40 vivos (varios adaptados a APIs nuevas), 1 obsoleto
+  (upstream ya desactiva `frustumCulled` en el skeleton helper).
+- **Hallazgo incómodo**: el lab llevaba roto para GLBs comprimidos desde
+  H2 slice 3 (meshopt) — `setMeshoptDecoder` nunca se cableó y nadie
+  cargó un critter desde entonces. Arreglado con marcador nuevo.
+- **Barrido de rutas root-absolute** que rompen bajo base `/animations/`
+  (iconos del nav nuevo, textura de joints, model variations, rig de
+  referencia del retarget) — 9 marcadores nuevos en total.
+- **Probe del issue #139 (pick 8 del afilado): VERDE.** cheeto.glb
+  (Tripo 39 huesos, meshopt) en el retarget Swing-Twist nuevo de
+  upstream: auto-map + bake 76 frames/39 huesos + "retargeting
+  complete" + preview. El pipeline de signature moves queda
+  des-riesgado, y ese subsistema es candidato futuro a reemplazar
+  `BichitosTripoRetargeter` con retargets de más calidad.
+- **Verificación**: build vite OK, 67/67 vitest upstream, tsc en
+  paridad exacta con la línea base upstream (81 errores vs 82 — los
+  markers no añaden ninguno y nuestro guard quita uno), e2e del create
+  flow (Cheeto pre-rigged → "Test animations", 15 mallas activas
+  registradas para export, 162 clips retargeteados, animación avanza
+  con dt manual). Auditado de paso qué critters son Tripo de verdad:
+  cheeto/kowalski/shelly/trunk/kermit (39 huesos) sí; kurama/sebastian/
+  sergei/sihans son rigs de 24 huesos estilo Mixamo (flujo MM normal).
+- Merge `--no-ff` en el main del hermano (`f6d603e`); detalle completo
+  del port en su `PORT_MAP.md`. Pendiente menor: 365 `.webm` heredados
+  (7,9 MB) que 0.185 ya no usa (previews son `.mp4`) — decisión de
+  borrado para Rafa.
+
 ## 2026-08-20 — Afilado slice C: el melón de las hitboxes + tuner de habilidades
 
 - **Hitbox visible y editable en calibrate** (decisión de Rafa: melón

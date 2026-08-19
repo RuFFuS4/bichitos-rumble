@@ -89,8 +89,18 @@ Orden acordado:
    tuner de AbilityDef del critter vivo en el match lab (defs mutadas
    en vivo, baselines cacheados, Copy JSON para porte manual — sin
    ToolPatch deliberadamente). 43 tests, e2e verde.
-4. [ ] **Slice D — port mesh2motion upstream** (pick 8, repo hermano):
-   diff-and-port de los 43 marcadores, probar issue #139 con GLB Tripo.
+4. [x] **Slice D — port mesh2motion upstream** (pick 8, repo hermano,
+   2026-08-19): árbol upstream 0.185 encima + 40/41 marcadores
+   reaplicados (1 obsoleto) por 4 agentes + integración manual
+   (create.html, package sin wrangler, tsconfig, meshopt decoder — el
+   lab llevaba roto para GLBs comprimidos desde H2 y el port lo
+   destapó — y barrido de rutas root-absolute). Verificado: build,
+   67/67 vitest, e2e create flow (Cheeto pre-rigged → 162 clips) y
+   **probe issue #139 OK**: GLB Tripo en el retarget Swing-Twist nuevo
+   de upstream (auto-map + bake + preview) → pipeline de signature
+   moves des-riesgado. Merge --no-ff en main del hermano (f6d603e).
+   Detalle: PORT_MAP.md del repo hermano. Pendiente menor: borrar 365
+   .webm heredados (7,9 MB) que 0.185 ya no usa.
 5. [ ] Después, según demanda: HUD fuente única (pick 5), salida del
    animation tuner (pick 7), determinismo+batch runner (pick 6).
 
