@@ -459,3 +459,135 @@ test('calibrate: physicsRadius replaces the shared R reference with a literal', 
   assert.match(out, /id: 'sergei',[\s\S]*?physicsRadius: R, pivotY: 0,/);
   assert.deepEqual(validateToolPatch({ tool: 'calibrate', version: 1, data: { x: { physicsRadius: 0.6 } } }), []);
 });
+
+// ===========================================================================
+// anim-personality — sparse numeric merge (afilado slice E)
+// ===========================================================================
+
+import { applyAnimPersonality } from '../tool-patch-core.mjs';
+
+// Inline fixtures (the real target file ships empty, so goldens for
+// populated records are built here, same pattern as the OVR builder).
+const PERSONA = (blocks) => `// header prose — must survive
+import type { AnimationPersonality } from './critter-animation';
+
+export const PERSONALITY_OVERRIDES: Record<string, Partial<AnimationPersonality>> = {
+${blocks}
+};
+
+export const tailMarker = 1;
+`;
+
+const PERSONA_EMPTY = `// header prose — must survive
+import type { AnimationPersonality } from './critter-animation';
+
+export const PERSONALITY_OVERRIDES: Record<string, Partial<AnimationPersonality>> = {
+};
+
+export const tailMarker = 1;
+`;
+
+test('anim-personality: new critter block in an empty record, canonical field order', () => {
+  const out = applyAnimPersonality(PERSONA_EMPTY, { Sergei: { chargeStretchMult: 1.2, idleBobHz: 1.05 } });
+  // No leading blank line after '{'; fields in AnimationPersonality
+  // interface order (idleBobHz first, despite alphabetical order).
+  assert.match(out, /= \{\n  Sergei: \{\n    idleBobHz: 1\.05,\n    chargeStretchMult: 1\.2,\n  \},\n\};/);
+  assert.match(out, /export const tailMarker = 1;/);
+  // CRLF source keeps CRLF on every appended line.
+  const crlfOut = applyAnimPersonality(PERSONA_EMPTY.replace(/\n/g, '\r\n'), { Sergei: { idleBobHz: 1.05 } });
+  assert.ok(!/(^|[^\r])\n/.test(crlfOut), 'no bare LF anywhere in a CRLF file');
+  assert.match(crlfOut, /Sergei: \{\r\n    idleBobHz: 1\.05,\r\n  \},\r\n\};/);
+});
+
+test('anim-personality: appends missing fields inside an existing block', () => {
+  const src = PERSONA(`  Sergei: {
+    idleBobHz: 1.1,
+  },`);
+  const out = applyAnimPersonality(src, { Sergei: { runSwayRadians: 0.12 } });
+  assert.match(out, /Sergei: \{\n    idleBobHz: 1\.1,\n    runSwayRadians: 0\.12,\n  \},/);
+});
+
+test('anim-personality: numeric token rewrite keeps the same-line comment byte-identical', () => {
+  const src = PERSONA(`  Shelly: {
+    idleBobHz: 0.9,        // deep slow breath — tanque
+    leanRadians: 0.08,
+  },`);
+  const out = applyAnimPersonality(src, { Shelly: { idleBobHz: 1.4 } });
+  // Alignment spaces before the comment survive too (token-only rewrite).
+  assert.match(out, /idleBobHz: 1\.4,        \/\/ deep slow breath — tanque/);
+  assert.match(out, /leanRadians: 0\.08,/);
+});
+
+test('anim-personality: entries and fields absent from the patch stay byte-identical', () => {
+  const src = PERSONA(`  Sergei: {
+    idleBobHz: 1.1, // nervous idle
+    runBounceAmp: 0.12,
+  },
+
+  Kurama: {
+    // parked: chargeStretchMult: 9,
+    leanRadians: 0.21,
+  },`);
+  const out = applyAnimPersonality(src, { Sergei: { runBounceAmp: 0.2 } });
+  // Kurama block (comment included) survives verbatim.
+  assert.match(out, /Kurama: \{\n    \/\/ parked: chargeStretchMult: 9,\n    leanRadians: 0\.21,\n  \},/);
+  // Sergei's untouched field keeps its comment; the patched one changed.
+  assert.match(out, /idleBobHz: 1\.1, \/\/ nervous idle/);
+  assert.match(out, /runBounceAmp: 0\.2,/);
+  // Header prose and tail identical.
+  const headEnd = src.indexOf('export const PERSONALITY_OVERRIDES');
+  assert.equal(out.slice(0, headEnd), src.slice(0, headEnd));
+  assert.ok(out.includes('export const tailMarker = 1;'));
+});
+
+test('anim-personality: validate accepts good patches and rejects junk', () => {
+  assert.deepEqual(validateToolPatch({ tool: 'anim-personality', version: 1, data: { Sergei: { idleBobHz: 1.2 } } }), []);
+  // Unknown version.
+  assert.ok(validateToolPatch({ tool: 'anim-personality', version: 9, data: {} }).length > 0);
+  // Unknown field — the message names the valid closed set.
+  const unknown = validateToolPatch({ tool: 'anim-personality', version: 1, data: { Sergei: { bobHz: 1 } } });
+  assert.ok(unknown.some((e) => /unknown field "bobHz"/.test(e) && /idleBobHz/.test(e)));
+  // Non-finite / non-number values.
+  assert.ok(validateToolPatch({ tool: 'anim-personality', version: 1, data: { Sergei: { idleBobHz: Infinity } } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'anim-personality', version: 1, data: { Sergei: { idleBobHz: 'fast' } } }).length > 0);
+  // Non-identifier critter name.
+  assert.ok(validateToolPatch({ tool: 'anim-personality', version: 1, data: { 'Ser gei': { idleBobHz: 1 } } }).length > 0);
+});
+
+test('anim-personality: mutator refuses instead of guessing', () => {
+  // Missing record.
+  assert.throws(() => applyAnimPersonality('const nope = 1;', { Sergei: { idleBobHz: 1 } }), /export not found/);
+  // Unknown field / non-finite value — defense in depth below validate.
+  assert.throws(() => applyAnimPersonality(PERSONA_EMPTY, { Sergei: { bobHz: 1 } }), /not an AnimationPersonality field/);
+  assert.throws(() => applyAnimPersonality(PERSONA_EMPTY, { Sergei: { idleBobHz: NaN } }), /not a finite number/);
+  // Existing value that is not a plain numeric literal: rewriting could
+  // corrupt it and appending would silently shadow it — hard error.
+  const src = PERSONA(`  Sergei: {
+    idleBobHz: BASE * 2,
+  },`);
+  assert.throws(() => applyAnimPersonality(src, { Sergei: { idleBobHz: 1.2 } }), /not a plain number/);
+});
+
+test('anim-personality: merge against the REAL animation-personality-overrides.ts round-trips', () => {
+  // Whatever EOL the working tree uses (autocrlf) — don't normalize.
+  const real = readFileSync(path.join(here, '../../src/animation-personality-overrides.ts'), 'utf8');
+  const patch = { tool: 'anim-personality', version: 1, data: { Sergei: { idleBobHz: 1.15, chargeStretchMult: 1.3 }, Shelly: { runBounceAmp: 0.05 } } };
+  assert.deepEqual(validateToolPatch(patch), []);
+  const once = applyPatch(real, patch);
+  const lf = once.replace(/\r\n/g, '\n');
+  assert.match(lf, /Sergei: \{\n    idleBobHz: 1\.15,\n    chargeStretchMult: 1\.3,\n  \},/);
+  assert.match(lf, /Shelly: \{\n    runBounceAmp: 0\.05,\n  \},/);
+  // The file's doc header (the never-delete contract prose) survives.
+  assert.ok(once.includes('This file is a ToolPatch TARGET'));
+  // applyPatch dispatch === direct mutator call.
+  assert.equal(once, applyAnimPersonality(real, patch.data));
+});
+
+test('anim-personality: applying the same patch twice is a no-op the second time', () => {
+  const src = PERSONA(`  Sergei: {
+    idleBobHz: 1.1, // keep
+  },`);
+  const data = { Sergei: { idleBobHz: 1.4, leanRadians: 0.2 }, Kurama: { runBounceHz: 2.4 } };
+  const once = applyAnimPersonality(src, data);
+  assert.equal(applyAnimPersonality(once, data), once);
+});

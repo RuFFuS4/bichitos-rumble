@@ -8,11 +8,15 @@
 // dev-server apply endpoint (H3 slice 4) and the test suite
 // (npm run test:patch).
 //
-// Routes the payload to one of:
+// Routes the payload (via targetByTool) to one of:
 //   · src/roster.ts                — calibrate     (sparse field rewrite)
 //   · src/animation-overrides.ts   — anim-lab      (sparse MERGE — never
 //                                    deletes; see core docstring)
 //   · src/arena-decor-layouts.ts   — decor-editor  (per-pack wholesale)
+//   · src/gamefeel.ts              — feel-patch    (numeric token rewrite)
+//   · src/animation-personality-overrides.ts
+//                                  — anim-personality (sparse numeric
+//                                    MERGE — never deletes)
 //
 // Safety
 // ------
@@ -74,7 +78,7 @@ Usage:
   npm run apply-tool-patch -- --dry-run          # show diff, do not write
 
 Patch shape (see src/tools/tool-storage.ts ToolPatch):
-  { "tool": "calibrate" | "anim-lab" | "decor-editor",
+  { "tool": "calibrate" | "anim-lab" | "decor-editor" | "feel-patch" | "anim-personality",
     "version": 1, "generated": "...", "data": { ... } }
 `);
   process.exit(0);

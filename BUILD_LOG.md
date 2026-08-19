@@ -1,5 +1,38 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-20 — Afilado slice E: el animation tuner por fin aterriza en fuente
+
+- **El pipeline sin salida se cierra**: los sliders de Animation
+  (player) mutaban `animPersonality` en vivo pero todo se re-derivaba
+  de (mass, speed) al reiniciar — cada sesión de tuning se tiraba a la
+  basura. Ahora hay tabla `PERSONALITY_OVERRIDES`
+  (src/animation-personality-overrides.ts, sparse por critter) que
+  `deriveAnimationPersonality` fusiona sobre la fórmula; los llamadores
+  no cambian (config ya lleva name).
+- **`anim-personality` = 5º tool type del pipeline ToolPatch**: applier
+  con merge no destructivo (update de token estilo feel-patch para
+  conservar comentarios byte-identical; insert/append estilo anim-lab),
+  lista cerrada de 7 campos validada, guardia anti-corrupción si el
+  valor existente no es literal numérico plano. CLI + endpoint dev via
+  la tabla compartida targetByTool (el plugin de vite no duplica
+  mapping). 8 tests golden nuevos → 51/51.
+- **Tuner con memoria**: divergencias vs lo autorado persisten en
+  `match-lab:anim-personality` y se reaplican tras restart (detección
+  por identidad del objeto player, no por nombre — un F10 del mismo
+  critter también reconstruye). Store = divergencia vs AUTORADO (lo que
+  hay que reaplicar en vivo); patch = divergencia vs fórmula PURA (lo
+  que debe quedar en la tabla) — distinción deliberada y documentada.
+  Botones 📦/💾/⚡ como el resto de labs; Reset Derived vuelve a lo
+  autorado y limpia solo el critter actual.
+- **Verificado**: tsc limpio, 51/51 tests, e2e del círculo completo —
+  mutación en vivo (Sergei idleBobHz 1.18→1.77) → preview con diff →
+  apply escribiendo la tabla real → append de segundo campo a la
+  entrada existente → HMR reload → el Sergei recién derivado arranca
+  con los valores DE LA TABLA. Residuos de prueba revertidos.
+- Ejecutado con workflow de 2 agentes (core applier+tests / UI
+  sidebar+storage) sobre ficheros disjuntos tras scaffold propio del
+  contrato (tabla + derive). Pick 7 del AFILADO_PLAN cerrado.
+
 ## 2026-08-20 — Afilado slice D: port de mesh2motion a upstream 0.185
 
 - **El repo hermano `../bichitos-mesh2motion` se realinea con el

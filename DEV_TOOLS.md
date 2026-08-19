@@ -100,8 +100,9 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   `npm run apply-tool-patch -- --patch=x.json [--dry-run]` (tools:
   `calibrate` → roster.ts incl. physicsRadius · `anim-lab` → merge de
   overrides · `decor-editor` → layouts por pack · `feel-patch` →
-  dot-paths de FEEL). Mismos mutadores testeados (`npm run test:patch`)
-  que usan los botones de la UI.
+  dot-paths de FEEL · `anim-personality` → PERSONALITY_OVERRIDES por
+  critter). Mismos mutadores testeados (`npm run test:patch`) que usan
+  los botones de la UI.
 - **Con dev server vivo**: `POST /__tool-patch/preview|apply` (JSON del
   patch; preview devuelve el diff estructurado sin escribir).
 - **Módulo puro**: `scripts/tool-patch-core.mjs` exporta
@@ -144,6 +145,25 @@ headless de recordings, match runner headless (pick 6).
   cacheados al primer avistamiento). Sin ToolPatch todavía
   (deliberado): "Copy JSON" agrupa lo tuneado por critter para portarlo
   a mano a los overrides de abilities.ts.
+
+### Salida del animation tuner (afilado slice E)
+
+El tuner de Animation (player) dejó de ser un pipeline sin salida:
+
+- **Tabla `PERSONALITY_OVERRIDES`** en
+  src/animation-personality-overrides.ts — excepciones autoradas por
+  critter (sparse) que `deriveAnimationPersonality` fusiona sobre la
+  fórmula (mass, speed). Tabla vacía = habla la fórmula.
+- **Persistencia de sesión**: las divergencias de sliders vs lo autorado
+  se guardan en `match-lab:anim-personality` y se reaplican tras F10 /
+  cambio de player (detección por identidad de objeto, 4 Hz).
+- **`anim-personality`** (5º tool type): data = por critter, campos que
+  divergen de la fórmula PURA (así los overrides ya autorados re-emiten
+  y la tabla queda autoconsistente). Merge no destructivo: nunca borra
+  campos ni entradas — volver un campo al valor derivado exacto lo omite
+  del patch y la entrada vieja sobrevive (borrado = edición manual).
+  Botones 📦 Copy / 💾 Download / ⚡ Apply to source; "Reset Derived"
+  vuelve a lo autorado y limpia la divergencia del critter actual.
 
 ### Apply-patch workflow (2026-04-26, one-click desde H3 slice 4)
 

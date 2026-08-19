@@ -21,7 +21,8 @@
 
 import { getPlayableNames } from '../roster';
 import { ARENA_PACK_IDS } from '../arena-decorations';
-import { deriveAnimationPersonality } from '../critter-animation';
+import { deriveAnimationPersonality, type AnimationPersonality } from '../critter-animation';
+import { CRITTER_PRESETS } from '../critter';
 import { clearAllHeldInputs } from '../input';
 import {
   toolStorageKey,
@@ -30,7 +31,9 @@ import {
   clearStorage,
   makeToolPatch,
   copyPatchToClipboard,
+  downloadPatch,
   type FeelPatch,
+  type AnimPersonalityPatch,
 } from './tool-storage';
 import { FEEL } from '../gamefeel';
 import { applyPatchToSource } from './apply-ui';
@@ -925,9 +928,57 @@ export function mountLabSidebar(devApi: DevApi): void {
   const tuningGroup = group(root, 'Tuning', 'tuning');
 
   // ---- Animation tuner (collapsed — occasional tweaking) ----------------
+  // Sliders mutate player.animPersonality in place — the procedural
+  // layer reads it per frame, so changes land immediately. Two baselines
+  // matter (afilado slice E):
+  //   - AUTHORED = derive(player.config): formula + PERSONALITY_OVERRIDES
+  //     (config.name routes through the table). A fresh Critter boots
+  //     with these; the per-field divergence indicator and the persisted
+  //     working copy compare against AUTHORED.
+  //   - PURE = derive({ mass, speed }) without name: the raw formula.
+  //     The exported anim-personality patch compares against PURE — see
+  //     buildAnimPersonalityPatch.
+  // Divergences persist per critter in localStorage and reapply onto the
+  // freshly-derived animPersonality after every restart / pick change
+  // (object-identity check at 4 Hz — refreshAnimTuner).
   const anim = section(tuningGroup, 'Animation (player)', { collapsed: true });
+  const ANIM_STORE_KEY = toolStorageKey('match-lab', 'anim-personality');
+  type AnimStore = Record<string, Partial<Record<AnimKey, number>>>;
+  const ANIM_KEY_SET = new Set<string>(ANIM_PARAMS.map((p) => p.key));
+  function isAnimStore(v: unknown): v is AnimStore {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+    return Object.values(v as Record<string, unknown>).every((e) =>
+      !!e && typeof e === 'object' && !Array.isArray(e)
+      && Object.entries(e as Record<string, unknown>).every(
+        ([k, x]) => ANIM_KEY_SET.has(k) && typeof x === 'number' && Number.isFinite(x),
+      ));
+  }
+  const animStore: AnimStore = loadFromStorage<AnimStore>(ANIM_STORE_KEY, isAnimStore) ?? {};
+  /** AUTHORED personality of the current player. Always a fresh derive
+   *  result, never an alias of the live mutable object. */
+  let animAuthored: AnimationPersonality | null = null;
+  let animTunerPlayer: unknown = null;
+
+  function persistAnimStore(): void {
+    if (Object.keys(animStore).length === 0) clearStorage(ANIM_STORE_KEY);
+    else saveToStorage(ANIM_STORE_KEY, animStore);
+  }
+
+  const animInfo = document.createElement('div');
+  animInfo.className = 'lab-info';
+  anim.appendChild(animInfo);
+  function refreshAnimInfo(): void {
+    const name = devApi.game.player?.config.name ?? '(no player)';
+    const own = Object.keys(animStore[name] ?? {}).length;
+    const critters = Object.keys(animStore).length;
+    animInfo.textContent = critters === 0
+      ? `${name} — authored values (formula + overrides table)`
+      : `⚡ ${name} — ${own} field${own === 1 ? '' : 's'} diverge · working copy spans ${critters} critter${critters === 1 ? '' : 's'}`;
+  }
+
   const sliders = new Map<AnimKey, HTMLInputElement>();
   const valueLabels = new Map<AnimKey, HTMLSpanElement>();
+  const fieldLabels = new Map<AnimKey, HTMLLabelElement>();
   for (const p of ANIM_PARAMS) {
     const rowEl = row(anim);
     const l = document.createElement('label');
@@ -945,29 +996,134 @@ export function mountLabSidebar(devApi: DevApi): void {
       const v = parseFloat(slider.value);
       val.textContent = v.toFixed(3);
       const player = devApi.game.player;
-      if (player?.animPersonality) {
-        player.animPersonality[p.key] = v;
+      if (!player?.animPersonality) return;
+      player.animPersonality[p.key] = v;
+      if (!animAuthored) return;
+      // Divergence bookkeeping vs the AUTHORED value. Round-tripping a
+      // slider back within half a step snaps to authored and clears the
+      // entry — same resolution rule as the FEEL tuner.
+      const name = player.config.name;
+      if (Math.abs(v - animAuthored[p.key]) < p.step / 2) {
+        player.animPersonality[p.key] = animAuthored[p.key];
+        const entry = animStore[name];
+        if (entry) {
+          delete entry[p.key];
+          if (Object.keys(entry).length === 0) delete animStore[name];
+        }
+      } else {
+        (animStore[name] ??= {})[p.key] = v;
       }
+      l.style.color = animStore[name]?.[p.key] !== undefined ? '#ffdc5c' : '';
+      persistAnimStore();
+      refreshAnimInfo();
     });
     rowEl.appendChild(slider);
     rowEl.appendChild(val);
     sliders.set(p.key, slider);
     valueLabels.set(p.key, val);
+    fieldLabels.set(p.key, l);
   }
+
+  /** 4 Hz hook (same mechanism as refreshAbilityTuner, but on object
+   *  IDENTITY): every restart builds a new Critter whose animPersonality
+   *  was freshly derived (AUTHORED), so the persisted divergences must
+   *  reapply on top. A name check alone would miss same-critter
+   *  restarts. */
+  function refreshAnimTuner(): void {
+    const player = devApi.game.player ?? null;
+    if (player === animTunerPlayer) return;
+    animTunerPlayer = player;
+    if (!player) { animAuthored = null; refreshAnimInfo(); return; }
+    animAuthored = deriveAnimationPersonality(player.config);
+    const stored = animStore[player.config.name];
+    if (stored) Object.assign(player.animPersonality, stored);
+    syncSlidersFromPlayer();
+    refreshAnimInfo();
+  }
+
+  /**
+   * Patch data (contract in tool-storage.ts): per critter with a working
+   * copy, every field whose CURRENT value diverges from the PURE
+   * baseline — derive({ mass, speed }) WITHOUT name, i.e. the formula
+   * with no overrides table. Comparing against PURE instead of AUTHORED
+   * keeps already-authored overrides that still diverge inside the
+   * patch, so the applier's merge leaves a self-consistent table.
+   * Never-delete corollary: a field tuned back to exactly its derived
+   * value is OMITTED from the patch and any old PERSONALITY_OVERRIDES
+   * entry for it survives — removing an override is a deliberate manual
+   * edit in src/animation-personality-overrides.ts.
+   */
+  function buildAnimPersonalityPatch(): AnimPersonalityPatch {
+    const data: AnimPersonalityPatch['data'] = {};
+    for (const [name, stored] of Object.entries(animStore)) {
+      const cfg = CRITTER_PRESETS.find((c) => c.name === name);
+      if (!cfg) continue; // renamed/removed critter — stale entry, skip
+      const pure = deriveAnimationPersonality({ mass: cfg.mass, speed: cfg.speed });
+      const authored = deriveAnimationPersonality(cfg);
+      const entry: AnimPersonalityPatch['data'][string] = {};
+      for (const p of ANIM_PARAMS) {
+        const cur = stored[p.key] ?? authored[p.key];
+        if (Math.abs(cur - pure[p.key]) >= p.step / 2) entry[p.key] = cur;
+      }
+      if (Object.keys(entry).length > 0) data[name] = entry;
+    }
+    return makeToolPatch<AnimPersonalityPatch>('anim-personality', data);
+  }
+
   const animBtns = row(anim);
   button(animBtns, 'Reset Derived', () => {
     const player = devApi.game.player;
     if (!player) return;
-    player.animPersonality = deriveAnimationPersonality(player.config);
+    // derive(config) includes the overrides table (config.name), so this
+    // resets to the AUTHORED values — not the raw formula — and drops
+    // the persisted divergence for THIS critter only.
+    animAuthored = deriveAnimationPersonality(player.config);
+    player.animPersonality = { ...animAuthored };
+    delete animStore[player.config.name];
+    persistAnimStore();
     syncSlidersFromPlayer();
+    refreshAnimInfo();
   });
-  button(animBtns, 'Copy Values', () => {
-    const player = devApi.game.player;
-    if (!player) return;
-    navigator.clipboard
-      .writeText(JSON.stringify(player.animPersonality, null, 2))
-      .catch(() => {});
+  button(animBtns, '📦 Copy patch', async () => {
+    const patch = buildAnimPersonalityPatch();
+    if (Object.keys(patch.data).length === 0) {
+      animInfo.textContent = '(nothing diverges from the formula — move a slider first)';
+      return;
+    }
+    await copyPatchToClipboard(patch);
+    const n = Object.keys(patch.data).length;
+    animInfo.textContent = `📦 anim-personality patch copied (${n} critter${n === 1 ? '' : 's'})`;
   });
+  button(animBtns, '💾 Download', () => {
+    const patch = buildAnimPersonalityPatch();
+    if (Object.keys(patch.data).length === 0) {
+      animInfo.textContent = '(nothing diverges from the formula — move a slider first)';
+      return;
+    }
+    downloadPatch(patch);
+  });
+  button(animBtns, '⚡ Apply to source', async () => {
+    const patch = buildAnimPersonalityPatch();
+    if (Object.keys(patch.data).length === 0) {
+      animInfo.textContent = '(nothing diverges from the formula — move a slider first)';
+      return;
+    }
+    const backup: AnimStore = JSON.parse(JSON.stringify(animStore)) as AnimStore;
+    await applyPatchToSource(patch, {
+      // The write triggers a Vite full-reload; the tuned values are now
+      // AUTHORED (merged into PERSONALITY_OVERRIDES), so the working
+      // copy must not resurrect on top of them.
+      onBeforeApply: () => {
+        for (const k of Object.keys(animStore)) delete animStore[k];
+        clearStorage(ANIM_STORE_KEY);
+      },
+      onApplyFailed: () => {
+        Object.assign(animStore, backup);
+        persistAnimStore();
+      },
+    });
+  }, 'primary');
+  refreshAnimTuner(); // player already exists (auto-start precedes mount)
 
   // ---- Badges (collapsed — BADGES_DESIGN testing) ----------------------
   // Lets us unlock / lock / reset the belt system without playing 20+
@@ -1922,11 +2078,15 @@ export function mountLabSidebar(devApi: DevApi): void {
   function syncSlidersFromPlayer(): void {
     const player = devApi.game.player;
     if (!player?.animPersonality) return;
+    const stored = animStore[player.config.name];
     for (const p of ANIM_PARAMS) {
       const slider = sliders.get(p.key)!;
       const v = player.animPersonality[p.key];
       slider.value = String(v);
       valueLabels.get(p.key)!.textContent = (+v).toFixed(3);
+      // Per-field divergence indicator — yellow while the persisted
+      // working copy carries a value for this field.
+      fieldLabels.get(p.key)!.style.color = stored?.[p.key] !== undefined ? '#ffdc5c' : '';
     }
   }
 
@@ -1945,6 +2105,7 @@ export function mountLabSidebar(devApi: DevApi): void {
     refreshBotsPanel();
     refreshRecordingPanel();
     refreshAbilityTuner();
+    refreshAnimTuner();
   }, 250);
   // First paint
   setTimeout(() => {

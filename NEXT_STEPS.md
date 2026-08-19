@@ -101,8 +101,14 @@ Orden acordado:
    moves des-riesgado. Merge --no-ff en main del hermano (f6d603e).
    Detalle: PORT_MAP.md del repo hermano. Los 365 .webm heredados
    (7,9 MB) que 0.185 ya no usaba se borraron a continuación (11c4692).
-5. [ ] Después, según demanda: HUD fuente única (pick 5), salida del
-   animation tuner (pick 7), determinismo+batch runner (pick 6).
+5. [x] **Slice E — salida del animation tuner** (pick 7, 2026-08-20):
+   tabla PERSONALITY_OVERRIDES consultada por derive + 5º tool type
+   `anim-personality` (merge no destructivo, 8 tests golden → 51/51,
+   CLI + endpoint) + tuner con persistencia que sobrevive F10 y trío
+   Copy/Download/Apply. E2e del círculo completo verificado (slider →
+   tabla real → reload → derive consume la tabla).
+6. [ ] Después, según demanda: HUD fuente única (pick 5),
+   determinismo+batch runner (pick 6 — LA herramienta Claude-first).
 
 ## Dirección post-H3 (fijada por Rafa, 2026-08-19)
 
