@@ -155,7 +155,7 @@ navegador en <1 min con diff visible ✅ · cero pérdida de datos al
 recargar ✅ · mesh2motion fuera del repo ✅. Smoke de producción verde
 tras el deploy (el refactor de main.ts shippeó limpio).
 
-## Interludio — Fase de afilado (2026-08-19, en curso)
+## Interludio — Fase de afilado (2026-08-19 → 2026-08-20, COMPLETA)
 
 Entre H3 y la fase de mecánicas/assets, por decisión de Rafa: hacer las
 herramientas más eficientes, eficaces y útiles ANTES de usarlas a
@@ -163,11 +163,21 @@ fondo. Plan completo con evidencia en
 [`docs/AFILADO_PLAN.md`](docs/AFILADO_PLAN.md); checklist operativa en
 [`NEXT_STEPS.md`](NEXT_STEPS.md). Decisiones marco: tuning
 offline-first (server se sincroniza al final), melón de physicsRadius
-abierto, port de mesh2motion upstream pronto.
+abierto, port de mesh2motion upstream pronto. Durante la fase nació la
+**directiva dual-surface** (2026-08-20): toda herramienta con dos
+caras desde el día uno — UI para Rafa, CLI/patch/módulo para Claude.
 
-Estado: slices A (17 quick-wins) y B (cabina de tuning: step-frame +
-hotkeys + FEEL tuner + `feel-patch`) completados. Pendientes: C (tuner
-de AbilityDef + hitbox visible) y D (port mesh2motion upstream).
+**8/8 picks ejecutados** (slices A-G): A quick-wins ·
+B cabina de tuning (step-frame/hotkeys/FEEL tuner/`feel-patch`) ·
+C hitbox visible + tuner de AbilityDef · D port mesh2motion a upstream
+0.185 (probe issue #139 verde: retarget Swing-Twist con GLB Tripo) ·
+E salida del animation tuner (`anim-personality`, 5º tool type) ·
+F HUD fuente única (partial de vite, paridad 187 propiedades) ·
+G determinismo + batch runner headless (`npm run batch`,
+REPRODUCIBLE: yes con 218 eventos idénticos). Detalle por slice en
+[`BUILD_LOG.md`](BUILD_LOG.md). Fleco menor: applier de ability-tuner.
+Pendiente de la decisión offline-first: sync del server al entrar en
+la fase de mecánicas.
 
 ## H4 — Retención y bucle social (~3-4 semanas)
 
