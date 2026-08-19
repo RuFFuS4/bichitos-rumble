@@ -54,6 +54,7 @@ import { clearProjectiles } from './projectiles';
 import { clearAllCritterStatus, disposeCritterStatus } from './hud/status-icons';
 import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
 import { getPreviewPackId } from './arena-decor-layouts';
+import { seedMatchRng, matchRng } from './match-rng';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended' | 'online';
 
@@ -506,7 +507,11 @@ export class Game {
     // the editor preview lands on the user's expected pack instead of
     // a random roll.
     const offlinePack = getPreviewPackId() ?? getRandomPackId();
-    this.arena.buildFromSeed((Math.random() * 0xFFFFFFFF) | 0, offlinePack);
+    // Un seed = una partida entera: el mismo seed que construye la arena
+    // siembra el PRNG de la partida (bots, respawns, drops iniciales).
+    const matchSeed = (Math.random() * 0xFFFFFFFF) | 0;
+    seedMatchRng(matchSeed);
+    this.arena.buildFromSeed(matchSeed, offlinePack);
     const roster = buildMatchRoster(
       playerConfig,
       MAX_CRITTERS_PER_MATCH - 1,
@@ -610,11 +615,13 @@ export class Game {
     const n = this.critters.length;
     for (let i = 0; i < n; i++) {
       const c = this.critters[i];
-      const h = 10 + Math.random() * 6;                  // 10..16
+      // matchRng: drop height/stagger shifts the first-contact timing,
+      // so it's gameplay randomness, not VFX.
+      const h = 10 + matchRng() * 6;                     // 10..16
       // Staggered delay: every critter starts 0.15..0.35s after the
       // previous one (plus jitter). Player (index 0) always starts
       // immediately so the local experience doesn't feel sluggish.
-      const baseDelay = i === 0 ? 0 : 0.15 + Math.random() * 0.2;
+      const baseDelay = i === 0 ? 0 : 0.15 + matchRng() * 0.2;
       const delay = i === 0 ? 0 : (baseDelay * i);
       c.mesh.position.y = h;
       this.countdownDrops.set(c, { y: h, vy: 0, delay, fallStarted: false });
@@ -1747,7 +1754,8 @@ export class Game {
     const maxR = Math.max(2.0, arena.currentRadius * 0.4);
     for (let i = 0; i < 12; i++) {
       const r = maxR * (1 - i / 12) + 0.5;
-      const angle = Math.random() * Math.PI * 2;
+      // matchRng: respawn position IS gameplay (changes who lands where).
+      const angle = matchRng() * Math.PI * 2;
       const x = Math.cos(angle) * r;
       const z = Math.sin(angle) * r;
       if (arena.isOnArena(x, z)) return [x, z];
@@ -1862,22 +1870,28 @@ export class Game {
 
         this.matchTimer -= effectiveDt;
 
-        // 1. Player input
-        updatePlayer(this.player, effectiveDt, this.scene, this.critters);
+        // 1. Player input — suppressed under autopilot so the bot brain
+        // below is the ONLY writer on the player slot.
+        if (!this.autopilotPlayer) {
+          updatePlayer(this.player, effectiveDt, this.scene, this.critters);
 
-        // 1.5. Portal check (before physics so redirect happens cleanly)
-        // P key toggles minimized/expanded state during match.
-        if (this.portalKeyPressed('KeyP')) {
-          togglePortalExpanded();
-        }
-        if (this.player.alive && !this.player.falling) {
-          const portalHit = updatePortals(this.player.x, this.player.z, effectiveDt);
-          if (portalHit) return; // redirect in progress, freeze game loop
+          // 1.5. Portal check (before physics so redirect happens cleanly)
+          // P key toggles minimized/expanded state during match.
+          // Skipped under autopilot: a bot-driven player wandering into
+          // the start portal would redirect the page mid-batch-run.
+          if (this.portalKeyPressed('KeyP')) {
+            togglePortalExpanded();
+          }
+          if (this.player.alive && !this.player.falling) {
+            const portalHit = updatePortals(this.player.x, this.player.z, effectiveDt);
+            if (portalHit) return; // redirect in progress, freeze game loop
+          }
         }
 
-        // 2. Bot AI (all critters except the player)
+        // 2. Bot AI (all critters except the player — unless autopilot
+        // drives the player slot too)
         for (let i = 0; i < this.critters.length; i++) {
-          if (i === this.playerIndex) continue;
+          if (i === this.playerIndex && !this.autopilotPlayer) continue;
           updateBot(this.critters[i], this.critters, effectiveDt);
         }
 
@@ -2038,6 +2052,14 @@ export class Game {
   public debugSpeedScale = 1;
 
   /**
+   * Lab-only (afilado batch runner): when true, the player slot is driven
+   * by updateBot — same brain as the other bots — and human input stops
+   * writing to it (updatePlayer is skipped, so there's never two writers).
+   * Toggled via devApi.setAutopilot().
+   */
+  public autopilotPlayer = false;
+
+  /**
    * Lab-only: spawn an offline match with an explicit player + bot lineup,
    * bypassing title / character select. Optionally forces an arena seed for
    * deterministic replay.
@@ -2073,6 +2095,8 @@ export class Game {
     playMusic('ingame');
 
     const seed = options.seed ?? ((Math.random() * 0xFFFFFFFF) | 0);
+    // Un seed = una partida entera (mismo contrato que enterCountdown).
+    seedMatchRng(seed);
     this.arena.reset();
     // Lab doesn't expose a pack picker yet — roll randomly too so the
     // /tools.html path matches normal play. If a specific pack is needed

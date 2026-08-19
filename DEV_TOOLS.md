@@ -112,9 +112,19 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   setSpeed/requestStep, forzar habilidades, bots, recording.
 - **Inspección de assets**: `npm run inspect:clips|parts|bounds`,
   `verify:glbs`, `check-pws-parity`.
+- **Batch runner headless** (afilado slice G — LA herramienta
+  Claude-first): con el dev server vivo,
+  `npm run batch -- --matches=20 --seed=1 --player=Shelly --bots=Trunk,Sergei,Kurama --speed=8`
+  corre N partidas solo-bots deterministas (autopilot del slot player)
+  y agrega winrates/headbutts/caídas por critter + tabla y JSON
+  (`--out`, def `.tmp/batch-results.json`). `--verify` corre el mismo
+  seed dos veces (con reload entre medias) y compara la secuencia de
+  eventos completa → `REPRODUCIBLE: yes/no`. `--dump-recordings=dir`
+  vuelca la RecordingSession completa de cada partida (cierra el hueco
+  del volcado headless).
 
-Huecos conocidos (AFILADO_PLAN): applier de ability-tuner, volcado
-headless de recordings, match runner headless (pick 6).
+Hueco conocido restante (AFILADO_PLAN): applier de ability-tuner
+(export JSON manual → falta ToolPatch a CRITTER_ABILITIES).
 
 ### Cabina de tuning (afilado slice B)
 
@@ -164,6 +174,23 @@ El tuner de Animation (player) dejó de ser un pipeline sin salida:
   del patch y la entrada vieja sobrevive (borrado = edición manual).
   Botones 📦 Copy / 💾 Download / ⚡ Apply to source; "Reset Derived"
   vuelve a lo autorado y limpia la divergencia del critter actual.
+
+### Determinismo + batch runner (afilado slice G)
+
+- **Un seed = una partida entera**: el seed del arena siembra también
+  el PRNG de la partida (src/match-rng.ts, mulberry32) que consumen los
+  rolls de decisión de los bots, el respawn y los drops del countdown.
+  El VFX (puffs, tumbles) sigue con Math.random — no afecta al
+  resultado. 'Replay Last' ahora reproduce la PARTIDA, no solo la arena
+  (solo-bots; con humano el input no se reproduce).
+- **DevApi**: `setAutopilot(on)` (el slot player pasa a updateBot, el
+  input humano se suprime — un solo escritor), `setFixedStep(N, dt)`
+  (N pasos de dt fijo por frame, render decimado 1/20 bajo fixed-step
+  para que SwiftShader no ahogue la sim; pausa y requestStep siguen
+  mandando).
+- **CLI**: `npm run batch` (ver Superficie programática). El fin de
+  partida se espera por PROGRESO del reloj de sim, no por timeout de
+  reloj de pared (robusto en máquinas lentas).
 
 ### Apply-patch workflow (2026-04-26, one-click desde H3 slice 4)
 

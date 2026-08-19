@@ -134,6 +134,8 @@ export type LabActionType =
   | 'reset_cooldowns'
   | 'force_seed'
   | 'set_speed'
+  | 'set_autopilot'
+  | 'set_fixed_step'
   | 'end_match';
 
 export interface LabAction {
@@ -314,6 +316,44 @@ export class DevApi {
 
   getSpeed(): number {
     return this.game.debugSpeedScale;
+  }
+
+  // --- Autopilot (afilado batch runner) ------------------------------------
+  // The player slot is driven by updateBot (same brain as the bots) and
+  // human input stops writing to it — Game.update skips updatePlayer while
+  // the flag is on, so there is exactly one writer at any time.
+
+  setAutopilot(on: boolean): void {
+    this.game.autopilotPlayer = on;
+    // Drop any held human inputs so a key that was down when autopilot
+    // engaged doesn't fire the instant it disengages.
+    clearAllHeldInputs();
+    this.logAction('set_autopilot', { on });
+  }
+
+  getAutopilot(): boolean {
+    return this.game.autopilotPlayer;
+  }
+
+  // --- Fixed-step (afilado batch runner) -----------------------------------
+  // While active, each rAF frame advances `stepsPerFrame` simulation steps
+  // of a FIXED dt (default 1/60) and renders once — stepsPerFrame=8 is
+  // ~8× real time, deterministic because dt no longer comes from the
+  // clock. The lab loop (tools/main.ts) reads this via getFixedStep().
+  // Pause (speed 0) still wins: no steps advance while paused, but a
+  // pending requestStep() single-step does. Pass null to deactivate.
+  private fixedStep: { stepsPerFrame: number; dt: number } | null = null;
+
+  setFixedStep(stepsPerFrame: number | null, dt: number = 1 / 60): void {
+    this.fixedStep =
+      stepsPerFrame !== null && stepsPerFrame > 0
+        ? { stepsPerFrame: Math.floor(stepsPerFrame), dt }
+        : null;
+    this.logAction('set_fixed_step', { stepsPerFrame, dt });
+  }
+
+  getFixedStep(): { stepsPerFrame: number; dt: number } | null {
+    return this.fixedStep;
   }
 
   // -------------------------------------------------------------------------

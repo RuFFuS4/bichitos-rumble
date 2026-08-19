@@ -1,5 +1,42 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-20 — Afilado slice G: determinismo + batch runner — el balance deja de ser anécdota
+
+- **Un seed = una partida entera** (src/match-rng.ts, mulberry32): el
+  seed del arena siembra también el PRNG que consumen los 4 rolls de
+  decisión de bot.ts, pickRespawnPos y los drops del countdown. El VFX
+  y el shuffle de menú se quedan con Math.random a propósito. 'Replay
+  Last' pasa de reproducir la arena a reproducir la PARTIDA (solo-bots).
+- **Autopilot** (`devApi.setAutopilot`): el slot player corre con
+  updateBot y el input humano se suprime — un solo escritor; el bloque
+  de portales también se salta (un bot entrando al portal redirigiría
+  la página en mitad de un batch). **Fixed-step**
+  (`devApi.setFixedStep(N)`): N pasos de dt fijo por frame; pausa y
+  requestStep siguen mandando.
+- **Batch runner** (`npm run batch`, scripts/run-match-batch.mjs):
+  playwright headless contra el dev server — N partidas con seeds
+  consecutivos, autopilot + fixed-step, agregación de winrates/HB/
+  caídas por critter en tabla + JSON, `--dump-recordings` (cierra el
+  hueco dual-surface del volcado headless) y `--verify` (mismo seed
+  dos veces con reload entre medias, compara la secuencia completa de
+  eventos).
+- **Dos fixes de integración cazados con el batch real**: (1) bajo
+  SwiftShader headless el render por-frame ahogaba el rAF y la sim
+  corría a 0.125× — render decimado a 1/20 bajo fixed-step y la misma
+  partida pasó de timeout a completarse a ~1.6× de reloj; (2) el
+  timeout del runner era de reloj de pared — ahora espera por PROGRESO
+  del reloj de sim (stall de 20s = colgado), robusto en máquinas
+  lentas. Bonus de debugging: un boot roto resultó ser estado HMR
+  rancio de vite tras el churn de git (stash/branch), no código —
+  reiniciar el dev server antes de culpar al árbol.
+- **Verificado**: tsc limpio, batch real de 2 partidas completas
+  (51s sim, headbutts/caídas/eliminaciones reales en la tabla) y
+  `--verify` → **REPRODUCIBLE: yes, 218 eventos idénticos** entre dos
+  runs con reload. La pregunta '¿está Shelly OP contra pesados?' ya
+  cuesta un comando, no 10 partidas a mano y una hoja de cálculo.
+- Pick 6 cerrado — **la fase de afilado queda completa** (8/8 picks:
+  slices A-G). Habilita el golden sim test headless a futuro.
+
 ## 2026-08-20 — Afilado slice F: HUD fuente única — muere la tercera capa de drift
 
 - **El HUD in-match ya no se copia a mano entre index.html y

@@ -113,8 +113,18 @@ Orden acordado:
    gana la familia .lives-* y el preload de sprites compartido.
    Paridad verificada: 187 propiedades computadas en index, cero
    diferencias. La clase de drift muere estructuralmente.
-7. [ ] Último pick según demanda: determinismo+batch runner (pick 6 —
-   LA herramienta Claude-first de la directiva dual-surface).
+7. [x] **Slice G — determinismo + batch runner** (pick 6, 2026-08-20):
+   un seed = una partida entera (match-rng sembrado con el seed del
+   arena; bots/respawn/drops), autopilot del slot player, fixed-step
+   con render decimado, y `npm run batch` (playwright headless):
+   winrates agregados + `--verify` → REPRODUCIBLE: yes con 218
+   eventos idénticos. Cierra el hueco dual-surface del match runner
+   headless y el volcado de recordings.
+
+**FASE DE AFILADO COMPLETA** (8/8 picks, slices A-G). Siguiente etapa
+según la dirección post-H3: mecánicas y assets a fondo. Hueco menor
+que queda del dual-surface: applier de ability-tuner (ToolPatch a
+CRITTER_ABILITIES).
 
 ## Dirección post-H3 (fijada por Rafa, 2026-08-19)
 
