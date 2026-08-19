@@ -92,6 +92,29 @@ el lab se vuelve ilegible para quien entre después.
 >
 > New internal tools should consume this module from day one.
 
+### Superficie programática (para Claude/agentes — directiva dual-surface)
+
+Todo lo tunable tiene camino sin navegador. Catálogo actual:
+
+- **Aplicar cambios a fuente**: escribir un ToolPatch JSON y
+  `npm run apply-tool-patch -- --patch=x.json [--dry-run]` (tools:
+  `calibrate` → roster.ts incl. physicsRadius · `anim-lab` → merge de
+  overrides · `decor-editor` → layouts por pack · `feel-patch` →
+  dot-paths de FEEL). Mismos mutadores testeados (`npm run test:patch`)
+  que usan los botones de la UI.
+- **Con dev server vivo**: `POST /__tool-patch/preview|apply` (JSON del
+  patch; preview devuelve el diff estructurado sin escribir).
+- **Módulo puro**: `scripts/tool-patch-core.mjs` exporta
+  applyPatch/validateToolPatch/simpleDiff para scripts ad-hoc.
+- **Estado del juego en vivo**: `window.__game` y `window.__devApi`
+  (match lab) via Playwright — snapshots, startMatch con seed/pack,
+  setSpeed/requestStep, forzar habilidades, bots, recording.
+- **Inspección de assets**: `npm run inspect:clips|parts|bounds`,
+  `verify:glbs`, `check-pws-parity`.
+
+Huecos conocidos (AFILADO_PLAN): applier de ability-tuner, volcado
+headless de recordings, match runner headless (pick 6).
+
 ### Cabina de tuning (afilado slice B)
 
 - **Hotkeys de tiempo** (match lab, fuera de inputs): `F7`/`.` step de
