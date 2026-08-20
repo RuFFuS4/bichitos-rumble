@@ -122,8 +122,8 @@ export const CRITTER_CONFIGS: Record<string, CritterConfigServer> = {
   // headbuttForce 16 → 48 (bestia). Boost: 3.0 → 2.55 (micropass 1)
   // → 2.30 (micropass 2, otro -10 %).
   Trunk:     serverConfig('Trunk',     2.30, { speed: 16, headbuttForce: 48 }),
-  Kurama:    serverConfig('Kurama'),     // Trickster
-  Shelly:    serverConfig('Shelly'),     // Tank
+  Kurama:    serverConfig('Kurama', 1.15),  // Trickster — balance v2 2026-08-21
+  Shelly:    serverConfig('Shelly', 1.30),  // Tank — balance v2 2026-08-21
   Kermit:    serverConfig('Kermit'),     // Controller
   Sihans:    serverConfig('Sihans'),     // Trapper
   Kowalski:  serverConfig('Kowalski',  1.20), // headbutt boosted

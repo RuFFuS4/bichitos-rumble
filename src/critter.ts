@@ -103,12 +103,18 @@ export const CRITTER_PRESETS: CritterConfig[] = [
   { // Trickster — fast, light, evasive. Uses Frenzy as ult.
     ...deriveCritterStats('Kurama'),
     name: 'Kurama', color: 0xff6633,
+    // 2026-08-21 balance v2 (audit: 74 headbutts/partida para 2 wins —
+    // mucho ruido, poco premio): algo más de castigo por golpe.
+    headbuttBoost: 1.15,
     role: 'Trickster',
     tagline: 'Fast, sly, unpredictable.',
   },
   { // Tank — slow, heavy, crushing. Uses Frenzy as ult (berserk).
     ...deriveCritterStats('Shelly'),
     name: 'Shelly', color: 0x2d8659,
+    // 2026-08-21 balance v2 (audit: 0/6 wins, 2.6 caídas/p): el tanque
+    // que no devolvía el golpe. Boost dentro del cap 1.0-1.5 del marco.
+    headbuttBoost: 1.30,
     role: 'Tank',
     tagline: 'Heavy and wise.',
   },

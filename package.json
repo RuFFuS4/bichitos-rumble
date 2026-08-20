@@ -25,7 +25,8 @@
     "batch": "node scripts/run-match-batch.mjs",
     "check": "tsc --noEmit && node --test scripts/tests/tool-patch-core.test.mjs && node scripts/verify-critter-glbs.mjs && node scripts/verify-ability-parity.mjs && node scripts/check-pws-parity.mjs && vite build && node scripts/clean-dist-raw.mjs && node scripts/check-payload-budget.mjs",
     "doctor": "node scripts/doctor.mjs",
-    "test:patch": "node --test scripts/tests/tool-patch-core.test.mjs"
+    "test:patch": "node --test scripts/tests/tool-patch-core.test.mjs",
+    "balance": "node scripts/balance-report.mjs"
   },
   "dependencies": {
     "@colyseus/sdk": "^0.17.43",
