@@ -140,6 +140,40 @@ export function updateBot(
     bot.startHeadbutt();
   }
 
+  // --- Defensive ability: reactive, NOT probabilistic (balance v2 it3).
+  // A tank that sometimes forgets the shield is not a tank — and a
+  // deterministic reflex keeps batch runs reproducible. Fires when the
+  // bot is in the edge danger band with an enemy inside punt distance:
+  // exactly the "about to be knocked into the void" moment the audit
+  // showed killing Shelly 3×/match.
+  {
+    const defensive = findAbilityByTag(bot.abilityStates, 'defensive');
+    if (defensive && canActivateAbility(defensive)) {
+      // Two triggers, both anticipatory (the shell has 0.20 s of windUp
+      // — waiting for contact range casts it into the launch):
+      //   1. Incoming attack: the nearest enemy is mid-headbutt or in a
+      //      mobility charge within defendRange × 1.6 — shield BEFORE
+      //      the punt lands, anywhere on the arena (immunity mid-arena
+      //      is correct tank play against force-48 charges).
+      //   2. Edge pressure: enemy inside defendRange while we sit in
+      //      the shrinking rim's danger band.
+      const chargeIncoming =
+        (nearest.isHeadbutting ||
+          findAbilityByTag(nearest.abilityStates, 'mobility')?.active) &&
+        nearestDist < FEEL.bots.defendRange * 1.6;
+      let edgePressure = false;
+      if (arena) {
+        const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
+        edgePressure =
+          rd > arena.currentRadius - FEEL.bots.edgeMargin &&
+          nearestDist < FEEL.bots.defendRange;
+      }
+      if (chargeIncoming || edgePressure) {
+        activateAbility(defensive, bot);
+      }
+    }
+  }
+
   // Ability fire rate multiplier (aggressive mode fires more often)
   const aggroMul = mode === 'aggressive' ? 3.0 : 1.0;
 

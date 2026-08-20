@@ -22,6 +22,7 @@ export const FEEL = {
     edgeMargin: 1.4,      // distancia al borde donde arranca la autoconservación
     edgeSteer: 1.6,       // peso del tirón hacia el centro en pleno borde
     lookAhead: 1.1,       // sonda de vacío por delante (aware de patrones de colapso)
+    defendRange: 2.8,     // enemigo a menos de esto + banda de peligro → defensiva
   },
 
   // --- Headbutt ---

@@ -840,6 +840,11 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // (effectiveMass) como en server (effectiveMass).
       name: 'Steel Shell',
       description: 'Lock into the shell — invulnerable for 4 s',
+      // 2026-08-21 balance v2 it3: retag aoe_push → defensive. Heredaba
+      // el tag del factory y el bot lo quemaba con la condición de AoE
+      // (radius 0 + force 0 = cast desperdiciado). Con el tag correcto
+      // entra en el trigger defensivo reactivo del cerebro (bot.ts).
+      tags: ['defensive'],
       radius: 0, force: 0,
       windUp: 0.20, cooldown: 12.0, duration: 4.0,
       slowDuringActive: 0, cancelAnimOnEnd: true,

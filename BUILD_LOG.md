@@ -1,5 +1,22 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-21 — Balance v2 it3: el escudo de Shelly despierta (y el límite del tuning)
+
+- **Steel Shell re-etiquetado** aoe_push → defensive: heredaba el tag
+  del factory y el cerebro lo QUEMABA en castings de AoE con radius 0 y
+  force 0 — el escudo de la tanque llevaba meses siendo un no-op.
+- **Trigger defensivo en el cerebro** (determinista, sin dados): castea
+  al anticipar carga entrante (headbutt/mobility activa a defendRange
+  ×1.6 — el shell tiene 0.2s de windUp, esperar al contacto lo castea
+  ya volando) o con presión en la banda del borde. FEEL.bots.defendRange.
+- **Resultado medido**: Shelly sigue 0/6 con 3 caídas/p. Diagnóstico
+  final: estructural, no de tuning — a speed 8 contra trios con Trunk/
+  Kowalski no puede desengancharse ni llegar, y 4s de escudo con 12s de
+  cooldown solo posponen. Sebastian ídem por puntería. VEREDICTO: ambos
+  necesitan MECÁNICA (fase de mecánicas), no más stats — candidatos:
+  shell que refleja knockback, o cañón con auto-aim suave para el bot.
+  En manos humanas pueden estar bien (meta-bot ≠ meta-jugador).
+
 ## 2026-08-21 — Balance v2 ronda 2: Trunk domado + bots con conciencia del borde
 
 - **Trunk boost 2.30 → 1.0** (decisión de Rafa, micropass 3): fuerza
