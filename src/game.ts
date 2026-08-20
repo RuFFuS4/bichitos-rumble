@@ -1892,7 +1892,7 @@ export class Game {
         // drives the player slot too)
         for (let i = 0; i < this.critters.length; i++) {
           if (i === this.playerIndex && !this.autopilotPlayer) continue;
-          updateBot(this.critters[i], this.critters, effectiveDt);
+          updateBot(this.critters[i], this.critters, effectiveDt, this.arena);
         }
 
         // 3. Ability updates

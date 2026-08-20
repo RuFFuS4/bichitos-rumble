@@ -51,7 +51,18 @@ const ZERO: BotInput = {
  * same drop-target behaviour anyway. If the only enemy alive is Kurama
  * during their immunity window, the bot falls back to standing still.
  */
-export function computeBotInput(bot: PlayerSchema, allPlayers: PlayerSchema[]): BotInput {
+// Edge awareness (balance v2, 2026-08-21) — keep in sync with the
+// client's FEEL.bots (src/gamefeel.ts). Mirrored inline: the server sim
+// carries no gamefeel module and these three are the only knobs.
+const EDGE_MARGIN = 1.4;
+const EDGE_STEER = 1.6;
+const LOOK_AHEAD = 1.1;
+
+export function computeBotInput(
+  bot: PlayerSchema,
+  allPlayers: PlayerSchema[],
+  arena?: { currentRadius: number; isOnArena(x: number, z: number): boolean },
+): BotInput {
   if (!bot.alive || bot.falling) return ZERO;
 
   let nearest: PlayerSchema | null = null;
@@ -60,6 +71,8 @@ export function computeBotInput(bot: PlayerSchema, allPlayers: PlayerSchema[]): 
 
   for (const p of allPlayers) {
     if (p === bot || !p.alive) continue;
+    // Balance v2: a falling target is bait — don't chase it off the rim.
+    if (p.falling) continue;
     // v0.11 — Kurama Mirror Trick bot confuse: bots stop targeting a
     // Kurama who is in an immunity window. Other critters with
     // immunity (post-respawn) are still considered targets — only
@@ -82,8 +95,29 @@ export function computeBotInput(bot: PlayerSchema, allPlayers: PlayerSchema[]): 
   const dx = nearest.x - bot.x;
   const dz = nearest.z - bot.z;
   const d = Math.max(0.01, Math.sqrt(dx * dx + dz * dz));
-  const moveX = dx / d;
-  const moveZ = dz / d;
+  let moveX = dx / d;
+  let moveZ = dz / d;
+
+  // --- Edge awareness (balance v2) — mirror of src/bot.ts: void probe
+  // ahead (collapse-pattern aware) + radial danger-band inward blend.
+  if (arena) {
+    const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
+    if (rd > 0.01) {
+      if (!arena.isOnArena(bot.x + moveX * LOOK_AHEAD, bot.z + moveZ * LOOK_AHEAD)) {
+        moveX = -bot.x / rd;
+        moveZ = -bot.z / rd;
+      } else {
+        const danger = rd - (arena.currentRadius - EDGE_MARGIN);
+        if (danger > 0) {
+          const w = Math.min(1, danger / EDGE_MARGIN) * EDGE_STEER;
+          moveX -= (bot.x / rd) * w;
+          moveZ -= (bot.z / rd) * w;
+          const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
+          if (len > 0.01) { moveX /= len; moveZ /= len; }
+        }
+      }
+    }
+  }
 
   // --- Headbutt at contact range ---
   const headbutt = nearestDist < 2.0;

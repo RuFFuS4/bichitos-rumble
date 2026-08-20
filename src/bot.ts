@@ -22,7 +22,14 @@ import { matchRng } from './match-rng';
  *   - chase        : chase only, no headbutt, no abilities
  *   - ability_only : skip headbutt, still fires abilities
  */
-export function updateBot(bot: Critter, allCritters: Critter[], dt: number): void {
+export function updateBot(
+  bot: Critter,
+  allCritters: Critter[],
+  dt: number,
+  // Minimal arena view for edge awareness (balance v2). Optional so
+  // headless/unit contexts without an arena keep working.
+  arena?: { currentRadius: number; isOnArena(x: number, z: number): boolean },
+): void {
   if (!bot.alive) return;
 
   const mode = bot.debugBotBehaviour;
@@ -48,6 +55,9 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
   let nearbyCount = 0;
   for (const other of allCritters) {
     if (other === bot || !other.alive) continue;
+    // Balance v2: a falling target is bait — chasing it walks the bot
+    // straight off the edge. Let gravity finish the job unassisted.
+    if (other.falling) continue;
     if (other.config.name === 'Kurama' && other.isImmune) continue;
     const dx = other.x - bot.x;
     const dz = other.z - bot.z;
@@ -79,6 +89,37 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
     if (mobility?.active && mobility.windUpLeft <= 0) {
       nx *= FEEL.chargeRush.steerFactor;
       nz *= FEEL.chargeRush.steerFactor;
+    }
+
+    // --- Edge awareness (balance v2, 2026-08-21) -----------------------
+    // Two layers, both FEEL-tunable:
+    //   1. Void probe: if the spot ~lookAhead ahead of the chase vector
+    //      is off the arena (collapse-pattern aware), steer fully inward.
+    //   2. Radial margin: within edgeMargin of the shrinking rim, blend
+    //      an inward pull proportional to how deep into the danger band
+    //      the bot is, then renormalize.
+    // Runs BEFORE the confusion inversion on purpose: a confused bot
+    // SHOULD still be able to stumble into the void — that's the point
+    // of Toxic Touch.
+    if (arena) {
+      const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
+      if (rd > 0.01) {
+        const aheadX = bot.x + nx * FEEL.bots.lookAhead;
+        const aheadZ = bot.z + nz * FEEL.bots.lookAhead;
+        if (!arena.isOnArena(aheadX, aheadZ)) {
+          nx = -bot.x / rd;
+          nz = -bot.z / rd;
+        } else {
+          const danger = rd - (arena.currentRadius - FEEL.bots.edgeMargin);
+          if (danger > 0) {
+            const w = Math.min(1, danger / FEEL.bots.edgeMargin) * FEEL.bots.edgeSteer;
+            nx -= (bot.x / rd) * w;
+            nz -= (bot.z / rd) * w;
+            const len = Math.sqrt(nx * nx + nz * nz);
+            if (len > 0.01) { nx /= len; nz /= len; }
+          }
+        }
+      }
     }
 
     // 2026-04-30 final-L — Toxic Touch confused inversion (offline bot).

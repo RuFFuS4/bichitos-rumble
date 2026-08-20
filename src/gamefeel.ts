@@ -15,6 +15,15 @@ export const FEEL = {
     velocityDeadZone: 0.15,   // below this speed → snap to 0 (kills micro-drift)
   },
 
+  // --- Bot brain (balance v2, 2026-08-21) ---
+  // Conciencia del borde: sin esto los bots persiguen recto hacia el
+  // vacío (el audit midió 2.4-3.0 caídas/partida en todo el roster).
+  bots: {
+    edgeMargin: 1.4,      // distancia al borde donde arranca la autoconservación
+    edgeSteer: 1.6,       // peso del tirón hacia el centro en pleno borde
+    lookAhead: 1.1,       // sonda de vacío por delante (aware de patrones de colapso)
+  },
+
   // --- Headbutt ---
   headbutt: {
     anticipation: {

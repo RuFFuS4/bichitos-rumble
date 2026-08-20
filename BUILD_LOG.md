@@ -1,5 +1,25 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-21 — Balance v2 ronda 2: Trunk domado + bots con conciencia del borde
+
+- **Trunk boost 2.30 → 1.0** (decisión de Rafa, micropass 3): fuerza
+  efectiva 110.4 → 48. Sigue 5/6 pero ahora en partidas largas (24.5 →
+  44.7 HB/partida) — domado sin matar al elefante (speed 16 intacto).
+- **Conciencia del borde en el cerebro bot** (FEEL.bots: edgeMargin/
+  edgeSteer/lookAhead — sliders gratis en el tuner): sonda de vacío por
+  delante (aware de patrones de colapso) + tirón al centro en la banda
+  de peligro; un objetivo cayendo ya no es cebo; la confusión de Toxic
+  Touch se aplica DESPUÉS a propósito. Espejo en el server
+  (computeBotInput + arenaSim en BrawlRoom) — los bots online también
+  dejan de suicidarse.
+- **Re-audit de 54 partidas**: caídas ↓ en los ágiles (Sihans 2.3→1.5,
+  Kurama 2.7→2.2), partidas 51s→68s (más pelea real), Kurama 2→3 wins.
+- **Revelación**: Sebastian y Shelly siguen 0/6 con 3.0 caídas EXACTAS
+  — sus muertes son EMPUJADOS, no de andarse al vacío. La palanca que
+  queda es de kit: el cerebro no casta defensivas reactivamente (el
+  Shell Shield de Shelly se dispara con ≥2 cerca, nunca al borde de
+  comerse un golpe). Candidato: trigger defensivo en el cerebro.
+
 ## 2026-08-21 — Balance marco v2: el presupuesto dice la verdad
 
 - **Marco v2 aprobado por Rafa**: P/W/S sigue siendo el lenguaje, pero

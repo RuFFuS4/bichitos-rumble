@@ -655,7 +655,7 @@ export class BrawlRoom extends Room {
       if (!p.isBot) continue;
       const data = this.internal.get(p.sessionId);
       if (!data) continue;
-      const input = computeBotInput(p, players);
+      const input = computeBotInput(p, players, this.arenaSim);
       data.inputMoveX = input.moveX;
       data.inputMoveZ = input.moveZ;
       data.inputHeadbutt = input.headbutt;

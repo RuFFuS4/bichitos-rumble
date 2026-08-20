@@ -94,9 +94,12 @@ export const CRITTER_PRESETS: CritterConfig[] = [
     // K + L stuns recortados en abilities.ts en proporción similar.
     // Speed 16 y headbuttForce 48 sin tocar — el cabezazo se modula
     // vía boost y la sensación de "elefante que persigue" se preserva.
+    // 2026-08-21 balance v2 (micropass 3, decisión de Rafa): boost
+    // 2.30 → 1.0. Con el boost tasado en el presupuesto, la fuerza
+    // efectiva era 110.4 (+50 pts cuando el roster vive en 0..+5).
+    // A 48 sigue doblando al segundo más fuerte — elefante intacto.
     speed: 16,
     headbuttForce: 48,
-    headbuttBoost: 2.30,
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
   },
