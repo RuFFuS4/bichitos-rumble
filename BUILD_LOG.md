@@ -1,5 +1,28 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-21 — Balance marco v2: el presupuesto dice la verdad
+
+- **Marco v2 aprobado por Rafa**: P/W/S sigue siendo el lenguaje, pero
+  'cero potencia fuera de presupuesto' — el headbuttBoost (multiplicador
+  DIRECTO de fuerza en physics.ts) y los overrides explícitos se tasan.
+  Herramienta dual-surface:  (scripts/balance-report.mjs)
+  — presupuesto efectivo en puntos P/W/S, overrides marcados con *, cruce
+  con los .tmp/audit-*.json del batch runner.
+- **Hallazgo mayor**: Trunk juega a otro juego — presupuesto efectivo
+  +50.4 (fuerza 48×2.30=110.4 vs 19.6 de Sergei, speed 16, masa +1) con
+  el roster entre 0 y +5. Decisión de diseño pendiente de Rafa (domar
+  boost→1.0 · re-derivar · jefe intencional).
+- **Ronda 1 de ajustes** (54 partidas de auditoría + re-batch): Shelly
+  boost 1.30, Kurama 1.15, Sebastian w -2→-1 (masa 0.8). Paridad server
+  sincronizada. Resultado: Kurama iguala wins con 40% menos headbutts;
+  Sebastian y Shelly SIGUEN 0/6 — la palanca no era masa/boost.
+- **Insight estructural**: el cerebro bot es uniforme y SIN conciencia
+  del borde (persigue recto hacia el vacío) → en ese meta la velocidad
+  es EL stat de supervivencia: Trunk speed16 cae 1.8/p, Shelly speed8
+  cae 3/p pese a masa máxima. W está sobretasado vs S en la práctica.
+  Caveat: el autopilot mide el meta-bot, no el meta-jugador (el cañón
+  de Sebastian necesita puntería que el cerebro no tiene).
+
 ## 2026-08-20 — Afilado slice G: determinismo + batch runner — el balance deja de ser anécdota
 
 - **Un seed = una partida entera** (src/match-rng.ts, mulberry32): el
