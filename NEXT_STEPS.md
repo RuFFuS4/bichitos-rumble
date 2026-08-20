@@ -121,10 +121,30 @@ Orden acordado:
    eventos idénticos. Cierra el hueco dual-surface del match runner
    headless y el volcado de recordings.
 
-**FASE DE AFILADO COMPLETA** (8/8 picks, slices A-G). Siguiente etapa
-según la dirección post-H3: mecánicas y assets a fondo. Hueco menor
-que queda del dual-surface: applier de ability-tuner (ToolPatch a
+**FASE DE AFILADO COMPLETA** (8/8 picks, slices A-G). Hueco menor que
+queda del dual-surface: applier de ability-tuner (ToolPatch a
 CRITTER_ABILITIES).
+
+## Balance v2 (2026-08-21 — primer bloque de la etapa de mecánicas)
+
+Marco, reglas, estado del roster y cola de mecánicas en
+[docs/BALANCE.md](docs/BALANCE.md). Ejecutado en un día con las
+herramientas del afilado (108+ partidas medidas):
+
+1. [x] Auditoría de balance (54 partidas, 9 critters autopilot).
+2. [x] Marco v2: `npm run balance` — cero potencia fuera de
+   presupuesto (boost y overrides tasados). Hallazgo: Trunk +50.4 de
+   presupuesto efectivo con el roster en 0..+5.
+3. [x] Ronda 1: Shelly boost 1.30, Kurama 1.15, Sebastian masa 0.8.
+4. [x] Ronda 2 (decisiones de Rafa): Trunk domado (boost→1.0, elefante
+   intacto) + bots con conciencia del borde (cliente+server) — caídas ↓
+   en 6/9, partidas 51→68s.
+5. [x] It3: Steel Shell despierta (retag defensive + trigger
+   anticipatorio del cerebro).
+6. [ ] **Siguiente**: mecánicas de balanceo para Shelly (shell que
+   refleja knockback) y Sebastian (que el cañón conecte en meta-bot) —
+   principio nuevo de Rafa: las mecánicas tienen fuerza en el
+   balanceo. Arranque natural de la fase de mecánicas y assets.
 
 ## Dirección post-H3 (fijada por Rafa, 2026-08-19)
 
