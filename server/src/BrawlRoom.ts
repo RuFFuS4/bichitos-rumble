@@ -28,7 +28,7 @@ import { createAbilityStates, tickPlayerAbilities, getAbilityKit } from './sim/a
 import { ArenaSim } from './sim/arena.js';
 import { computeBotInput } from './sim/bot.js';
 import {
-  verifyPlayer, recordMatchResult,
+  verifyPlayer, recordMatchResult, recordMatch,
   getAllBeltHolders, diffBeltHolders,
 } from './db.js';
 
@@ -151,7 +151,13 @@ export class BrawlRoom extends Room {
    *  read once on endMatch. Null until the match actually starts. */
   private playingStartedAtMs: number | null = null;
   /** H4 integridad: humanos verificados al arrancar el countdown. */
-  private humansAtStart = 0;
+  private humansVerifiedAtStart = 0;
+  /** H4 retención: asientos humanos TOTALES (no-bot, con o sin identidad)
+   *  al arrancar el countdown — alimenta matches.humans_at_start. */
+  private humansTotalAtStart = 0;
+  /** H4 — true si la sala se creó con { private: true } (Play with
+   *  Friends). Se persiste en matches.private_room para métricas. */
+  private isPrivateRoom = false;
   /** Authoritative slow-zone tracker (Kermit Poison Cloud, Kowalski
    *  Arctic Burst). Each zone is consulted by `effectiveSpeed` for
    *  every player and its `ttl` decremented once per tick. Zones
@@ -183,6 +189,7 @@ export class BrawlRoom extends Room {
     // idéntico al de una sala pública.
     const opts = (_options ?? {}) as { private?: boolean };
     if (opts.private === true) {
+      this.isPrivateRoom = true;
       void this.setPrivate(true);
       console.log(`[BrawlRoom] sala PRIVADA creada: ${this.roomId}`);
     }
@@ -519,9 +526,12 @@ export class BrawlRoom extends Room {
     // machacar bots a solas no toca Throne/Flash/Streak ni el Slayer.
     // Se mide al inicio a propósito: un rage-quit posterior no
     // "desinfecta" la partida del que se queda.
-    this.humansAtStart = [...this.state.players.keys()]
+    this.humansVerifiedAtStart = [...this.state.players.keys()]
       .filter((sid) => !!this.internal.get(sid)?.onlinePlayerId
         && !this.state.players.get(sid)?.isBot).length;
+    // H4 retención: humanos totales (asientos no-bot), verificados o no.
+    this.humansTotalAtStart = [...this.state.players.values()]
+      .filter((p) => !p.isBot).length;
     const seed = (Math.random() * 0xFFFFFFFF) | 0;
     this.arenaSim = new ArenaSim(seed);
     this.state.arenaSeed = seed;
@@ -573,6 +583,34 @@ export class BrawlRoom extends Room {
     this.lock().catch(() => { /* already locked or disposing */ });
     console.log(`[BrawlRoom] match ended reason=${reason} winner=${winnerSessionId} (locked)`);
 
+    // H4 retención — historial de partidas. SIEMPRE antes de
+    // recordOnlineBeltStats (que resetea playingStartedAtMs). try/catch
+    // con la misma filosofía que las escrituras de belts: un fallo de
+    // BD jamás tumba el room.
+    try {
+      const endedAt = Date.now();
+      const winner = winnerSessionId ? this.state.players.get(winnerSessionId) : undefined;
+      // Ganador verificado Y aún humano en su asiento — un asiento en
+      // bot-takeover (rage-quit / gracia expirada) no cuenta como
+      // ganador identificable (coherente con "irse nunca puntúa").
+      const winnerPlayerId = winner && !winner.isBot
+        ? this.internal.get(winnerSessionId)?.onlinePlayerId ?? null
+        : null;
+      recordMatch({
+        startedAtMs: this.playingStartedAtMs,
+        endedAtMs: endedAt,
+        durationMs: this.playingStartedAtMs !== null ? endedAt - this.playingStartedAtMs : 0,
+        humansAtStart: this.humansTotalAtStart,
+        humansVerified: this.humansVerifiedAtStart,
+        endReason: reason,
+        winnerPlayerId,
+        winnerCritter: winner?.critterName ?? '',
+        privateRoom: this.isPrivateRoom,
+      });
+    } catch (err) {
+      console.error('[Matches] failed to record match:', err);
+    }
+
     this.recordOnlineBeltStats(winnerSessionId);
   }
 
@@ -596,8 +634,8 @@ export class BrawlRoom extends Room {
     // H4 integridad: sin un segundo humano verificado, la partida no
     // puntúa NADA (ni wins ni losses ni kills) — los cinturones online
     // se ganan contra personas, no farmeando bots.
-    if (this.humansAtStart < 2) {
-      console.log(`[Belts] match not recorded (humansAtStart=${this.humansAtStart} < 2)`);
+    if (this.humansVerifiedAtStart < 2) {
+      console.log(`[Belts] match not recorded (humansVerifiedAtStart=${this.humansVerifiedAtStart} < 2)`);
       return;
     }
     const durationMs = this.playingStartedAtMs !== null

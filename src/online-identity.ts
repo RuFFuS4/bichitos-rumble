@@ -146,6 +146,10 @@ export function getDeviceIdentityId(): string {
 export interface OnlineIdentity {
   playerId: string;
   nickname: string;
+  /** true solo cuando el server acaba de CREAR la fila (primer registro
+   *  de ese nick). El modal lo usa para decidir si muestra el paso de
+   *  "apúntate el código de recuperación". */
+  isNew?: boolean;
 }
 
 /**
@@ -236,8 +240,12 @@ export async function registerNickname(nickname: string): Promise<OnlineIdentity
     throw new Error(reason);
   }
 
-  const body = (await res.json()) as { id: string; nickname: string };
-  const identity: OnlineIdentity = { playerId: body.id, nickname: body.nickname };
+  const body = (await res.json()) as { id: string; nickname: string; isNew?: boolean };
+  const identity: OnlineIdentity = {
+    playerId: body.id,
+    nickname: body.nickname,
+    isNew: body.isNew === true,
+  };
   // 2026-05-01 final block — every registration writes to
   // sessionStorage (this tab's confirmed identity, used by
   // `getCachedIdentity` to skip the modal on refresh). Forks STOP
@@ -247,6 +255,14 @@ export async function registerNickname(nickname: string): Promise<OnlineIdentity
   // claimed playerId for any future session.
   sessionStorage.setItem(SESSION_PLAYER_ID_KEY, identity.playerId);
   sessionStorage.setItem(SESSION_NICKNAME_KEY, identity.nickname);
+  // 2026-08-24 H4 fix — espejar TAMBIÉN el token/identity usados en el
+  // registro. Sin esto, en el camino no-fork getDeviceToken() (que tras
+  // escribir la identidad de sesión prefiere sessionStorage) inventaba
+  // un token de pestaña que el server nunca había visto → verifyPlayer
+  // fallaba en el join y el jugador quedaba como guest. En el camino
+  // fork es un no-op (los valores ya viven en sessionStorage).
+  sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  sessionStorage.setItem(SESSION_IDENTITY_KEY, identityId);
   if (!forkSession) {
     localStorage.setItem(PLAYER_ID_KEY, identity.playerId);
     localStorage.setItem(NICKNAME_KEY, identity.nickname);
@@ -269,6 +285,120 @@ export function forgetIdentity(): void {
 export function getDeviceToken(): string {
   if (hasSessionIdentity()) return getOrCreateSessionToken();
   return getOrCreateToken();
+}
+
+// ---------------------------------------------------------------------------
+// Recovery code — identidad cross-device sin login (H4 retención)
+// ---------------------------------------------------------------------------
+//
+// El server solo guarda un hash salteado del código, así que "ver mi
+// código" no puede releerlo del server: cada petición al endpoint genera
+// (y ROTA) uno nuevo. Para no rotar por accidente, el cliente cachea en
+// localStorage el último código conocido — el que generó aquí o el que
+// el jugador tecleó en una recuperación con éxito. Guardarlo en local
+// tiene la misma postura de seguridad que el device token que ya vive
+// ahí: quien lea este localStorage ya posee la sesión entera.
+const RECOVERY_CODE_KEY = 'br-online-recovery-code'; // JSON { playerId, code }
+
+function cacheRecoveryCode(playerId: string, code: string): void {
+  try {
+    localStorage.setItem(RECOVERY_CODE_KEY, JSON.stringify({ playerId, code }));
+  } catch { /* modo privado — el código simplemente no se cachea */ }
+}
+
+/** Último código conocido en este dispositivo PARA ese playerId (una
+ *  pestaña forkeada con otra identidad no ve el código del nick
+ *  preferido del dispositivo). */
+export function getCachedRecoveryCode(playerId: string): string | null {
+  try {
+    const raw = localStorage.getItem(RECOVERY_CODE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { playerId?: string; code?: string };
+    if (parsed.playerId === playerId && typeof parsed.code === 'string') return parsed.code;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Devuelve el código de recuperación de la identidad activa: el cacheado
+ * si existe (sin tocar el server → no rota), o pide uno nuevo al server
+ * (que invalida cualquier código anterior) y lo cachea. Lanza con un
+ * reason-code machine-readable en caso de fallo.
+ */
+export async function getOrFetchRecoveryCode(): Promise<string> {
+  const identity = getCachedIdentity();
+  if (!identity) throw new Error('no_identity');
+  const cached = getCachedRecoveryCode(identity.playerId);
+  if (cached) return cached;
+
+  let res: Response;
+  try {
+    res = await fetch(restBase() + '/api/identity/recovery-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId: identity.playerId, token: getDeviceToken() }),
+    });
+  } catch {
+    throw new Error('network_error');
+  }
+  if (!res.ok) {
+    let reason = 'server_error';
+    try {
+      const body = await res.json();
+      if (body && typeof body.error === 'string') reason = body.error;
+    } catch { /* body no-JSON → server_error */ }
+    throw new Error(reason);
+  }
+  const body = (await res.json()) as { code: string };
+  cacheRecoveryCode(identity.playerId, body.code);
+  return body.code;
+}
+
+/**
+ * Recupera una identidad existente en ESTE dispositivo con (nickname +
+ * código de recuperación). El server verifica el hash y rota el device
+ * token al que generamos aquí — a partir de ese momento este dispositivo
+ * es dueño de la fila (el original conserva su vía de reclamo por
+ * identity_id). Al éxito se persiste igual que un registro no-fork:
+ * identidad preferida del dispositivo (localStorage) + sesión de la
+ * pestaña (sessionStorage), y se cachea el código tecleado (sigue
+ * siendo válido — el server no lo invalida al usarse).
+ */
+export async function recoverIdentity(code: string, nickname: string): Promise<OnlineIdentity> {
+  const token = getOrCreateToken();
+  const identityId = getOrCreateIdentityId();
+
+  let res: Response;
+  try {
+    res = await fetch(restBase() + '/api/identity/recover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nickname, code, token, identityId }),
+    });
+  } catch {
+    throw new Error('network_error');
+  }
+  if (!res.ok) {
+    let reason = 'server_error';
+    try {
+      const body = await res.json();
+      if (body && typeof body.error === 'string') reason = body.error;
+    } catch { /* body no-JSON → server_error */ }
+    throw new Error(reason);
+  }
+
+  const body = (await res.json()) as { id: string; nickname: string };
+  const identity: OnlineIdentity = { playerId: body.id, nickname: body.nickname, isNew: false };
+  sessionStorage.setItem(SESSION_PLAYER_ID_KEY, identity.playerId);
+  sessionStorage.setItem(SESSION_NICKNAME_KEY, identity.nickname);
+  sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  sessionStorage.setItem(SESSION_IDENTITY_KEY, identityId);
+  localStorage.setItem(PLAYER_ID_KEY, identity.playerId);
+  localStorage.setItem(NICKNAME_KEY, identity.nickname);
+  cacheRecoveryCode(identity.playerId, code);
+  return identity;
 }
 
 // ---------------------------------------------------------------------------

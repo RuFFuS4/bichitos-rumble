@@ -313,6 +313,28 @@ const DICT = {
                                   es: 'Algo ha salido mal. Inténtalo otra vez.' },
   'nickname-registering':       { en: 'Registering…',           es: 'Registrando…' },
 
+  // ---- Nickname modal (recuperación cross-device, H4) ---------------------
+  'nickname-recover-link':      { en: 'Already have a nick? Recover it with your code',
+                                  es: '¿Ya tienes nick? Recupéralo con tu código' },
+  'nickname-recover-hint':      { en: 'Type your nick above and your recovery code here:',
+                                  es: 'Pon tu nick arriba y tu código de recuperación aquí:' },
+  // Formato de código, no texto — idéntico en ambos idiomas a propósito.
+  'nickname-code-placeholder':  { en: 'BICHO-XXXX-XXXX',        es: 'BICHO-XXXX-XXXX' },
+  'nickname-recover-btn':       { en: '🔑 Recover',              es: '🔑 Recuperar' },
+  'nickname-recovering':        { en: 'Recovering…',            es: 'Recuperando…' },
+  'nickname-err-bad-code':      { en: 'Wrong nick or code. Check both.',
+                                  es: 'Nick o código incorrectos. Revisa los dos.' },
+  'nickname-success-title':     { en: '✅ Nick saved!',          es: '✅ ¡Nick guardado!' },
+  'nickname-success-recovered': { en: '✅ Identity recovered!',  es: '✅ ¡Identidad recuperada!' },
+  'nickname-continue':          { en: '▶ Brawl on!',             es: '▶ ¡A pelear!' },
+  'nickname-view-code':         { en: '🔑 View my recovery code',
+                                  es: '🔑 Ver mi código de recuperación' },
+  'nickname-code-hint':         { en: 'Write it down! It recovers your nick on any device.',
+                                  es: '¡Apúntalo! Recupera tu nick en cualquier dispositivo.' },
+  'nickname-code-loading':      { en: 'Getting your code…',     es: 'Generando tu código…' },
+  'nickname-code-error':        { en: 'Could not get the code. Try again later.',
+                                  es: 'No se ha podido obtener el código. Inténtalo más tarde.' },
+
   // ---- Character select (badges dinámicos del grid) -----------------------
   'select-wip':               { en: 'WIP',                      es: 'EN OBRAS' },
   'select-coming-soon':       { en: 'Coming Soon',              es: 'Muy pronto' },
