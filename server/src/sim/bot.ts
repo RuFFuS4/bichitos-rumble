@@ -15,6 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PlayerSchema } from '../state/PlayerSchema.js';
+import { getAbilityKit } from './abilities.js';
 
 export interface BotInput {
   moveX: number;
@@ -127,15 +128,33 @@ export function computeBotInput(
   // 0.02 per frame ≈ ~40% chance/sec to actually fire while in the window.
   const ability1 =
     nearestDist > 3.0 && nearestDist < 6.0 && Math.random() < 0.02;
-  // 2026-04-29 K-session — Kowalski Snowball reuses the ability2
-  // slot (server kit index 1). The bot fires it as a ranged tool
-  // when the target is in the snowball's effective lane (4..14 u).
-  // Other critters' ability2 (ground_pound / blink / steel_shell)
-  // still fire on the surrounded-2-enemies condition. The server
-  // dispatcher resolves the actual type per kit.
+  // 2026-08-24 paridad con src/bot.ts (hallazgo del review adversarial:
+  // el cañón de Sebastian era solo-cliente y online nunca salía en
+  // 1v1). El slot 2 dispara según la FORMA del def, resuelta del kit
+  // — def-driven, sin special-cases por nombre:
+  //   · projectile (Kowalski Snowball): banda 4..14 u frontal.
+  //   · cono direccional (coneAngleDeg — Claw Wave de Sebastian): UNA
+  //     víctima delante dentro del radio ×0.9, doble de probabilidad.
+  //   · radial: "estoy rodeado" — nearbyCount >= 2, como siempre.
+  const def2 = getAbilityKit(bot.critterName)[1];
   let ability2: boolean;
-  if (bot.critterName === 'Kowalski') {
+  if (def2?.selfBuffOnly && (def2.selfImmunityDuration ?? 0) > 0 && !def2.decoyEscapeDistance) {
+    // Defensiva pura (Steel Shell): reflejo DETERMINISTA como en el
+    // cliente (it3) — anticipa la carga entrante o la presión en el
+    // borde. Sin dados: un tanque que a veces olvida el escudo no es
+    // un tanque. (Mirror Trick de Kurama queda fuera: su
+    // decoyEscapeDistance lo marca como escape, no como muro.)
+    const chargeIncoming = !!nearest.isHeadbutting && nearestDist < 2.8 * 1.6;
+    let edgePressure = false;
+    if (arena) {
+      const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
+      edgePressure = rd > arena.currentRadius - EDGE_MARGIN && nearestDist < 2.8;
+    }
+    ability2 = chargeIncoming || edgePressure;
+  } else if (def2?.type === 'projectile') {
     ability2 = nearestDist > 4.0 && nearestDist < 14.0 && Math.random() < 0.022;
+  } else if (typeof def2?.coneAngleDeg === 'number') {
+    ability2 = nearestDist < (def2.radius ?? 3.5) * 0.9 && Math.random() < 0.03;
   } else {
     ability2 = nearbyCount >= 2 && Math.random() < 0.015;
   }
