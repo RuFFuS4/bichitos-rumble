@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind, isOnSlipperyZone } from './abilities';
+import { createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind, isOnSlipperyZone } from './abilities-runtime';
 import type { AbilityState } from './abilities';
 import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
 import { play as playSound } from './audio';

@@ -3,7 +3,7 @@
 // ability preview)
 // ---------------------------------------------------------------------------
 
-import { createAbilityStates } from '../abilities';
+import { createAbilityStates } from '../abilities-runtime';
 import type { CritterConfig } from '../critter';
 import type { RosterEntry } from '../roster';
 import { getCritterThumbnail } from '../slot-thumbnail';

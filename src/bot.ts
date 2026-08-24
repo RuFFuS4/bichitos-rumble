@@ -1,5 +1,5 @@
 import { Critter } from './critter';
-import { activateAbility, canActivateAbility, findAbilityByTag } from './abilities';
+import { activateAbility, canActivateAbility, findAbilityByTag } from './abilities-runtime';
 import { FEEL } from './gamefeel';
 import { matchRng } from './match-rng';
 

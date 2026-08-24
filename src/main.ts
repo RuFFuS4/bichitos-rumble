@@ -27,7 +27,7 @@ import {
 import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 import { initOnlineBeltToast } from './online-belt-toast';
-import { isInsideZoneOfKind, setArenaForAbilities } from './abilities';
+import { isInsideZoneOfKind, setArenaForAbilities } from './abilities-runtime';
 import { initSceneAtmosphere } from './scene-atmosphere';
 import { tickSharedGameplay } from './frame-ticks';
 import { initStatusLegend } from './hud/status-legend';

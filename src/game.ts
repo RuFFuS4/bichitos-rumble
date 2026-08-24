@@ -4,7 +4,7 @@ import { Critter, CRITTER_PRESETS, type CritterConfig } from './critter';
 import { updatePlayer } from './player';
 import { consumeMenuAction, clearMenuActions } from './input';
 import { updateBot } from './bot';
-import { updateAbilities } from './abilities';
+import { updateAbilities } from './abilities-runtime';
 import { resolveCollisions, checkFalloff, updateFalling } from './physics';
 import {
   updateHUD, showOverlay, hideOverlay,
@@ -48,7 +48,9 @@ import { getDeviceToken, type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
-import { spawnShockwaveRing, spawnFrenzyBurst, spawnDecoyAt, spawnAllInTrajectoryPreview, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing, deriveZoneVfxKind } from './abilities';
+import { getCritterVfxPalette } from './abilities';
+import { clearActiveZones, pushNetworkZone, deriveZoneVfxKind } from './abilities-runtime';
+import { spawnShockwaveRing, spawnFrenzyBurst, spawnDecoyAt, spawnAllInTrajectoryPreview, spawnZoneRing } from './abilities-vfx';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { clearProjectiles } from './projectiles';
 import { clearAllCritterStatus, disposeCritterStatus } from './hud/status-icons';

@@ -19,7 +19,7 @@ import type * as THREE from 'three';
 import type { Game } from './game';
 import type { Critter } from './critter';
 import { updateDustPuffs } from './dust-puff';
-import { tickAbilityZones, isInsideZoneOfKind, tickLOffline } from './abilities';
+import { tickAbilityZones, isInsideZoneOfKind, tickLOffline } from './abilities-runtime';
 import { tickProjectiles } from './projectiles';
 import {
   setCritterStatus,
