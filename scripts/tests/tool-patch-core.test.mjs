@@ -778,3 +778,56 @@ test('ability-patch: applies against the REAL src/abilities.ts and round-trips',
   assert.equal(once, applyAbilityPatch(real, patch.data));
   assert.equal(applyPatch(once, patch), once);
 });
+
+// ---------------------------------------------------------------------------
+// Review 2026-08-24 — expresiones aritméticas con espacio deben RECHAZAR
+// (antes `68 * 1.15` / `0.3 * 2` / `1e-3` se medio-reescribían).
+// ---------------------------------------------------------------------------
+
+test('feel-patch: arithmetic and sci-notation values refuse instead of half-rewriting', () => {
+  const src = [
+    'export const FEEL = {',
+    '  shake: {',
+    '    headbutt: 0.3 * 2,   // tuned live',
+    '    landing: 1e-3,',
+    '  },',
+    '};',
+  ].join('\n');
+  for (const key of ['shake.headbutt', 'shake.landing']) {
+    assert.throws(
+      () => applyPatch(src, { tool: 'feel-patch', version: 1, generated: 't', data: { [key]: 5 } }),
+      /not found|not a plain number/i,
+      `${key} debía rechazar`,
+    );
+  }
+});
+
+test('ability-patch: `68 * 1.15` refuses instead of half-rewriting', () => {
+  const src = [
+    'export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {',
+    '  Sergei: [',
+    '    makeChargeRush({',
+    '      cooldown: 68 * 1.15,',
+    '    }),',
+    '  ],',
+    '};',
+  ].join('\n');
+  assert.throws(
+    () => applyPatch(src, { tool: 'ability-patch', version: 1, generated: 't', data: { Sergei: { 'J.cooldown': 5 } } }),
+    /not a plain numeric literal/i,
+  );
+});
+
+test('anim-personality: `1.2 * 2` refuses instead of half-rewriting', () => {
+  const src = [
+    'export const PERSONALITY_OVERRIDES: Record<string, Partial<AnimationPersonality>> = {',
+    '  Sergei: {',
+    '    idleBobHz: 1.2 * 2,',
+    '  },',
+    '};',
+  ].join('\n');
+  assert.throws(
+    () => applyPatch(src, { tool: 'anim-personality', version: 1, generated: 't', data: { Sergei: { idleBobHz: 3 } } }),
+    /not a plain number/i,
+  );
+});

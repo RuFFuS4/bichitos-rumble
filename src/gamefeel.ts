@@ -23,6 +23,19 @@ export const FEEL = {
     edgeSteer: 1.6,       // peso del tirón hacia el centro en pleno borde
     lookAhead: 1.1,       // sonda de vacío por delante (aware de patrones de colapso)
     defendRange: 2.8,     // enemigo a menos de esto + banda de peligro → defensiva
+    // Tasas de decisión POR SEGUNDO (review 2026-08-24): las antiguas
+    // probabilidades por-frame (0.02, 0.015...) asumían 60 Hz — a 144 Hz
+    // los bots casteaban 2.4× más y el server a 30 Hz la mitad. Estos
+    // valores son la conversión exacta 1-(1-p)^60 de aquellas, así que
+    // a dt=1/60 el comportamiento (y el golden) es idéntico. El roll:
+    // matchRng() < (1-(1-rate)^dt) × aggroMul.
+    fireRatesPerSec: {
+      mobility: 0.702,
+      radial: 0.596,
+      cone: 0.839,
+      ranged: 0.737,
+      buff: 0.382,
+    },
   },
 
   // --- Headbutt ---

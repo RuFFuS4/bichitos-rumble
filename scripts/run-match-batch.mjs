@@ -583,6 +583,14 @@ async function runGolden(browser, labUrl, cfg) {
     return false;
   }
 
+  // Review 2026-08-24: matriz del golden desincronizada (entradas de
+  // menos, player/seed distintos) → mensaje guiado, no TypeError.
+  if (!Array.isArray(golden.matrix) || golden.matrix.length !== GOLDEN_MATRIX.length
+      || golden.matrix.some((g, i) => g.player !== GOLDEN_MATRIX[i].player || g.seed !== GOLDEN_MATRIX[i].seed)) {
+    console.error('ERROR: el golden guardado no coincide con la GOLDEN_MATRIX actual (¿matriz editada?). Regenera con npm run golden:write.');
+    return false;
+  }
+
   let allOk = true;
   for (let i = 0; i < GOLDEN_MATRIX.length; i++) {
     const g = golden.matrix[i];
@@ -621,7 +629,7 @@ async function runGolden(browser, labUrl, cfg) {
 // ---------------------------------------------------------------------------
 
 async function runBatch(browser, labUrl, cfg, participants) {
-  const page = await openLabPage(browser, labUrl);
+  let page = await openLabPage(browser, labUrl);
   const timeoutMs = Math.ceil((MATCH_SIM_SEC / cfg.speed) * 1000) + TIMEOUT_MARGIN_MS;
   if (cfg.dumpDir) await mkdir(cfg.dumpDir, { recursive: true });
 
@@ -655,6 +663,15 @@ async function runBatch(browser, labUrl, cfg, participants) {
       if (i === 0) throw e;
       console.log(`FALLO: ${e.message}`);
       matchResults.push({ index: i, seed, ok: false, error: e.message });
+      // Review 2026-08-24: una página muerta (Target crashed/closed,
+      // contexto destruido) envenenaba TODAS las partidas restantes —
+      // recreamos la página para que el resto del batch corra limpio.
+      const msg = String(e.message ?? '');
+      if (/Target (crashed|closed)|context was destroyed|has been closed/i.test(msg)) {
+        try { await page.close(); } catch { /* ya muerta */ }
+        page = await openLabPage(browser, labUrl);
+        console.log('  (página recreada tras el crash)');
+      }
     }
   }
   await page.close();
@@ -672,6 +689,9 @@ async function runBatch(browser, labUrl, cfg, participants) {
   };
   await writeJson(cfg.out, outDoc);
   console.log(`JSON: ${path.resolve(cfg.out)}`);
+  // Review 2026-08-24: partidas falladas ⇒ exit 1 (antes salía 0 y un
+  // `npm run batch && balance-report` encadenaba sobre datos cojos).
+  return agg.matchesFailed === 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -767,7 +787,8 @@ async function main() {
       const ok = await runVerify(browser, labUrl, cfg, participants);
       if (!ok) exitCode = 1;
     } else {
-      await runBatch(browser, labUrl, cfg, participants);
+      const ok = await runBatch(browser, labUrl, cfg, participants);
+      if (!ok) exitCode = 1;
     }
 
     } // fin del modo normal (no-golden)

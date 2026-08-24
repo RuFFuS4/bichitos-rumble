@@ -2144,6 +2144,13 @@ export class Game {
     // Un seed = una partida entera (mismo contrato que enterCountdown).
     seedMatchRng(seed);
     this.arena.reset();
+    // Review 2026-08-24: sin estas limpiezas, una Poison Cloud (ttl 10s)
+    // o un Snowball en vuelo de la partida anterior CONTAMINAN la
+    // siguiente en el batch runner (misma página, N partidas) y en
+    // Restart Same Seed — rompiendo el contrato "same seed ⇒ same
+    // outcome" en las partidas i>0. Espeja enterCountdown/enterTitle.
+    clearActiveZones();
+    clearProjectiles();
     // Lab doesn't expose a pack picker yet — roll randomly too so the
     // /tools.html path matches normal play. If a specific pack is needed
     // for testing, `options.packId` is forwarded when provided.

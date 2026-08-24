@@ -30,7 +30,10 @@ export function updateBot(
   // headless/unit contexts without an arena keep working.
   arena?: { currentRadius: number; isOnArena(x: number, z: number): boolean },
 ): void {
-  if (!bot.alive) return;
+  // Review 2026-08-24: guard de falling en paridad con el server (que
+  // devuelve ZERO) — un bot cayendo seguía persiguiendo/casteando en
+  // el aire y podía disparar cooldowns fantasma antes del respawn.
+  if (!bot.alive || bot.falling) { bot.hasInput = false; return; }
 
   const mode = bot.debugBotBehaviour;
 
@@ -104,8 +107,15 @@ export function updateBot(
     if (arena) {
       const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
       if (rd > 0.01) {
-        const aheadX = bot.x + nx * FEEL.bots.lookAhead;
-        const aheadZ = bot.z + nz * FEEL.bots.lookAhead;
+        // Review 2026-08-24: la sonda usa la DIRECCIÓN normalizada, no
+        // el vector ya escalado — durante una carga steerFactor deja
+        // nx/nz en ~0.15 y la sonda encogía a 0.17 u (miraba a sus
+        // propios pies justo cuando más rápido va hacia el vacío).
+        const dl = Math.sqrt(nx * nx + nz * nz);
+        const dirX = dl > 0.001 ? nx / dl : nx;
+        const dirZ = dl > 0.001 ? nz / dl : nz;
+        const aheadX = bot.x + dirX * FEEL.bots.lookAhead;
+        const aheadZ = bot.z + dirZ * FEEL.bots.lookAhead;
         if (!arena.isOnArena(aheadX, aheadZ)) {
           nx = -bot.x / rd;
           nz = -bot.z / rd;
@@ -176,6 +186,13 @@ export function updateBot(
 
   // Ability fire rate multiplier (aggressive mode fires more often)
   const aggroMul = mode === 'aggressive' ? 3.0 : 1.0;
+  // Review 2026-08-24: rolls frame-rate-independientes — la tasa vive
+  // por SEGUNDO en FEEL.bots.fireRatesPerSec y se convierte con el dt
+  // real del frame. A dt=1/60 reproduce EXACTAMENTE las probabilidades
+  // históricas (golden intacto); a 144 Hz deja de castear 2.4× más y
+  // el server (30 Hz) puede espejar la misma tasa.
+  const roll = (ratePerSec: number): boolean =>
+    matchRng() < (1 - Math.pow(1 - ratePerSec, dt)) * aggroMul;
 
   // --- Mobility ability: use at mid-range to close the gap
   const mobilityAbility = findAbilityByTag(bot.abilityStates, 'mobility');
@@ -185,7 +202,7 @@ export function updateBot(
     nearestDist > 3.0 &&
     nearestDist < 6.0
   ) {
-    if (matchRng() < 0.02 * aggroMul) {
+    if (roll(FEEL.bots.fireRatesPerSec.mobility)) {
       activateAbility(mobilityAbility, bot);
     }
   }
@@ -203,7 +220,7 @@ export function updateBot(
     const fires = isCone
       ? nearestDist < (aoeAbility.def.radius ?? 3.5) * 0.9
       : nearbyCount >= 2;
-    if (fires && matchRng() < (isCone ? 0.03 : 0.015) * aggroMul) {
+    if (fires && roll(isCone ? FEEL.bots.fireRatesPerSec.cone : FEEL.bots.fireRatesPerSec.radial)) {
       activateAbility(aoeAbility, bot);
     }
   }
@@ -219,7 +236,7 @@ export function updateBot(
     // Cone gate: only fire if the target is roughly in front of us
     // (within ±35° of our movement vector). nx,nz already point at
     // the target, so we just need to face it before firing.
-    if (matchRng() < 0.022 * aggroMul) {
+    if (roll(FEEL.bots.fireRatesPerSec.ranged)) {
       activateAbility(rangedAbility, bot);
     }
   }
@@ -227,7 +244,7 @@ export function updateBot(
   // --- Buff ability (e.g. Frenzy): activate when close to an enemy
   const buffAbility = findAbilityByTag(bot.abilityStates, 'buff');
   if (buffAbility && canActivateAbility(buffAbility) && nearestDist < 3.5) {
-    if (matchRng() < 0.008 * aggroMul) {
+    if (roll(FEEL.bots.fireRatesPerSec.buff)) {
       activateAbility(buffAbility, bot);
     }
   }

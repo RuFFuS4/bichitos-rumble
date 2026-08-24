@@ -59,6 +59,15 @@ const EDGE_MARGIN = 1.4;
 const EDGE_STEER = 1.6;
 const LOOK_AHEAD = 1.1;
 
+// Tasas de decisión POR SEGUNDO (review 2026-08-24) — espejo de
+// FEEL.bots.fireRatesPerSec del cliente. Antes las probabilidades
+// por-frame de 60 Hz estaban copiadas literales aquí (30 Hz): los bots
+// online casteaban la MITAD que offline. rollAt convierte por tick.
+const FIRE_RATES = { mobility: 0.702, radial: 0.596, cone: 0.839, ranged: 0.737 };
+const TICK_DT = 1 / 30;
+const rollAt = (ratePerSec: number): boolean =>
+  Math.random() < 1 - Math.pow(1 - ratePerSec, TICK_DT);
+
 export function computeBotInput(
   bot: PlayerSchema,
   allPlayers: PlayerSchema[],
@@ -127,7 +136,7 @@ export function computeBotInput(
   // Same constants as the offline bot in src/bot.ts so online feels similar.
   // 0.02 per frame ≈ ~40% chance/sec to actually fire while in the window.
   const ability1 =
-    nearestDist > 3.0 && nearestDist < 6.0 && Math.random() < 0.02;
+    nearestDist > 3.0 && nearestDist < 6.0 && rollAt(FIRE_RATES.mobility);
   // 2026-08-24 paridad con src/bot.ts (hallazgo del review adversarial:
   // el cañón de Sebastian era solo-cliente y online nunca salía en
   // 1v1). El slot 2 dispara según la FORMA del def, resuelta del kit
@@ -144,7 +153,21 @@ export function computeBotInput(
     // borde. Sin dados: un tanque que a veces olvida el escudo no es
     // un tanque. (Mirror Trick de Kurama queda fuera: su
     // decoyEscapeDistance lo marca como escape, no como muro.)
-    const chargeIncoming = !!nearest.isHeadbutting && nearestDist < 2.8 * 1.6;
+    // Review 2026-08-24: el cliente tambien anticipa cargas de
+    // MOVILIDAD activas (charge_rush/blink), no solo headbutts — sin
+    // esto, un Trunk cargando lanzaba a la Shelly online sin que
+    // levantara el escudo. Mismo patron kit+indice que isAnchored().
+    const nearestKit = getAbilityKit(nearest.critterName);
+    let mobilityActive = false;
+    for (let i = 0; i < nearest.abilities.length; i++) {
+      const d = nearestKit[i];
+      if (d && (d.type === 'charge_rush' || d.type === 'blink') && nearest.abilities[i].active) {
+        mobilityActive = true;
+        break;
+      }
+    }
+    const chargeIncoming =
+      (!!nearest.isHeadbutting || mobilityActive) && nearestDist < 2.8 * 1.6;
     let edgePressure = false;
     if (arena) {
       const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
@@ -152,11 +175,11 @@ export function computeBotInput(
     }
     ability2 = chargeIncoming || edgePressure;
   } else if (def2?.type === 'projectile') {
-    ability2 = nearestDist > 4.0 && nearestDist < 14.0 && Math.random() < 0.022;
+    ability2 = nearestDist > 4.0 && nearestDist < 14.0 && rollAt(FIRE_RATES.ranged);
   } else if (typeof def2?.coneAngleDeg === 'number') {
-    ability2 = nearestDist < (def2.radius ?? 3.5) * 0.9 && Math.random() < 0.03;
+    ability2 = nearestDist < (def2.radius ?? 3.5) * 0.9 && rollAt(FIRE_RATES.cone);
   } else {
-    ability2 = nearbyCount >= 2 && Math.random() < 0.015;
+    ability2 = nearbyCount >= 2 && rollAt(FIRE_RATES.radial);
   }
   const ultimate = false; // conservative: let bots not spam ultimates online
 

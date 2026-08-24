@@ -294,7 +294,11 @@ export function applyFeelPatch(source, data) {
     if (blockClose < 0) throw new Error(`feel-patch: unbalanced braces in section '${sec}'`);
     const blockText = record.slice(blockOpen + 1, blockClose);
 
-    const lineRe = new RegExp(`(^|\\n)([ \\t]*)${escapeRegex(key)}:\\s*(-?\\d+(?:\\.\\d+)?)`, 'g');
+    // Review 2026-08-24: el número debe ser el VALOR ENTERO — sin el
+    // lookahead, `1e-3` matcheaba el `1` y `0.3 * 2` el `0.3`,
+    // corrompiendo la expresión en silencio. Tras el token solo puede
+    // venir coma, comentario o fin de línea.
+    const lineRe = new RegExp(`(^|\\n)([ \\t]*)${escapeRegex(key)}:\\s*(-?\\d+(?:\\.\\d+)?)(?=[ \\t]*(?:,|//|/\\*|\\r|\\n|$))`, 'g');
     const blockMask = codeMask(blockText);
     const lines = [...blockText.matchAll(lineRe)].filter((m) => {
       const keyIdx = m.index + m[1].length + m[2].length;
@@ -811,7 +815,9 @@ function mergePersonalityFieldsIntoBlock(blockText, fields, orderedFields, headI
       const lineEnd = endOfLine(out, valueStart);
       // The numeric token must be the WHOLE value (next char ends it):
       // `idleBobHz: BASE * 2` or `1e-3` must refuse, not half-rewrite.
-      const vm = out.slice(valueStart, lineEnd).match(/^([ \t]*)(-?\d+(?:\.\d+)?)(?=[,\s}/]|$)/);
+      // Review 2026-08-24: `[,\s}/]` aceptaba espacio → `1.2 * 2` se
+      // medio-reescribía. Solo whitespace y luego terminador real.
+      const vm = out.slice(valueStart, lineEnd).match(/^([ \t]*)(-?\d+(?:\.\d+)?)[ \t]*(?=,|\/\/|\/\*|$)/);
       if (!vm) {
         throw new Error(`anim-personality: field '${field}' of '${name}' is not a plain number — edit src/animation-personality-overrides.ts by hand`);
       }
@@ -981,7 +987,9 @@ function rewriteAbilityField(record, name, slot, field, value) {
     // The numeric token must be the WHOLE value (next char ends it):
     // `force: FEEL.x.y`, `0xa8c0d0` or `1e-3` must refuse, not
     // half-rewrite.
-    const vm = inner.slice(valueStart).match(/^(\s*)(-?\d+(?:\.\d+)?)(?=[,\s})/]|$)/);
+    // Review 2026-08-24: `[,\s})/]` aceptaba espacio → `68 * 1.15` se
+    // medio-reescribía. Solo whitespace horizontal y terminador real.
+    const vm = inner.slice(valueStart).match(/^(\s*)(-?\d+(?:\.\d+)?)[ \t]*(?=,|\r|\n|\/\/|\/\*|$)/);
     if (!vm) {
       throw new Error(`ability-patch: field '${field}' in slot ${slot} of '${name}' is not a plain numeric literal — edit src/abilities.ts by hand`);
     }
