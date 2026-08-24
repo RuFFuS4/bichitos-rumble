@@ -14,7 +14,7 @@ initObservability();
 // the source language baked into the markup; this swaps in Spanish when
 // the detected/persisted language is 'es'. See src/i18n.ts header.
 applyStaticI18n();
-import { updateCameraShake } from './gamefeel';
+import { FEEL, updateCameraShake } from './gamefeel';
 import { initPreview, tickPreview } from './preview';
 import { isLikelyMobile } from './input';
 import { initTouchInput } from './input-touch';
@@ -188,6 +188,18 @@ if (previewCanvas) {
 // and a narrow viewport. Keyboard backend is always on regardless.
 if (isLikelyMobile()) {
   initTouchInput();
+}
+
+// Accessibility (H4) — prefers-reduced-motion. Si el SO pide movimiento
+// reducido, amortiguamos SOLO los efectos de cámara (shake + hit-stop)
+// vía el multiplicador central de FEEL; squash/stretch y animaciones de
+// gameplay se mantienen porque comunican quién recibió el golpe. Ver el
+// comentario de FEEL.accessibility en src/gamefeel.ts para el alcance.
+// Se lee una vez en el arranque — cambiar el ajuste del SO en caliente
+// requiere recargar la página (deliberado: cero coste por frame).
+if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+  FEEL.accessibility.motionScale = 0.3;
+  console.info('[main] prefers-reduced-motion — camera shake/hit-stop damped (motionScale 0.3)');
 }
 
 // Badge toast — creates the DOM node so the first match-end is ready to

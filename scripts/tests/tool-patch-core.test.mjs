@@ -76,6 +76,31 @@ test('calibrate: unknown critter throws, source untouched semantics', () => {
   assert.throws(() => applyCalibrate(ROSTER, { nonexistent: { scale: 1 } }), /entry not found/);
 });
 
+test('calibrate: fields inside multi-line block comments survive', () => {
+  // Review 2026-08-24: the old line-based comment cut only recognised a
+  // comment when the line contained the `/` opener itself, so values on
+  // the CONTINUATION lines of a /* */ block (and on its closing line,
+  // before the terminator) were silently rewritten.
+  const src = [
+    'export const ROSTER = [',
+    '  {',
+    "    id: 'sergei',",
+    '    /* old calibration kept for reference:',
+    '       scale: 0.66, pivotY: 0.10,',
+    '       rotation: 1.5708, */',
+    '    scale: 1.09, rotation: 0,',
+    '    physicsRadius: R, pivotY: 0.02,',
+    '  },',
+    '];',
+    '',
+  ].join('\n');
+  const out = applyCalibrate(src, { sergei: { scale: 2, pivotY: 0.5, rotation: 0 } });
+  // The parked block-comment values survive byte-identical...
+  assert.match(out, /\/\* old calibration kept for reference:\n {7}scale: 0\.66, pivotY: 0\.10,\n {7}rotation: 1\.5708, \*\//);
+  // ...and only the live fields are rewritten.
+  assert.match(out, /\*\/\n    scale: 2, rotation: 0,\n    physicsRadius: R, pivotY: 0\.5,/);
+});
+
 // ===========================================================================
 // anim-lab — the new merge contract
 // ===========================================================================

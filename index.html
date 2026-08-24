@@ -2,10 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Bichitos Rumble — Headbutt Your Rivals Into The Void</title>
   <meta name="description" content="Lightweight web arena brawler for Vibe Jam 2026. 4-player online, 9 critters, signature abilities, no signup. Free to play in your browser." />
   <meta name="theme-color" content="#0a0a18" />
+  <!-- H4 PWA: manifest para instalar el juego a pantalla completa desde el
+       navegador (Add to Home Screen). Colores = fondo del juego (#0a0a18),
+       icono = favicon-br.png (192x192 real, verificado) + SVG escalable.
+       Deliberadamente SIN service worker: fuera de alcance en H4 — el juego
+       es online-first y un SW mal cacheado es un footgun de deploys. Si
+       algún día se quiere offline/instalable "completo", apuntarlo como
+       tarea propia (workbox o SW manual + estrategia de versionado). -->
+  <link rel="manifest" href="/manifest.webmanifest" />
   <!-- Favicon — AI-generated BR mark. Multi-resolution .ico first (16/32/48/
        64/128/256 px PNG frames embedded; Windows taskbar + iOS Safari probe
        /favicon.ico before anything else). PNG fallback keeps older and edge

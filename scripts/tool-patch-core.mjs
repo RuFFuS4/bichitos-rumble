@@ -427,25 +427,34 @@ export function applyCalibrate(source, data) {
 }
 
 /**
- * Like String.replace(re, replacement) but line-scoped and skipping
- * anything after a comment start (quote-aware). Roster blocks carry
- * calibration notes in comments — a note like "scale: 0.66 was the old
- * value" must never be rewritten by the mutator.
+ * Like String.replace(re, replacement) but skipping comment text —
+ * line comments AND multi-line block comments (quote-aware, via
+ * codeMask). Roster blocks carry calibration notes in comments — a
+ * note like "scale: 0.66 was the old value", or a whole calibration
+ * "parked" inside a block comment, must never be rewritten.
+ *
+ * Review 2026-08-24: the old line-based cut only recognised a comment
+ * when the line itself contained a `/` flagged M_COMMENT — the
+ * CONTINUATION lines of a multi-line block comment (no `/` on them)
+ * slipped through and got rewritten, and on the closing line the text
+ * BEFORE the comment terminator was rewritten too. Now the text is
+ * split into comment / live runs straight from the mask (same source
+ * of truth feel-patch and anim-personality already filter on) and the
+ * regex only ever sees the live runs.
  */
 function replaceFieldOutsideComments(text, fieldRe, replacement) {
   const mask = codeMask(text);
-  let offset = 0;
-  return text.split('\n').map((line) => {
-    const lineStart = offset;
-    offset += line.length + 1;
-    // Cut at the first char that starts a comment on this line.
-    let cut = -1;
-    for (let i = 0; i < line.length; i++) {
-      if (mask[lineStart + i] === M_COMMENT && line[i] === '/') { cut = i; break; }
-    }
-    if (cut < 0) return line.replace(fieldRe, replacement);
-    return line.slice(0, cut).replace(fieldRe, replacement) + line.slice(cut);
-  }).join('\n');
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    const inComment = mask[i] === M_COMMENT;
+    let j = i + 1;
+    while (j < text.length && (mask[j] === M_COMMENT) === inComment) j++;
+    const run = text.slice(i, j);
+    out += inComment ? run : run.replace(fieldRe, replacement);
+    i = j;
+  }
+  return out;
 }
 
 // ===========================================================================

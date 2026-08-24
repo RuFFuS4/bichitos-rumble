@@ -33,6 +33,32 @@ const PARTIALS = {
 /** Matches `<!-- @partial:NAME -->` (whitespace-tolerant). */
 const TOKEN_RE = /<!--\s*@partial:([\w-]+)\s*-->/g;
 
+/**
+ * Post-injection sanity check: every `<!--` in the final HTML must have
+ * a later `-->`. An unclosed comment doesn't error in the browser — it
+ * silently comments out everything to the end of the document, which
+ * with injected partials shows up as "half the page is missing" with
+ * zero console output. Throwing here turns that into a build error that
+ * names the entry and the line of the offending opener.
+ */
+function assertNoUnclosedComment(html, filename) {
+  let idx = 0;
+  for (;;) {
+    const open = html.indexOf('<!--', idx);
+    if (open < 0) return;
+    const close = html.indexOf('-->', open + 4);
+    if (close < 0) {
+      const line = html.slice(0, open).split('\n').length;
+      throw new Error(
+        `[html-partials] entry "${filename}": unclosed HTML comment after partial injection — `
+        + `"<!--" opened at line ${line} has no matching "-->". `
+        + 'Check the injected partial files (and the entry itself) for a comment that never closes.',
+      );
+    }
+    idx = close + 3;
+  }
+}
+
 export function htmlPartialsPlugin() {
   /** Project root — set once config is resolved. */
   let root = process.cwd();
@@ -74,7 +100,7 @@ export function htmlPartialsPlugin() {
       handler(html, ctx) {
         if (!TOKEN_RE.test(html)) return html;
         TOKEN_RE.lastIndex = 0;
-        return html.replace(TOKEN_RE, (_match, name) => {
+        const out = html.replace(TOKEN_RE, (_match, name) => {
           const abs = resolvePartial(name);
           let content;
           try {
@@ -87,6 +113,13 @@ export function htmlPartialsPlugin() {
           }
           return content;
         });
+        // Review 2026-08-24 (diferido): un `<!--` sin `-->` posterior en
+        // el HTML resultante haría que el navegador se tragase EN
+        // SILENCIO todo el resto del documento (típicamente un partial
+        // que abre un comentario y no lo cierra). Error de build claro
+        // en vez de una página medio vacía imposible de diagnosticar.
+        assertNoUnclosedComment(out, ctx.filename ?? '(unknown entry)');
+        return out;
       },
     },
   };
