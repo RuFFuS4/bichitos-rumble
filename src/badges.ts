@@ -106,7 +106,7 @@ function championBadges(): BadgeDef[] {
       name: `${critter} — ${flavour}`,
       description: `Win ${CHAMPION_WINS_THRESHOLD} matches with ${critter}.`,
       icon,
-      imgPath: `./images/belts/${id}.png`,
+      imgPath: `./images/belts/${id}.webp`,
       critter,
       condition: (s: Stats) => (s.byCritter[critter]?.wins ?? 0) >= CHAMPION_WINS_THRESHOLD,
     };
@@ -124,7 +124,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Speedrun Belt',
     description: `Win a match in ${SPEEDRUN_MAX_SECS} seconds or less.`,
     icon: '⚡',
-    imgPath: './images/belts/speedrun-belt.png',
+    imgPath: './images/belts/speedrun-belt.webp',
     condition: (s) =>
       s.fastestWinSecs !== null && s.fastestWinSecs <= SPEEDRUN_MAX_SECS,
   },
@@ -134,7 +134,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Iron Will',
     description: 'Win a match without losing a single life.',
     icon: '🛡️',
-    imgPath: './images/belts/iron-will.png',
+    imgPath: './images/belts/iron-will.webp',
     condition: (s) => s.noDeathWins >= 1,
   },
   {
@@ -143,7 +143,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Untouchable',
     description: 'Win a match without taking a single headbutt.',
     icon: '👻',
-    imgPath: './images/belts/untouchable.png',
+    imgPath: './images/belts/untouchable.webp',
     condition: (s) => s.noHitWins >= 1,
   },
   {
@@ -152,7 +152,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Survivor',
     description: `Reach ${SURVIVOR_WINS_THRESHOLD} total wins across the roster.`,
     icon: '🏔️',
-    imgPath: './images/belts/survivor.png',
+    imgPath: './images/belts/survivor.webp',
     condition: (s) => s.totalWins >= SURVIVOR_WINS_THRESHOLD,
   },
   {
@@ -161,7 +161,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Globetrotter',
     description: 'Win at least one match with every playable critter.',
     icon: '🌍',
-    imgPath: './images/belts/globetrotter.png',
+    imgPath: './images/belts/globetrotter.webp',
     condition: (s) => {
       // Every critter in CHAMPIONS must have at least 1 win.
       for (const { critter } of CHAMPIONS) {
@@ -176,7 +176,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Arena Apex',
     description: 'Win a match with only one life left (comeback victory).',
     icon: '🔥',
-    imgPath: './images/belts/arena-apex.png',
+    imgPath: './images/belts/arena-apex.webp',
     condition: (s) => s.comebackWins >= 1,
   },
   {
@@ -185,7 +185,7 @@ const GLOBAL_BADGES: BadgeDef[] = [
     name: 'Pain Tolerance',
     description: `Win at least one match after taking ${PAIN_TOLERANCE_MIN_HITS}+ headbutts.`,
     icon: '💪',
-    imgPath: './images/belts/pain-tolerance.png',
+    imgPath: './images/belts/pain-tolerance.webp',
     // Coarse heuristic: cumulative hits received ≥ threshold AND ≥1 total
     // win. Phase 2 may refine with per-match tracking if the bar feels off.
     condition: (s) => {

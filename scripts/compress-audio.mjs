@@ -143,6 +143,11 @@ function runFfmpeg(src, dst, quality) {
       '-y',
       '-hide_banner', '-loglevel', 'error',
       '-i', src,
+      // -vn: los exports de Suno llevan la carátula como stream de vídeo
+      // mjpeg — sin esto ffmpeg la re-adjunta ENGORDADA y la salvaguarda
+      // "si crece, skip" convierte el script en un no-op (descubierto en
+      // la auditoría de payload 2026-08-24).
+      '-vn',
       '-codec:a', 'libmp3lame',
       '-q:a', String(quality),
       '-map_metadata', '-1',
