@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { setMatchHudVisible } from './dom-shared';
+import { t } from '../i18n';
 
 const endScreen      = document.getElementById('end-screen')!;
 const endResultEl    = document.getElementById('end-result')!;
@@ -35,10 +36,10 @@ export function setEndMatchStats(stats: EndMatchStats): void {
   // want themed glyphs, swap these for CSS masked SVGs without
   // touching the rest.
   const rows: Array<{ icon: string; label: string; value: number }> = [
-    { icon: '⚡', label: 'Headbutts',  value: stats.headbutts     },
-    { icon: '✨', label: 'Abilities',  value: stats.abilitiesUsed },
-    { icon: '💀', label: 'Falls',      value: stats.falls         },
-    { icon: '🔁', label: 'Respawns',   value: stats.respawns      },
+    { icon: '⚡', label: t('end-stat-headbutts'), value: stats.headbutts     },
+    { icon: '✨', label: t('end-stat-abilities'), value: stats.abilitiesUsed },
+    { icon: '💀', label: t('end-stat-falls'),     value: stats.falls         },
+    { icon: '🔁', label: t('end-stat-respawns'),  value: stats.respawns      },
   ];
   endStatsEl.innerHTML = '';
   const valueEls: Array<{ el: HTMLSpanElement; target: number }> = [];
@@ -120,7 +121,7 @@ endScreen.addEventListener('click', (e) => {
 // --- H4 share — end screen ------------------------------------------------
 // The button lives inside the tap-to-restart overlay, so clicks must not
 // bubble (a share tap would instantly restart the match otherwise).
-let endShareText = 'Bichitos Rumble — free web arena brawler!';
+let endShareText = t('share-pitch');
 const btnEndShare = document.getElementById('btn-end-share') as HTMLButtonElement | null;
 btnEndShare?.addEventListener('click', (ev) => {
   ev.stopPropagation();
@@ -131,8 +132,9 @@ btnEndShare?.addEventListener('click', (ev) => {
       .catch(() => { /* user cancelled */ });
   } else {
     nav.clipboard?.writeText(`${endShareText} ${url}`).then(() => {
-      btnEndShare.textContent = '✅ Copied!';
-      setTimeout(() => { btnEndShare.textContent = '📤 Share'; }, 1600);
+      btnEndShare.textContent = t('share-copied');
+      // Vuelve al texto original del botón — misma clave que su data-i18n.
+      setTimeout(() => { btnEndShare.textContent = t('end-share'); }, 1600);
     }).catch(() => { /* clipboard blocked */ });
   }
 });
@@ -146,7 +148,7 @@ export function showEndScreen(
 ): void {
   // Outcome-aware share line ("Gané con Kurama…" per the H4 roadmap
   // item); callers that don't pass one get the generic pitch.
-  endShareText = shareText ?? 'Bichitos Rumble — free web arena brawler!';
+  endShareText = shareText ?? t('share-pitch');
   // 2026-05-01 polish — prepend a crown / trophy / skull sprite to
   // the title text so the win/lose/draw read at-glance is reinforced
   // by the AI-generated HUD sheet. Emoji fallback ships alongside;

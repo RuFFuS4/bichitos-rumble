@@ -41,6 +41,7 @@ import {
 } from './input';
 import { showGamepadToast } from './hud';
 import { setGamepadGlyphMode } from './input-glyphs';
+import { t } from './i18n';
 
 // Deadzone for the left stick: below this magnitude we treat input as zero.
 // Prevents drifting sticks from nudging the critter and suppresses jitter
@@ -121,7 +122,7 @@ export function initGamepadInput(): void {
     pad.id = '';
     // Prevent held-action keys from staying pressed after disconnect.
     clearAllHeldInputs();
-    showGamepadToast('🎮 Gamepad disconnected');
+    showGamepadToast(t('hud-gamepad-disconnected'));
     // Restore the keyboard glyphs everywhere.
     setGamepadGlyphMode(false);
   });

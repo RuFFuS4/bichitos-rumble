@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { initObservability } from './observability';
+import { applyStaticI18n, t } from './i18n';
 import { createCamera, handleResize, syncSize, applyGameplayCameraPose } from './camera';
 import { Game } from './game';
 
@@ -7,6 +8,12 @@ import { Game } from './game';
 // before any other module runs its boot code. Inert without
 // VITE_SENTRY_DSN (see src/observability.ts).
 initObservability();
+
+// i18n static pass — resolve every data-i18n/-html/-placeholder in the
+// document BEFORE anything is shown (title screen included). English is
+// the source language baked into the markup; this swaps in Spanish when
+// the detected/persisted language is 'es'. See src/i18n.ts header.
+applyStaticI18n();
 import { updateCameraShake } from './gamefeel';
 import { initPreview, tickPreview } from './preview';
 import { isLikelyMobile } from './input';
@@ -259,7 +266,7 @@ if (btnSfx) {
       <span class="sprite-fallback-hud" aria-hidden="true">${m ? '🔇' : '🔊'}</span>
       <span class="sprite-hud sprite-hud-sfx-${m ? 'off' : 'on'}" aria-hidden="true"></span>`;
     btnSfx.classList.toggle('muted', m);
-    btnSfx.title = m ? 'Enable sound effects' : 'Disable sound effects';
+    btnSfx.title = m ? t('hud-sfx-enable') : t('hud-sfx-disable');
     btnSfx.setAttribute('aria-pressed', m ? 'true' : 'false');
   };
   refresh();
@@ -274,7 +281,7 @@ if (btnMusic) {
       <span class="sprite-fallback-hud" aria-hidden="true">${m ? '🎵' : '🎶'}</span>
       <span class="sprite-hud sprite-hud-music-${m ? 'off' : 'on'}" aria-hidden="true"></span>`;
     btnMusic.classList.toggle('muted', m);
-    btnMusic.title = m ? 'Enable music' : 'Disable music';
+    btnMusic.title = m ? t('hud-music-enable') : t('hud-music-disable');
     btnMusic.setAttribute('aria-pressed', m ? 'true' : 'false');
   };
   refresh();

@@ -19,6 +19,7 @@ import {
   registerNickname,
   type OnlineIdentity,
 } from '../online-identity';
+import { t } from '../i18n';
 
 const modalEl       = document.getElementById('nickname-modal')!;
 const inputEl       = document.getElementById('nickname-input') as HTMLInputElement;
@@ -32,16 +33,16 @@ const RESERVED = new Set(['admin', 'root', 'anonymous', 'null', 'undefined', 'gu
 
 function errorMessage(reasonCode: string): string {
   switch (reasonCode) {
-    case 'too_short': return 'Nickname must be at least 3 characters.';
-    case 'too_long': return 'Nickname must be at most 16 characters.';
-    case 'invalid_chars': return 'Only letters, digits, "-" and "_" allowed.';
-    case 'reserved': return 'That nickname is reserved. Pick another.';
-    case 'nickname_taken': return 'That nickname is already taken. Pick another.';
-    case 'nickname_required': return 'Nickname is required.';
-    case 'invalid_token': return 'Session invalid. Refresh the page.';
-    case 'rate_limited': return 'Too many attempts — wait a moment.';
-    case 'network_error': return 'Could not reach the server. Check your connection.';
-    default: return 'Something went wrong. Try again.';
+    case 'too_short': return t('nickname-err-too-short');
+    case 'too_long': return t('nickname-err-too-long');
+    case 'invalid_chars': return t('nickname-err-invalid-chars');
+    case 'reserved': return t('nickname-err-reserved');
+    case 'nickname_taken': return t('nickname-err-taken');
+    case 'nickname_required': return t('nickname-err-required');
+    case 'invalid_token': return t('nickname-err-invalid-token');
+    case 'rate_limited': return t('nickname-err-rate-limited');
+    case 'network_error': return t('nickname-err-network');
+    default: return t('nickname-err-generic');
   }
 }
 
@@ -62,7 +63,8 @@ function setBusy(busy: boolean): void {
   confirmBtn.disabled = busy;
   cancelBtn.disabled = busy;
   inputEl.disabled = busy;
-  confirmBtn.textContent = busy ? 'Registering…' : '▶ Play online';
+  // El texto de reposo es la misma clave que el data-i18n del botón.
+  confirmBtn.textContent = busy ? t('nickname-registering') : t('nickname-play');
 }
 
 /**

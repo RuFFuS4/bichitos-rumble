@@ -55,6 +55,7 @@ import { clearAllCritterStatus, disposeCritterStatus } from './hud/status-icons'
 import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
 import { getPreviewPackId } from './arena-decor-layouts';
 import { seedMatchRng, matchRng } from './match-rng';
+import { t, tf } from './i18n';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended' | 'online';
 
@@ -559,7 +560,7 @@ export class Game {
       getRosterEntry(this.player.config.name)?.id ?? null,
     );
     initAllLivesHUD(this.critters, this.playerIndex);
-    showOverlay('Preparing arena…');
+    showOverlay(t('hud-preparing-arena'));
 
     // 2026-04-29 — wait for the arena pack assets (skybox, ground texture,
     // decor GLBs) to settle before kicking off the visible countdown.
@@ -573,7 +574,7 @@ export class Game {
       // Guard: user may have quit / restarted while we were awaiting.
       if (this.phase === 'countdown' && this.phaseTimer < 0) {
         this.phaseTimer = FEEL.match.countdown;
-        showOverlay('Get Ready!');
+        showOverlay(t('hud-get-ready'));
       }
     });
 
@@ -739,7 +740,7 @@ export class Game {
         for (const c of this.onlineCritters.values()) { disposeCritterStatus(c); c.dispose(); }
         this.onlineCritters.clear();
         this.arena.reset();
-        showOverlay('Connecting...');
+        showOverlay(t('hud-connecting'));
 
         // Properly await leave so the server fully removes us before we
         // matchmake again. Server also calls lock() on match end, so
@@ -782,7 +783,7 @@ export class Game {
       this.onlineCritters.forEach(c => { disposeCritterStatus(c); c.dispose(); });
       this.onlineCritters.clear();
       this.arena.reset();
-      showOverlay('Connecting...');
+      showOverlay(t('hud-connecting'));
 
       // El ÚNICO punto que carga el SDK de Colyseus (chunk async).
       const { connectToBrawl, onPlayersChange } = await import('./network');
@@ -823,22 +824,12 @@ export class Game {
       // Anything else is a real connection failure.
       const msg = (err as Error)?.message ?? '';
       if (msg.includes('nickname_active_in_room')) {
-        alert(
-          'This nickname is already active in another tab on this device.\n\n' +
-          'Use a different nickname or close the other tab and try again.',
-        );
+        alert(t('connect-nickname-active'));
       } else if (msg.includes('nickname_taken')) {
-        alert(
-          'This nickname is already in use by another device.\n\n' +
-          'Pick a different nickname.',
-        );
+        alert(t('connect-nickname-taken'));
       } else {
-        const detail = msg ? `\n\nServer said: ${msg}` : '';
-        alert(
-          'Could not connect to multiplayer server.\n\n' +
-          'In dev: make sure the server is running (cd server && npm run dev).\n' +
-          `In prod: contact the site owner.${detail}`,
-        );
+        const detail = msg ? `\n\n${tf('connect-failed-server-said', { msg })}` : '';
+        alert(t('connect-failed') + detail);
       }
     } finally {
       this.connectInProgress = false;
@@ -883,7 +874,7 @@ export class Game {
     // Player info for the portal redirect query params is set after the
     // local critter spawns (needs config). See spawnOnlineCritter.
 
-    showOverlay('Waiting for opponent...');
+    showOverlay(t('hud-waiting-opponent'));
 
     // Player add/remove listeners via the network adapter — the SDK's
     // state-callbacks API (v3 proxies / v4 Callbacks) lives entirely in
@@ -1035,7 +1026,7 @@ export class Game {
     room.onLeave(() => {
       console.log('[Game] disconnected from room');
       if (this.phase === 'online' && this.room === room && !this.restartInProgress) {
-        showOverlay('Disconnected', 'Press T to return to title');
+        showOverlay(t('hud-disconnected'), t('hud-disconnected-sub'));
       }
     });
   }
@@ -1286,7 +1277,7 @@ export class Game {
         // timeout). Server keeps marching; we only delay the local
         // confirmation. Once `waitForPack` resolves we drop the overlay
         // and the player sees the fully-decorated scene.
-        showOverlay('Preparing arena…');
+        showOverlay(t('hud-preparing-arena'));
         void this.arena.waitForPack(2500).then(() => {
           // Defensive: only hide if we're still in playing phase. A
           // fast end-of-match could have already swapped phases.
@@ -1320,21 +1311,21 @@ export class Game {
           }
         }
 
-        let title = 'DRAW';
-        let subtitle = 'No winner';
+        let title = t('end-title-draw');
+        let subtitle = t('end-sub-no-winner');
         let result: EndResult = 'draw';
         if (winnerSid === localSid) {
-          result = 'win'; title = 'VICTORY'; subtitle = 'You won';
+          result = 'win'; title = t('end-title-victory'); subtitle = t('end-sub-you-won');
           playSoundEffect('victory');
           playMusic('special');
         } else if (winnerSid && winnerSid !== localSid) {
-          result = 'lose'; title = 'DEFEATED';
+          result = 'lose'; title = t('end-title-defeated');
           if (reason === 'opponent_left') {
-            subtitle = 'You won by default';
+            subtitle = t('end-sub-won-by-default');
           } else if (winnerIsBot) {
-            subtitle = `Bot ${winnerCritterName || ''} won`.trim();
+            subtitle = tf('end-sub-bot-won', { name: winnerCritterName || '' }).trim();
           } else {
-            subtitle = `${winnerCritterName || 'Opponent'} won`.trim();
+            subtitle = tf('end-sub-player-won', { name: winnerCritterName || t('end-opponent') }).trim();
           }
           playMusic('intro');
         } else {
@@ -1344,8 +1335,8 @@ export class Game {
         hideOverlay();
         showEndScreen(result, title, subtitle, false,
           result === 'win'
-            ? `I just won an online brawl in Bichitos Rumble! 🐛👊`
-            : 'Playing Bichitos Rumble — free web arena brawler! 🐛');
+            ? t('share-won-online')
+            : t('share-playing'));
 
         // Skeletal: surviving critters celebrate. Losers already locked
         // into 'defeat' via the alive-edge hook above. No-op for critters
@@ -1415,7 +1406,7 @@ export class Game {
     // Overlay for countdown
     if (serverPhase === 'countdown') {
       const sec = Math.max(0, Math.ceil(state.countdownLeft));
-      showOverlay(`${sec > 0 ? sec : 'GO!'}`);
+      showOverlay(sec > 0 ? String(sec) : t('hud-go'));
     }
 
     // HUD updates — active during countdown + playing, not waiting/ended
@@ -1454,7 +1445,7 @@ export class Game {
       console.warn('[Game] portal send failed:', err);
     }
 
-    showOverlay('Leaving...');
+    showOverlay(t('hud-leaving'));
 
     const redirectUrl = which === 'start'
       ? (getPortalReturnUrl() ?? getPortalExitUrl())
@@ -1559,8 +1550,8 @@ export class Game {
     hideOverlay();
     showEndScreen(result, title, subtitle, isFromPortal(),
       result === 'win' && this.player
-        ? `I just won as ${this.player.config.name} in Bichitos Rumble! 🐛👊`
-        : 'Playing Bichitos Rumble — free web arena brawler! 🐛');
+        ? tf('share-won-as', { name: this.player.config.name })
+        : t('share-playing'));
     if (result === 'win') {
       playSound('victory');
       // Music: celebratory track on victory. Preload already covers the
@@ -1889,7 +1880,7 @@ export class Game {
           // Flash "GO!" for ~0.45 s before hiding — the green variant in
           // CSS plays a radial burst, which sells the transition better
           // than snapping straight to gameplay.
-          showOverlay('GO!');
+          showOverlay(t('hud-go'));
           window.setTimeout(() => hideOverlay(), 450);
           this.phase = 'playing';
           // Stamp the moment the match really starts. Used by recordWin
@@ -1988,14 +1979,17 @@ export class Game {
 
         // Win/loss check
         if (!this.player.alive) {
-          this.enterEnded('lose', 'ELIMINATED', `${this.player.config.name} fell into the void`);
+          this.enterEnded('lose', t('end-title-eliminated'),
+            tf('end-sub-fell-void', { name: this.player.config.name }));
         } else if (this.activeCount <= 1 && !this.critters.some(c => c.falling)) {
-          this.enterEnded('win', 'VICTORY', `${this.player.config.name} is the last one standing`);
+          this.enterEnded('win', t('end-title-victory'),
+            tf('end-sub-last-standing', { name: this.player.config.name }));
         } else if (this.matchTimer <= 0) {
           if (this.player.alive) {
-            this.enterEnded('win', 'SURVIVED', `${this.player.config.name} made it to the end`);
+            this.enterEnded('win', t('end-title-survived'),
+              tf('end-sub-made-it', { name: this.player.config.name }));
           } else {
-            this.enterEnded('lose', 'TIME UP', 'Better luck next time');
+            this.enterEnded('lose', t('end-title-time-up'), t('end-sub-better-luck'));
           }
         }
         break;

@@ -13,6 +13,7 @@
 
 import { getRosterEntry } from '../roster';
 import { getCritterThumbnail } from '../slot-thumbnail';
+import { t } from '../i18n';
 
 // Null on /tools.html (the lab skips the waiting flow entirely).
 const waitingScreen    = document.getElementById('waiting-screen');
@@ -49,8 +50,9 @@ export function setWaitingShareRoom(roomId: string | null): void {
 waitingShareCopy?.addEventListener('click', () => {
   if (!currentShareUrl) return;
   navigator.clipboard?.writeText(currentShareUrl).then(() => {
-    waitingShareCopy.textContent = '✅ Copied!';
-    setTimeout(() => { waitingShareCopy.textContent = '📋 Copy link'; }, 1600);
+    waitingShareCopy.textContent = t('share-copied');
+    // Vuelve al texto original del botón — misma clave que su data-i18n.
+    setTimeout(() => { waitingShareCopy.textContent = t('waiting-share-copy'); }, 1600);
   }).catch(() => { /* clipboard blocked — the link is visible to copy by hand */ });
 });
 
@@ -58,7 +60,7 @@ waitingShareNative?.addEventListener('click', () => {
   if (!currentShareUrl) return;
   void navigator.share?.({
     title: 'Bichitos Rumble',
-    text: 'Join my private room in Bichitos Rumble!',
+    text: t('share-join-room'),
     url: currentShareUrl,
   }).catch(() => { /* user cancelled the share sheet — fine */ });
 });
@@ -162,7 +164,7 @@ function buildWaitingSlotEl(s: WaitingSlotData): HTMLDivElement {
   const name = document.createElement('span');
   name.className = 'waiting-slot-name';
   if (s.kind === 'empty') {
-    name.textContent = 'Open';
+    name.textContent = t('waiting-slot-open');
   } else if (s.nickname) {
     name.textContent = s.nickname;
   } else {
@@ -183,12 +185,13 @@ function buildWaitingSlotEl(s: WaitingSlotData): HTMLDivElement {
   const badge = document.createElement('span');
   badge.className = 'waiting-slot-badge';
   if (s.kind === 'bot') {
+    // El label viene SOLO del diccionario tipado (nunca input de usuario).
     badge.innerHTML =
       '<span class="sprite-fallback-hud" aria-hidden="true">\u{1F916}</span>' +
       '<span class="sprite-hud sprite-hud-bot-mask waiting-bot-sprite" aria-hidden="true"></span>' +
-      '<span class="waiting-bot-label">BOT</span>';
+      '<span class="waiting-bot-label">' + t('waiting-badge-bot') + '</span>';
   } else {
-    badge.textContent = s.kind === 'human' ? 'HUMAN' : 'OPEN';
+    badge.textContent = s.kind === 'human' ? t('waiting-badge-human') : t('waiting-badge-open');
   }
   el.appendChild(badge);
 

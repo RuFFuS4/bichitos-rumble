@@ -12,6 +12,7 @@ import type { Critter } from '../critter';
 import { getRosterEntry } from '../roster';
 import { getCritterThumbnail } from '../slot-thumbnail';
 import { tagGlyph } from '../input-glyphs';
+import { t, tf } from '../i18n';
 
 // ---- Top bar -------------------------------------------------------------
 
@@ -35,7 +36,7 @@ const portalToggleBtn = document.getElementById('btn-portal-toggle');
 const spectatorPrompt = document.getElementById('spectator-prompt');
 
 export function updateHUD(aliveCount: number, timeLeft: number): void {
-  if (aliveEl) aliveEl.textContent = `Alive: ${aliveCount}`;
+  if (aliveEl) aliveEl.textContent = tf('hud-alive', { n: aliveCount });
   if (timerEl) {
     const mins = Math.floor(timeLeft / 60);
     const secs = Math.floor(timeLeft % 60);
@@ -137,7 +138,7 @@ export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = 
       badge.innerHTML =
         '<span class="sprite-fallback-hud" aria-hidden="true">\u{1F916}</span>' +
         '<span class="sprite-hud sprite-hud-bot-mask lives-bot-sprite" aria-hidden="true"></span>';
-      badge.title = 'Bot';
+      badge.title = t('hud-bot');
       corner.appendChild(badge);
     }
 
@@ -225,7 +226,9 @@ function digitVariant(text: string): string | null {
   if (text === '3') return 'overlay-d-3';
   if (text === '2') return 'overlay-d-2';
   if (text === '1') return 'overlay-d-1';
-  if (text === 'GO!' || text === 'GO' || text === '0') return 'overlay-d-go';
+  // t('hud-go') cubre el valor localizado que envía game.ts; los literales
+  // ingleses quedan como red de seguridad para llamadores legacy.
+  if (text === t('hud-go') || text === 'GO!' || text === 'GO' || text === '0') return 'overlay-d-go';
   return null;
 }
 
@@ -316,7 +319,7 @@ export function initAbilityHUD(
     if (isUnavailable) {
       const soon = document.createElement('div');
       soon.className = 'ability-soon-badge';
-      soon.textContent = 'SOON';
+      soon.textContent = t('hud-soon');
       slot.appendChild(soon);
     }
 
@@ -432,8 +435,9 @@ export function setCopycatTarget(targetCritterName: string | null): void {
   badge.style.background = color;
   badge.style.color = pickReadableTextColor(color);
   badge.textContent = initial;
-  badge.title = `Copycat target: ${targetCritterName}`;
-  badge.setAttribute('aria-label', `Copycat target: ${targetCritterName}`);
+  const copycatLabel = tf('hud-copycat-target', { name: targetCritterName });
+  badge.title = copycatLabel;
+  badge.setAttribute('aria-label', copycatLabel);
 }
 
 /**
