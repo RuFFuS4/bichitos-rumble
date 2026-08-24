@@ -1,5 +1,28 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-24 (sesión larga 2) — Reconnect, integridad de belts, PWA y accesibilidad
+
+- **Reconnect con gracia de 30 s** (item nº1 de retención H4):
+  allowReconnection en onLeave para cierres anómalos, bot-takeover
+  como cobertura temporal, devolución limpia al volver. Cliente con
+  auto-reconexión del SDK (onDrop→Reconnecting…, onReconnect→limpia,
+  guard anti-duplicados en el respawn de critters online). E2e server
+  completo con Colyseus local (drop→grace→expiración→cierre); el
+  rejoin real necesita wifi de verdad → checklist de Rafa.
+- **Integridad de leaderboards**: <2 humanos verificados al countdown
+  = la partida no puntúa nada; rage-quit/gracia expirada = derrota
+  aunque tu critter-bot gane. Fix destapado por el e2e: un muerto que
+  desconecta ya no corta la partida de los 3 vivos. Y el Slayer Belt
+  resultó estar YA cableado entero (ROADMAP rancio) — verificado
+  physics→deaths→credit→db y documentado.
+- **PWA + reduced-motion** (agente): manifest standalone/landscape,
+  viewport-fit=cover, FEEL.accessibility.motionScale a 0.3× con
+  prefers-reduced-motion (solo shake/hit-stop — visibilidad ≠ mareo).
+- **Robustez**: calibrate respeta comentarios de bloque (66/66 tests)
+  y el plugin de partials detecta comentarios sin cerrar en build.
+- Coordinación de working tree compartido con el agente resuelta con
+  split de commits por pathspec (ramas disjuntas por fichero).
+
 ## 2026-08-24 (tanda grande autónoma) — H4 arranca: salas privadas, i18n, dieta y review
 
 Seis ramas aterrizadas en dev en una sesión autónoma (encargo de Rafa:

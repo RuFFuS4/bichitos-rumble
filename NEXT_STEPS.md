@@ -153,6 +153,37 @@ Hecho y en dev (detalle en BUILD_LOG): salas privadas + enlace + share
 golden sim guardian + ability-patch (dual-surface 100%) · paridad bot
 server · 9 fixes del review adversarial aplicados.
 
+## CHECKLIST DE RAFA (actualizada 2026-08-24, sesión larga)
+
+Pruebas manuales pendientes, en orden de valor:
+
+- [ ] **Reconnect (la estrella)**: partida online en el móvil →
+      desactiva el wifi 5-10 s → debe salir "Reconnecting…", un bot te
+      cubre, y al volver el wifi recuperas tu critter donde esté.
+      Más de 30 s fuera = derrota registrada (rage-quit = derrota).
+- [ ] **Sala privada real**: "👥 Jugar con amigos" → comparte el
+      enlace con alguien → jugad. Verifica que un tercero con
+      "Multijugador online" NO cae en vuestra sala.
+- [ ] **PWA**: en Android/Chrome → "Instalar app" → abre standalone,
+      apaisada, icono BR, sin barras blancas en el notch.
+- [ ] **Reduced motion**: Windows → Accesibilidad → Efectos de
+      animación OFF → recarga → el shake/hit-stop casi desaparece.
+- [ ] **Playtesting de mecánicas** (pendiente de la sesión anterior):
+      shell-reflect de Shelly (¿duele pegarle?) y Claw Wave de
+      Sebastian (¿asusta?).
+- [ ] **Pase visual** post-dieta: arenas y belts (gltfpack cuantiza) +
+      el juego entero en ES (¿algún texto desborda en móvil?).
+- [ ] **Las 10 traducciones de autor** (BUILD_LOG 2026-08-24): ¿tono OK?
+- [ ] **Revisión de networking**: BrawlRoom (salas privadas, gracia de
+      reconnect, integridad de belts) — tu zona sensible.
+- [ ] **Merge dev→main + tag** cuando todo lo anterior te cuadre.
+
+**Para verificar con 2 dispositivos (no lo pude simular)**: el rejoin
+real del SDK (cierre 1006), y que humansAtStart cuenta bien a 2
+humanos verificados (en mi e2e salía 0 con un solo nick automatizado
+— puede ser identidad no registrada del flujo rápido; si con humanos
+reales sale <2 y no puntúa, avisa).
+
 **Para Rafa (pendientes que solo puedes hacer tú):**
 - [ ] Playtesting: shell-reflect y Claw Wave (de la sesión anterior) +
       probar una sala privada con alguien de verdad + ojear las 10
