@@ -1,5 +1,38 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-24 (mega-ronda) — El split, los tests del sim y la retención completa
+
+Cinco frentes aterrizados en dev:
+
+1. **Split de abilities.ts** (364bc92): 2928 líneas → config (1146,
+   abilities.ts intacto para tools) + runtime (1269) + vfx (583).
+   Movimientos byte a byte, 7 importadores repuntados, sin ciclos.
+   GOLDEN 3/3 EXACTO tras mover ~1850 líneas — cero cambio de
+   comportamiento demostrado. El prerequisito de "tocar gameplay en
+   serio" está pagado.
+2. **32 tests Vitest del sim** (312aa49; pedía ~20): rng, pws golden,
+   physics del server con números exactos (reflect 18·3.5·1.45·0.85),
+   cerebro bot determinista, invariantes de balance v2 con excepciones
+   documentadas. Cero mocks, cero cambios de producción. npm run
+   test:sim (232ms).
+3. **Tabla matches + métricas de retención** (73f8f7f, worktree):
+   GET /api/metrics/retention (agregados sin PII). recordMatch en
+   endMatch con humans_at_start/verified y private_room.
+4. **Identidad con código de recuperación** (mismo commit): BICHO-
+   XXXX-XXXX con hash salt+sha256, timingSafeEqual, rate-limit,
+   rotación de tokens; UI en el modal de nickname con interstitial.
+   FIX DE REGALO: registerNickname no espejaba el token en
+   sessionStorage → los registros nuevos jugaban como guest (explica
+   el humansAtStart=0 del e2e de reconnect).
+5. **Shell reflect online con feedback** (e40e7d8): out-param en
+   resolveCollisions + broadcast + shake/hit-stop/sonido en cliente.
+
+NO-GO razonado: shared sim package — el server tiene rootDir src
+estricto y su pipeline de deploy no está documentado; necesita sesión
+propia con ese contexto (análisis apuntado). Incidencia: git add -A
+se tragó un worktree de agente como repo embebido → destrackeado y
+.claude/worktrees/ gitignoreado (526fcad→dev).
+
 ## 2026-08-24 (sesión larga 2) — Reconnect, integridad de belts, PWA y accesibilidad
 
 - **Reconnect con gracia de 30 s** (item nº1 de retención H4):

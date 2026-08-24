@@ -176,6 +176,14 @@ Pruebas manuales pendientes, en orden de valor:
 - [ ] **Las 10 traducciones de autor** (BUILD_LOG 2026-08-24): ¿tono OK?
 - [ ] **Revisión de networking**: BrawlRoom (salas privadas, gracia de
       reconnect, integridad de belts) — tu zona sensible.
+- [ ] **Código de recuperación** (mega-ronda): navegador A → registra
+      nick → interstitial "🔑 Ver mi código" → apúntalo; navegador B
+      (incógnito) → "¿Ya tienes nick? Recupéralo" → mismo nick +
+      código → debe recuperar tu identidad (belts incluidos).
+- [ ] **Métricas**: tras 2-3 partidas online, abre
+      <server>/api/metrics/retention y comprueba partidas/día.
+- [ ] **Reflect online**: partida online contra Shelly → headbuttéala
+      enconchada → debe SONAR y sacudir (antes era mudo).
 - [ ] **Merge dev→main + tag** cuando todo lo anterior te cuadre.
 
 **Para verificar con 2 dispositivos (no lo pude simular)**: el rejoin
