@@ -146,6 +146,36 @@ herramientas del afilado (108+ partidas medidas):
    principio nuevo de Rafa: las mecánicas tienen fuerza en el
    balanceo. Arranque natural de la fase de mecánicas y assets.
 
+## Tanda grande 2026-08-24 (autónoma) — H4 en marcha
+
+Hecho y en dev (detalle en BUILD_LOG): salas privadas + enlace + share
+(e2e verde) · i18n ES/EN 131 claves · dieta de payload 96.9→69.7 MB ·
+golden sim guardian + ability-patch (dual-surface 100%) · paridad bot
+server · 9 fixes del review adversarial aplicados.
+
+**Para Rafa (pendientes que solo puedes hacer tú):**
+- [ ] Playtesting: shell-reflect y Claw Wave (de la sesión anterior) +
+      probar una sala privada con alguien de verdad + ojear las 10
+      traducciones de autor (BUILD_LOG 2026-08-24 / i18n.ts).
+- [ ] Pase visual de arenas y belts tras el gltfpack (cuantiza; golden
+      no ve píxeles) y del juego en ES en móvil.
+- [ ] Revisión de la zona networking (salas privadas tocan BrawlRoom).
+- [ ] Merge dev→main + tag cuando lo des por bueno (deploy a prod).
+
+**Backlog H4 restante (por tamaño):**
+- [ ] Reconnect (allowReconnection) — el más valioso de retención.
+- [ ] Slayer Belt real (wiring lastHitBy→kills_vs_humans) + integridad
+      de leaderboards (vs bots no puntúa; rage-quit = derrota).
+- [ ] Identidad con código de recuperación · tabla matches server.
+- [ ] PWA manifest + prefers-reduced-motion (pequeños, quedaron fuera
+      de la tanda).
+- [ ] Split abilities.ts + ~20 tests Vitest del sim · shared sim
+      package (el refactor de más palanca — con el golden de guardián).
+- [ ] Diferidos del review: feedback visual del shell-reflect online,
+      calibrate en comentarios de bloque, validación del partial.
+- [ ] Payload frontera: simplificar sebastian/kermit/kurama (44 MB)
+      para el ≤50 MB de H2 (hard-stop: decisión de diseño).
+
 ## Dirección post-H3 (fijada por Rafa, 2026-08-19)
 
 1. **Afilado de herramientas + investigación**: al cerrar los slices,

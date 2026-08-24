@@ -1,5 +1,36 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-24 (tanda grande autónoma) — H4 arranca: salas privadas, i18n, dieta y review
+
+Seis ramas aterrizadas en dev en una sesión autónoma (encargo de Rafa:
+"abarca algo grande"). En orden:
+
+1. **Golden sim guardian + ability-patch** (833b3b9): dual-surface 100%.
+2. **Salas privadas + join por enlace + share** (9a62ed8) — item nº1
+   del H4. E2e con 3 pestañas y Colyseus local: host crea y ve el
+   enlace, el invitado entra por ?room=, el quickmatch NO se cuela en
+   la sala privada. ZONA SENSIBLE networking: revisión de Rafa.
+3. **Paridad bot server** (aef6adb): cañón de Sebastian y Steel Shell
+   defensivo también online, def-driven sin special-cases.
+4. **Dieta de payload** (10856b5): 96.9 → 69.7 MB MEDIDOS (gltfpack 53
+   GLBs −26 MB, belts WebP, audio -vn VBR5, meshoptimizer/decoder
+   subpath −25% gzip del chunk index). Golden 3/3 exacto tras la
+   dieta. Budget ratcheted a 75. Pendiente: pase visual de Rafa.
+5. **i18n ES/EN** (62d25bf): 131 claves, 126 traducidas con tono
+   arcade ("¡CABEZAZOS AL VACÍO!"), detección por navigator.language,
+   e2e de ambos idiomas. Workflow de 3 fases.
+6. **Fixes del review adversarial** (7fa5c03): 25 agentes, 18
+   confirmados, 9 aplicados — bots (falling guard, sonda normalizada,
+   tasas por segundo frame-rate-independientes espejadas al server),
+   determinismo (zonas/proyectiles limpiados en el batch, grabación
+   congelada en tiempo de sim) y robustez del tooling (appliers que
+   rechazan expresiones, batch con exit code veraz). Golden
+   regenerado documentando el cambio intencional.
+
+Lección de infra: un corte de red mató 12/15 agentes del review a
+mitad — resumeFromRunId recuperó el run entero con caché. Y la de
+siempre: correr golden/batch con el dev server ASENTADO.
+
 ## 2026-08-24 (sesión 2) — Golden sim guardian + ability-patch: dual-surface COMPLETO
 
 - **Golden sim guardian** (npm run golden / golden:write): matriz fija
