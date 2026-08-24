@@ -41,6 +41,17 @@
 //                    keys) — unknown fields are refused, they would
 //                    emit source Partial<AnimationPersonality> cannot
 //                    type.
+//   · ability-patch — slot-indexed numeric rewrite/append inside the
+//                    per-critter factory-call overrides of
+//                    CRITTER_ABILITIES (src/abilities.ts). Keys are
+//                    "<J|K|L>.<field>"; J/K/L map to the 1st/2nd/3rd
+//                    factory call of the critter's array. An existing
+//                    plain-number field gets ONLY its numeric token
+//                    rewritten (comments survive); a missing field is
+//                    appended at the end of the overrides object.
+//                    Same never-delete contract as anim-lab; existing
+//                    non-literal values (FEEL refs, hex colours) are
+//                    hard errors, not silent corruption.
 //
 // Textual robustness: all brace/anchor scanning is COMMENT- and
 // STRING-AWARE (see codeMask) — a stray `}` inside a `// note` or a
@@ -57,6 +68,7 @@ export const SUPPORTED_VERSIONS = {
   'decor-editor':     [1],
   'feel-patch':       [1],
   'anim-personality': [1],
+  'ability-patch':    [1],
 };
 
 export const targetByTool = {
@@ -65,6 +77,7 @@ export const targetByTool = {
   'decor-editor':     'src/arena-decor-layouts.ts',
   'feel-patch':       'src/gamefeel.ts',
   'anim-personality': 'src/animation-personality-overrides.ts',
+  'ability-patch':    'src/abilities.ts',
 };
 
 /** Keys written as bare TS identifiers must actually be identifiers —
@@ -79,6 +92,12 @@ const PERSONALITY_FIELDS = [
   'idleBobHz', 'idleBobAmp', 'runBounceHz', 'runBounceAmp',
   'leanRadians', 'runSwayRadians', 'chargeStretchMult',
 ];
+
+/** ability-patch data keys: "<slot>.<field>" where the slot letter maps
+ *  to the POSITION of the factory call in the critter's array (J = 1st,
+ *  K = 2nd, L = 3rd) and the field must be a bare TS identifier. */
+const ABILITY_KEY_RE = /^[JKL]\.[A-Za-z_$][A-Za-z0-9_$]*$/;
+const ABILITY_SLOT_INDEX = { J: 0, K: 1, L: 2 };
 
 // ---------------------------------------------------------------------------
 // Envelope + payload validation
@@ -179,6 +198,20 @@ export function validateToolPatch(patch) {
         }
       }
     }
+  } else if (tool === 'ability-patch') {
+    for (const [name, fields] of Object.entries(data)) {
+      checkIdent('ability-patch: critter name', name);
+      if (!fields || typeof fields !== 'object' || Array.isArray(fields)) {
+        errors.push(`ability-patch: entry "${name}" is not an object`); continue;
+      }
+      for (const [k, v] of Object.entries(fields)) {
+        if (!ABILITY_KEY_RE.test(k)) {
+          errors.push(`ability-patch: key "${k}" of "${name}" is not "<J|K|L>.<field>" with an identifier field`);
+        } else if (!isFinite_(v)) {
+          errors.push(`ability-patch: "${name}" "${k}" is not a finite number`);
+        }
+      }
+    }
   } else if (tool === 'decor-editor') {
     for (const [pack, placements] of Object.entries(data)) {
       checkIdent('decor-editor: pack id', pack);
@@ -212,6 +245,7 @@ export function applyPatch(source, patch) {
   if (patch.tool === 'decor-editor') return applyDecorEditor(source, patch.data);
   if (patch.tool === 'feel-patch')   return applyFeelPatch(source, patch.data);
   if (patch.tool === 'anim-personality') return applyAnimPersonality(source, patch.data);
+  if (patch.tool === 'ability-patch') return applyAbilityPatch(source, patch.data);
   throw new Error(`unknown tool: ${patch.tool}`);
 }
 
@@ -326,11 +360,18 @@ export function codeMask(text) {
 /** Index of the brace matching text[openIdx] (which must be `{`),
  *  counting only M_CODE braces. Returns -1 if unbalanced. */
 function matchBraceMasked(text, openIdx, mask) {
+  return matchDelimMasked(text, openIdx, mask, '{', '}');
+}
+
+/** Generalised matchBraceMasked: index of the `close` delimiter matching
+ *  the `open` at text[openIdx], counting only M_CODE occurrences.
+ *  Returns -1 if unbalanced. */
+function matchDelimMasked(text, openIdx, mask, open, close) {
   let depth = 0;
   for (let i = openIdx; i < text.length; i++) {
     if (mask[i] !== M_CODE) continue;
-    if (text[i] === '{') depth++;
-    else if (text[i] === '}') {
+    if (text[i] === open) depth++;
+    else if (text[i] === close) {
       depth--;
       if (depth === 0) return i;
     }
@@ -786,6 +827,245 @@ function mergePersonalityFieldsIntoBlock(blockText, fields, orderedFields, headI
     }
   }
   return out;
+}
+
+// ===========================================================================
+// ability-patch — slot-indexed numeric merge into CRITTER_ABILITIES
+// ===========================================================================
+
+/**
+ * Merge an AbilityPatch into the `CRITTER_ABILITIES` record
+ * (src/abilities.ts). Closes the last dual-surface gap: the match lab's
+ * Abilities tuner used to export a manual-port JSON only.
+ *
+ * `data` is `Record<critterName, Record<"J|K|L.field", number>>`. Each
+ * critter entry in source is an ARRAY OF FACTORY CALLS with literal
+ * override objects:
+ *
+ *     Sergei: [
+ *       makeChargeRush({ cooldown: 4.0, ... }),   // slot J (1st call)
+ *       makeGroundPound({ force: 68, ... }),      // slot K (2nd call)
+ *       makeFrenzy({ duration: 2.5, ... }),       // slot L (3rd call)
+ *     ],
+ *
+ * The slot letter maps to the POSITION of the call (J=1st, K=2nd,
+ * L=3rd — same convention as the tuner UI). Inside that call's
+ * overrides object:
+ *   · field exists as a plain numeric literal → rewrite ONLY the
+ *     numeric token (feel-patch style — trailing comma, alignment and
+ *     any tuning comment survive byte-identical). Mid-line fields
+ *     (`radius: 0, force: 0,`) are handled; fields of NESTED objects
+ *     (`zone: { radius }`) are shielded by depth tracking.
+ *   · field missing → APPEND it at the end of the object (anim-lab
+ *     style: detected indent, comma-guard). Never deletes anything.
+ *
+ * Hard errors (no output produced — refuse-to-guess):
+ *   · record / critter entry not found, or critter anchor ambiguous;
+ *   · slot out of range (kit has fewer factory calls);
+ *   · the call has NO overrides object literal (`makeChargeRush()`) —
+ *     creating one is a manual edit;
+ *   · existing value that is not a plain numeric literal (`force:
+ *     FEEL.x.y`, `0xa8c0d0`, `1e-3`, booleans, strings) — rewriting
+ *     could corrupt it and appending would silently shadow it;
+ *   · field name not an identifier, slot letter not J/K/L, value not a
+ *     finite number.
+ */
+export function applyAbilityPatch(source, data) {
+  const anchor = 'export const CRITTER_ABILITIES';
+  const start = source.indexOf(anchor);
+  if (start < 0) throw new Error('ability-patch: CRITTER_ABILITIES export not found');
+  const srcMask = codeMask(source);
+  let openBrace = -1;
+  for (let i = start; i < source.length; i++) {
+    if (srcMask[i] === M_CODE && source[i] === '{') { openBrace = i; break; }
+  }
+  if (openBrace < 0) throw new Error('ability-patch: CRITTER_ABILITIES open brace not found');
+  const close = matchBraceMasked(source, openBrace, srcMask);
+  if (close < 0) throw new Error('ability-patch: CRITTER_ABILITIES close brace not found');
+
+  let record = source.slice(openBrace, close + 1);
+
+  for (const name of Object.keys(data).sort()) {
+    const fields = data[name];
+    if (!fields || Object.keys(fields).length === 0) continue;
+    if (!IDENT_RE.test(name)) {
+      throw new Error(`ability-patch: critter name '${name}' is not a valid identifier`);
+    }
+    for (const key of Object.keys(fields).sort()) {
+      // Defense in depth (validateToolPatch already refuses these when
+      // the patch arrives through the CLI/endpoint).
+      const km = key.match(/^([JKL])\.([A-Za-z_$][A-Za-z0-9_$]*)$/);
+      if (!km) {
+        throw new Error(`ability-patch: key '${key}' of '${name}' is not "<J|K|L>.<field>" with an identifier field`);
+      }
+      const v = fields[key];
+      if (typeof v !== 'number' || !Number.isFinite(v)) {
+        throw new Error(`ability-patch: '${name}' ${key} is not a finite number`);
+      }
+      record = rewriteAbilityField(record, name, km[1], km[2], v);
+    }
+  }
+
+  return source.slice(0, openBrace) + record + source.slice(close + 1);
+}
+
+/** One field of one slot of one critter — relocates everything from the
+ *  record text each time (edits shift offsets; patches are tiny). */
+function rewriteAbilityField(record, name, slot, field, value) {
+  const mask = codeMask(record);
+  const eol = detectEol(record);
+
+  // Critter entry `<Name>: [` at the record's own entry indent — the
+  // exact-indent anchor keeps `tags: [...]` lines inside override
+  // objects (deeper indent) from ever matching.
+  const entryIndent = detectArrayEntryIndent(record, mask);
+  const headRe = new RegExp(`(^|\\n)(${escapeRegex(entryIndent)})${escapeRegex(name)}:\\s*\\[`, 'g');
+  const heads = [...record.matchAll(headRe)].filter((m) => {
+    const keyIdx = m.index + m[1].length + m[2].length;
+    return mask[keyIdx] === M_CODE;
+  });
+  if (heads.length === 0) throw new Error(`ability-patch: critter '${name}' not found in CRITTER_ABILITIES`);
+  if (heads.length > 1) throw new Error(`ability-patch: critter '${name}' matches ${heads.length} entries — refusing to guess`);
+  const arrOpen = heads[0].index + heads[0][0].length - 1; // index of '['
+  const arrClose = matchDelimMasked(record, arrOpen, mask, '[', ']');
+  if (arrClose < 0) throw new Error(`ability-patch: unbalanced brackets in entry for '${name}'`);
+
+  // N-th top-level factory call of the array = slot J/K/L.
+  const calls = topLevelCallsInRange(record, mask, arrOpen + 1, arrClose, name);
+  const slotIdx = ABILITY_SLOT_INDEX[slot];
+  if (slotIdx >= calls.length) {
+    throw new Error(
+      `ability-patch: slot ${slot} of '${name}' is out of range — the kit has ${calls.length} factory call${calls.length === 1 ? '' : 's'} (J=1st, K=2nd, L=3rd)`,
+    );
+  }
+  const call = calls[slotIdx];
+
+  // Overrides object = first top-level '{' inside the call's parens.
+  let objOpen = -1;
+  let depth = 0;
+  for (let i = call.parenOpen + 1; i < call.parenClose; i++) {
+    if (mask[i] !== M_CODE) continue;
+    const ch = record[i];
+    if (depth === 0 && ch === '{') { objOpen = i; break; }
+    if (ch === '(' || ch === '[' || ch === '{') depth++;
+    else if (ch === ')' || ch === ']' || ch === '}') depth--;
+  }
+  if (objOpen < 0) {
+    throw new Error(`ability-patch: slot ${slot} of '${name}' has no overrides object literal — edit src/abilities.ts by hand`);
+  }
+  const objClose = matchBraceMasked(record, objOpen, mask);
+  if (objClose < 0 || objClose > call.parenClose) {
+    throw new Error(`ability-patch: unbalanced braces in slot ${slot} of '${name}'`);
+  }
+
+  const inner = record.slice(objOpen + 1, objClose);
+  const innerMask = codeMask(inner);
+  const innerDepth = bracketDepths(inner, innerMask);
+
+  // The field can sit mid-line (`radius: 0, force: 0,`) so the anchor is
+  // a token boundary, not a line start. Depth 0 = top level of the
+  // overrides object — `zone: { radius: ... }` internals never match.
+  const fieldRe = new RegExp(`(^|[^.A-Za-z0-9_$])${escapeRegex(field)}\\s*:`, 'g');
+  const matches = [...inner.matchAll(fieldRe)].filter((m) => {
+    const keyIdx = m.index + m[1].length;
+    return innerMask[keyIdx] === M_CODE && innerDepth[keyIdx] === 0;
+  });
+  if (matches.length > 1) {
+    throw new Error(`ability-patch: field '${field}' in slot ${slot} of '${name}' matches ${matches.length} times — refusing to guess`);
+  }
+
+  let merged;
+  if (matches.length === 1) {
+    const m = matches[0];
+    const valueStart = m.index + m[0].length;
+    // The numeric token must be the WHOLE value (next char ends it):
+    // `force: FEEL.x.y`, `0xa8c0d0` or `1e-3` must refuse, not
+    // half-rewrite.
+    const vm = inner.slice(valueStart).match(/^(\s*)(-?\d+(?:\.\d+)?)(?=[,\s})/]|$)/);
+    if (!vm) {
+      throw new Error(`ability-patch: field '${field}' in slot ${slot} of '${name}' is not a plain numeric literal — edit src/abilities.ts by hand`);
+    }
+    const numStart = valueStart + vm[1].length;
+    const numEnd = numStart + vm[2].length;
+    merged = inner.slice(0, numStart) + formatNumber(value) + inner.slice(numEnd);
+  } else {
+    // Append at the end of the object (comma-guard shared with
+    // anim-lab; close-brace indent copies the factory-call line).
+    const callLineStart = record.lastIndexOf('\n', call.nameStart) + 1;
+    const callIndent = (record.slice(callLineStart, call.nameStart).match(/^[ \t]*/) ?? [''])[0];
+    const indentMatch = maskedFirstMatch(inner, innerMask, /(^|\n)([ \t]+)[A-Za-z_$]/g, 2);
+    const fieldIndent = indentMatch ?? `${callIndent}  `;
+    const guarded = ensureTrailingCommaOnLastCodeLine(inner);
+    const trimmed = guarded.replace(/\s+$/, '');
+    merged = `${trimmed}${eol}${fieldIndent}${field}: ${formatNumber(value)},${eol}${callIndent}`;
+  }
+  return record.slice(0, objOpen + 1) + merged + record.slice(objClose);
+}
+
+/** Indentation of the record's own `<Name>: [` entries (first code-level
+ *  match). Same anchoring idea as detectEntryIndent, for array-valued
+ *  records. */
+function detectArrayEntryIndent(record, mask) {
+  const re = /(^|\n)([ \t]*)[A-Za-z_$][A-Za-z0-9_$]*:\s*\[/g;
+  for (const m of record.matchAll(re)) {
+    const keyIdx = m.index + m[1].length + m[2].length;
+    if (mask[keyIdx] === M_CODE) return m[2];
+  }
+  return '  ';
+}
+
+/** Top-level `identifier(...)` calls between [from, to) — brace/paren
+ *  matching is masked, so parens in comments or strings never count.
+ *  Returns [{ nameStart, parenOpen, parenClose }, ...] in source order. */
+function topLevelCallsInRange(record, mask, from, to, name) {
+  const calls = [];
+  let depth = 0;
+  let i = from;
+  while (i < to) {
+    if (mask[i] !== M_CODE) { i++; continue; }
+    const ch = record[i];
+    if (ch === '(' || ch === '[' || ch === '{') { depth++; i++; continue; }
+    if (ch === ')' || ch === ']' || ch === '}') { depth--; i++; continue; }
+    if (depth === 0 && /[A-Za-z_$]/.test(ch)) {
+      const nameStart = i;
+      let j = i + 1;
+      while (j < to && mask[j] === M_CODE && /[A-Za-z0-9_$]/.test(record[j])) j++;
+      let k = j;
+      while (k < to && (mask[k] !== M_CODE || /\s/.test(record[k]))) k++;
+      if (k < to && mask[k] === M_CODE && record[k] === '(') {
+        const parenClose = matchDelimMasked(record, k, mask, '(', ')');
+        if (parenClose < 0 || parenClose >= to) {
+          throw new Error(`ability-patch: unbalanced parens in entry for '${name}'`);
+        }
+        calls.push({ nameStart, parenOpen: k, parenClose });
+        i = parenClose + 1;
+        continue;
+      }
+      i = j;
+      continue;
+    }
+    i++;
+  }
+  return calls;
+}
+
+/** Bracket-nesting depth (all of (), [], {}) at every index of `text`,
+ *  counting only M_CODE brackets. A close bracket reports the OUTER
+ *  depth (decrement before store) so a top-level key reads depth 0. */
+function bracketDepths(text, mask) {
+  const depths = new Int32Array(text.length);
+  let d = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (mask[i] === M_CODE) {
+      const ch = text[i];
+      if (ch === ')' || ch === ']' || ch === '}') d--;
+      depths[i] = d;
+      if (ch === '(' || ch === '[' || ch === '{') d++;
+    } else {
+      depths[i] = d;
+    }
+  }
+  return depths;
 }
 
 // ===========================================================================

@@ -101,8 +101,9 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   `calibrate` → roster.ts incl. physicsRadius · `anim-lab` → merge de
   overrides · `decor-editor` → layouts por pack · `feel-patch` →
   dot-paths de FEEL · `anim-personality` → PERSONALITY_OVERRIDES por
-  critter). Mismos mutadores testeados (`npm run test:patch`) que usan
-  los botones de la UI.
+  critter · `ability-patch` → overrides de CRITTER_ABILITIES por
+  critter/slot, claves `"J|K|L.campo"`). Mismos mutadores testeados
+  (`npm run test:patch`) que usan los botones de la UI.
 - **Con dev server vivo**: `POST /__tool-patch/preview|apply` (JSON del
   patch; preview devuelve el diff estructurado sin escribir).
 - **Módulo puro**: `scripts/tool-patch-core.mjs` exporta
@@ -123,8 +124,21 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   vuelca la RecordingSession completa de cada partida (cierra el hueco
   del volcado headless).
 
-Hueco conocido restante (AFILADO_PLAN): applier de ability-tuner
-(export JSON manual → falta ToolPatch a CRITTER_ABILITIES).
+- **Golden sim guardian** (2026-08-24): `npm run golden` corre una
+  matriz FIJA de 3 partidas doradas (cubre los 9 critters, seeds
+  501-503) y compara la secuencia completa de eventos contra
+  `scripts/golden/sim-golden.json` (trackeado en git) — cualquier
+  cambio en physics/abilities/bots que altere el balance canta con el
+  evento exacto de divergencia y exit 1. Sensibilidad probada: detecta
+  una centésima en un factor de FEEL. Cambio intencional →
+  `npm run golden:write` y el diff del JSON documenta el cambio en el
+  commit. Ojo: correr con el dev server ASENTADO (una edición de src
+  en caliente dispara HMR a mitad de partida y aborta el run).
+
+Huecos de AFILADO_PLAN cerrados: el applier de ability-tuner llegó el
+2026-08-24 como **`ability-patch`** (6º tool type) — ver "Tuner de
+habilidades" más abajo. Con él y el golden, TODOS los huecos
+dual-surface conocidos quedan cerrados.
 
 ### Cabina de tuning (afilado slice B)
 
@@ -152,9 +166,17 @@ Hueco conocido restante (AFILADO_PLAN): applier de ability-tuner
   los campos numéricos de las defs J/K/L del critter jugador. Mutan la
   def en vivo (aplica en el siguiente cast y sobrevive restarts — las
   defs son objetos compartidos de CRITTER_ABILITIES; baselines
-  cacheados al primer avistamiento). Sin ToolPatch todavía
-  (deliberado): "Copy JSON" agrupa lo tuneado por critter para portarlo
-  a mano a los overrides de abilities.ts.
+  cacheados al primer avistamiento).
+- **`ability-patch`** (6º tool type, 2026-08-24): data = por critter,
+  campos que divergen del baseline autoral, claves `"SLOT.campo"` con
+  SLOT J/K/L = posición de la llamada de factory en el array de
+  CRITTER_ABILITIES (src/abilities.ts). El apply reescribe SOLO el
+  token numérico dentro del objeto de overrides de esa llamada (los
+  comentarios de tuning sobreviven) o AÑADE el campo al final del
+  objeto si no existía. Nunca borra; rechaza en duro valores no
+  literales (`force: FEEL.x.y`, hex como `selfTintHex`), slots fuera
+  de rango y critters desconocidos. Botones 📦 Copy / 💾 Download /
+  ⚡ Apply to source (mismo trío que anim-personality).
 
 ### Salida del animation tuner (afilado slice E)
 

@@ -591,3 +591,190 @@ test('anim-personality: applying the same patch twice is a no-op the second time
   const once = applyAnimPersonality(src, data);
   assert.equal(applyAnimPersonality(once, data), once);
 });
+
+// ===========================================================================
+// ability-patch — slot-indexed merge into CRITTER_ABILITIES (6th tool)
+// ===========================================================================
+
+import { applyAbilityPatch } from '../tool-patch-core.mjs';
+
+// Inline fixture builder (same pattern as OVR/PERSONA): a miniature
+// CRITTER_ABILITIES shaped exactly like src/abilities.ts — arrays of
+// factory calls with literal override objects, mid-line field packing,
+// nested `zone` objects, tuning comments, non-literal values.
+const ABIL = (blocks) => `// header prose — must survive
+import { FEEL } from './gamefeel';
+
+export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
+${blocks}
+};
+
+export function abilitiesTail(): number { return 1; }
+`;
+
+const ABIL_FIX = ABIL(`  // Rojo — balanced brawler (uses FEEL defaults, no overrides object)
+  Rojo: [
+    makeChargeRush(),
+    makeGroundPound(),
+  ],
+
+  Sergei: [
+    makeChargeRush({
+      name: 'Gorilla Rush',
+      impulse: 25,
+      cooldown: 4.0,        // feel pass — snappy
+      speedMultiplier: 2.6,
+    }),
+    makeGroundPound({
+      name: 'Shockwave',
+      radius: 3.5, force: 68,
+      windUp: 0.30,
+      slowDuringActive: 0, cancelAnimOnEnd: true,
+    }),
+    makeFrenzy({
+      duration: 2.5,
+      massMultiplier: 5.50,
+    }),
+  ],
+
+  Kermit: [
+    makeChargeRush({
+      impulse: 20, duration: 0.30,
+    }),
+    makeGroundPound({
+      name: 'Poison Cloud',
+      radius: 5.0, force: 14, windUp: 0.15, cooldown: 16.0,
+      zone: {
+        radius: 5.0,
+        duration: 10.0,
+      },
+    }),
+  ],
+
+  Weird: [
+    makeChargeRush({
+      impulse: FEEL.chargeRush.impulse,
+      selfTintHex: 0xa8c0d0,
+    }),
+  ],`);
+
+test('ability-patch: rewrites an existing field, trailing comment survives byte-identical', () => {
+  const out = applyAbilityPatch(ABIL_FIX, { Sergei: { 'J.cooldown': 3.4 } });
+  assert.match(out, /cooldown: 3\.4,        \/\/ feel pass — snappy/);
+  // Neighbouring fields of the same object untouched.
+  assert.match(out, /impulse: 25,\n      cooldown: 3\.4,/);
+  assert.match(out, /speedMultiplier: 2\.6,/);
+});
+
+test('ability-patch: missing field appends at the end of the correct slot object', () => {
+  const out = applyAbilityPatch(ABIL_FIX, { Sergei: { 'K.cooldown': 7.5 } });
+  // Lands in the K (2nd call) object, right before its close, house indent.
+  assert.match(out, /slowDuringActive: 0, cancelAnimOnEnd: true,\n      cooldown: 7\.5,\n    \}\),/);
+  // The J object's cooldown (comment included) is untouched.
+  assert.match(out, /cooldown: 4\.0,        \/\/ feel pass — snappy/);
+});
+
+test('ability-patch: two critters and two slots in a single apply', () => {
+  const out = applyAbilityPatch(ABIL_FIX, {
+    Sergei: { 'L.duration': 3 },
+    Kermit: { 'J.impulse': 22 },
+  });
+  assert.match(out, /makeFrenzy\(\{\n      duration: 3,\n      massMultiplier: 5\.50,/);
+  assert.match(out, /impulse: 22, duration: 0\.30,/);
+});
+
+test('ability-patch: mid-line fields rewrite in place; nested zone objects are shielded', () => {
+  const out = applyAbilityPatch(ABIL_FIX, { Kermit: { 'K.force': 20, 'K.radius': 6 } });
+  // Both fields live mid-line in the same source line.
+  assert.match(out, /radius: 6, force: 20, windUp: 0\.15, cooldown: 16\.0,/);
+  // zone.radius / zone.duration (nested) stay byte-identical.
+  assert.match(out, /zone: \{\n        radius: 5\.0,\n        duration: 10\.0,\n      \},/);
+  // A field that only exists NESTED appends at top level instead of
+  // rewriting the nested copy.
+  const out2 = applyAbilityPatch(ABIL_FIX, { Kermit: { 'K.duration': 0.5 } });
+  assert.match(out2, /zone: \{\n        radius: 5\.0,\n        duration: 10\.0,\n      \},\n      duration: 0\.5,\n    \}\),/);
+});
+
+test('ability-patch: everything the patch does not mention stays byte-identical', () => {
+  const out = applyAbilityPatch(ABIL_FIX, { Sergei: { 'J.cooldown': 3.4 } });
+  // Header and tail identical.
+  const headEnd = ABIL_FIX.indexOf('export const CRITTER_ABILITIES');
+  assert.equal(out.slice(0, headEnd), ABIL_FIX.slice(0, headEnd));
+  assert.ok(out.includes('export function abilitiesTail(): number { return 1; }'));
+  // Kermit + Weird entries byte-identical.
+  const kermitBlock = ABIL_FIX.slice(ABIL_FIX.indexOf('Kermit: ['), ABIL_FIX.indexOf('Weird: ['));
+  assert.ok(out.includes(kermitBlock));
+  const weirdBlock = ABIL_FIX.slice(ABIL_FIX.indexOf('Weird: ['), ABIL_FIX.indexOf('};'));
+  assert.ok(out.includes(weirdBlock));
+  // The whole diff is exactly one line swapped.
+  const d = simpleDiff(ABIL_FIX, out);
+  assert.equal(d.filter((l) => l.kind === 'add').length, 1);
+  assert.equal(d.filter((l) => l.kind === 'del').length, 1);
+});
+
+test('ability-patch: applying the same patch twice is a no-op the second time', () => {
+  const data = { Sergei: { 'J.cooldown': 3.4, 'K.cooldown': 7.5 }, Kermit: { 'K.force': 20 } };
+  const once = applyAbilityPatch(ABIL_FIX, data);
+  assert.equal(applyAbilityPatch(once, data), once);
+});
+
+test('ability-patch: unknown critter and out-of-range slot refuse', () => {
+  assert.throws(() => applyAbilityPatch(ABIL_FIX, { Nadie: { 'J.cooldown': 1 } }), /critter 'Nadie' not found/);
+  // Kermit's kit has 2 factory calls — L (3rd) is out of range.
+  assert.throws(() => applyAbilityPatch(ABIL_FIX, { Kermit: { 'L.cooldown': 1 } }), /slot L of 'Kermit' is out of range — the kit has 2 factory calls/);
+  // Missing record entirely.
+  assert.throws(() => applyAbilityPatch('const nope = 1;', { Sergei: { 'J.cooldown': 1 } }), /export not found/);
+});
+
+test('ability-patch: non-literal existing values refuse instead of corrupting', () => {
+  // FEEL reference.
+  assert.throws(() => applyAbilityPatch(ABIL_FIX, { Weird: { 'J.impulse': 3 } }), /not a plain numeric literal/);
+  // Hex colour literal.
+  assert.throws(() => applyAbilityPatch(ABIL_FIX, { Weird: { 'J.selfTintHex': 5 } }), /not a plain numeric literal/);
+  // Boolean value.
+  assert.throws(() => applyAbilityPatch(ABIL_FIX, { Sergei: { 'K.cancelAnimOnEnd': 1 } }), /not a plain numeric literal/);
+  // A call with no overrides object at all (Rojo uses factory defaults).
+  assert.throws(() => applyAbilityPatch(ABIL_FIX, { Rojo: { 'J.cooldown': 3 } }), /no overrides object literal/);
+});
+
+test('ability-patch: malformed keys and non-finite values refuse', () => {
+  assert.throws(() => applyAbilityPatch(ABIL_FIX, { Sergei: { 'J.foo-bar': 1 } }), /not "<J\|K\|L>\.<field>"/);
+  assert.throws(() => applyAbilityPatch(ABIL_FIX, { Sergei: { 'X.cooldown': 1 } }), /not "<J\|K\|L>\.<field>"/);
+  assert.throws(() => applyAbilityPatch(ABIL_FIX, { Sergei: { cooldown: 1 } }), /not "<J\|K\|L>\.<field>"/);
+  assert.throws(() => applyAbilityPatch(ABIL_FIX, { Sergei: { 'J.cooldown': NaN } }), /not a finite number/);
+  assert.throws(() => applyAbilityPatch(ABIL_FIX, { 'Ser gei': { 'J.cooldown': 1 } }), /not a valid identifier/);
+});
+
+test('ability-patch: validate accepts good patches and rejects junk', () => {
+  assert.deepEqual(validateToolPatch({ tool: 'ability-patch', version: 1, data: { Sergei: { 'J.cooldown': 3.5, 'L.duration': 3 } } }), []);
+  assert.ok(validateToolPatch({ tool: 'ability-patch', version: 9, data: {} }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'ability-patch', version: 1, data: { Sergei: { 'M.cooldown': 1 } } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'ability-patch', version: 1, data: { Sergei: { 'J.foo-bar': 1 } } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'ability-patch', version: 1, data: { Sergei: { 'J.cooldown': 'slow' } } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'ability-patch', version: 1, data: { Sergei: ['J.cooldown'] } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'ability-patch', version: 1, data: { 'Ser gei': { 'J.cooldown': 1 } } }).length > 0);
+});
+
+test('ability-patch: applies against the REAL src/abilities.ts and round-trips', () => {
+  // Whatever EOL the working tree uses (autocrlf) — don't normalize.
+  const real = readFileSync(path.join(here, '../../src/abilities.ts'), 'utf8');
+  const patch = {
+    tool: 'ability-patch', version: 1, generated: 'test',
+    data: { Sergei: { 'J.cooldown': 3.7 }, Trunk: { 'L.gripStunDuration': 3.5 } },
+  };
+  assert.deepEqual(validateToolPatch(patch), []);
+  const once = applyPatch(real, patch);
+  const lf = once.replace(/\r\n/g, '\n');
+  // Sergei J (Gorilla Rush): cooldown 4.0 → 3.7, neighbours intact.
+  assert.match(lf, /cooldown: 3\.7,\n      windUp: 0\.04,\n      speedMultiplier: 2\.6,/);
+  // Trunk L (Trunk Grip, 3rd call): gripStunDuration 3.80 → 3.5 with
+  // the BLOQUE FINAL micropass comment above it intact.
+  assert.match(lf, /gripStunDuration: 3\.5,\n    \}\),/);
+  assert.ok(lf.includes('//   4.25 → 3.80 (-11 %, micropass 2)'));
+  // Kowalski (untouched) byte-identical.
+  const kowalskiBlock = real.slice(real.indexOf('Kowalski: ['), real.indexOf('// Cheeto'));
+  assert.ok(once.includes(kowalskiBlock));
+  // Dispatch === direct call; idempotent on second apply.
+  assert.equal(once, applyAbilityPatch(real, patch.data));
+  assert.equal(applyPatch(once, patch), once);
+});

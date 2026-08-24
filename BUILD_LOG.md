@@ -1,5 +1,26 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-24 (sesión 2) — Golden sim guardian + ability-patch: dual-surface COMPLETO
+
+- **Golden sim guardian** (npm run golden / golden:write): matriz fija
+  de 3 partidas doradas (9 critters, seeds 501-503) con las secuencias
+  completas de eventos en git (scripts/golden/sim-golden.json). El
+  check re-corre y compara: probado que detecta UNA CENTÉSIMA en un
+  factor de FEEL con el evento exacto de divergencia y exit 1. El
+  guardián de toda la fase de mecánicas: tocar physics/abilities sin
+  querer ya no pasa desapercibido. Lección operativa: correr con el
+  dev server asentado (HMR a mitad de partida aborta el run).
+- **ability-patch, 6º tool type** (agente, 62/62 tests): el Copy JSON
+  manual del ability tuner muere — trío Copy/Download/Apply estándar.
+  El applier reescribe tokens numéricos DENTRO de los objetos de
+  overrides de las llamadas de factory (J/K/L posicionales, mid-line
+  safe, blindaje de objetos anidados, refuse-to-guess en hex/expr/
+  bool). Verificado también contra el endpoint del dev server.
+- **Todos los huecos dual-surface conocidos CERRADOS** (CLAUDE.md/
+  AGENTS.md actualizados): batch runner, recording dump, ability
+  applier, golden. La directiva de Rafa del 2026-08-20 queda cumplida
+  al 100% en su primera lista.
+
 ## 2026-08-24 — Mecánicas de balanceo 1: shell reflect + el cañón dispara (día autónomo)
 
 - **Shell reflect** (cola de BALANCE.md): headbuttear a un critter
