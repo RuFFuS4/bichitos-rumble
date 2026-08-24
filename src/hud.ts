@@ -52,6 +52,6 @@ export {
 export type { EndResult, EndMatchStats } from './hud/end';
 
 export {
-  showWaitingScreen, hideWaitingScreen, updateWaitingScreen,
+  showWaitingScreen, hideWaitingScreen, updateWaitingScreen, setWaitingShareRoom,
 } from './hud/waiting';
 export type { WaitingSlotKind, WaitingSlotData, WaitingScreenData } from './hud/waiting';

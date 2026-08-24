@@ -165,6 +165,18 @@ export class BrawlRoom extends Room {
 
   onCreate(_options: unknown) {
     this.tickInterval = 1000 / SIM.tickRate;
+
+    // H4 — salas privadas ("Play with Friends"): el cliente crea la sala
+    // con `client.create('brawl', { private: true })`. setPrivate la
+    // saca del matchmaking de joinOrCreate — solo se entra por
+    // joinById con el roomId compartido por enlace (?room=XYZ). El
+    // resto del ciclo (countdown, bots de relleno, reinicios) es
+    // idéntico al de una sala pública.
+    const opts = (_options ?? {}) as { private?: boolean };
+    if (opts.private === true) {
+      void this.setPrivate(true);
+      console.log(`[BrawlRoom] sala PRIVADA creada: ${this.roomId}`);
+    }
     // Waiting-room countdown starts the moment the first client joins, not
     // on room creation — see onJoin. The initial value here is a visible
     // default in case a client attaches before anyone else.

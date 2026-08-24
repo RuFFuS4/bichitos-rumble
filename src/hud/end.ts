@@ -117,12 +117,36 @@ endScreen.addEventListener('click', (e) => {
 
 // ---- Show / hide --------------------------------------------------------
 
+// --- H4 share — end screen ------------------------------------------------
+// The button lives inside the tap-to-restart overlay, so clicks must not
+// bubble (a share tap would instantly restart the match otherwise).
+let endShareText = 'Bichitos Rumble — free web arena brawler!';
+const btnEndShare = document.getElementById('btn-end-share') as HTMLButtonElement | null;
+btnEndShare?.addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  const url = `${location.origin}${location.pathname}`;
+  const nav: Navigator = navigator;
+  if (typeof nav.share === 'function') {
+    void nav.share({ title: 'Bichitos Rumble', text: endShareText, url })
+      .catch(() => { /* user cancelled */ });
+  } else {
+    nav.clipboard?.writeText(`${endShareText} ${url}`).then(() => {
+      btnEndShare.textContent = '✅ Copied!';
+      setTimeout(() => { btnEndShare.textContent = '📤 Share'; }, 1600);
+    }).catch(() => { /* clipboard blocked */ });
+  }
+});
+
 export function showEndScreen(
   result: EndResult,
   title: string,
   subtitle: string,
   showPortalOptions = false,
+  shareText?: string,
 ): void {
+  // Outcome-aware share line ("Gané con Kurama…" per the H4 roadmap
+  // item); callers that don't pass one get the generic pitch.
+  endShareText = shareText ?? 'Bichitos Rumble — free web arena brawler!';
   // 2026-05-01 polish — prepend a crown / trophy / skull sprite to
   // the title text so the win/lose/draw read at-glance is reinforced
   // by the AI-generated HUD sheet. Emoji fallback ships alongside;

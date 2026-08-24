@@ -932,6 +932,21 @@
        (e.g. match ended on the very first frame, edge case). Entry is
        animated via .stats-enter — panel slides up + fades in, numbers
        get an easeOutCubic count-up via hud.ts setEndMatchStats(). */
+    /* H4 — share button on the end screen */
+    .end-share-btn {
+      font: 700 14px/1 'Segoe UI', Arial, sans-serif;
+      letter-spacing: 1px;
+      color: #fff;
+      background: rgba(255, 220, 92, 0.18);
+      border: 1px solid #ffdc5c;
+      border-radius: 8px;
+      padding: 10px 22px;
+      margin-top: 10px;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .end-share-btn:hover { background: rgba(255, 220, 92, 0.32); }
+
     #end-stats.end-stats {
       display: flex;
       gap: 22px;
@@ -1220,6 +1235,47 @@
     .waiting-slot.human .waiting-slot-badge { color: #4ade80; }
     .waiting-slot.bot .waiting-slot-badge { color: #ffaa44; }
     .waiting-slot.empty .waiting-slot-badge { color: rgba(255,255,255,0.35); }
+    /* H4 private rooms — share row on the waiting screen */
+    #waiting-screen .waiting-share {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 10px auto 2px;
+      max-width: 560px;
+    }
+    #waiting-screen .waiting-share-label {
+      width: 100%;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #ffdc5c;
+    }
+    #waiting-screen .waiting-share-link {
+      font: 12px/1.6 monospace;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 6px;
+      padding: 4px 10px;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #waiting-screen .waiting-share-btn {
+      font: 600 12px/1 inherit;
+      color: #fff;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    #waiting-screen .waiting-share-btn:hover { background: rgba(255,255,255,0.22); }
+
     #waiting-screen .waiting-hint {
       font-size: 13px;
       opacity: 0.55;
@@ -2265,6 +2321,7 @@
     <div class="title-mode-buttons">
       <button id="btn-vs-bots" class="title-mode-btn selected" data-mode="bots">🤖 vs Bots</button>
       <button id="btn-online" class="title-mode-btn" data-mode="online">🌐 Online Multiplayer (up to 4P)</button>
+      <button id="btn-friends" class="title-mode-btn" data-mode="friends">👥 Play with Friends</button>
     </div>
     <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> switch · <kbd>ENTER</kbd> confirm</div>
     <div class="prompt touch-only">Tap a mode to play</div>
@@ -2334,6 +2391,14 @@
       <div class="waiting-countdown-unit">seconds</div>
     </div>
     <div id="waiting-slots" class="waiting-slots"></div>
+    <!-- H4 private rooms: share row, hidden unless the room was created
+         via "Play with Friends" (waiting.ts populates + toggles). -->
+    <div id="waiting-share" class="waiting-share" style="display:none;">
+      <div class="waiting-share-label">Invite your friends:</div>
+      <code id="waiting-share-link" class="waiting-share-link"></code>
+      <button id="waiting-share-copy" class="waiting-share-btn">📋 Copy link</button>
+      <button id="waiting-share-native" class="waiting-share-btn">📤 Share</button>
+    </div>
     <div class="waiting-hint">
       If the room doesn't fill in time, bots will take the remaining slots.
     </div>
@@ -2409,6 +2474,9 @@
       <div class="belt-slot-label">Belt earned</div>
     </div>
     <div id="end-stats" class="end-stats" style="display:none;"></div>
+    <!-- H4 share: navigator.share con fallback clipboard (end.ts). El
+         stopPropagation evita que el tap-to-restart del overlay salte. -->
+    <button id="btn-end-share" class="end-share-btn" type="button">📤 Share</button>
     <div class="prompt desktop-only"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
     <div class="prompt touch-only">Tap to play again</div>
     <div id="end-portal-prompt" class="prompt desktop-only" style="display:none;">

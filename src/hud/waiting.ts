@@ -18,6 +18,50 @@ import { getCritterThumbnail } from '../slot-thumbnail';
 const waitingScreen    = document.getElementById('waiting-screen');
 const waitingCountdownEl = document.getElementById('waiting-countdown');
 const waitingSlotsEl   = document.getElementById('waiting-slots');
+const waitingShareEl   = document.getElementById('waiting-share');
+const waitingShareLink = document.getElementById('waiting-share-link');
+const waitingShareCopy = document.getElementById('waiting-share-copy') as HTMLButtonElement | null;
+const waitingShareNative = document.getElementById('waiting-share-native') as HTMLButtonElement | null;
+
+// --- H4 private rooms — share row -----------------------------------------
+// game.ts calls setWaitingShareRoom(roomId) after creating a private room
+// ("Play with Friends"); null hides the row again (public rooms / leave).
+let currentShareUrl: string | null = null;
+
+export function setWaitingShareRoom(roomId: string | null): void {
+  if (!waitingShareEl || !waitingShareLink) return;
+  if (!roomId) {
+    currentShareUrl = null;
+    waitingShareEl.style.display = 'none';
+    return;
+  }
+  currentShareUrl = `${location.origin}${location.pathname}?room=${encodeURIComponent(roomId)}`;
+  waitingShareLink.textContent = currentShareUrl;
+  waitingShareEl.style.display = '';
+  // navigator.share only exists on secure contexts + supporting browsers
+  // (mobile mostly) — hide the native button where it would just throw.
+  if (waitingShareNative) {
+    waitingShareNative.style.display =
+      typeof navigator !== 'undefined' && 'share' in navigator ? '' : 'none';
+  }
+}
+
+waitingShareCopy?.addEventListener('click', () => {
+  if (!currentShareUrl) return;
+  navigator.clipboard?.writeText(currentShareUrl).then(() => {
+    waitingShareCopy.textContent = '✅ Copied!';
+    setTimeout(() => { waitingShareCopy.textContent = '📋 Copy link'; }, 1600);
+  }).catch(() => { /* clipboard blocked — the link is visible to copy by hand */ });
+});
+
+waitingShareNative?.addEventListener('click', () => {
+  if (!currentShareUrl) return;
+  void navigator.share?.({
+    title: 'Bichitos Rumble',
+    text: 'Join my private room in Bichitos Rumble!',
+    url: currentShareUrl,
+  }).catch(() => { /* user cancelled the share sheet — fine */ });
+});
 
 export type WaitingSlotKind = 'human' | 'bot' | 'empty';
 

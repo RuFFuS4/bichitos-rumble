@@ -16,7 +16,7 @@ import {
   showMatchHud,
   setSlotClickHandler, setTitleModeHandlers, updateTitleModeSelection, isOnlineModeAvailable, setEndTapHandler,
   setPortalLegend, setPortalToggleHandler,
-  showWaitingScreen, hideWaitingScreen, updateWaitingScreen,
+  showWaitingScreen, hideWaitingScreen, updateWaitingScreen, setWaitingShareRoom,
   showSpectatorPrompt, hideSpectatorPrompt,
   setEndMatchStats, clearEndMatchStats,
   type EndResult, type WaitingScreenData,
@@ -171,7 +171,12 @@ export class Game {
    *  client with two half-initialised rooms. */
   private connectInProgress: boolean = false;
   /** Currently highlighted mode on the title screen (keyboard navigation). */
-  private titleMode: 'bots' | 'online' = 'bots';
+  private titleMode: 'bots' | 'online' | 'friends' = 'bots';
+  /** H4 private rooms — how the NEXT online connect lands in a room:
+   *  null = quickmatch (joinOrCreate), {create:true} = create a private
+   *  room ("Play with Friends"), {roomId} = joinById (?room=XYZ link).
+   *  Cleared on enterTitle so a later quickmatch doesn't inherit it. */
+  private friendsJoin: { create?: boolean; roomId?: string } | null = null;
   /** Offline-only pause flag. When true, the 'playing' branch of update()
    *  short-circuits (no input, no bot AI, no physics) and the DOM pause
    *  menu overlay is shown. Toggled by ESC and the pause buttons. */
@@ -225,6 +230,7 @@ export class Game {
         // Block click-confirm while a previous connect/restart is still in flight.
         if (this.connectInProgress || this.restartInProgress) return;
         if (mode === 'online') this.enterOnlineCharacterSelect();
+        else if (mode === 'friends') this.enterOnlineCharacterSelect({ create: true });
         else this.enterCharacterSelect();
       },
     );
@@ -260,6 +266,15 @@ export class Game {
       this.enterCountdown();
     } else {
       this.enterTitle();
+      // H4 private rooms — invite link (?room=XYZ): jump straight into
+      // the online flow (nickname modal → character select → joinById).
+      // Runs AFTER enterTitle so a cancelled modal lands on a sane
+      // title screen instead of a blank page.
+      const inviteRoomId = new URLSearchParams(location.search).get('room');
+      if (inviteRoomId && isOnlineModeAvailable()) {
+        console.log('[Game] invite link → joining room', inviteRoomId);
+        void this.enterOnlineCharacterSelect({ roomId: inviteRoomId });
+      }
     }
 
     // Warm the model cache in browser idle time so character-select
@@ -438,10 +453,14 @@ export class Game {
     hidePreview();
     // Ensure the mode highlight matches the current state (default: bots)
     // If online isn't available (no server URL), force-select bots.
-    if (!isOnlineModeAvailable() && this.titleMode === 'online') {
+    if (!isOnlineModeAvailable() && this.titleMode !== 'bots') {
       this.titleMode = 'bots';
     }
     updateTitleModeSelection(this.titleMode);
+    // H4 private rooms: back on the title = any pending invite/create
+    // intent dies, and the waiting share row hides for the next room.
+    this.friendsJoin = null;
+    setWaitingShareRoom(null);
   }
 
   private enterCharacterSelect(): void {
@@ -678,14 +697,20 @@ export class Game {
    * prompt for a nickname + register it before showing the select. On
    * cancel, we stay on the title screen.
    */
-  public async enterOnlineCharacterSelect(): Promise<void> {
+  public async enterOnlineCharacterSelect(
+    friends: { create?: boolean; roomId?: string } | null = null,
+  ): Promise<void> {
     try {
       const identity = await ensureOnlineIdentity();
       this.onlineIdentity = identity;
     } catch (_err) {
       // User cancelled the nickname modal → stay on title screen.
+      this.friendsJoin = null;
       return;
     }
+    // H4 private rooms: remember HOW the connect should land (create
+    // private / joinById) until connectOnlineWith consumes it.
+    this.friendsJoin = friends;
     this.selectForOnline = true;
     this.enterCharacterSelect();
   }
@@ -771,7 +796,21 @@ export class Game {
         joinOpts.playerToken = getDeviceToken();
         joinOpts.nickname = this.onlineIdentity.nickname;
       }
-      const room = await connectToBrawl(getDefaultServerUrl(), joinOpts);
+      // H4 private rooms: create-private o joinById según friendsJoin;
+      // quickmatch (joinOrCreate) cuando es null. Se consume aquí: un
+      // restart posterior desde el end screen re-conecta en quickmatch
+      // (la sala privada original ya terminó y está locked).
+      const mode = this.friendsJoin?.create
+        ? { createPrivate: true as const }
+        : this.friendsJoin?.roomId
+          ? { joinRoomId: this.friendsJoin.roomId }
+          : undefined;
+      const wasFriendsCreate = !!this.friendsJoin?.create;
+      this.friendsJoin = null;
+      const room = await connectToBrawl(getDefaultServerUrl(), joinOpts, mode);
+      // Share row en la waiting screen SOLO para el creador de la sala
+      // privada (quien entra por enlace ya tiene el enlace).
+      setWaitingShareRoom(wasFriendsCreate ? room.roomId : null);
       this.enterOnline(room, onPlayersChange);
     } catch (err) {
       console.error('[Game] online connect failed:', err);
@@ -1303,7 +1342,10 @@ export class Game {
           playMusic('intro');
         }
         hideOverlay();
-        showEndScreen(result, title, subtitle, false);
+        showEndScreen(result, title, subtitle, false,
+          result === 'win'
+            ? `I just won an online brawl in Bichitos Rumble! 🐛👊`
+            : 'Playing Bichitos Rumble — free web arena brawler! 🐛');
 
         // Skeletal: surviving critters celebrate. Losers already locked
         // into 'defeat' via the alive-edge hook above. No-op for critters
@@ -1515,7 +1557,10 @@ export class Game {
     this.lastEndResult = result;
     document.body.classList.remove('match-active');
     hideOverlay();
-    showEndScreen(result, title, subtitle, isFromPortal());
+    showEndScreen(result, title, subtitle, isFromPortal(),
+      result === 'win' && this.player
+        ? `I just won as ${this.player.config.name} in Bichitos Rumble! 🐛👊`
+        : 'Playing Bichitos Rumble — free web arena brawler! 🐛');
     if (result === 'win') {
       playSound('victory');
       // Music: celebratory track on victory. Preload already covers the
@@ -1775,14 +1820,21 @@ export class Game {
         for (const c of this.critters) c.update(dt);
         // Arrow left/right toggles mode highlight. If online isn't
         // available, left/right are ignored (only one mode exists).
-        if (consumeMenuAction('left') || consumeMenuAction('right')) {
-          if (isOnlineModeAvailable()) {
-            this.titleMode = this.titleMode === 'bots' ? 'online' : 'bots';
-            updateTitleModeSelection(this.titleMode);
+        {
+          const left = consumeMenuAction('left');
+          if (left || consumeMenuAction('right')) {
+            if (isOnlineModeAvailable()) {
+              // 3 modos desde H4: bots ⇄ online ⇄ friends (cíclico).
+              const cycle: Array<'bots' | 'online' | 'friends'> = ['bots', 'online', 'friends'];
+              const i = cycle.indexOf(this.titleMode);
+              this.titleMode = cycle[(i + (left ? cycle.length - 1 : 1)) % cycle.length];
+              updateTitleModeSelection(this.titleMode);
+            }
           }
         }
         if (consumeMenuAction('confirm') && !this.connectInProgress && !this.restartInProgress) {
           if (this.titleMode === 'online') this.enterOnlineCharacterSelect();
+          else if (this.titleMode === 'friends') this.enterOnlineCharacterSelect({ create: true });
           else this.enterCharacterSelect();
         }
         break;

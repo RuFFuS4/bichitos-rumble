@@ -338,9 +338,12 @@ setArenaForAbilities(game.arena);
 // is configured. In dev we always show it (defaults to ws://localhost:2567).
 // Click handling for both title buttons lives in hud.ts via setTitleModeHandlers.
 const btnOnline = document.getElementById('btn-online');
+const btnFriends = document.getElementById('btn-friends');
 const hasServerUrl = !!(import.meta.env.VITE_SERVER_URL) || !!import.meta.env.DEV;
-if (btnOnline && !hasServerUrl) {
-  btnOnline.remove();
+if (!hasServerUrl) {
+  // Both online paths share the gate — no server URL, no online buttons.
+  btnOnline?.remove();
+  btnFriends?.remove();
   console.info('[Main] online mode disabled (no VITE_SERVER_URL)');
 }
 
