@@ -46,6 +46,7 @@ export const FEEL = {
     normalPushForce: 3.0,     // casual bumps are gentle nudges
     headbuttMultiplier: 3.5,  // headbutt = headbuttForce * this (Rojo: 14*3.5=49)
     anchoredBounceFactor: 1.4, // × normalPushForce — rebound applied to whoever runs into an anchored critter (Shelly Steel Shell)
+    shellReflectFactor: 0.85,  // headbutting an anchored critter reflects the attacker's OWN force × this (balance v2 mechanic)
     stunnedVulnerability: 4,  // knockback multiplier while stunTimer > 0 (Trunk Slam/Grip follow-ups)
   },
 

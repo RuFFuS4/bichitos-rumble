@@ -1,5 +1,28 @@
 # Build Log — Bichitos Rumble
 
+## 2026-08-24 — Mecánicas de balanceo 1: shell reflect + el cañón dispara (día autónomo)
+
+- **Shell reflect** (cola de BALANCE.md): headbuttear a un critter
+  anclado (Shelly en Steel Shell) devuelve al atacante SU PROPIA fuerza
+  × FEEL.collision.shellReflectFactor (0.85). Cuanto más fuerte pegas
+  al tanque, más vuelas — Trunk se come 40 de castigo, Sihans 10. El
+  choque sin headbutt mantiene el bounce suave. Espejo en server
+  (physics.ts, const local con nota de sync).
+- **El cañón de Sebastian dispara**: el cerebro distingue la FORMA del
+  def aoe_push — radial mantiene la condición 'rodeado ≥2', pero un
+  cono direccional (Claw Wave, force 76, coneAngleDeg 60) dispara con
+  UNA víctima delante dentro del radio ×0.9 y doble rate. Def-driven:
+  cualquier cono futuro lo hereda. Antes su mejor arma solo salía
+  estando rodeado y perdido.
+- **Medición (18 partidas)**: Trunk 5→4 wins con caídas 1.5→1.7 —
+  consistente con comerse reflects: el shell ya recorta al depredador
+  alfa. Shelly/Sebastian siguen 0/6 en autopilot: CONFIRMA la regla 6
+  del marco (meta-bot ≠ meta-jugador) — estas mecánicas apuntan al
+  jugador humano y su prueba real es playtesting de Rafa, no más
+  batch. El autopilot tocó techo como instrumento para estos dos.
+- Gates: tsc cliente+server, paridad de habilidades, batches sin
+  errores. Todo en dev; sin merge a main (bloque de mecánicas abierto).
+
 ## 2026-08-21 — Balance v2 it3: el escudo de Shelly despierta (y el límite del tuning)
 
 - **Steel Shell re-etiquetado** aoe_push → defensive: heredaba el tag

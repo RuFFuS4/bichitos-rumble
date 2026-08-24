@@ -59,12 +59,33 @@ export function resolveCollisions(critters: Critter[]): void {
         const aAnchored = isAnchoredCritter(a);
         const bAnchored = isAnchoredCritter(b);
         const BOUNCE = FEEL.collision.normalPushForce * FEEL.collision.anchoredBounceFactor;
+        // 2026-08-24 balance v2 — shell reflect (mecánica de la cola de
+        // BALANCE.md): headbuttear a un critter anclado (Shelly en Steel
+        // Shell) te DEVUELVE tu propio golpe escalado por
+        // shellReflectFactor. Pegarle al tanque enconchado duele — la
+        // debilidad estructural (no puede escapar) se convierte en
+        // amenaza. Un choque sin headbutt sigue siendo el bounce suave.
+        const reflectOff = (attacker: Critter, dirX: number, dirZ: number) => {
+          const rf =
+            attacker.config.headbuttForce *
+            FEEL.collision.headbuttMultiplier *
+            (attacker.config.headbuttBoost ?? 1.0) *
+            FEEL.collision.shellReflectFactor;
+          attacker.vx += dirX * rf;
+          attacker.vz += dirZ * rf;
+          triggerHitStop(FEEL.hitStop.headbutt);
+          triggerCameraShake(FEEL.shake.headbutt);
+          applyImpactFeedback(attacker);
+          playSound('headbuttHit');
+        };
         if (aAnchored && !bAnchored) {
+          if (b.isHeadbutting) { reflectOff(b, nx, nz); continue; }
           b.vx += nx * BOUNCE;
           b.vz += nz * BOUNCE;
           continue;
         }
         if (bAnchored && !aAnchored) {
+          if (a.isHeadbutting) { reflectOff(a, -nx, -nz); continue; }
           a.vx -= nx * BOUNCE;
           a.vz -= nz * BOUNCE;
           continue;

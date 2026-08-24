@@ -90,12 +90,32 @@ export function resolveCollisions(
         const aAnchored = isAnchored(a);
         const bAnchored = isAnchored(b);
         const BOUNCE = SIM.collision.normalPushForce * 1.4;
+        // 2026-08-24 balance v2 — shell reflect (espejo del cliente,
+        // src/physics.ts): headbuttear al anclado devuelve tu propia
+        // fuerza × SHELL_REFLECT. Mantener en sync con
+        // FEEL.collision.shellReflectFactor.
+        const SHELL_REFLECT = 0.85;
+        const reflectForce = (cfg: { headbuttForce: number; headbuttBoost?: number }) =>
+          cfg.headbuttForce * SIM.collision.headbuttMultiplier *
+          (cfg.headbuttBoost ?? 1.0) * SHELL_REFLECT;
         if (aAnchored && !bAnchored) {
+          if (b.isHeadbutting) {
+            const rf = reflectForce(bCfg);
+            b.vx += nx * rf;
+            b.vz += nz * rf;
+            continue;
+          }
           b.vx += nx * BOUNCE;
           b.vz += nz * BOUNCE;
           continue;
         }
         if (bAnchored && !aAnchored) {
+          if (a.isHeadbutting) {
+            const rf = reflectForce(aCfg);
+            a.vx -= nx * rf;
+            a.vz -= nz * rf;
+            continue;
+          }
           a.vx -= nx * BOUNCE;
           a.vz -= nz * BOUNCE;
           continue;

@@ -62,12 +62,18 @@ Batch de referencia: 6 partidas/critter como jugador-autopilot, seeds
 
 ## Cola de mecánicas de balanceo (para la fase de mecánicas)
 
-- **Shelly — shell que castiga**: reflejar una fracción del knockback
-  al atacante durante Steel Shell (pegarle al tanque enconchado debe
-  doler). Convierte su debilidad estructural (no escapa) en amenaza.
-- **Sebastian — que el cañón dispare**: auto-aim suave del bot (o
-  ventana de contacto más generosa en su headbutt firma) para que el
-  meta-bot exprese su P+2; en manos humanas ya apunta el jugador.
+- [x] **Shelly — shell que castiga** (2026-08-24): reflect del golpe
+  del atacante × `FEEL.collision.shellReflectFactor` (0.85) durante
+  Steel Shell, cliente+server. Medido: recorta a Trunk (5→4 wins);
+  no mueve el 0/6 de la propia Shelly en autopilot → su prueba real
+  es playtesting humano (regla 6).
+- [x] **Sebastian — que el cañón dispare** (2026-08-24): el cerebro
+  distingue conos (coneAngleDeg) de AoE radial — la Claw Wave dispara
+  con una víctima delante, no "rodeado ≥2". Def-driven. Mismo veredicto:
+  el autopilot no lo refleja, playtesting humano.
+- [ ] **PENDIENTE de playtesting de Rafa**: sentir shell-reflect y la
+  Claw Wave en partida real antes de más iteración sobre estos dos. El
+  autopilot tocó techo como instrumento aquí.
 - Infra ya lista que ayuda: trigger defensivo del cerebro (bot.ts, se
   activa con cualquier def `tags: ['defensive']`), FEEL.bots tuneable
   desde el match lab, y el pipeline de signature moves des-riesgado

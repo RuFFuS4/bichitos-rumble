@@ -190,10 +190,20 @@ export function updateBot(
     }
   }
 
-  // --- AoE push ability: use when surrounded
+  // --- AoE push ability: two firing conditions by SHAPE of the def
+  // (2026-08-24 balance v2 — cañón de Sebastian, cola de BALANCE.md):
+  //   · Radial (sin coneAngleDeg): "estoy rodeado" — nearbyCount >= 2.
+  //   · Direccional (coneAngleDeg): es un cañón frontal, UNA víctima
+  //     delante dentro del radio basta. Con la condición radial, la
+  //     Claw Wave de Sebastian (force 76, su mejor arma) solo salía
+  //     cuando ya estaba rodeado y perdido — el audit lo midió en 0/6.
   const aoeAbility = findAbilityByTag(bot.abilityStates, 'aoe_push');
-  if (aoeAbility && canActivateAbility(aoeAbility) && nearbyCount >= 2) {
-    if (matchRng() < 0.015 * aggroMul) {
+  if (aoeAbility && canActivateAbility(aoeAbility)) {
+    const isCone = typeof aoeAbility.def.coneAngleDeg === 'number';
+    const fires = isCone
+      ? nearestDist < (aoeAbility.def.radius ?? 3.5) * 0.9
+      : nearbyCount >= 2;
+    if (fires && matchRng() < (isCone ? 0.03 : 0.015) * aggroMul) {
       activateAbility(aoeAbility, bot);
     }
   }
