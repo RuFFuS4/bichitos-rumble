@@ -1023,6 +1023,24 @@ export class Game {
     // rejection arrives as an error in `joinOrCreate` (handled in
     // the catch block of `enterOnlinePhase`) before we ever get
     // here.
+    // H4 reconnect: con la auto-reconexión del SDK activa (network.ts),
+    // onLeave solo dispara cuando los reintentos se agotan o el server
+    // rechaza el rejoin (gracia de 30 s expirada). onDrop = blip de red
+    // (arrancan los reintentos); onReconnect = de vuelta en la sala con
+    // el estado re-sincronizado (spawnOnlineCritter tiene guard de
+    // duplicados para el re-emit de onAdd).
+    room.onDrop((code, reason) => {
+      console.warn('[Game] connection dropped, reconnecting…', code, reason ?? '');
+      if (this.phase === 'online' && this.room === room) {
+        showOverlay(t('hud-reconnecting'), t('hud-reconnecting-sub'));
+      }
+    });
+    room.onReconnect(() => {
+      console.log('[Game] reconnected to room', room.roomId);
+      if (this.phase === 'online' && this.room === room) {
+        hideOverlay();
+      }
+    });
     room.onLeave(() => {
       console.log('[Game] disconnected from room');
       if (this.phase === 'online' && this.room === room && !this.restartInProgress) {
@@ -1032,6 +1050,10 @@ export class Game {
   }
 
   private spawnOnlineCritter(sessionId: string, playerState: any): void {
+    // H4 reconnect: tras un rejoin el SDK re-aplica el estado completo y
+    // onAdd re-dispara para jugadores que YA tenemos instanciados — sin
+    // este guard, cada reconexión duplicaría critters visuales.
+    if (this.onlineCritters.has(sessionId)) return;
     // Resolve the character from server-authoritative state. If unknown
     // (shouldn't happen — server validates before sending), fall back to
     // the first playable from the roster.

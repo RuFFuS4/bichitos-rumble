@@ -34,6 +34,11 @@ import {
 
 /** Seconds of open waiting before the server fills empty slots with bots. */
 const WAITING_TIMEOUT = 60;
+
+/** H4 reconnect: segundos de gracia para volver tras un cierre anormal
+ *  (blip de wifi, tab suspendida). Mientras corre, un bot cubre el
+ *  asiento; el cliente reintenta con backoff (network.ts, maxRetries 8). */
+const RECONNECT_GRACE_SEC = 30;
 /** Hard cap on humans+bots in one room — matches `maxClients`. */
 const MAX_PLAYERS = 4;
 
@@ -78,9 +83,11 @@ interface InternalPlayerData {
   // nickname via the REST API and passed verifyPlayer on join). Null for
   // bots and for humans who skipped the nickname modal.
   onlinePlayerId: string | null;
-  /** Kills this match that were humans (not bots). TODO(belts-v2): wire
-   *  headbutt last-hitter tracking to credit the actual slayer. For now
-   *  stays at 0 — Slayer Belt will need a follow-up. */
+  /** Kills this match that were humans (not bots). Wired end-to-end:
+   *  physics.ts registra lastAttackerSid en cada headbutt conectado
+   *  (ventana de frescura ATTACKER_STALE_MS), checkFalloff lo vuelca en
+   *  deaths[], y BrawlRoom acredita aquí → recordMatchResult →
+   *  kills_vs_humans en db. Solo cuentan víctimas humanas verificadas. */
   killsVsHumansThisMatch: number;
   /** 2026-04-30 final-L — Cheeto Cone Pulse pulse-accumulator.
    *  Counts elapsed seconds since the last pulse fired so the L
@@ -143,6 +150,8 @@ export class BrawlRoom extends Room {
    *  the Online Belts recorded stats. Set in transitionFromCountdown and
    *  read once on endMatch. Null until the match actually starts. */
   private playingStartedAtMs: number | null = null;
+  /** H4 integridad: humanos verificados al arrancar el countdown. */
+  private humansAtStart = 0;
   /** Authoritative slow-zone tracker (Kermit Poison Cloud, Kowalski
    *  Arctic Burst). Each zone is consulted by `effectiveSpeed` for
    *  every player and its `ttl` decremented once per tick. Zones
@@ -313,22 +322,58 @@ export class BrawlRoom extends Room {
     }
   }
 
-  // Colyseus 0.17: the second param is now the WS close code (number),
-  // not the consented boolean. We never read it — every leave (consented
-  // or not) takes the same path: bot-takeover mid-match, slot free
-  // otherwise.
-  onLeave(client: Client, _code: number) {
+  // Colyseus 0.17: the second param is the WS close code (number).
+  // 4000 = consented leave (client called room.leave()); anything else
+  // is an abnormal close (wifi blip, tab suspend, server restart…).
+  //
+  // H4 reconnect (2026-08-24): abnormal closes mid-match get a
+  // RECONNECT_GRACE_SEC window via allowReconnection — the existing
+  // bot-takeover covers the seat MEANWHILE, and if the human comes
+  // back we simply flip isBot off again. Consented leaves and grace
+  // expiry take the permanent path (takeover-forever / end match).
+  async onLeave(client: Client, code: number) {
     const sid = client.sessionId;
     const phase = this.state.phase;
 
     // Waiting / ended: simple delete, no further logic. A human leaving
     // during waiting just frees the slot; the bot-fill timer handles the
-    // rest once it expires.
+    // rest once it expires. (No grace here: re-joining a waiting room
+    // through the normal matchmaking path is cheap.)
     if (phase === 'waiting' || phase === 'ended') {
       this.state.players.delete(sid);
       this.internal.delete(sid);
       console.log(`[BrawlRoom] ${sid} left during ${phase} (${this.state.players.size} remaining)`);
       return;
+    }
+
+    const WS_CLOSE_CONSENTED = 4000;
+    if (code !== WS_CLOSE_CONSENTED) {
+      const dropee = this.state.players.get(sid);
+      if (dropee) {
+        // Bot covers the seat during the grace window (same mechanics
+        // as the permanent takeover below — one code path to trust).
+        dropee.isBot = true;
+        this.clearHeldInputs(sid);
+        console.log(`[BrawlRoom] ${sid} dropped (code ${code}) during ${phase} → grace de ${RECONNECT_GRACE_SEC}s, bot cubre`);
+        try {
+          await this.allowReconnection(client, RECONNECT_GRACE_SEC);
+          // Human is back: hand the critter back exactly as it stands
+          // (lives/position are server state — nothing to restore).
+          dropee.isBot = false;
+          this.clearHeldInputs(sid);
+          console.log(`[BrawlRoom] ${sid} RECONNECTED during ${this.state.phase}`);
+          return;
+        } catch {
+          // Grace expired (or room disposed): fall through to the
+          // permanent-leave logic with FRESH phase/alive state.
+          console.log(`[BrawlRoom] ${sid} reconnect grace expired`);
+          if (this.state.phase === 'waiting' || this.state.phase === 'ended') {
+            this.state.players.delete(sid);
+            this.internal.delete(sid);
+            return;
+          }
+        }
+      }
     }
 
     // Countdown / playing: the leaver's critter is potentially still on the
@@ -351,16 +396,21 @@ export class BrawlRoom extends Room {
 
     if (remainingAlive.length >= 2 && leaver.alive) {
       leaver.isBot = true;
-      const data = this.internal.get(sid);
-      if (data) {
-        data.inputMoveX = 0;
-        data.inputMoveZ = 0;
-        data.inputHeadbutt = false;
-        data.inputAbility1 = false;
-        data.inputAbility2 = false;
-        data.inputUltimate = false;
-      }
+      this.clearHeldInputs(sid);
       console.log(`[BrawlRoom] ${sid} left during ${phase} → bot takeover (${remainingAlive.length} humans remain)`);
+      return;
+    }
+
+    // H4 fix (destapado por el e2e de reconnect): un leaver YA MUERTO
+    // con la partida aún poblada no necesita takeover NI debe terminar
+    // la partida de los demás — antes caía al endMatch de abajo y un
+    // espectador desconectando cortaba un 3-vivos en seco. Se marca
+    // isBot para que recordOnlineBeltStats le registre la derrota
+    // (rage-quit = derrota) sin borrar su fila del scoreboard.
+    if (remainingAlive.length >= 2 && !leaver.alive) {
+      leaver.isBot = true;
+      this.clearHeldInputs(sid);
+      console.log(`[BrawlRoom] ${sid} (dead) left during ${phase} → match continues (${remainingAlive.length} alive)`);
       return;
     }
 
@@ -370,6 +420,20 @@ export class BrawlRoom extends Room {
     const survivor = remainingAlive[0];
     console.log(`[BrawlRoom] ${sid} left during ${phase} → ending match (${remainingAlive.length} remaining alive)`);
     this.endMatch('opponent_left', survivor?.sessionId ?? '');
+  }
+
+  /** Reset every held-input flag for a seat — used on bot takeover (the
+   *  bot AI starts from a clean slate) and on reconnect handback (the
+   *  returning human starts without ghost inputs). */
+  private clearHeldInputs(sid: string): void {
+    const data = this.internal.get(sid);
+    if (!data) return;
+    data.inputMoveX = 0;
+    data.inputMoveZ = 0;
+    data.inputHeadbutt = false;
+    data.inputAbility1 = false;
+    data.inputAbility2 = false;
+    data.inputUltimate = false;
   }
 
   onDispose() {
@@ -450,6 +514,14 @@ export class BrawlRoom extends Room {
    */
   private transitionToCountdown(): void {
     if (this.state.phase !== 'waiting') return;
+    // H4 integridad de leaderboards: cuenta de humanos VERIFICADOS al
+    // arrancar. recordOnlineBeltStats no registra nada si fue < 2 —
+    // machacar bots a solas no toca Throne/Flash/Streak ni el Slayer.
+    // Se mide al inicio a propósito: un rage-quit posterior no
+    // "desinfecta" la partida del que se queda.
+    this.humansAtStart = [...this.state.players.keys()]
+      .filter((sid) => !!this.internal.get(sid)?.onlinePlayerId
+        && !this.state.players.get(sid)?.isBot).length;
     const seed = (Math.random() * 0xFFFFFFFF) | 0;
     this.arenaSim = new ArenaSim(seed);
     this.state.arenaSeed = seed;
@@ -521,6 +593,13 @@ export class BrawlRoom extends Room {
    * physics.ts) lande; entonces el Slayer Belt tendrá datos reales.
    */
   private recordOnlineBeltStats(winnerSessionId: string): void {
+    // H4 integridad: sin un segundo humano verificado, la partida no
+    // puntúa NADA (ni wins ni losses ni kills) — los cinturones online
+    // se ganan contra personas, no farmeando bots.
+    if (this.humansAtStart < 2) {
+      console.log(`[Belts] match not recorded (humansAtStart=${this.humansAtStart} < 2)`);
+      return;
+    }
     const durationMs = this.playingStartedAtMs !== null
       ? Date.now() - this.playingStartedAtMs
       : 0;
@@ -536,10 +615,14 @@ export class BrawlRoom extends Room {
     let anyWriteSucceeded = false;
     for (const [sid, p] of this.state.players) {
       const internal = this.internal.get(sid);
-      if (!internal?.onlinePlayerId) continue;      // guest or bot → skip
-      if (p.isBot) continue;                        // bot-takeover edge case
+      if (!internal?.onlinePlayerId) continue;      // guest or bot-nato → skip
 
-      const won = sid === winnerSessionId;
+      // H4 integridad (rage-quit = derrota): un asiento con identidad
+      // verificada cuyo critter es ahora bot = humano que se FUE
+      // (quit o gracia de reconnect expirada). Registra DERROTA aunque
+      // su critter-bot "ganara" la partida — irse nunca puntúa.
+      const departed = p.isBot;
+      const won = !departed && sid === winnerSessionId;
       const livesLeft = Math.max(0, p.lives);
       try {
         recordMatchResult({

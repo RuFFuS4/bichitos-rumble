@@ -189,6 +189,8 @@ const DICT = {
   'hud-preparing-arena':      { en: 'Preparing arena…',         es: 'Preparando la arena…' },
   'hud-get-ready':            { en: 'Get Ready!',               es: '¡Prepárate!' },
   'hud-waiting-opponent':     { en: 'Waiting for opponent...',  es: 'Esperando rival...' },
+  'hud-reconnecting':         { en: 'Reconnecting…',            es: 'Reconectando…' },
+  'hud-reconnecting-sub':     { en: 'Connection lost — a bot covers you meanwhile', es: 'Conexión perdida — un bot te cubre mientras tanto' },
   'hud-disconnected':         { en: 'Disconnected',             es: 'Desconectado' },
   'hud-disconnected-sub':     { en: 'Press T to return to title',
                                 es: 'Pulsa T para volver al título' },

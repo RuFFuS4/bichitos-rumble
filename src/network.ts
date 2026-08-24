@@ -53,16 +53,15 @@ export async function connectToBrawl(
   } else {
     room = await client.joinOrCreate('brawl', options);
   }
-  // H1 review (0.17): the SDK now ships auto-reconnection ENABLED by
-  // default, but our server has no allowReconnection/onDrop support —
-  // a mid-match hard disconnect (server restart, dropped wifi, tab
-  // suspend) would silently retry ~15 times (~1 min) with the match
-  // frozen and no "Disconnected" overlay, because onLeave stops firing
-  // for abnormal closes. Disabling restores the 0.16 semantics: onLeave
-  // fires immediately, the overlay shows, and the server-side
-  // bot-takeover already covers the gameplay half. Revisit in H4 when
-  // allowReconnection lands server-side.
-  room.reconnection.enabled = false;
+  // H4 reconnect (2026-08-24): allowReconnection YA está en el server
+  // (BrawlRoom.onLeave, gracia de 30 s con bot-takeover mientras tanto),
+  // así que la auto-reconexión del SDK vuelve a estar activa (su
+  // default). El cliente muestra "Reconnecting…" en onDrop y limpia en
+  // onReconnect (game.ts); onLeave solo llega cuando los reintentos se
+  // agotan o el server rechaza el rejoin. Cap de reintentos alineado
+  // con la gracia del server: no tiene sentido insistir minutos contra
+  // un asiento que expiró a los 30 s.
+  room.reconnection.maxRetries = 8;
   console.log('[Network] joined room', room.roomId, 'as', room.sessionId);
   return room;
 }
