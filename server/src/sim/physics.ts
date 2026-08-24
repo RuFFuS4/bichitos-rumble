@@ -41,9 +41,20 @@ const ATTACKER_STALE_MS = 5000;
  * are recorded on the defender so Slayer Belt credit can flow through
  * updateFalling when a life is lost.
  */
+/** Un reflect del Steel Shell este tick — el room lo broadcast-ea para
+ *  que los clientes reproduzcan el feedback (shake/sonido) que offline
+ *  dispara la física local. Review 2026-08-24: el rebote era mudo online. */
+export interface ShellReflectEvent {
+  /** Atacante que se comió su propia fuerza. */
+  attackerSid: string;
+  /** El anclado que reflejó. */
+  anchoredSid: string;
+}
+
 export function resolveCollisions(
   players: PlayerSchema[],
   internal?: Map<string, InternalLike>,
+  reflectsOut?: ShellReflectEvent[],
 ): void {
   for (let i = 0; i < players.length; i++) {
     const a = players[i];
@@ -103,6 +114,7 @@ export function resolveCollisions(
             const rf = reflectForce(bCfg);
             b.vx += nx * rf;
             b.vz += nz * rf;
+            reflectsOut?.push({ attackerSid: b.sessionId, anchoredSid: a.sessionId });
             continue;
           }
           b.vx += nx * BOUNCE;
@@ -114,6 +126,7 @@ export function resolveCollisions(
             const rf = reflectForce(aCfg);
             a.vx -= nx * rf;
             a.vz -= nz * rf;
+            reflectsOut?.push({ attackerSid: a.sessionId, anchoredSid: b.sessionId });
             continue;
           }
           a.vx -= nx * BOUNCE;

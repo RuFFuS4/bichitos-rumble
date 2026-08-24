@@ -1384,7 +1384,15 @@ export class BrawlRoom extends Room {
     // 4. Collisions + knockback (player vs player).
     // `this.internal` is passed so headbutt hits can be attributed for
     // Online Belts Slayer credit when the defender eventually falls.
-    resolveCollisions(players, this.internal);
+    // Review 2026-08-24: los reflects del Steel Shell salen por
+    // reflectsOut y se broadcast-ean para que el cliente reproduzca el
+    // feedback (shake/sonido) que offline dispara su física local — el
+    // rebote era mudo online.
+    const reflects: import('./sim/physics.js').ShellReflectEvent[] = [];
+    resolveCollisions(players, this.internal, reflects);
+    for (const r of reflects) {
+      this.broadcast('shellReflected', r);
+    }
 
     // 5. Falloff detection — uses the authoritative fragment layout
     checkFalloff(players, this.internal, (x, z) => this.arenaSim.isOnArena(x, z));

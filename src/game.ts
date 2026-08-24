@@ -40,13 +40,13 @@ import {
 } from './portal';
 // network-events es colyseus-free (imports type-only del SDK) — el SDK
 // real (network.ts) solo entra por import dinámico en connectOnline.
-import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, type Room, type AbilityFiredEvent, type PlayersChangeBinder } from './network-events';
+import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, onShellReflected, type Room, type AbilityFiredEvent, type PlayersChangeBinder } from './network-events';
 import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
 import { getDeviceToken, type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
-import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
+import { triggerCameraShake, triggerHitStop, applyDashFeedback, applyImpactFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
 import { getCritterVfxPalette } from './abilities';
 import { clearActiveZones, pushNetworkZone, deriveZoneVfxKind } from './abilities-runtime';
@@ -900,6 +900,17 @@ export class Game {
 
     // Ability fire events → trigger client-side VFX + audio
     onAbilityFired(room, (ev: AbilityFiredEvent) => this.handleAbilityFired(ev));
+
+    // Steel Shell reflect (review 2026-08-24): mismo feedback que la
+    // física offline dispara localmente — shake+hit-stop+sonido, y el
+    // impact-squash sobre el critter atacante si lo tenemos instanciado.
+    onShellReflected(room, (ev) => {
+      triggerHitStop(FEEL.hitStop.headbutt);
+      triggerCameraShake(FEEL.shake.headbutt);
+      playSound('headbuttHit');
+      const attacker = this.onlineCritters.get(ev.attackerSid);
+      if (attacker) applyImpactFeedback(attacker);
+    });
 
     // Slow-zone broadcasts → render the persistent ground hazard +
     // register the zone in the client-side tracker so `effectiveSpeed`
