@@ -1,5 +1,31 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-05 — La checklist, simulada: campaña Playwright + review de networking
+
+- **12 de 14 items verificados por Claude** con una campaña Playwright
+  (.tmp/checklist/): reconnect e2e real (context.setOffline → cierre
+  1006 → Reconectando… → RECONNECTED en server → humano de vuelta),
+  sala privada A/B + quickmatch aislado, código de recuperación
+  cross-context, PWA (manifest/iconos), reduced-motion por media query,
+  cero desbordes en ES móvil, métricas con partida real, y pase
+  visual a ojo de las 5 arenas y el Hall of Belts (16/16). Queda para
+  las manos de Rafa: el feel, instalar la PWA y el merge a main.
+- **Hallazgos de la campaña**: el lab (tools.html, batch, golden)
+  llevaba ROTO desde el pack de retención — querySelector a nivel de
+  módulo sobre un modal que el lab no tiene (7f8bd92). Y la barra de
+  habilidades asomaba en la sala de espera.
+- **Review de networking (item 13)**: 17 agentes, 13 confirmados, 10
+  arreglados (7b4a4e6) — los gordos: cliente zombi al salir durante la
+  reconexión (abandonRoom + guards de room en todos los listeners),
+  rage-quit sin derrota cuando la salida termina la partida, salas
+  privadas puntuando belts; más gracia≠abandono, all_humans_left,
+  scrypt en el recovery code, identity_stale explícito. E2e del zombi:
+  T durante Reconectando… → título limpio, cero fantasmas, ningún
+  RECONNECTED posterior.
+- Lección: Playwright simula más de lo que parece (offline real,
+  media queries, contextos como dispositivos, capturas que Claude puede
+  mirar). La checklist humana se reduce a lo sensorial y lo físico.
+
 ## 2026-08-24 (mega-ronda) — El split, los tests del sim y la retención completa
 
 Cinco frentes aterrizados en dev:

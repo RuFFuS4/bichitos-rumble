@@ -153,44 +153,39 @@ Hecho y en dev (detalle en BUILD_LOG): salas privadas + enlace + share
 golden sim guardian + ability-patch (dual-surface 100%) · paridad bot
 server · 9 fixes del review adversarial aplicados.
 
-## CHECKLIST DE RAFA (actualizada 2026-08-24, sesión larga)
+## CHECKLIST — verificada por Claude el 2026-09-05 (campaña Playwright)
 
-Pruebas manuales pendientes, en orden de valor:
+Evidencia en .tmp/checklist/ (report.json + capturas) y BUILD_LOG.
 
-- [ ] **Reconnect (la estrella)**: partida online en el móvil →
-      desactiva el wifi 5-10 s → debe salir "Reconnecting…", un bot te
-      cubre, y al volver el wifi recuperas tu critter donde esté.
-      Más de 30 s fuera = derrota registrada (rage-quit = derrota).
-- [ ] **Sala privada real**: "👥 Jugar con amigos" → comparte el
-      enlace con alguien → jugad. Verifica que un tercero con
-      "Multijugador online" NO cae en vuestra sala.
-- [ ] **PWA**: en Android/Chrome → "Instalar app" → abre standalone,
-      apaisada, icono BR, sin barras blancas en el notch.
-- [ ] **Reduced motion**: Windows → Accesibilidad → Efectos de
-      animación OFF → recarga → el shake/hit-stop casi desaparece.
-- [ ] **Playtesting de mecánicas** (pendiente de la sesión anterior):
-      shell-reflect de Shelly (¿duele pegarle?) y Claw Wave de
-      Sebastian (¿asusta?).
-- [ ] **Pase visual** post-dieta: arenas y belts (gltfpack cuantiza) +
-      el juego entero en ES (¿algún texto desborda en móvil?).
-- [ ] **Las 10 traducciones de autor** (BUILD_LOG 2026-08-24): ¿tono OK?
-- [ ] **Revisión de networking**: BrawlRoom (salas privadas, gracia de
-      reconnect, integridad de belts) — tu zona sensible.
-- [ ] **Código de recuperación** (mega-ronda): navegador A → registra
-      nick → interstitial "🔑 Ver mi código" → apúntalo; navegador B
-      (incógnito) → "¿Ya tienes nick? Recupéralo" → mismo nick +
-      código → debe recuperar tu identidad (belts incluidos).
-- [ ] **Métricas**: tras 2-3 partidas online, abre
-      <server>/api/metrics/retention y comprueba partidas/día.
-- [ ] **Reflect online**: partida online contra Shelly → headbuttéala
-      enconchada → debe SONAR y sacudir (antes era mudo).
-- [ ] **Merge dev→main + tag** cuando todo lo anterior te cuadre.
+| # | Item | Estado |
+|---|---|---|
+| 1 | Shell-reflect offline | ✅ mecánica (tests exactos + golden) — *feel* pendiente de Rafa |
+| 2 | Claw Wave de Sebastian | ✅ mecánica (test del cono + batch) — *feel* pendiente |
+| 3 | Bots con conciencia del borde | ✅ batch (caídas ↓ 6/9, partidas 51→68s) |
+| 4 | Reconnect | ✅✅ e2e: setOffline → Reconectando… → RECONNECTED en server → humano de vuelta |
+| 5 | Sala privada | ✅ e2e: A crea, B entra por enlace a la misma sala, quickmatch aislado |
+| 6 | Código de recuperación | ✅ e2e: mismo playerId+nick en contexto limpio |
+| 7 | Reflect online | ✅ mecánica (broadcast testeado) — sonido pendiente de oído |
+| 8 | Métricas | ✅ partida real → totalMatches 1, duración media 94s |
+| 9 | PWA | ✅ manifest/iconos/viewport-fit — **instalar en móvil: Rafa** |
+| 10 | Reduced motion | ✅ motionScale 0.3 con la media query, 1.0 sin ella |
+| 11 | ES en móvil | ✅ cero desbordes landscape+portrait, capturas revisadas |
+| 12 | Pase visual | ✅ 5 arenas + Hall of Belts 16/16 revisados a ojo: sin artefactos |
+| 13 | Revisión networking | ✅ review de 17 agentes → 13 confirmados, 10 arreglados (7b4a4e6) + e2e del zombi |
+| 14 | Merge dev→main + tag | ⏳ **decisión de Rafa** |
 
-**Para verificar con 2 dispositivos (no lo pude simular)**: el rejoin
-real del SDK (cierre 1006), y que humansAtStart cuenta bien a 2
-humanos verificados (en mi e2e salía 0 con un solo nick automatizado
-— puede ser identidad no registrada del flujo rápido; si con humanos
-reales sale <2 y no puntúa, avisa).
+**Solo tus manos (lo que no se puede simular):**
+- [ ] Sentir shell-reflect, Claw Wave y el reflect online con sonido.
+- [ ] Instalar la PWA en Android (standalone, apaisada, icono).
+- [ ] Con 2 dispositivos reales: reconnect con wifi de verdad; recuperar
+      el nick en el móvil y ver el aviso "identidad usada en otro
+      dispositivo" en el PC; entrar por enlace a una sala ya empezada
+      (alert legible); que el rival cierre la pestaña en un 1v1 (tú +1
+      win, él +1 loss); una privada completa NO debe mover el Hall of Belts.
+- [ ] Merge dev→main + tag cuando te cuadre (deploy a prod).
+
+Diferido del review (estructural): tabla multi-dispositivo para tokens
+(hoy recuperar en B invalida el token de A con aviso explícito).
 
 **Para Rafa (pendientes que solo puedes hacer tú):**
 - [ ] Playtesting: shell-reflect y Claw Wave (de la sesión anterior) +

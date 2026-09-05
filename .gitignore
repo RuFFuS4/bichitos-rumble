@@ -50,3 +50,4 @@ Thumbs.db
 .vscode/*.log
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+resources/
