@@ -270,12 +270,23 @@ export async function registerNickname(nickname: string): Promise<OnlineIdentity
   return identity;
 }
 
-/** Wipe cached identity. Used by the "reset" button in settings / end-screen. */
+/** Wipe cached identity (device-preferred AND this tab's session copy).
+ *  Review 2026-09-05 (fix H): called when the server rejects a join with
+ *  'identity_stale' — the token was rotated elsewhere (recovery on another
+ *  device / row deleted). Clearing only localStorage would leave
+ *  getCachedIdentity() serving the same stale identity from
+ *  sessionStorage and the next Online tap would fail identically. */
 export function forgetIdentity(): void {
   localStorage.removeItem(PLAYER_ID_KEY);
   localStorage.removeItem(NICKNAME_KEY);
-  // NB: token is kept so if the user re-registers the same nickname on
-  // the same device they reclaim ownership instead of being locked out.
+  try {
+    sessionStorage.removeItem(SESSION_PLAYER_ID_KEY);
+    sessionStorage.removeItem(SESSION_NICKNAME_KEY);
+  } catch { /* sessionStorage unavailable — nothing cached there anyway */ }
+  // NB: tokens + identity ids are kept so if the user re-registers the
+  // same nickname on the same device they reclaim ownership (via
+  // identity_id even when the token no longer matches) instead of
+  // being locked out.
 }
 
 /** The device token, exposed read-only so the network layer can send it

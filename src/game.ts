@@ -44,7 +44,7 @@ import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSp
 import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
-import { getDeviceToken, type OnlineIdentity } from './online-identity';
+import { getDeviceToken, forgetIdentity, type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback, applyImpactFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
@@ -76,6 +76,17 @@ const MAX_CRITTERS_PER_MATCH = SPAWN_POSITIONS.length;
  * via SPAWN_POSITIONS.length.
  */
 const ONLINE_MAX_PLAYERS = 4;
+
+/**
+ * Review 2026-09-05 (fix A) — upper bound on how long restartMatch waits
+ * for the abandoned room's leave to settle. With the socket open the
+ * server answers in one RTT; while "Reconnecting…" the SDK's socket may
+ * be CLOSED between retries, and then `leave()` cannot settle until the
+ * pending retry fires (≤ 5 s backoff). The user pressed R — don't make
+ * them stare at "Connecting..." for that; the onReconnect guard in
+ * enterOnline leaves the stale room whenever that retry lands.
+ */
+const ABANDON_ROOM_WAIT_MS = 1500;
 
 /**
  * Build the match roster: player config first, then bots drawn from the
@@ -748,9 +759,12 @@ export class Game {
         // matchmake again. Server also calls lock() on match end, so
         // joinOrCreate will never match the finished room — but waiting
         // here also avoids a brief double-connection on the client.
-        try {
-          await prevRoom.leave();
-        } catch (_e) { /* server may have already disposed */ }
+        // Bounded (see ABANDON_ROOM_WAIT_MS): a room mid-reconnect can't
+        // settle its leave until the SDK's next retry fires.
+        await Promise.race([
+          this.abandonRoom(prevRoom),
+          new Promise<void>((resolve) => setTimeout(resolve, ABANDON_ROOM_WAIT_MS)),
+        ]);
 
         if (!critterName) {
           this.enterTitle();
@@ -763,6 +777,27 @@ export class Game {
     } finally {
       this.restartInProgress = false;
     }
+  }
+
+  /**
+   * Review 2026-09-05 (fix A) — the ONE way to walk away from a room.
+   * Used by back-to-title (online + ended phases) and restartMatch.
+   *
+   * `room.leave()` alone is not enough while the SDK is auto-reconnecting
+   * ("Reconnecting…" overlay): the pending retry keeps going, rejoins the
+   * server seat and the human's critter is handed back to a client that
+   * no longer listens — a zombie seat the bots cannot cover and a room
+   * that never disposes. So: disable further reconnection, then leave
+   * consented only if the socket is actually open (LEAVE_ROOM → server
+   * onLeave code 4000 = permanent departure); otherwise leave(false)
+   * aborts the in-flight socket. A retry already scheduled by the SDK
+   * cannot be cancelled from outside — enterOnline's onReconnect guard
+   * leaves the room again the moment it lands.
+   */
+  private abandonRoom(room: Room): Promise<void> {
+    room.reconnection.enabled = false;
+    const socketOpen = room.connection?.isOpen === true;
+    return room.leave(socketOpen).then(() => undefined, () => undefined);
   }
 
   /**
@@ -793,11 +828,12 @@ export class Game {
       // uses this to credit match stats to the right row for the Online
       // Belts (Fase 3 wires the room handler; for now we just attach it
       // to the join options so the handshake carries it).
+      // (The display nickname is NOT sent — review 2026-09-05, fix I:
+      // the server reads it from the BD row of the verified identity.)
       const joinOpts: Record<string, unknown> = { critterName };
       if (this.onlineIdentity) {
         joinOpts.playerId = this.onlineIdentity.playerId;
         joinOpts.playerToken = getDeviceToken();
-        joinOpts.nickname = this.onlineIdentity.nickname;
       }
       // H4 private rooms: create-private o joinById según friendsJoin;
       // quickmatch (joinOrCreate) cuando es null. Se consume aquí: un
@@ -829,6 +865,25 @@ export class Game {
         alert(t('connect-nickname-active'));
       } else if (msg.includes('nickname_taken')) {
         alert(t('connect-nickname-taken'));
+      } else if (msg.includes('identity_stale')) {
+        // Review 2026-09-05 (fix H) — the server refused our
+        // playerId+token (rotated by a recovery on another device, or
+        // row deleted). Drop the stale identity so the next Online tap
+        // opens the nickname modal (recover-with-code lives there)
+        // instead of silently playing a whole match as a guest.
+        // NB: true multi-device (one row, N tokens) is structural and
+        // stays out of scope — this only makes the rotation visible.
+        forgetIdentity();
+        this.onlineIdentity = null;
+        alert(t('connect-identity-stale'));
+      } else if (msg.includes('room_already_started') || msg.includes('is locked')) {
+        // Fix J — joinById on a shared link whose room already left
+        // 'waiting'. Two surfaces of the same fact: the matchmaker
+        // rejects a LOCKED room (`room "X" is locked` — the common case,
+        // rooms lock on countdown) before onJoin runs, and onJoin throws
+        // 'room_already_started' in the race window before the lock
+        // lands. Same copy for both.
+        alert(t('connect-room-started'));
       } else {
         const detail = msg ? `\n\n${tf('connect-failed-server-said', { msg })}` : '';
         alert(t('connect-failed') + detail);
@@ -881,11 +936,18 @@ export class Game {
     // Player add/remove listeners via the network adapter — the SDK's
     // state-callbacks API (v3 proxies / v4 Callbacks) lives entirely in
     // network.ts. onAdd also fires for players already present at attach.
+    // Review 2026-09-05 (fix A): every listener below checks
+    // `this.room === room` — a room we abandoned (back / restart while
+    // reconnecting) can still deliver in-flight patches and broadcasts
+    // until its socket closes, and they must not spawn critters or VFX
+    // into the title screen or the NEXT match.
     onPlayersChange(room, {
       onAdd: (playerState, sessionId) => {
+        if (this.room !== room) return;
         this.spawnOnlineCritter(sessionId, playerState);
       },
       onRemove: (_playerState, sessionId) => {
+        if (this.room !== room) return;
         const c = this.onlineCritters.get(sessionId);
         if (c) {
           // Clean the floating status emoji DOM node BEFORE disposing —
@@ -899,12 +961,16 @@ export class Game {
     });
 
     // Ability fire events → trigger client-side VFX + audio
-    onAbilityFired(room, (ev: AbilityFiredEvent) => this.handleAbilityFired(ev));
+    onAbilityFired(room, (ev: AbilityFiredEvent) => {
+      if (this.room !== room) return;
+      this.handleAbilityFired(ev);
+    });
 
     // Steel Shell reflect (review 2026-08-24): mismo feedback que la
     // física offline dispara localmente — shake+hit-stop+sonido, y el
     // impact-squash sobre el critter atacante si lo tenemos instanciado.
     onShellReflected(room, (ev) => {
+      if (this.room !== room) return;
       triggerHitStop(FEEL.hitStop.headbutt);
       triggerCameraShake(FEEL.shake.headbutt);
       playSound('headbuttHit');
@@ -924,6 +990,7 @@ export class Game {
     // `projectileExpired`. Local integration in tickProjectiles is
     // visual-only — server still owns collision + slowTimer write.
     onProjectileSpawned(room, (ev) => {
+      if (this.room !== room) return;
       pushNetworkProjectile(this.scene, {
         id: ev.id,
         ownerSid: ev.ownerSid,
@@ -933,13 +1000,16 @@ export class Game {
       });
     });
     onProjectileHit(room, (ev) => {
+      if (this.room !== room) return;
       removeProjectile(ev.id, /*withImpact*/ true);
     });
     onProjectileExpired(room, (ev) => {
+      if (this.room !== room) return;
       removeProjectile(ev.id, /*withImpact*/ false);
     });
 
     onZoneSpawned(room, (ev) => {
+      if (this.room !== room) return;
       // Render — colour comes from the caster's pound palette so
       // online and offline match visually.
       const caster = this.onlineCritters.get(ev.ownerSid);
@@ -973,6 +1043,7 @@ export class Game {
     // server-broadcast `waveCenter`. Without this, online viewers
     // saw the cone pulses HIT but had no visible cone wave.
     onLPulse(room, (ev) => {
+      if (this.room !== room) return;
       const caster = this.onlineCritters.get(ev.sessionId);
       const palette = caster ? getCritterVfxPalette(caster.config.name) : undefined;
       const halfCone = ((ev.angleDeg ?? 45) * Math.PI) / 180;
@@ -1001,6 +1072,7 @@ export class Game {
     // screen showed the trajectory line; other clients saw him
     // rooted with no indicator of which way he was about to dash.
     onLChargeStart(room, (ev) => {
+      if (this.room !== room) return;
       spawnAllInTrajectoryPreview(
         this.scene,
         ev.x, ev.z,
@@ -1015,6 +1087,7 @@ export class Game {
     // out under the hole disc; clients knock them out locally so
     // the visual fall + isOnArena read match the server.
     onArenaFragmentsKilled(room, (ev) => {
+      if (this.room !== room) return;
       if (ev.indices && ev.indices.length > 0) {
         this.arena.killFragmentIndices(ev.indices);
       }
@@ -1023,7 +1096,10 @@ export class Game {
     // Online Belts: if the server detects a belt changed hands after this
     // match, it broadcasts `beltChanged` to the whole room. Toast it so
     // everyone sees who just took what.
-    onBeltChanged(room, (ev) => showOnlineBeltToast(ev));
+    onBeltChanged(room, (ev) => {
+      if (this.room !== room) return;
+      showOnlineBeltToast(ev);
+    });
 
     // Attach leave handler — if the server drops us unexpectedly we
     // surface it. Intentional leaves (restartMatch, back-to-title)
@@ -1049,8 +1125,18 @@ export class Game {
       }
     });
     room.onReconnect(() => {
+      // Fix A — a retry the SDK had already scheduled before we
+      // abandoned this room (back / restart while "Reconnecting…") just
+      // landed: the server handed the seat back to us. Leave for real
+      // (socket is open here → LEAVE_ROOM → server code 4000) so the
+      // seat becomes a permanent bot-takeover instead of a zombie.
+      if (this.room !== room) {
+        console.log('[Game] stale room reconnected after abandon — leaving', room.roomId);
+        room.leave().catch(() => { /* ignore */ });
+        return;
+      }
       console.log('[Game] reconnected to room', room.roomId);
-      if (this.phase === 'online' && this.room === room) {
+      if (this.phase === 'online') {
         hideOverlay();
       }
     });
@@ -2045,7 +2131,7 @@ export class Game {
         }
 
         if (consumeMenuAction('back')) {
-          this.room?.leave().catch(() => { /* ignore */ });
+          if (this.room) void this.abandonRoom(this.room);
           this.room = null;
           for (const c of this.onlineCritters.values()) { disposeCritterStatus(c); c.dispose(); }
           this.onlineCritters.clear();
@@ -2068,7 +2154,7 @@ export class Game {
         if (consumeMenuAction('back')) {
           // T: always hard-return to title (drops online room if any)
           if (this.room) {
-            this.room.leave().catch(() => { /* ignore */ });
+            void this.abandonRoom(this.room);
             this.room = null;
             for (const c of this.onlineCritters.values()) { disposeCritterStatus(c); c.dispose(); }
             this.onlineCritters.clear();

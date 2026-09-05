@@ -16,7 +16,9 @@
 //     regardless of input source, so no branch on bot-ness in the sim.
 //   - On human leave mid-match: if the remaining alive count is ≥ 2 we
 //     convert the leaver's critter into a bot (bot-takeover), keeping the
-//     match alive. Otherwise the match ends with opponent_left.
+//     match alive. Otherwise the match ends with opponent_left. If NO
+//     human remains (connected or reconnecting) it ends right away with
+//     all_humans_left — no room ever disposes mid-match unrecorded.
 // ---------------------------------------------------------------------------
 
 import { Room, type Client } from 'colyseus';
@@ -28,7 +30,7 @@ import { createAbilityStates, tickPlayerAbilities, getAbilityKit } from './sim/a
 import { ArenaSim } from './sim/arena.js';
 import { computeBotInput } from './sim/bot.js';
 import {
-  verifyPlayer, recordMatchResult, recordMatch,
+  verifyPlayer, getPlayerNickname, recordMatchResult, recordMatch,
   getAllBeltHolders, diffBeltHolders,
 } from './db.js';
 
@@ -54,10 +56,11 @@ interface InputMessage {
 interface JoinOptions {
   critterName?: string;
   /** Online identity from src/online-identity.ts (optional — guests can
-   *  still play online, they just don't earn Online Belts). */
+   *  still play online, they just don't earn Online Belts). The display
+   *  nickname is NOT accepted from the client (review 2026-09-05, fix I):
+   *  it comes from the BD once the identity verifies. */
   playerId?: string;
   playerToken?: string;
-  nickname?: string;
 }
 
 /**
@@ -158,6 +161,12 @@ export class BrawlRoom extends Room {
   /** H4 — true si la sala se creó con { private: true } (Play with
    *  Friends). Se persiste en matches.private_room para métricas. */
   private isPrivateRoom = false;
+  /** Review 2026-09-05 (fix D/E) — sessionIds de humanos en ventana de
+   *  gracia de reconnect (allowReconnection pendiente). Un asiento con
+   *  isBot=true cuyo sid está aquí NO se ha ido: lo cubre un bot mientras
+   *  vuelve. Lo consultan recordOnlineBeltStats/endMatch (gracia ≠
+   *  rage-quit) y onLeave (¿queda algún humano vivo o volviendo?). */
+  private graceSids = new Set<string>();
   /** Authoritative slow-zone tracker (Kermit Poison Cloud, Kowalski
    *  Arctic Burst). Each zone is consulted by `effectiveSpeed` for
    *  every player and its `ttl` decremented once per tick. Zones
@@ -246,12 +255,14 @@ export class BrawlRoom extends Room {
   onJoin(client: Client, options: JoinOptions = {}) {
     // Only accept humans in 'waiting' — once we're in countdown/playing the
     // room is locked via maxClients + seat count, but Colyseus can still
-    // race a join before lock takes effect. This guard rejects late humans
-    // cleanly instead of injecting them mid-match.
+    // race a join before lock takes effect (and joinById by shared link
+    // ignores the lock entirely). Review 2026-09-05 (fix J): throw instead
+    // of client.leave() — same pattern as nickname_active_in_room below —
+    // so joinById rejects with a readable message instead of the generic
+    // "Could not connect".
     if (this.state.phase !== 'waiting') {
       console.log(`[BrawlRoom] rejected ${client.sessionId}: phase=${this.state.phase}`);
-      client.leave();
-      return;
+      throw new Error('room_already_started');
     }
 
     // Reset the waiting timer ONLY the first time someone joins. That way a
@@ -286,10 +297,25 @@ export class BrawlRoom extends Room {
     // "Could not connect" alert. The send+leave pattern raced the
     // socket closing before the typed message arrived, which is
     // exactly what surfaced as the connection failure Rafa saw.
-    const incomingPlayerId = options.playerId && options.playerToken
-      && verifyPlayer(options.playerId, options.playerToken)
-      ? options.playerId
+    //
+    // Review 2026-09-05 (fix H) — a client that CLAIMS an identity
+    // (playerId + playerToken) but fails verification is not silently
+    // degraded to guest any more: the usual cause is the token having
+    // been rotated by a recovery on another device, and playing a whole
+    // match as a guest without knowing is the worst outcome. Throwing
+    // 'identity_stale' lets the client forget the stale identity and
+    // explain it. (A playerId without token — pre-token clients — still
+    // plays as guest; it never claimed anything verifiable.)
+    const claimsIdentity = typeof options.playerId === 'string'
+      && typeof options.playerToken === 'string';
+    const incomingPlayerId = claimsIdentity
+      && verifyPlayer(options.playerId!, options.playerToken!)
+      ? options.playerId!
       : null;
+    if (claimsIdentity && !incomingPlayerId) {
+      console.log(`[BrawlRoom] rejected ${client.sessionId}: identity ${options.playerId} failed verification (stale token)`);
+      throw new Error('identity_stale');
+    }
     if (incomingPlayerId) {
       for (const data of this.internal.values()) {
         if (data.onlinePlayerId === incomingPlayerId) {
@@ -301,24 +327,22 @@ export class BrawlRoom extends Room {
 
     const p = this.buildPlayerSchema(client.sessionId, critterName, spawn, /*isBot*/ false);
     this.state.players.set(client.sessionId, p);
-    // 2026-05-01 final block — write the verified nickname onto
-    // PlayerSchema so the cliente waiting room + future spectator
-    // UI can show "Rafa (Trunk)" instead of just the critter name.
-    // Guests (no verified identity) get an empty string and the
-    // cliente falls back to the critter name display.
-    if (typeof options.nickname === 'string') {
-      const n = options.nickname.trim().slice(0, 16);
-      if (n.length >= 3) p.nickname = n;
-    }
     const internal = newInternal();
-    // Verify the online identity if the client supplied one. Only a
-    // verified identity gets credited on match-end; guests (no identity
-    // or failed verification) play normally but earn nothing for belts.
+    // Only a verified identity gets credited on match-end; guests (no
+    // identity) play normally but earn nothing for belts.
+    //
+    // 2026-05-01 final block — the display nickname goes onto
+    // PlayerSchema so the cliente waiting room + future spectator UI
+    // can show "Rafa (Trunk)" instead of just the critter name.
+    // Review 2026-09-05 (fix I): it is read from the BD row of the
+    // VERIFIED identity, never from join options — a client could
+    // otherwise wear any nickname (someone else's included) on the
+    // waiting screen. Guests get an empty string and the cliente falls
+    // back to the critter name display.
     if (incomingPlayerId) {
       internal.onlinePlayerId = incomingPlayerId;
-      console.log(`[BrawlRoom] ${client.sessionId} online identity verified (${options.nickname ?? options.playerId})`);
-    } else if (options.playerId) {
-      console.log(`[BrawlRoom] ${client.sessionId} failed identity verification — playing as guest`);
+      p.nickname = getPlayerNickname(incomingPlayerId) ?? '';
+      console.log(`[BrawlRoom] ${client.sessionId} online identity verified (${p.nickname || incomingPlayerId})`);
     }
     this.internal.set(client.sessionId, internal);
     console.log(`[BrawlRoom] ${client.sessionId} joined roomId=${this.roomId} (${this.state.players.size}/${this.maxClients})`);
@@ -354,13 +378,31 @@ export class BrawlRoom extends Room {
     }
 
     const WS_CLOSE_CONSENTED = 4000;
-    if (code !== WS_CLOSE_CONSENTED) {
+    // Review 2026-09-05 (fix F) — a client that closed BEFORE acking
+    // JOIN_ROOM ("half-joined": onJoin threw, or a fresh/rejoin socket
+    // died mid-handshake) cannot get a grace window: @colyseus/core
+    // 0.17.50 Room.mjs:794-796 makes allowReconnection reject with "not
+    // joined" while `_enqueuedMessages` is still defined (the core
+    // deletes it at Room.mjs:1031 on the JOIN_ROOM ack). Detect it here
+    // and skip straight to the permanent-leave path instead of paying a
+    // rejected promise and logging a misleading "grace expired". Note
+    // that the seat CAN exist (4th human joins → countdown starts inside
+    // onJoin → socket dies before the ack), so it is NOT a bare return:
+    // the permanent path below hands the seat to a bot / ends the match
+    // exactly as for any other departure.
+    const halfJoined = (client as any)._enqueuedMessages !== undefined;
+    if (halfJoined) {
+      console.log(`[BrawlRoom] ${sid} closed mid-handshake (code ${code}) during ${phase} → no grace, permanent leave`);
+    } else if (code !== WS_CLOSE_CONSENTED) {
       const dropee = this.state.players.get(sid);
       if (dropee) {
         // Bot covers the seat during the grace window (same mechanics
         // as the permanent takeover below — one code path to trust).
         dropee.isBot = true;
         this.clearHeldInputs(sid);
+        // Fix D: while in graceSids the seat is NOT "departed" for
+        // belts/matches even though isBot=true — see seatDeparted().
+        this.graceSids.add(sid);
         console.log(`[BrawlRoom] ${sid} dropped (code ${code}) during ${phase} → grace de ${RECONNECT_GRACE_SEC}s, bot cubre`);
         try {
           await this.allowReconnection(client, RECONNECT_GRACE_SEC);
@@ -379,6 +421,8 @@ export class BrawlRoom extends Room {
             this.internal.delete(sid);
             return;
           }
+        } finally {
+          this.graceSids.delete(sid);
         }
       }
     }
@@ -401,6 +445,26 @@ export class BrawlRoom extends Room {
       p => p.sessionId !== sid && p.alive,
     );
 
+    // Review 2026-09-05 (fix E) — nobody human left (connected OR in a
+    // reconnect grace window) → end the match NOW instead of handing
+    // the seat to a bot. Before, a 1-human room whose human left with
+    // ≥2 alive did a takeover, and the room then auto-disposed still in
+    // 'playing': no `matches` row, no belt losses for the leaver. Reason
+    // 'all_humans_left' (not 'opponent_left') so the retention metrics
+    // can tell "the arena emptied" from "my rival quit on me"; nobody
+    // human ever renders this end screen, so the cliente copy is moot.
+    // `this.clients` already excludes the leaver here: core 0.17.50
+    // Room.mjs:1051 deletes it BEFORE calling onLeave. Humans in grace
+    // are not in `clients` either, hence + graceSids.size.
+    const humansLeft = this.clients.length + this.graceSids.size;
+    if (humansLeft === 0) {
+      leaver.isBot = true;
+      this.clearHeldInputs(sid);
+      console.log(`[BrawlRoom] ${sid} left during ${phase} → last human gone, ending match (all_humans_left)`);
+      this.endMatch('all_humans_left', '');
+      return;
+    }
+
     if (remainingAlive.length >= 2 && leaver.alive) {
       leaver.isBot = true;
       this.clearHeldInputs(sid);
@@ -421,12 +485,29 @@ export class BrawlRoom extends Room {
       return;
     }
 
-    // Not enough players to keep the match alive: delete + end.
-    this.state.players.delete(sid);
-    this.internal.delete(sid);
+    // Not enough players to keep the match alive: end, THEN delete.
+    // Review 2026-09-05 (fix B) — the seat used to be deleted before
+    // endMatch, so recordOnlineBeltStats never saw the leaver and a
+    // rage-quit that ENDED the match went unpunished (only the
+    // takeover paths above marked isBot for "rage-quit = derrota").
+    // Same marking here; the delete after endMatch keeps the survivor's
+    // end screen identical to before (no leaver row).
+    leaver.isBot = true;
+    this.clearHeldInputs(sid);
     const survivor = remainingAlive[0];
     console.log(`[BrawlRoom] ${sid} left during ${phase} → ending match (${remainingAlive.length} remaining alive)`);
     this.endMatch('opponent_left', survivor?.sessionId ?? '');
+    this.state.players.delete(sid);
+    this.internal.delete(sid);
+  }
+
+  /** Review 2026-09-05 (fix D) — "this verified human is GONE": the seat
+   *  is bot-driven AND its owner is not in a reconnect grace window. A
+   *  seat merely covered by a bot while its human reconnects is still
+   *  the human's for belts/matches — a wifi blip at the last second must
+   *  not turn a win into a recorded loss. */
+  private seatDeparted(p: PlayerSchema): boolean {
+    return p.isBot && !this.graceSids.has(p.sessionId);
   }
 
   /** Reset every held-input flag for a seat — used on bot takeover (the
@@ -445,6 +526,15 @@ export class BrawlRoom extends Room {
 
   onDispose() {
     if (this.tickHandle) clearInterval(this.tickHandle);
+    // Review 2026-09-05 (fix E, defensive) — a room can only dispose
+    // once no client and no seat reservation remains, so this is the
+    // one place that GUARANTEES nobody is coming back. If the match is
+    // still running here, some path skipped endMatch: close it so the
+    // `matches` row and the belt losses of whoever walked out land.
+    if (this.state.phase === 'countdown' || this.state.phase === 'playing') {
+      console.log(`[BrawlRoom] disposing during ${this.state.phase} → endMatch(all_humans_left)`);
+      this.endMatch('all_humans_left', '');
+    }
     console.log(`[BrawlRoom] disposed`);
   }
 
@@ -590,10 +680,11 @@ export class BrawlRoom extends Room {
     try {
       const endedAt = Date.now();
       const winner = winnerSessionId ? this.state.players.get(winnerSessionId) : undefined;
-      // Ganador verificado Y aún humano en su asiento — un asiento en
-      // bot-takeover (rage-quit / gracia expirada) no cuenta como
-      // ganador identificable (coherente con "irse nunca puntúa").
-      const winnerPlayerId = winner && !winner.isBot
+      // Ganador verificado Y aún dueño de su asiento — un asiento en
+      // bot-takeover permanente (rage-quit / gracia expirada) no cuenta
+      // como ganador identificable (coherente con "irse nunca puntúa").
+      // Un asiento en gracia de reconnect SÍ es suyo (fix D).
+      const winnerPlayerId = winner && !this.seatDeparted(winner)
         ? this.internal.get(winnerSessionId)?.onlinePlayerId ?? null
         : null;
       recordMatch({
@@ -631,6 +722,15 @@ export class BrawlRoom extends Room {
    * physics.ts) lande; entonces el Slayer Belt tendrá datos reales.
    */
   private recordOnlineBeltStats(winnerSessionId: string): void {
+    // Review 2026-09-05 (fix C): Play with Friends es social, no ranked.
+    // Una sala privada la llena quien quiera con sus propias pestañas
+    // (dos nicks verificados = "≥2 humanos") y farmearía Throne/Streak
+    // a solas. recordMatch sigue persistiendo la fila con private_room=1
+    // para las métricas de retención — solo los cinturones se saltan.
+    if (this.isPrivateRoom) {
+      console.log('[Belts] match not recorded (private room — social, not ranked)');
+      return;
+    }
     // H4 integridad: sin un segundo humano verificado, la partida no
     // puntúa NADA (ni wins ni losses ni kills) — los cinturones online
     // se ganan contra personas, no farmeando bots.
@@ -659,7 +759,9 @@ export class BrawlRoom extends Room {
       // verificada cuyo critter es ahora bot = humano que se FUE
       // (quit o gracia de reconnect expirada). Registra DERROTA aunque
       // su critter-bot "ganara" la partida — irse nunca puntúa.
-      const departed = p.isBot;
+      // Fix D: un humano EN gracia (blip justo al acabar) no se ha ido —
+      // se le registra su resultado real.
+      const departed = this.seatDeparted(p);
       const won = !departed && sid === winnerSessionId;
       const livesLeft = Math.max(0, p.lives);
       try {
