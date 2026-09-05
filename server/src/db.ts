@@ -16,7 +16,7 @@
 // ---------------------------------------------------------------------------
 
 import Database from 'better-sqlite3';
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomInt, randomUUID, scryptSync, timingSafeEqual } from 'crypto';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 
@@ -61,6 +61,16 @@ if (!hasIdentityId) {
   console.log('[db] migrated players.identity_id (added column)');
 }
 
+// 2026-08-24 H4 retención — código de recuperación cross-device. Guarda
+// el hash salteado del código (formato en "Recovery codes" más abajo;
+// nunca el código en claro). NULL = el jugador nunca ha generado código.
+// Migración idempotente, mismo patrón que identity_id.
+const hasRecoveryHash = playerCols.some(c => c.name === 'recovery_code_hash');
+if (!hasRecoveryHash) {
+  db.exec("ALTER TABLE players ADD COLUMN recovery_code_hash TEXT");
+  console.log('[db] migrated players.recovery_code_hash (added column)');
+}
+
 db.exec(`
 
   CREATE TABLE IF NOT EXISTS player_stats (
@@ -81,6 +91,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_stats_fastest      ON player_stats(fastest_win_ms ASC);
   CREATE INDEX IF NOT EXISTS idx_stats_kills        ON player_stats(kills_vs_humans DESC);
   CREATE INDEX IF NOT EXISTS idx_stats_long_streak  ON player_stats(longest_streak DESC);
+`);
+
+// 2026-08-24 H4 retención — historial de partidas server-side. Una fila
+// por partida terminada (endMatch), incluyendo las que acabaron durante
+// el countdown (duration_ms = 0). Alimenta GET /api/metrics/retention.
+// winner_player_id solo se rellena si el ganador era un humano verificado
+// que seguía en su asiento (rage-quit/bot-takeover → NULL); el endpoint
+// de métricas NUNCA lo expone — queda para análisis interno con acceso
+// directo a la BD.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS matches (
+    id               TEXT PRIMARY KEY,
+    started_at       INTEGER NOT NULL,       -- epoch ms del inicio de 'playing' (= ended_at si nunca llegó)
+    ended_at         INTEGER NOT NULL,       -- epoch ms de endMatch
+    duration_ms      INTEGER NOT NULL,       -- 0 si terminó antes de 'playing'
+    humans_at_start  INTEGER NOT NULL,       -- asientos humanos (no-bot) al arrancar el countdown
+    humans_verified  INTEGER NOT NULL,       -- de esos, cuántos con identidad online verificada
+    end_reason       TEXT NOT NULL,          -- eliminated | timeout | draw | opponent_left | all_humans_left
+    winner_player_id TEXT,                   -- players.id del ganador verificado, o NULL
+    winner_critter   TEXT NOT NULL DEFAULT '',
+    private_room     INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_matches_ended_at ON matches(ended_at);
 `);
 
 // ---------------------------------------------------------------------------
@@ -209,6 +243,18 @@ export function verifyPlayer(playerId: string, rawToken: string): boolean {
   return row.token_hash === sha256(rawToken);
 }
 
+/**
+ * Display nickname of a player row, or null if the id is unknown. Review
+ * 2026-09-05 (fix I): BrawlRoom writes THIS onto PlayerSchema.nickname
+ * for verified identities instead of trusting the join options.
+ */
+export function getPlayerNickname(playerId: string): string | null {
+  const row = db.prepare('SELECT nickname_display FROM players WHERE id = ?').get(playerId) as
+    | { nickname_display: string }
+    | undefined;
+  return row?.nickname_display ?? null;
+}
+
 export interface MatchResultInput {
   playerId: string;
   won: boolean;
@@ -310,6 +356,267 @@ export function recordMatchResult(input: MatchResultInput): void {
     );
   });
   tx();
+}
+
+// ---------------------------------------------------------------------------
+// Match history — H4 retención (2026-08-24)
+// ---------------------------------------------------------------------------
+
+export interface MatchRecordInput {
+  /** Epoch ms del inicio de 'playing'; null si la partida murió antes. */
+  startedAtMs: number | null;
+  endedAtMs: number;
+  durationMs: number;
+  humansAtStart: number;
+  humansVerified: number;
+  endReason: string;
+  winnerPlayerId: string | null;
+  winnerCritter: string;
+  privateRoom: boolean;
+}
+
+/**
+ * Persiste UNA partida terminada en `matches`. Igual de robusta que
+ * recordMatchResult: el caller (BrawlRoom.endMatch) la envuelve en
+ * try/catch — un fallo de disco/BD jamás tumba el room ni corta el
+ * flujo de fin de partida.
+ */
+export function recordMatch(input: MatchRecordInput): void {
+  db.prepare(`
+    INSERT INTO matches (
+      id, started_at, ended_at, duration_ms,
+      humans_at_start, humans_verified, end_reason,
+      winner_player_id, winner_critter, private_room
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    randomUUID(),
+    input.startedAtMs ?? input.endedAtMs,
+    input.endedAtMs,
+    Math.max(0, Math.round(input.durationMs)),
+    Math.max(0, input.humansAtStart),
+    Math.max(0, input.humansVerified),
+    input.endReason,
+    input.winnerPlayerId,
+    input.winnerCritter,
+    input.privateRoom ? 1 : 0,
+  );
+}
+
+export interface RetentionMetrics {
+  totalMatches: number;
+  /** Partidas por día natural (UTC) de los últimos 14 días. Solo días con
+   *  al menos una partida — los vacíos se omiten. */
+  byDay: Array<{ day: string; matches: number }>;
+  /** Media de duración sobre partidas que llegaron a 'playing' (>0 ms). */
+  avgDurationMs: number;
+  /** % de partidas con ≥2 humanos en el arranque. */
+  pctWithTwoPlusHumans: number;
+  /** % de partidas jugadas en sala privada. */
+  pctPrivateRooms: number;
+}
+
+/**
+ * Agregados de retención para GET /api/metrics/retention. SOLO datos
+ * agregados — nada de player_ids ni nicknames (ver decisión de no-auth
+ * documentada en api.ts).
+ */
+export function getRetentionMetrics(): RetentionMetrics {
+  const now = nowMs();
+  const since = now - 14 * 24 * 60 * 60 * 1000;
+
+  const total = (db.prepare('SELECT COUNT(*) AS n FROM matches').get() as { n: number }).n;
+
+  const byDay = (db.prepare(`
+    SELECT strftime('%Y-%m-%d', ended_at / 1000, 'unixepoch') AS day, COUNT(*) AS matches
+    FROM matches WHERE ended_at >= ?
+    GROUP BY day ORDER BY day ASC
+  `).all(since) as Array<{ day: string; matches: number }>);
+
+  const avgRow = db.prepare(
+    'SELECT AVG(duration_ms) AS avg_ms FROM matches WHERE duration_ms > 0',
+  ).get() as { avg_ms: number | null };
+
+  const pctRow = db.prepare(`
+    SELECT
+      AVG(CASE WHEN humans_at_start >= 2 THEN 100.0 ELSE 0.0 END) AS pct_multi,
+      AVG(CASE WHEN private_room = 1 THEN 100.0 ELSE 0.0 END)     AS pct_private
+    FROM matches
+  `).get() as { pct_multi: number | null; pct_private: number | null };
+
+  const round1 = (v: number | null) => v === null ? 0 : Math.round(v * 10) / 10;
+  return {
+    totalMatches: total,
+    byDay,
+    avgDurationMs: Math.round(avgRow.avg_ms ?? 0),
+    pctWithTwoPlusHumans: round1(pctRow.pct_multi),
+    pctPrivateRooms: round1(pctRow.pct_private),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Recovery codes — identidad cross-device sin login (H4 retención)
+// ---------------------------------------------------------------------------
+//
+// El jugador con identidad online puede generar UN código legible
+// (BICHO-XXXX-XXXX) que le permite recuperar su fila (playerId + nick)
+// desde otro dispositivo. En BD solo vive un hash salteado del código —
+// un dump de la BD no sirve para robar cuentas.
+//
+// Formato de `recovery_code_hash` (review 2026-09-05, fix G):
+//  · `v2$salt$hex` — scrypt(code, salt, N=2^15, r=8, p=1, 32 bytes).
+//    Un sha256 de una pasada sobre 2^39.6 de entropía cae en horas con
+//    una GPU si se filtra el dump; scrypt a ~75 ms/hash y 32 MiB por
+//    intento lo lleva a años. Con el rate-limit online (5/min/IP) el
+//    coste por verificación es irrelevante.
+//  · `salt$hex` (legado, sin prefijo) — sha256(`salt:code`) de la
+//    primera versión. Sigue verificando para no dejar fuera a quien ya
+//    apuntó su código; al recuperar con éxito se re-hashea a v2 con el
+//    código en claro que acabamos de validar (upgrade transparente).
+//    Generar un código nuevo escribe siempre v2.
+//
+// Decisiones de seguridad (razonadas):
+//  · El código NO se invalida al usarse. Es la llave duradera del
+//    jugador ("apúntalo en un papel"): invalidarlo en cada uso obligaría
+//    a regenerarlo y re-apuntarlo tras cada recuperación, y el jugador
+//    puede ya no tener acceso al dispositivo original para generar otro.
+//    Riesgo aceptado: un código filtrado da acceso hasta que se rote —
+//    mitigado por entropía alta, rate-limit en /identity/recover y la
+//    posibilidad de rotar desde cualquier dispositivo con sesión.
+//  · Generar un código nuevo ROTA (invalida) el anterior — solo hay una
+//    columna de hash. Así el jugador siempre puede "cambiar la
+//    cerradura" si sospecha que su código se filtró.
+//  · Alfabeto sin ambigüedades (sin 0/O/1/I/L) para que apuntarlo a mano
+//    no falle. 8 chars sobre 31 símbolos ≈ 2^39.6 de entropía; con el
+//    rate-limit de 5 intentos/min/IP un brute-force online es inviable.
+//  · Comparación con timingSafeEqual — sin oráculos de timing.
+
+const RECOVERY_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // 31 símbolos, sin 0/O/1/I/L
+
+function generateRecoveryCodeString(): string {
+  const block = (n: number) =>
+    Array.from({ length: n }, () => RECOVERY_ALPHABET[randomInt(RECOVERY_ALPHABET.length)]).join('');
+  return `BICHO-${block(4)}-${block(4)}`;
+}
+
+/** Normaliza el código para hashear/comparar: mayúsculas y solo [A-Z0-9]
+ *  (los guiones y espacios que el jugador teclee dan igual). */
+function normalizeRecoveryCode(raw: string): string {
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+const RECOVERY_HASH_VERSION = 'v2';
+/** scrypt N=2^15,r=8 needs 128·N·r = 32 MiB, which trips Node's default
+ *  maxmem (also 32 MiB — the check has headroom on top). Explicit cap. */
+const RECOVERY_SCRYPT = { N: 2 ** 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 } as const;
+const RECOVERY_HASH_BYTES = 32;
+
+function hashRecoveryCodeV2(code: string, salt: string): string {
+  return scryptSync(normalizeRecoveryCode(code), salt, RECOVERY_HASH_BYTES, RECOVERY_SCRYPT)
+    .toString('hex');
+}
+
+/** Legacy (pre-2026-09-05) one-pass hash — verification only. */
+function hashRecoveryCodeLegacy(code: string, salt: string): string {
+  return sha256(`${salt}:${normalizeRecoveryCode(code)}`);
+}
+
+/** Stored form for a fresh/rotated code: always the current version. */
+function encodeRecoveryHash(code: string): string {
+  const salt = randomBytes(8).toString('hex');
+  return `${RECOVERY_HASH_VERSION}$${salt}$${hashRecoveryCodeV2(code, salt)}`;
+}
+
+/** Constant-time check of a candidate code against a stored hash of
+ *  either format. Returns whether it matched and whether the stored
+ *  hash is the legacy format (caller upgrades it on success). */
+function verifyRecoveryHash(stored: string, code: string): { ok: boolean; legacy: boolean } {
+  const parts = stored.split('$');
+  let expectedHex: string;
+  let legacy: boolean;
+  if (parts.length === 3 && parts[0] === RECOVERY_HASH_VERSION) {
+    expectedHex = parts[2];
+    legacy = false;
+  } else if (parts.length === 2) {
+    expectedHex = parts[1];
+    legacy = true;
+  } else {
+    return { ok: false, legacy: false };
+  }
+  const salt = legacy ? parts[0] : parts[1];
+  if (!salt) return { ok: false, legacy };
+  const candidate = legacy ? hashRecoveryCodeLegacy(code, salt) : hashRecoveryCodeV2(code, salt);
+  const a = Buffer.from(expectedHex, 'hex');
+  const b = Buffer.from(candidate, 'hex');
+  return { ok: a.length === b.length && a.length > 0 && timingSafeEqual(a, b), legacy };
+}
+
+/**
+ * Genera (o rota) el código de recuperación de un jugador autenticado
+ * con su (playerId, token) actuales. Devuelve el código EN CLARO una
+ * única vez — el server solo guarda el hash salteado.
+ */
+export function createRecoveryCode(
+  playerId: string,
+  rawToken: string,
+): { code: string } | { error: string } {
+  if (!verifyPlayer(playerId, rawToken)) return { error: 'invalid_credentials' };
+  const code = generateRecoveryCodeString();
+  db.prepare('UPDATE players SET recovery_code_hash = ?, last_seen = ? WHERE id = ?')
+    .run(encodeRecoveryHash(code), nowMs(), playerId);
+  return { code };
+}
+
+/**
+ * Recupera una identidad con (nickname + código). Si el hash cuadra,
+ * ROTA el device token al que envía el cliente nuevo (mismo contrato que
+ * registerOrClaimPlayer: el cliente genera el token, aquí se guarda su
+ * hash) y hace backfill del identity_id si la fila no tenía. El
+ * identity_id existente NO se machaca: así el dispositivo original
+ * conserva su vía de reclamo por identidad aunque el token haya rotado —
+ * ambos dispositivos quedan operativos.
+ *
+ * Error único 'recovery_failed' tanto para "nick no existe" como para
+ * "código incorrecto": no regala información de qué mitad falló.
+ */
+export function recoverWithCode(
+  rawNick: string,
+  rawCode: string,
+  rawToken: string,
+  rawIdentityId?: string,
+): { id: string; nickname: string } | { error: string } {
+  const v = validateNickname(rawNick);
+  if (!v.ok) return { error: v.reason };
+  if (typeof rawToken !== 'string' || rawToken.length < 16 || rawToken.length > 128) {
+    return { error: 'invalid_token' };
+  }
+  const normCode = typeof rawCode === 'string' ? normalizeRecoveryCode(rawCode) : '';
+  if (normCode.length < 8 || normCode.length > 32) return { error: 'recovery_failed' };
+
+  const row = db.prepare(
+    'SELECT id, nickname_display, recovery_code_hash FROM players WHERE nickname_norm = ?',
+  ).get(normaliseNickname(v.nick)) as
+    | { id: string; nickname_display: string; recovery_code_hash: string | null }
+    | undefined;
+  if (!row || !row.recovery_code_hash) return { error: 'recovery_failed' };
+
+  const check = verifyRecoveryHash(row.recovery_code_hash, rawCode);
+  if (!check.ok) return { error: 'recovery_failed' };
+
+  const identityId =
+    typeof rawIdentityId === 'string' && rawIdentityId.length >= 16 && rawIdentityId.length <= 128
+      ? rawIdentityId
+      : null;
+  db.prepare(
+    'UPDATE players SET token_hash = ?, identity_id = COALESCE(identity_id, ?), last_seen = ? WHERE id = ?',
+  ).run(sha256(rawToken), identityId, nowMs(), row.id);
+  // Legacy sha256 row → upgrade to scrypt now that we hold the plaintext
+  // code the player just proved (same code, fresh salt).
+  if (check.legacy) {
+    db.prepare('UPDATE players SET recovery_code_hash = ? WHERE id = ?')
+      .run(encodeRecoveryHash(rawCode), row.id);
+    console.log(`[db] recovery hash upgraded to ${RECOVERY_HASH_VERSION} for ${row.id}`);
+  }
+  return { id: row.id, nickname: row.nickname_display };
 }
 
 // ---------------------------------------------------------------------------

@@ -25,7 +25,12 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const DIST = 'dist';
-const TOTAL_BUDGET_MB = 100;
+// 2026-08-24 dieta de payload: 96.9 → 69.7 MB (gltfpack de 53 GLBs de
+// arenas/belts −26 MB, belts PNG→WebP, audio -vn VBR5). Ratchet a 75
+// para que el margen no se rellene solo. Siguiente frontera (decisión
+// de Rafa, hard-stop): simplificar sebastian/kermit/kurama (44 MB en 3
+// GLBs) para el objetivo H2 de ≤50 MB.
+const TOTAL_BUDGET_MB = 75;
 const FILE_BUDGET_MB = 17;
 
 if (!existsSync(DIST)) {

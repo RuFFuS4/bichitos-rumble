@@ -4,7 +4,7 @@ import { Critter, CRITTER_PRESETS, type CritterConfig } from './critter';
 import { updatePlayer } from './player';
 import { consumeMenuAction, clearMenuActions } from './input';
 import { updateBot } from './bot';
-import { updateAbilities } from './abilities';
+import { updateAbilities } from './abilities-runtime';
 import { resolveCollisions, checkFalloff, updateFalling } from './physics';
 import {
   updateHUD, showOverlay, hideOverlay,
@@ -16,7 +16,7 @@ import {
   showMatchHud,
   setSlotClickHandler, setTitleModeHandlers, updateTitleModeSelection, isOnlineModeAvailable, setEndTapHandler,
   setPortalLegend, setPortalToggleHandler,
-  showWaitingScreen, hideWaitingScreen, updateWaitingScreen,
+  showWaitingScreen, hideWaitingScreen, updateWaitingScreen, setWaitingShareRoom,
   showSpectatorPrompt, hideSpectatorPrompt,
   setEndMatchStats, clearEndMatchStats,
   type EndResult, type WaitingScreenData,
@@ -40,21 +40,24 @@ import {
 } from './portal';
 // network-events es colyseus-free (imports type-only del SDK) — el SDK
 // real (network.ts) solo entra por import dinámico en connectOnline.
-import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, type Room, type AbilityFiredEvent, type PlayersChangeBinder } from './network-events';
+import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, onShellReflected, type Room, type AbilityFiredEvent, type PlayersChangeBinder } from './network-events';
 import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
-import { getDeviceToken, type OnlineIdentity } from './online-identity';
+import { getDeviceToken, forgetIdentity, type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
-import { triggerCameraShake, triggerHitStop, applyDashFeedback } from './gamefeel';
+import { triggerCameraShake, triggerHitStop, applyDashFeedback, applyImpactFeedback } from './gamefeel';
 import { play as playSoundEffect } from './audio';
-import { spawnShockwaveRing, spawnFrenzyBurst, spawnDecoyAt, spawnAllInTrajectoryPreview, getCritterVfxPalette, clearActiveZones, pushNetworkZone, spawnZoneRing, deriveZoneVfxKind } from './abilities';
+import { getCritterVfxPalette } from './abilities';
+import { clearActiveZones, pushNetworkZone, deriveZoneVfxKind } from './abilities-runtime';
+import { spawnShockwaveRing, spawnFrenzyBurst, spawnDecoyAt, spawnAllInTrajectoryPreview, spawnZoneRing } from './abilities-vfx';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { clearProjectiles } from './projectiles';
 import { clearAllCritterStatus, disposeCritterStatus } from './hud/status-icons';
 import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decorations';
 import { getPreviewPackId } from './arena-decor-layouts';
 import { seedMatchRng, matchRng } from './match-rng';
+import { t, tf } from './i18n';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended' | 'online';
 
@@ -73,6 +76,17 @@ const MAX_CRITTERS_PER_MATCH = SPAWN_POSITIONS.length;
  * via SPAWN_POSITIONS.length.
  */
 const ONLINE_MAX_PLAYERS = 4;
+
+/**
+ * Review 2026-09-05 (fix A) — upper bound on how long restartMatch waits
+ * for the abandoned room's leave to settle. With the socket open the
+ * server answers in one RTT; while "Reconnecting…" the SDK's socket may
+ * be CLOSED between retries, and then `leave()` cannot settle until the
+ * pending retry fires (≤ 5 s backoff). The user pressed R — don't make
+ * them stare at "Connecting..." for that; the onReconnect guard in
+ * enterOnline leaves the stale room whenever that retry lands.
+ */
+const ABANDON_ROOM_WAIT_MS = 1500;
 
 /**
  * Build the match roster: player config first, then bots drawn from the
@@ -171,7 +185,12 @@ export class Game {
    *  client with two half-initialised rooms. */
   private connectInProgress: boolean = false;
   /** Currently highlighted mode on the title screen (keyboard navigation). */
-  private titleMode: 'bots' | 'online' = 'bots';
+  private titleMode: 'bots' | 'online' | 'friends' = 'bots';
+  /** H4 private rooms — how the NEXT online connect lands in a room:
+   *  null = quickmatch (joinOrCreate), {create:true} = create a private
+   *  room ("Play with Friends"), {roomId} = joinById (?room=XYZ link).
+   *  Cleared on enterTitle so a later quickmatch doesn't inherit it. */
+  private friendsJoin: { create?: boolean; roomId?: string } | null = null;
   /** Offline-only pause flag. When true, the 'playing' branch of update()
    *  short-circuits (no input, no bot AI, no physics) and the DOM pause
    *  menu overlay is shown. Toggled by ESC and the pause buttons. */
@@ -225,6 +244,7 @@ export class Game {
         // Block click-confirm while a previous connect/restart is still in flight.
         if (this.connectInProgress || this.restartInProgress) return;
         if (mode === 'online') this.enterOnlineCharacterSelect();
+        else if (mode === 'friends') this.enterOnlineCharacterSelect({ create: true });
         else this.enterCharacterSelect();
       },
     );
@@ -260,6 +280,15 @@ export class Game {
       this.enterCountdown();
     } else {
       this.enterTitle();
+      // H4 private rooms — invite link (?room=XYZ): jump straight into
+      // the online flow (nickname modal → character select → joinById).
+      // Runs AFTER enterTitle so a cancelled modal lands on a sane
+      // title screen instead of a blank page.
+      const inviteRoomId = new URLSearchParams(location.search).get('room');
+      if (inviteRoomId && isOnlineModeAvailable()) {
+        console.log('[Game] invite link → joining room', inviteRoomId);
+        void this.enterOnlineCharacterSelect({ roomId: inviteRoomId });
+      }
     }
 
     // Warm the model cache in browser idle time so character-select
@@ -438,10 +467,14 @@ export class Game {
     hidePreview();
     // Ensure the mode highlight matches the current state (default: bots)
     // If online isn't available (no server URL), force-select bots.
-    if (!isOnlineModeAvailable() && this.titleMode === 'online') {
+    if (!isOnlineModeAvailable() && this.titleMode !== 'bots') {
       this.titleMode = 'bots';
     }
     updateTitleModeSelection(this.titleMode);
+    // H4 private rooms: back on the title = any pending invite/create
+    // intent dies, and the waiting share row hides for the next room.
+    this.friendsJoin = null;
+    setWaitingShareRoom(null);
   }
 
   private enterCharacterSelect(): void {
@@ -540,7 +573,7 @@ export class Game {
       getRosterEntry(this.player.config.name)?.id ?? null,
     );
     initAllLivesHUD(this.critters, this.playerIndex);
-    showOverlay('Preparing arena…');
+    showOverlay(t('hud-preparing-arena'));
 
     // 2026-04-29 — wait for the arena pack assets (skybox, ground texture,
     // decor GLBs) to settle before kicking off the visible countdown.
@@ -554,7 +587,7 @@ export class Game {
       // Guard: user may have quit / restarted while we were awaiting.
       if (this.phase === 'countdown' && this.phaseTimer < 0) {
         this.phaseTimer = FEEL.match.countdown;
-        showOverlay('Get Ready!');
+        showOverlay(t('hud-get-ready'));
       }
     });
 
@@ -678,14 +711,20 @@ export class Game {
    * prompt for a nickname + register it before showing the select. On
    * cancel, we stay on the title screen.
    */
-  public async enterOnlineCharacterSelect(): Promise<void> {
+  public async enterOnlineCharacterSelect(
+    friends: { create?: boolean; roomId?: string } | null = null,
+  ): Promise<void> {
     try {
       const identity = await ensureOnlineIdentity();
       this.onlineIdentity = identity;
     } catch (_err) {
       // User cancelled the nickname modal → stay on title screen.
+      this.friendsJoin = null;
       return;
     }
+    // H4 private rooms: remember HOW the connect should land (create
+    // private / joinById) until connectOnlineWith consumes it.
+    this.friendsJoin = friends;
     this.selectForOnline = true;
     this.enterCharacterSelect();
   }
@@ -714,15 +753,18 @@ export class Game {
         for (const c of this.onlineCritters.values()) { disposeCritterStatus(c); c.dispose(); }
         this.onlineCritters.clear();
         this.arena.reset();
-        showOverlay('Connecting...');
+        showOverlay(t('hud-connecting'));
 
         // Properly await leave so the server fully removes us before we
         // matchmake again. Server also calls lock() on match end, so
         // joinOrCreate will never match the finished room — but waiting
         // here also avoids a brief double-connection on the client.
-        try {
-          await prevRoom.leave();
-        } catch (_e) { /* server may have already disposed */ }
+        // Bounded (see ABANDON_ROOM_WAIT_MS): a room mid-reconnect can't
+        // settle its leave until the SDK's next retry fires.
+        await Promise.race([
+          this.abandonRoom(prevRoom),
+          new Promise<void>((resolve) => setTimeout(resolve, ABANDON_ROOM_WAIT_MS)),
+        ]);
 
         if (!critterName) {
           this.enterTitle();
@@ -735,6 +777,27 @@ export class Game {
     } finally {
       this.restartInProgress = false;
     }
+  }
+
+  /**
+   * Review 2026-09-05 (fix A) — the ONE way to walk away from a room.
+   * Used by back-to-title (online + ended phases) and restartMatch.
+   *
+   * `room.leave()` alone is not enough while the SDK is auto-reconnecting
+   * ("Reconnecting…" overlay): the pending retry keeps going, rejoins the
+   * server seat and the human's critter is handed back to a client that
+   * no longer listens — a zombie seat the bots cannot cover and a room
+   * that never disposes. So: disable further reconnection, then leave
+   * consented only if the socket is actually open (LEAVE_ROOM → server
+   * onLeave code 4000 = permanent departure); otherwise leave(false)
+   * aborts the in-flight socket. A retry already scheduled by the SDK
+   * cannot be cancelled from outside — enterOnline's onReconnect guard
+   * leaves the room again the moment it lands.
+   */
+  private abandonRoom(room: Room): Promise<void> {
+    room.reconnection.enabled = false;
+    const socketOpen = room.connection?.isOpen === true;
+    return room.leave(socketOpen).then(() => undefined, () => undefined);
   }
 
   /**
@@ -757,7 +820,7 @@ export class Game {
       this.onlineCritters.forEach(c => { disposeCritterStatus(c); c.dispose(); });
       this.onlineCritters.clear();
       this.arena.reset();
-      showOverlay('Connecting...');
+      showOverlay(t('hud-connecting'));
 
       // El ÚNICO punto que carga el SDK de Colyseus (chunk async).
       const { connectToBrawl, onPlayersChange } = await import('./network');
@@ -765,13 +828,28 @@ export class Game {
       // uses this to credit match stats to the right row for the Online
       // Belts (Fase 3 wires the room handler; for now we just attach it
       // to the join options so the handshake carries it).
+      // (The display nickname is NOT sent — review 2026-09-05, fix I:
+      // the server reads it from the BD row of the verified identity.)
       const joinOpts: Record<string, unknown> = { critterName };
       if (this.onlineIdentity) {
         joinOpts.playerId = this.onlineIdentity.playerId;
         joinOpts.playerToken = getDeviceToken();
-        joinOpts.nickname = this.onlineIdentity.nickname;
       }
-      const room = await connectToBrawl(getDefaultServerUrl(), joinOpts);
+      // H4 private rooms: create-private o joinById según friendsJoin;
+      // quickmatch (joinOrCreate) cuando es null. Se consume aquí: un
+      // restart posterior desde el end screen re-conecta en quickmatch
+      // (la sala privada original ya terminó y está locked).
+      const mode = this.friendsJoin?.create
+        ? { createPrivate: true as const }
+        : this.friendsJoin?.roomId
+          ? { joinRoomId: this.friendsJoin.roomId }
+          : undefined;
+      const wasFriendsCreate = !!this.friendsJoin?.create;
+      this.friendsJoin = null;
+      const room = await connectToBrawl(getDefaultServerUrl(), joinOpts, mode);
+      // Share row en la waiting screen SOLO para el creador de la sala
+      // privada (quien entra por enlace ya tiene el enlace).
+      setWaitingShareRoom(wasFriendsCreate ? room.roomId : null);
       this.enterOnline(room, onPlayersChange);
     } catch (err) {
       console.error('[Game] online connect failed:', err);
@@ -784,22 +862,31 @@ export class Game {
       // Anything else is a real connection failure.
       const msg = (err as Error)?.message ?? '';
       if (msg.includes('nickname_active_in_room')) {
-        alert(
-          'This nickname is already active in another tab on this device.\n\n' +
-          'Use a different nickname or close the other tab and try again.',
-        );
+        alert(t('connect-nickname-active'));
       } else if (msg.includes('nickname_taken')) {
-        alert(
-          'This nickname is already in use by another device.\n\n' +
-          'Pick a different nickname.',
-        );
+        alert(t('connect-nickname-taken'));
+      } else if (msg.includes('identity_stale')) {
+        // Review 2026-09-05 (fix H) — the server refused our
+        // playerId+token (rotated by a recovery on another device, or
+        // row deleted). Drop the stale identity so the next Online tap
+        // opens the nickname modal (recover-with-code lives there)
+        // instead of silently playing a whole match as a guest.
+        // NB: true multi-device (one row, N tokens) is structural and
+        // stays out of scope — this only makes the rotation visible.
+        forgetIdentity();
+        this.onlineIdentity = null;
+        alert(t('connect-identity-stale'));
+      } else if (msg.includes('room_already_started') || msg.includes('is locked')) {
+        // Fix J — joinById on a shared link whose room already left
+        // 'waiting'. Two surfaces of the same fact: the matchmaker
+        // rejects a LOCKED room (`room "X" is locked` — the common case,
+        // rooms lock on countdown) before onJoin runs, and onJoin throws
+        // 'room_already_started' in the race window before the lock
+        // lands. Same copy for both.
+        alert(t('connect-room-started'));
       } else {
-        const detail = msg ? `\n\nServer said: ${msg}` : '';
-        alert(
-          'Could not connect to multiplayer server.\n\n' +
-          'In dev: make sure the server is running (cd server && npm run dev).\n' +
-          `In prod: contact the site owner.${detail}`,
-        );
+        const detail = msg ? `\n\n${tf('connect-failed-server-said', { msg })}` : '';
+        alert(t('connect-failed') + detail);
       }
     } finally {
       this.connectInProgress = false;
@@ -844,16 +931,23 @@ export class Game {
     // Player info for the portal redirect query params is set after the
     // local critter spawns (needs config). See spawnOnlineCritter.
 
-    showOverlay('Waiting for opponent...');
+    showOverlay(t('hud-waiting-opponent'));
 
     // Player add/remove listeners via the network adapter — the SDK's
     // state-callbacks API (v3 proxies / v4 Callbacks) lives entirely in
     // network.ts. onAdd also fires for players already present at attach.
+    // Review 2026-09-05 (fix A): every listener below checks
+    // `this.room === room` — a room we abandoned (back / restart while
+    // reconnecting) can still deliver in-flight patches and broadcasts
+    // until its socket closes, and they must not spawn critters or VFX
+    // into the title screen or the NEXT match.
     onPlayersChange(room, {
       onAdd: (playerState, sessionId) => {
+        if (this.room !== room) return;
         this.spawnOnlineCritter(sessionId, playerState);
       },
       onRemove: (_playerState, sessionId) => {
+        if (this.room !== room) return;
         const c = this.onlineCritters.get(sessionId);
         if (c) {
           // Clean the floating status emoji DOM node BEFORE disposing —
@@ -867,7 +961,22 @@ export class Game {
     });
 
     // Ability fire events → trigger client-side VFX + audio
-    onAbilityFired(room, (ev: AbilityFiredEvent) => this.handleAbilityFired(ev));
+    onAbilityFired(room, (ev: AbilityFiredEvent) => {
+      if (this.room !== room) return;
+      this.handleAbilityFired(ev);
+    });
+
+    // Steel Shell reflect (review 2026-08-24): mismo feedback que la
+    // física offline dispara localmente — shake+hit-stop+sonido, y el
+    // impact-squash sobre el critter atacante si lo tenemos instanciado.
+    onShellReflected(room, (ev) => {
+      if (this.room !== room) return;
+      triggerHitStop(FEEL.hitStop.headbutt);
+      triggerCameraShake(FEEL.shake.headbutt);
+      playSound('headbuttHit');
+      const attacker = this.onlineCritters.get(ev.attackerSid);
+      if (attacker) applyImpactFeedback(attacker);
+    });
 
     // Slow-zone broadcasts → render the persistent ground hazard +
     // register the zone in the client-side tracker so `effectiveSpeed`
@@ -881,6 +990,7 @@ export class Game {
     // `projectileExpired`. Local integration in tickProjectiles is
     // visual-only — server still owns collision + slowTimer write.
     onProjectileSpawned(room, (ev) => {
+      if (this.room !== room) return;
       pushNetworkProjectile(this.scene, {
         id: ev.id,
         ownerSid: ev.ownerSid,
@@ -890,13 +1000,16 @@ export class Game {
       });
     });
     onProjectileHit(room, (ev) => {
+      if (this.room !== room) return;
       removeProjectile(ev.id, /*withImpact*/ true);
     });
     onProjectileExpired(room, (ev) => {
+      if (this.room !== room) return;
       removeProjectile(ev.id, /*withImpact*/ false);
     });
 
     onZoneSpawned(room, (ev) => {
+      if (this.room !== room) return;
       // Render — colour comes from the caster's pound palette so
       // online and offline match visually.
       const caster = this.onlineCritters.get(ev.ownerSid);
@@ -930,6 +1043,7 @@ export class Game {
     // server-broadcast `waveCenter`. Without this, online viewers
     // saw the cone pulses HIT but had no visible cone wave.
     onLPulse(room, (ev) => {
+      if (this.room !== room) return;
       const caster = this.onlineCritters.get(ev.sessionId);
       const palette = caster ? getCritterVfxPalette(caster.config.name) : undefined;
       const halfCone = ((ev.angleDeg ?? 45) * Math.PI) / 180;
@@ -958,6 +1072,7 @@ export class Game {
     // screen showed the trajectory line; other clients saw him
     // rooted with no indicator of which way he was about to dash.
     onLChargeStart(room, (ev) => {
+      if (this.room !== room) return;
       spawnAllInTrajectoryPreview(
         this.scene,
         ev.x, ev.z,
@@ -972,6 +1087,7 @@ export class Game {
     // out under the hole disc; clients knock them out locally so
     // the visual fall + isOnArena read match the server.
     onArenaFragmentsKilled(room, (ev) => {
+      if (this.room !== room) return;
       if (ev.indices && ev.indices.length > 0) {
         this.arena.killFragmentIndices(ev.indices);
       }
@@ -980,7 +1096,10 @@ export class Game {
     // Online Belts: if the server detects a belt changed hands after this
     // match, it broadcasts `beltChanged` to the whole room. Toast it so
     // everyone sees who just took what.
-    onBeltChanged(room, (ev) => showOnlineBeltToast(ev));
+    onBeltChanged(room, (ev) => {
+      if (this.room !== room) return;
+      showOnlineBeltToast(ev);
+    });
 
     // Attach leave handler — if the server drops us unexpectedly we
     // surface it. Intentional leaves (restartMatch, back-to-title)
@@ -993,15 +1112,47 @@ export class Game {
     // rejection arrives as an error in `joinOrCreate` (handled in
     // the catch block of `enterOnlinePhase`) before we ever get
     // here.
+    // H4 reconnect: con la auto-reconexión del SDK activa (network.ts),
+    // onLeave solo dispara cuando los reintentos se agotan o el server
+    // rechaza el rejoin (gracia de 30 s expirada). onDrop = blip de red
+    // (arrancan los reintentos); onReconnect = de vuelta en la sala con
+    // el estado re-sincronizado (spawnOnlineCritter tiene guard de
+    // duplicados para el re-emit de onAdd).
+    room.onDrop((code, reason) => {
+      console.warn('[Game] connection dropped, reconnecting…', code, reason ?? '');
+      if (this.phase === 'online' && this.room === room) {
+        showOverlay(t('hud-reconnecting'), t('hud-reconnecting-sub'));
+      }
+    });
+    room.onReconnect(() => {
+      // Fix A — a retry the SDK had already scheduled before we
+      // abandoned this room (back / restart while "Reconnecting…") just
+      // landed: the server handed the seat back to us. Leave for real
+      // (socket is open here → LEAVE_ROOM → server code 4000) so the
+      // seat becomes a permanent bot-takeover instead of a zombie.
+      if (this.room !== room) {
+        console.log('[Game] stale room reconnected after abandon — leaving', room.roomId);
+        room.leave().catch(() => { /* ignore */ });
+        return;
+      }
+      console.log('[Game] reconnected to room', room.roomId);
+      if (this.phase === 'online') {
+        hideOverlay();
+      }
+    });
     room.onLeave(() => {
       console.log('[Game] disconnected from room');
       if (this.phase === 'online' && this.room === room && !this.restartInProgress) {
-        showOverlay('Disconnected', 'Press T to return to title');
+        showOverlay(t('hud-disconnected'), t('hud-disconnected-sub'));
       }
     });
   }
 
   private spawnOnlineCritter(sessionId: string, playerState: any): void {
+    // H4 reconnect: tras un rejoin el SDK re-aplica el estado completo y
+    // onAdd re-dispara para jugadores que YA tenemos instanciados — sin
+    // este guard, cada reconexión duplicaría critters visuales.
+    if (this.onlineCritters.has(sessionId)) return;
     // Resolve the character from server-authoritative state. If unknown
     // (shouldn't happen — server validates before sending), fall back to
     // the first playable from the roster.
@@ -1247,7 +1398,7 @@ export class Game {
         // timeout). Server keeps marching; we only delay the local
         // confirmation. Once `waitForPack` resolves we drop the overlay
         // and the player sees the fully-decorated scene.
-        showOverlay('Preparing arena…');
+        showOverlay(t('hud-preparing-arena'));
         void this.arena.waitForPack(2500).then(() => {
           // Defensive: only hide if we're still in playing phase. A
           // fast end-of-match could have already swapped phases.
@@ -1281,21 +1432,21 @@ export class Game {
           }
         }
 
-        let title = 'DRAW';
-        let subtitle = 'No winner';
+        let title = t('end-title-draw');
+        let subtitle = t('end-sub-no-winner');
         let result: EndResult = 'draw';
         if (winnerSid === localSid) {
-          result = 'win'; title = 'VICTORY'; subtitle = 'You won';
+          result = 'win'; title = t('end-title-victory'); subtitle = t('end-sub-you-won');
           playSoundEffect('victory');
           playMusic('special');
         } else if (winnerSid && winnerSid !== localSid) {
-          result = 'lose'; title = 'DEFEATED';
+          result = 'lose'; title = t('end-title-defeated');
           if (reason === 'opponent_left') {
-            subtitle = 'You won by default';
+            subtitle = t('end-sub-won-by-default');
           } else if (winnerIsBot) {
-            subtitle = `Bot ${winnerCritterName || ''} won`.trim();
+            subtitle = tf('end-sub-bot-won', { name: winnerCritterName || '' }).trim();
           } else {
-            subtitle = `${winnerCritterName || 'Opponent'} won`.trim();
+            subtitle = tf('end-sub-player-won', { name: winnerCritterName || t('end-opponent') }).trim();
           }
           playMusic('intro');
         } else {
@@ -1303,7 +1454,10 @@ export class Game {
           playMusic('intro');
         }
         hideOverlay();
-        showEndScreen(result, title, subtitle, false);
+        showEndScreen(result, title, subtitle, false,
+          result === 'win'
+            ? t('share-won-online')
+            : t('share-playing'));
 
         // Skeletal: surviving critters celebrate. Losers already locked
         // into 'defeat' via the alive-edge hook above. No-op for critters
@@ -1373,7 +1527,7 @@ export class Game {
     // Overlay for countdown
     if (serverPhase === 'countdown') {
       const sec = Math.max(0, Math.ceil(state.countdownLeft));
-      showOverlay(`${sec > 0 ? sec : 'GO!'}`);
+      showOverlay(sec > 0 ? String(sec) : t('hud-go'));
     }
 
     // HUD updates — active during countdown + playing, not waiting/ended
@@ -1412,7 +1566,7 @@ export class Game {
       console.warn('[Game] portal send failed:', err);
     }
 
-    showOverlay('Leaving...');
+    showOverlay(t('hud-leaving'));
 
     const redirectUrl = which === 'start'
       ? (getPortalReturnUrl() ?? getPortalExitUrl())
@@ -1515,7 +1669,10 @@ export class Game {
     this.lastEndResult = result;
     document.body.classList.remove('match-active');
     hideOverlay();
-    showEndScreen(result, title, subtitle, isFromPortal());
+    showEndScreen(result, title, subtitle, isFromPortal(),
+      result === 'win' && this.player
+        ? tf('share-won-as', { name: this.player.config.name })
+        : t('share-playing'));
     if (result === 'win') {
       playSound('victory');
       // Music: celebratory track on victory. Preload already covers the
@@ -1775,14 +1932,21 @@ export class Game {
         for (const c of this.critters) c.update(dt);
         // Arrow left/right toggles mode highlight. If online isn't
         // available, left/right are ignored (only one mode exists).
-        if (consumeMenuAction('left') || consumeMenuAction('right')) {
-          if (isOnlineModeAvailable()) {
-            this.titleMode = this.titleMode === 'bots' ? 'online' : 'bots';
-            updateTitleModeSelection(this.titleMode);
+        {
+          const left = consumeMenuAction('left');
+          if (left || consumeMenuAction('right')) {
+            if (isOnlineModeAvailable()) {
+              // 3 modos desde H4: bots ⇄ online ⇄ friends (cíclico).
+              const cycle: Array<'bots' | 'online' | 'friends'> = ['bots', 'online', 'friends'];
+              const i = cycle.indexOf(this.titleMode);
+              this.titleMode = cycle[(i + (left ? cycle.length - 1 : 1)) % cycle.length];
+              updateTitleModeSelection(this.titleMode);
+            }
           }
         }
         if (consumeMenuAction('confirm') && !this.connectInProgress && !this.restartInProgress) {
           if (this.titleMode === 'online') this.enterOnlineCharacterSelect();
+          else if (this.titleMode === 'friends') this.enterOnlineCharacterSelect({ create: true });
           else this.enterCharacterSelect();
         }
         break;
@@ -1837,7 +2001,7 @@ export class Game {
           // Flash "GO!" for ~0.45 s before hiding — the green variant in
           // CSS plays a radial burst, which sells the transition better
           // than snapping straight to gameplay.
-          showOverlay('GO!');
+          showOverlay(t('hud-go'));
           window.setTimeout(() => hideOverlay(), 450);
           this.phase = 'playing';
           // Stamp the moment the match really starts. Used by recordWin
@@ -1892,7 +2056,7 @@ export class Game {
         // drives the player slot too)
         for (let i = 0; i < this.critters.length; i++) {
           if (i === this.playerIndex && !this.autopilotPlayer) continue;
-          updateBot(this.critters[i], this.critters, effectiveDt);
+          updateBot(this.critters[i], this.critters, effectiveDt, this.arena);
         }
 
         // 3. Ability updates
@@ -1936,14 +2100,17 @@ export class Game {
 
         // Win/loss check
         if (!this.player.alive) {
-          this.enterEnded('lose', 'ELIMINATED', `${this.player.config.name} fell into the void`);
+          this.enterEnded('lose', t('end-title-eliminated'),
+            tf('end-sub-fell-void', { name: this.player.config.name }));
         } else if (this.activeCount <= 1 && !this.critters.some(c => c.falling)) {
-          this.enterEnded('win', 'VICTORY', `${this.player.config.name} is the last one standing`);
+          this.enterEnded('win', t('end-title-victory'),
+            tf('end-sub-last-standing', { name: this.player.config.name }));
         } else if (this.matchTimer <= 0) {
           if (this.player.alive) {
-            this.enterEnded('win', 'SURVIVED', `${this.player.config.name} made it to the end`);
+            this.enterEnded('win', t('end-title-survived'),
+              tf('end-sub-made-it', { name: this.player.config.name }));
           } else {
-            this.enterEnded('lose', 'TIME UP', 'Better luck next time');
+            this.enterEnded('lose', t('end-title-time-up'), t('end-sub-better-luck'));
           }
         }
         break;
@@ -1964,7 +2131,7 @@ export class Game {
         }
 
         if (consumeMenuAction('back')) {
-          this.room?.leave().catch(() => { /* ignore */ });
+          if (this.room) void this.abandonRoom(this.room);
           this.room = null;
           for (const c of this.onlineCritters.values()) { disposeCritterStatus(c); c.dispose(); }
           this.onlineCritters.clear();
@@ -1987,7 +2154,7 @@ export class Game {
         if (consumeMenuAction('back')) {
           // T: always hard-return to title (drops online room if any)
           if (this.room) {
-            this.room.leave().catch(() => { /* ignore */ });
+            void this.abandonRoom(this.room);
             this.room = null;
             for (const c of this.onlineCritters.values()) { disposeCritterStatus(c); c.dispose(); }
             this.onlineCritters.clear();
@@ -2098,6 +2265,13 @@ export class Game {
     // Un seed = una partida entera (mismo contrato que enterCountdown).
     seedMatchRng(seed);
     this.arena.reset();
+    // Review 2026-08-24: sin estas limpiezas, una Poison Cloud (ttl 10s)
+    // o un Snowball en vuelo de la partida anterior CONTAMINAN la
+    // siguiente en el batch runner (misma página, N partidas) y en
+    // Restart Same Seed — rompiendo el contrato "same seed ⇒ same
+    // outcome" en las partidas i>0. Espeja enterCountdown/enterTitle.
+    clearActiveZones();
+    clearProjectiles();
     // Lab doesn't expose a pack picker yet — roll randomly too so the
     // /tools.html path matches normal play. If a specific pack is needed
     // for testing, `options.packId` is forwarded when provided.

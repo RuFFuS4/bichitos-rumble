@@ -179,6 +179,17 @@ REPRODUCIBLE: yes con 218 eventos idénticos). Detalle por slice en
 Pendiente de la decisión offline-first: sync del server al entrar en
 la fase de mecánicas.
 
+## Interludio 2 — Balance v2 (2026-08-21, primer bloque de mecánicas/assets)
+
+Primer uso real del taller afilado: 108+ partidas medidas con el batch
+runner en un día. Marco de balanceo v2 ("cero potencia fuera de
+presupuesto", `npm run balance`), Trunk domado conservando su fantasía,
+bots con conciencia del borde (cliente+server), Steel Shell despertado.
+Doc vivo: [docs/BALANCE.md](docs/BALANCE.md). Lección de diseño (Rafa):
+**las mecánicas tienen fuerza en el balanceo** — Shelly y Sebastian se
+balancean con mecánicas nuevas, no con más números. Esa cola abre la
+fase de mecánicas.
+
 ## H4 — Retención y bucle social (~3-4 semanas)
 
 **Meta**: razones para volver y jugadores que traen jugadores.

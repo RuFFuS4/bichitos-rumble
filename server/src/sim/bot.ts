@@ -15,6 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PlayerSchema } from '../state/PlayerSchema.js';
+import { getAbilityKit } from './abilities.js';
 
 export interface BotInput {
   moveX: number;
@@ -51,7 +52,27 @@ const ZERO: BotInput = {
  * same drop-target behaviour anyway. If the only enemy alive is Kurama
  * during their immunity window, the bot falls back to standing still.
  */
-export function computeBotInput(bot: PlayerSchema, allPlayers: PlayerSchema[]): BotInput {
+// Edge awareness (balance v2, 2026-08-21) — keep in sync with the
+// client's FEEL.bots (src/gamefeel.ts). Mirrored inline: the server sim
+// carries no gamefeel module and these three are the only knobs.
+const EDGE_MARGIN = 1.4;
+const EDGE_STEER = 1.6;
+const LOOK_AHEAD = 1.1;
+
+// Tasas de decisión POR SEGUNDO (review 2026-08-24) — espejo de
+// FEEL.bots.fireRatesPerSec del cliente. Antes las probabilidades
+// por-frame de 60 Hz estaban copiadas literales aquí (30 Hz): los bots
+// online casteaban la MITAD que offline. rollAt convierte por tick.
+const FIRE_RATES = { mobility: 0.702, radial: 0.596, cone: 0.839, ranged: 0.737 };
+const TICK_DT = 1 / 30;
+const rollAt = (ratePerSec: number): boolean =>
+  Math.random() < 1 - Math.pow(1 - ratePerSec, TICK_DT);
+
+export function computeBotInput(
+  bot: PlayerSchema,
+  allPlayers: PlayerSchema[],
+  arena?: { currentRadius: number; isOnArena(x: number, z: number): boolean },
+): BotInput {
   if (!bot.alive || bot.falling) return ZERO;
 
   let nearest: PlayerSchema | null = null;
@@ -60,6 +81,8 @@ export function computeBotInput(bot: PlayerSchema, allPlayers: PlayerSchema[]): 
 
   for (const p of allPlayers) {
     if (p === bot || !p.alive) continue;
+    // Balance v2: a falling target is bait — don't chase it off the rim.
+    if (p.falling) continue;
     // v0.11 — Kurama Mirror Trick bot confuse: bots stop targeting a
     // Kurama who is in an immunity window. Other critters with
     // immunity (post-respawn) are still considered targets — only
@@ -82,8 +105,29 @@ export function computeBotInput(bot: PlayerSchema, allPlayers: PlayerSchema[]): 
   const dx = nearest.x - bot.x;
   const dz = nearest.z - bot.z;
   const d = Math.max(0.01, Math.sqrt(dx * dx + dz * dz));
-  const moveX = dx / d;
-  const moveZ = dz / d;
+  let moveX = dx / d;
+  let moveZ = dz / d;
+
+  // --- Edge awareness (balance v2) — mirror of src/bot.ts: void probe
+  // ahead (collapse-pattern aware) + radial danger-band inward blend.
+  if (arena) {
+    const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
+    if (rd > 0.01) {
+      if (!arena.isOnArena(bot.x + moveX * LOOK_AHEAD, bot.z + moveZ * LOOK_AHEAD)) {
+        moveX = -bot.x / rd;
+        moveZ = -bot.z / rd;
+      } else {
+        const danger = rd - (arena.currentRadius - EDGE_MARGIN);
+        if (danger > 0) {
+          const w = Math.min(1, danger / EDGE_MARGIN) * EDGE_STEER;
+          moveX -= (bot.x / rd) * w;
+          moveZ -= (bot.z / rd) * w;
+          const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
+          if (len > 0.01) { moveX /= len; moveZ /= len; }
+        }
+      }
+    }
+  }
 
   // --- Headbutt at contact range ---
   const headbutt = nearestDist < 2.0;
@@ -92,18 +136,50 @@ export function computeBotInput(bot: PlayerSchema, allPlayers: PlayerSchema[]): 
   // Same constants as the offline bot in src/bot.ts so online feels similar.
   // 0.02 per frame ≈ ~40% chance/sec to actually fire while in the window.
   const ability1 =
-    nearestDist > 3.0 && nearestDist < 6.0 && Math.random() < 0.02;
-  // 2026-04-29 K-session — Kowalski Snowball reuses the ability2
-  // slot (server kit index 1). The bot fires it as a ranged tool
-  // when the target is in the snowball's effective lane (4..14 u).
-  // Other critters' ability2 (ground_pound / blink / steel_shell)
-  // still fire on the surrounded-2-enemies condition. The server
-  // dispatcher resolves the actual type per kit.
+    nearestDist > 3.0 && nearestDist < 6.0 && rollAt(FIRE_RATES.mobility);
+  // 2026-08-24 paridad con src/bot.ts (hallazgo del review adversarial:
+  // el cañón de Sebastian era solo-cliente y online nunca salía en
+  // 1v1). El slot 2 dispara según la FORMA del def, resuelta del kit
+  // — def-driven, sin special-cases por nombre:
+  //   · projectile (Kowalski Snowball): banda 4..14 u frontal.
+  //   · cono direccional (coneAngleDeg — Claw Wave de Sebastian): UNA
+  //     víctima delante dentro del radio ×0.9, doble de probabilidad.
+  //   · radial: "estoy rodeado" — nearbyCount >= 2, como siempre.
+  const def2 = getAbilityKit(bot.critterName)[1];
   let ability2: boolean;
-  if (bot.critterName === 'Kowalski') {
-    ability2 = nearestDist > 4.0 && nearestDist < 14.0 && Math.random() < 0.022;
+  if (def2?.selfBuffOnly && (def2.selfImmunityDuration ?? 0) > 0 && !def2.decoyEscapeDistance) {
+    // Defensiva pura (Steel Shell): reflejo DETERMINISTA como en el
+    // cliente (it3) — anticipa la carga entrante o la presión en el
+    // borde. Sin dados: un tanque que a veces olvida el escudo no es
+    // un tanque. (Mirror Trick de Kurama queda fuera: su
+    // decoyEscapeDistance lo marca como escape, no como muro.)
+    // Review 2026-08-24: el cliente tambien anticipa cargas de
+    // MOVILIDAD activas (charge_rush/blink), no solo headbutts — sin
+    // esto, un Trunk cargando lanzaba a la Shelly online sin que
+    // levantara el escudo. Mismo patron kit+indice que isAnchored().
+    const nearestKit = getAbilityKit(nearest.critterName);
+    let mobilityActive = false;
+    for (let i = 0; i < nearest.abilities.length; i++) {
+      const d = nearestKit[i];
+      if (d && (d.type === 'charge_rush' || d.type === 'blink') && nearest.abilities[i].active) {
+        mobilityActive = true;
+        break;
+      }
+    }
+    const chargeIncoming =
+      (!!nearest.isHeadbutting || mobilityActive) && nearestDist < 2.8 * 1.6;
+    let edgePressure = false;
+    if (arena) {
+      const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
+      edgePressure = rd > arena.currentRadius - EDGE_MARGIN && nearestDist < 2.8;
+    }
+    ability2 = chargeIncoming || edgePressure;
+  } else if (def2?.type === 'projectile') {
+    ability2 = nearestDist > 4.0 && nearestDist < 14.0 && rollAt(FIRE_RATES.ranged);
+  } else if (typeof def2?.coneAngleDeg === 'number') {
+    ability2 = nearestDist < (def2.radius ?? 3.5) * 0.9 && rollAt(FIRE_RATES.cone);
   } else {
-    ability2 = nearbyCount >= 2 && Math.random() < 0.015;
+    ability2 = nearbyCount >= 2 && rollAt(FIRE_RATES.radial);
   }
   const ultimate = false; // conservative: let bots not spam ultimates online
 

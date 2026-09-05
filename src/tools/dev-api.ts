@@ -200,7 +200,7 @@ export interface RecordingMeta {
 
 export interface RecordingOutcome {
   survivor: string | null;
-  reason: 'last_standing' | 'match_timeout' | 'user_stopped' | null;
+  reason: 'last_standing' | 'match_timeout' | 'player_eliminated' | 'user_stopped' | null;
 }
 
 export interface RecordingSession {
@@ -248,6 +248,16 @@ export class DevApi {
   private recordingElapsedMs = 0;        // drives snapshot sampling
   private readonly SNAPSHOT_INTERVAL_MS = 200;   // 5 snapshots/sec
   private lastSnapshotAt = 0;
+  /** Edge-detección de phase para congelar la grabación en tiempo de
+   *  sim al entrar en 'ended' (review 2026-08-24). */
+  private lastGamePhase = '';
+
+  /** `Game.phase` es privado; el runner ya lo lee en runtime vía
+   *  window.__game.phase — aquí hacemos la misma lectura runtime con
+   *  un cast estrecho en vez de abrir la clase. */
+  private gamePhase(): string {
+    return (this.game as unknown as { phase: string }).phase;
+  }
   private matchStartMs = 0;              // performance.now() at match start
 
   constructor(public readonly game: Game, private readonly renderer: THREE.WebGLRenderer) {}
@@ -522,7 +532,11 @@ export class DevApi {
     if (this.eventLog.length > this.MAX_EVENTS) this.eventLog.shift();
     // Recording keeps every event uncapped — the live panel is a separate
     // circular buffer just for display.
-    if (this.recording) {
+    // Review 2026-08-24: tras finalizar (endedAt fijado) la grabación
+    // queda CONGELADA — la sim sigue corriendo en 'ended' (bots vivos,
+    // caídas tardías) y esa cola dependía del wall-clock del runner,
+    // haciendo el final del event stream no reproducible.
+    if (this.recording && this.recording.meta.endedAt === null) {
       this.recording.events.push({ ...e });
     }
   }
@@ -733,6 +747,21 @@ export class DevApi {
     // match_ended event and finalise the recording so the downloaded
     // JSON/MD carries the correct endedAt + duration instead of
     // "(still recording)".
+    // Review 2026-08-24: cierre en tiempo de SIM también para los
+    // finales que no son last-standing (muerte del player / timeout) —
+    // el edge de phase a 'ended' congela outcome y grabación en el
+    // MISMO tick de sim en que ocurre, no cuando el runner lo ve.
+    if (this.gamePhase() === 'ended' && this.lastGamePhase !== 'ended'
+        && this.recording.outcome.reason === null) {
+      const g = this.game as unknown as { matchTimer?: number };
+      const reason = g.matchTimer !== undefined && g.matchTimer <= 0
+        ? 'match_timeout' as const
+        : 'player_eliminated' as const;
+      this.pushEvent('match_ended', 'arena', reason);
+      this.finaliseRecording(reason);
+    }
+    this.lastGamePhase = this.gamePhase();
+
     const alive = this.game.critters.filter(c => c.alive);
     if (alive.length === 1 && this.recording.outcome.survivor === null
         && this.game.critters.length > 1) {

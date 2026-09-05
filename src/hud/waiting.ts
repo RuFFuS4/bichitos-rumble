@@ -13,11 +13,57 @@
 
 import { getRosterEntry } from '../roster';
 import { getCritterThumbnail } from '../slot-thumbnail';
+import { t } from '../i18n';
 
 // Null on /tools.html (the lab skips the waiting flow entirely).
 const waitingScreen    = document.getElementById('waiting-screen');
 const waitingCountdownEl = document.getElementById('waiting-countdown');
 const waitingSlotsEl   = document.getElementById('waiting-slots');
+const waitingShareEl   = document.getElementById('waiting-share');
+const waitingShareLink = document.getElementById('waiting-share-link');
+const waitingShareCopy = document.getElementById('waiting-share-copy') as HTMLButtonElement | null;
+const waitingShareNative = document.getElementById('waiting-share-native') as HTMLButtonElement | null;
+
+// --- H4 private rooms — share row -----------------------------------------
+// game.ts calls setWaitingShareRoom(roomId) after creating a private room
+// ("Play with Friends"); null hides the row again (public rooms / leave).
+let currentShareUrl: string | null = null;
+
+export function setWaitingShareRoom(roomId: string | null): void {
+  if (!waitingShareEl || !waitingShareLink) return;
+  if (!roomId) {
+    currentShareUrl = null;
+    waitingShareEl.style.display = 'none';
+    return;
+  }
+  currentShareUrl = `${location.origin}${location.pathname}?room=${encodeURIComponent(roomId)}`;
+  waitingShareLink.textContent = currentShareUrl;
+  waitingShareEl.style.display = '';
+  // navigator.share only exists on secure contexts + supporting browsers
+  // (mobile mostly) — hide the native button where it would just throw.
+  if (waitingShareNative) {
+    waitingShareNative.style.display =
+      typeof navigator !== 'undefined' && 'share' in navigator ? '' : 'none';
+  }
+}
+
+waitingShareCopy?.addEventListener('click', () => {
+  if (!currentShareUrl) return;
+  navigator.clipboard?.writeText(currentShareUrl).then(() => {
+    waitingShareCopy.textContent = t('share-copied');
+    // Vuelve al texto original del botón — misma clave que su data-i18n.
+    setTimeout(() => { waitingShareCopy.textContent = t('waiting-share-copy'); }, 1600);
+  }).catch(() => { /* clipboard blocked — the link is visible to copy by hand */ });
+});
+
+waitingShareNative?.addEventListener('click', () => {
+  if (!currentShareUrl) return;
+  void navigator.share?.({
+    title: 'Bichitos Rumble',
+    text: t('share-join-room'),
+    url: currentShareUrl,
+  }).catch(() => { /* user cancelled the share sheet — fine */ });
+});
 
 export type WaitingSlotKind = 'human' | 'bot' | 'empty';
 
@@ -42,11 +88,16 @@ export interface WaitingScreenData {
 }
 
 export function showWaitingScreen(): void {
+  // Checklist 2026-09-05: la barra de habilidades del HUD asomaba entre
+  // el prompt "T · salir de la sala" y el texto (captura del host de
+  // sala privada). La clase en body la oculta mientras esperamos.
+  document.body.classList.add('waiting-room');
   if (!waitingScreen) return;
   waitingScreen.classList.remove('hidden');
 }
 
 export function hideWaitingScreen(): void {
+  document.body.classList.remove('waiting-room');
   if (!waitingScreen) return;
   waitingScreen.classList.add('hidden');
 }
@@ -118,7 +169,7 @@ function buildWaitingSlotEl(s: WaitingSlotData): HTMLDivElement {
   const name = document.createElement('span');
   name.className = 'waiting-slot-name';
   if (s.kind === 'empty') {
-    name.textContent = 'Open';
+    name.textContent = t('waiting-slot-open');
   } else if (s.nickname) {
     name.textContent = s.nickname;
   } else {
@@ -139,12 +190,13 @@ function buildWaitingSlotEl(s: WaitingSlotData): HTMLDivElement {
   const badge = document.createElement('span');
   badge.className = 'waiting-slot-badge';
   if (s.kind === 'bot') {
+    // El label viene SOLO del diccionario tipado (nunca input de usuario).
     badge.innerHTML =
       '<span class="sprite-fallback-hud" aria-hidden="true">\u{1F916}</span>' +
       '<span class="sprite-hud sprite-hud-bot-mask waiting-bot-sprite" aria-hidden="true"></span>' +
-      '<span class="waiting-bot-label">BOT</span>';
+      '<span class="waiting-bot-label">' + t('waiting-badge-bot') + '</span>';
   } else {
-    badge.textContent = s.kind === 'human' ? 'HUMAN' : 'OPEN';
+    badge.textContent = s.kind === 'human' ? t('waiting-badge-human') : t('waiting-badge-open');
   }
   el.appendChild(badge);
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Critter } from './critter';
-import { activateAbility, tickSebastianHoldToFire } from './abilities';
+import { activateAbility, tickSebastianHoldToFire } from './abilities-runtime';
 import { FEEL } from './gamefeel';
 import { getMoveVector, isHeld } from './input';
 

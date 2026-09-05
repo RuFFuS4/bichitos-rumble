@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { initObservability } from './observability';
+import { applyStaticI18n, t } from './i18n';
 import { createCamera, handleResize, syncSize, applyGameplayCameraPose } from './camera';
 import { Game } from './game';
 
@@ -7,7 +8,13 @@ import { Game } from './game';
 // before any other module runs its boot code. Inert without
 // VITE_SENTRY_DSN (see src/observability.ts).
 initObservability();
-import { updateCameraShake } from './gamefeel';
+
+// i18n static pass — resolve every data-i18n/-html/-placeholder in the
+// document BEFORE anything is shown (title screen included). English is
+// the source language baked into the markup; this swaps in Spanish when
+// the detected/persisted language is 'es'. See src/i18n.ts header.
+applyStaticI18n();
+import { FEEL, updateCameraShake } from './gamefeel';
 import { initPreview, tickPreview } from './preview';
 import { isLikelyMobile } from './input';
 import { initTouchInput } from './input-touch';
@@ -20,7 +27,7 @@ import {
 import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 import { initOnlineBeltToast } from './online-belt-toast';
-import { isInsideZoneOfKind, setArenaForAbilities } from './abilities';
+import { isInsideZoneOfKind, setArenaForAbilities } from './abilities-runtime';
 import { initSceneAtmosphere } from './scene-atmosphere';
 import { tickSharedGameplay } from './frame-ticks';
 import { initStatusLegend } from './hud/status-legend';
@@ -183,6 +190,18 @@ if (isLikelyMobile()) {
   initTouchInput();
 }
 
+// Accessibility (H4) — prefers-reduced-motion. Si el SO pide movimiento
+// reducido, amortiguamos SOLO los efectos de cámara (shake + hit-stop)
+// vía el multiplicador central de FEEL; squash/stretch y animaciones de
+// gameplay se mantienen porque comunican quién recibió el golpe. Ver el
+// comentario de FEEL.accessibility en src/gamefeel.ts para el alcance.
+// Se lee una vez en el arranque — cambiar el ajuste del SO en caliente
+// requiere recargar la página (deliberado: cero coste por frame).
+if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+  FEEL.accessibility.motionScale = 0.3;
+  console.info('[main] prefers-reduced-motion — camera shake/hit-stop damped (motionScale 0.3)');
+}
+
 // Badge toast — creates the DOM node so the first match-end is ready to
 // surface an unlock. Cheap (one div), idempotent, no runtime cost until
 // Game calls maybeShowBadgeToast().
@@ -259,7 +278,7 @@ if (btnSfx) {
       <span class="sprite-fallback-hud" aria-hidden="true">${m ? '🔇' : '🔊'}</span>
       <span class="sprite-hud sprite-hud-sfx-${m ? 'off' : 'on'}" aria-hidden="true"></span>`;
     btnSfx.classList.toggle('muted', m);
-    btnSfx.title = m ? 'Enable sound effects' : 'Disable sound effects';
+    btnSfx.title = m ? t('hud-sfx-enable') : t('hud-sfx-disable');
     btnSfx.setAttribute('aria-pressed', m ? 'true' : 'false');
   };
   refresh();
@@ -274,7 +293,7 @@ if (btnMusic) {
       <span class="sprite-fallback-hud" aria-hidden="true">${m ? '🎵' : '🎶'}</span>
       <span class="sprite-hud sprite-hud-music-${m ? 'off' : 'on'}" aria-hidden="true"></span>`;
     btnMusic.classList.toggle('muted', m);
-    btnMusic.title = m ? 'Enable music' : 'Disable music';
+    btnMusic.title = m ? t('hud-music-enable') : t('hud-music-disable');
     btnMusic.setAttribute('aria-pressed', m ? 'true' : 'false');
   };
   refresh();
@@ -338,9 +357,12 @@ setArenaForAbilities(game.arena);
 // is configured. In dev we always show it (defaults to ws://localhost:2567).
 // Click handling for both title buttons lives in hud.ts via setTitleModeHandlers.
 const btnOnline = document.getElementById('btn-online');
+const btnFriends = document.getElementById('btn-friends');
 const hasServerUrl = !!(import.meta.env.VITE_SERVER_URL) || !!import.meta.env.DEV;
-if (btnOnline && !hasServerUrl) {
-  btnOnline.remove();
+if (!hasServerUrl) {
+  // Both online paths share the gate — no server URL, no online buttons.
+  btnOnline?.remove();
+  btnFriends?.remove();
   console.info('[Main] online mode disabled (no VITE_SERVER_URL)');
 }
 

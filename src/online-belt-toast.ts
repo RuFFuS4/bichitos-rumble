@@ -30,15 +30,15 @@ interface BeltMeta {
 }
 
 const BELT_META: Record<BeltChangedEvent['belt'], BeltMeta> = {
-  'throne-online':    { name: 'Throne Belt',    icon: '👑', imgPath: './images/belts/throne-online.png',
+  'throne-online':    { name: 'Throne Belt',    icon: '👑', imgPath: './images/belts/throne-online.webp',
                         format: (v) => `${v} wins` },
-  'flash-online':     { name: 'Flash Belt',     icon: '⚡', imgPath: './images/belts/flash-online.png',
+  'flash-online':     { name: 'Flash Belt',     icon: '⚡', imgPath: './images/belts/flash-online.webp',
                         format: (v) => `${(v / 1000).toFixed(1)}s` },
-  'ironclad-online':  { name: 'Ironclad Belt',  icon: '🛡️', imgPath: './images/belts/ironclad-online.png',
+  'ironclad-online':  { name: 'Ironclad Belt',  icon: '🛡️', imgPath: './images/belts/ironclad-online.webp',
                         format: (v) => `${v.toFixed(2)} lives/match` },
-  'slayer-online':    { name: 'Slayer Belt',    icon: '🗡️', imgPath: './images/belts/slayer-online.png',
+  'slayer-online':    { name: 'Slayer Belt',    icon: '🗡️', imgPath: './images/belts/slayer-online.webp',
                         format: (v) => `${v} kills` },
-  'hot-streak-online': { name: 'Hot Streak Belt', icon: '🔥', imgPath: './images/belts/hot-streak-online.png',
+  'hot-streak-online': { name: 'Hot Streak Belt', icon: '🔥', imgPath: './images/belts/hot-streak-online.webp',
                         format: (v) => `${v} in a row` },
 };
 

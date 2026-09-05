@@ -1,5 +1,222 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-05 — La checklist, simulada: campaña Playwright + review de networking
+
+- **12 de 14 items verificados por Claude** con una campaña Playwright
+  (.tmp/checklist/): reconnect e2e real (context.setOffline → cierre
+  1006 → Reconectando… → RECONNECTED en server → humano de vuelta),
+  sala privada A/B + quickmatch aislado, código de recuperación
+  cross-context, PWA (manifest/iconos), reduced-motion por media query,
+  cero desbordes en ES móvil, métricas con partida real, y pase
+  visual a ojo de las 5 arenas y el Hall of Belts (16/16). Queda para
+  las manos de Rafa: el feel, instalar la PWA y el merge a main.
+- **Hallazgos de la campaña**: el lab (tools.html, batch, golden)
+  llevaba ROTO desde el pack de retención — querySelector a nivel de
+  módulo sobre un modal que el lab no tiene (7f8bd92). Y la barra de
+  habilidades asomaba en la sala de espera.
+- **Review de networking (item 13)**: 17 agentes, 13 confirmados, 10
+  arreglados (7b4a4e6) — los gordos: cliente zombi al salir durante la
+  reconexión (abandonRoom + guards de room en todos los listeners),
+  rage-quit sin derrota cuando la salida termina la partida, salas
+  privadas puntuando belts; más gracia≠abandono, all_humans_left,
+  scrypt en el recovery code, identity_stale explícito. E2e del zombi:
+  T durante Reconectando… → título limpio, cero fantasmas, ningún
+  RECONNECTED posterior.
+- Lección: Playwright simula más de lo que parece (offline real,
+  media queries, contextos como dispositivos, capturas que Claude puede
+  mirar). La checklist humana se reduce a lo sensorial y lo físico.
+
+## 2026-08-24 (mega-ronda) — El split, los tests del sim y la retención completa
+
+Cinco frentes aterrizados en dev:
+
+1. **Split de abilities.ts** (364bc92): 2928 líneas → config (1146,
+   abilities.ts intacto para tools) + runtime (1269) + vfx (583).
+   Movimientos byte a byte, 7 importadores repuntados, sin ciclos.
+   GOLDEN 3/3 EXACTO tras mover ~1850 líneas — cero cambio de
+   comportamiento demostrado. El prerequisito de "tocar gameplay en
+   serio" está pagado.
+2. **32 tests Vitest del sim** (312aa49; pedía ~20): rng, pws golden,
+   physics del server con números exactos (reflect 18·3.5·1.45·0.85),
+   cerebro bot determinista, invariantes de balance v2 con excepciones
+   documentadas. Cero mocks, cero cambios de producción. npm run
+   test:sim (232ms).
+3. **Tabla matches + métricas de retención** (73f8f7f, worktree):
+   GET /api/metrics/retention (agregados sin PII). recordMatch en
+   endMatch con humans_at_start/verified y private_room.
+4. **Identidad con código de recuperación** (mismo commit): BICHO-
+   XXXX-XXXX con hash salt+sha256, timingSafeEqual, rate-limit,
+   rotación de tokens; UI en el modal de nickname con interstitial.
+   FIX DE REGALO: registerNickname no espejaba el token en
+   sessionStorage → los registros nuevos jugaban como guest (explica
+   el humansAtStart=0 del e2e de reconnect).
+5. **Shell reflect online con feedback** (e40e7d8): out-param en
+   resolveCollisions + broadcast + shake/hit-stop/sonido en cliente.
+
+NO-GO razonado: shared sim package — el server tiene rootDir src
+estricto y su pipeline de deploy no está documentado; necesita sesión
+propia con ese contexto (análisis apuntado). Incidencia: git add -A
+se tragó un worktree de agente como repo embebido → destrackeado y
+.claude/worktrees/ gitignoreado (526fcad→dev).
+
+## 2026-08-24 (sesión larga 2) — Reconnect, integridad de belts, PWA y accesibilidad
+
+- **Reconnect con gracia de 30 s** (item nº1 de retención H4):
+  allowReconnection en onLeave para cierres anómalos, bot-takeover
+  como cobertura temporal, devolución limpia al volver. Cliente con
+  auto-reconexión del SDK (onDrop→Reconnecting…, onReconnect→limpia,
+  guard anti-duplicados en el respawn de critters online). E2e server
+  completo con Colyseus local (drop→grace→expiración→cierre); el
+  rejoin real necesita wifi de verdad → checklist de Rafa.
+- **Integridad de leaderboards**: <2 humanos verificados al countdown
+  = la partida no puntúa nada; rage-quit/gracia expirada = derrota
+  aunque tu critter-bot gane. Fix destapado por el e2e: un muerto que
+  desconecta ya no corta la partida de los 3 vivos. Y el Slayer Belt
+  resultó estar YA cableado entero (ROADMAP rancio) — verificado
+  physics→deaths→credit→db y documentado.
+- **PWA + reduced-motion** (agente): manifest standalone/landscape,
+  viewport-fit=cover, FEEL.accessibility.motionScale a 0.3× con
+  prefers-reduced-motion (solo shake/hit-stop — visibilidad ≠ mareo).
+- **Robustez**: calibrate respeta comentarios de bloque (66/66 tests)
+  y el plugin de partials detecta comentarios sin cerrar en build.
+- Coordinación de working tree compartido con el agente resuelta con
+  split de commits por pathspec (ramas disjuntas por fichero).
+
+## 2026-08-24 (tanda grande autónoma) — H4 arranca: salas privadas, i18n, dieta y review
+
+Seis ramas aterrizadas en dev en una sesión autónoma (encargo de Rafa:
+"abarca algo grande"). En orden:
+
+1. **Golden sim guardian + ability-patch** (833b3b9): dual-surface 100%.
+2. **Salas privadas + join por enlace + share** (9a62ed8) — item nº1
+   del H4. E2e con 3 pestañas y Colyseus local: host crea y ve el
+   enlace, el invitado entra por ?room=, el quickmatch NO se cuela en
+   la sala privada. ZONA SENSIBLE networking: revisión de Rafa.
+3. **Paridad bot server** (aef6adb): cañón de Sebastian y Steel Shell
+   defensivo también online, def-driven sin special-cases.
+4. **Dieta de payload** (10856b5): 96.9 → 69.7 MB MEDIDOS (gltfpack 53
+   GLBs −26 MB, belts WebP, audio -vn VBR5, meshoptimizer/decoder
+   subpath −25% gzip del chunk index). Golden 3/3 exacto tras la
+   dieta. Budget ratcheted a 75. Pendiente: pase visual de Rafa.
+5. **i18n ES/EN** (62d25bf): 131 claves, 126 traducidas con tono
+   arcade ("¡CABEZAZOS AL VACÍO!"), detección por navigator.language,
+   e2e de ambos idiomas. Workflow de 3 fases.
+6. **Fixes del review adversarial** (7fa5c03): 25 agentes, 18
+   confirmados, 9 aplicados — bots (falling guard, sonda normalizada,
+   tasas por segundo frame-rate-independientes espejadas al server),
+   determinismo (zonas/proyectiles limpiados en el batch, grabación
+   congelada en tiempo de sim) y robustez del tooling (appliers que
+   rechazan expresiones, batch con exit code veraz). Golden
+   regenerado documentando el cambio intencional.
+
+Lección de infra: un corte de red mató 12/15 agentes del review a
+mitad — resumeFromRunId recuperó el run entero con caché. Y la de
+siempre: correr golden/batch con el dev server ASENTADO.
+
+## 2026-08-24 (sesión 2) — Golden sim guardian + ability-patch: dual-surface COMPLETO
+
+- **Golden sim guardian** (npm run golden / golden:write): matriz fija
+  de 3 partidas doradas (9 critters, seeds 501-503) con las secuencias
+  completas de eventos en git (scripts/golden/sim-golden.json). El
+  check re-corre y compara: probado que detecta UNA CENTÉSIMA en un
+  factor de FEEL con el evento exacto de divergencia y exit 1. El
+  guardián de toda la fase de mecánicas: tocar physics/abilities sin
+  querer ya no pasa desapercibido. Lección operativa: correr con el
+  dev server asentado (HMR a mitad de partida aborta el run).
+- **ability-patch, 6º tool type** (agente, 62/62 tests): el Copy JSON
+  manual del ability tuner muere — trío Copy/Download/Apply estándar.
+  El applier reescribe tokens numéricos DENTRO de los objetos de
+  overrides de las llamadas de factory (J/K/L posicionales, mid-line
+  safe, blindaje de objetos anidados, refuse-to-guess en hex/expr/
+  bool). Verificado también contra el endpoint del dev server.
+- **Todos los huecos dual-surface conocidos CERRADOS** (CLAUDE.md/
+  AGENTS.md actualizados): batch runner, recording dump, ability
+  applier, golden. La directiva de Rafa del 2026-08-20 queda cumplida
+  al 100% en su primera lista.
+
+## 2026-08-24 — Mecánicas de balanceo 1: shell reflect + el cañón dispara (día autónomo)
+
+- **Shell reflect** (cola de BALANCE.md): headbuttear a un critter
+  anclado (Shelly en Steel Shell) devuelve al atacante SU PROPIA fuerza
+  × FEEL.collision.shellReflectFactor (0.85). Cuanto más fuerte pegas
+  al tanque, más vuelas — Trunk se come 40 de castigo, Sihans 10. El
+  choque sin headbutt mantiene el bounce suave. Espejo en server
+  (physics.ts, const local con nota de sync).
+- **El cañón de Sebastian dispara**: el cerebro distingue la FORMA del
+  def aoe_push — radial mantiene la condición 'rodeado ≥2', pero un
+  cono direccional (Claw Wave, force 76, coneAngleDeg 60) dispara con
+  UNA víctima delante dentro del radio ×0.9 y doble rate. Def-driven:
+  cualquier cono futuro lo hereda. Antes su mejor arma solo salía
+  estando rodeado y perdido.
+- **Medición (18 partidas)**: Trunk 5→4 wins con caídas 1.5→1.7 —
+  consistente con comerse reflects: el shell ya recorta al depredador
+  alfa. Shelly/Sebastian siguen 0/6 en autopilot: CONFIRMA la regla 6
+  del marco (meta-bot ≠ meta-jugador) — estas mecánicas apuntan al
+  jugador humano y su prueba real es playtesting de Rafa, no más
+  batch. El autopilot tocó techo como instrumento para estos dos.
+- Gates: tsc cliente+server, paridad de habilidades, batches sin
+  errores. Todo en dev; sin merge a main (bloque de mecánicas abierto).
+
+## 2026-08-21 — Balance v2 it3: el escudo de Shelly despierta (y el límite del tuning)
+
+- **Steel Shell re-etiquetado** aoe_push → defensive: heredaba el tag
+  del factory y el cerebro lo QUEMABA en castings de AoE con radius 0 y
+  force 0 — el escudo de la tanque llevaba meses siendo un no-op.
+- **Trigger defensivo en el cerebro** (determinista, sin dados): castea
+  al anticipar carga entrante (headbutt/mobility activa a defendRange
+  ×1.6 — el shell tiene 0.2s de windUp, esperar al contacto lo castea
+  ya volando) o con presión en la banda del borde. FEEL.bots.defendRange.
+- **Resultado medido**: Shelly sigue 0/6 con 3 caídas/p. Diagnóstico
+  final: estructural, no de tuning — a speed 8 contra trios con Trunk/
+  Kowalski no puede desengancharse ni llegar, y 4s de escudo con 12s de
+  cooldown solo posponen. Sebastian ídem por puntería. VEREDICTO: ambos
+  necesitan MECÁNICA (fase de mecánicas), no más stats — candidatos:
+  shell que refleja knockback, o cañón con auto-aim suave para el bot.
+  En manos humanas pueden estar bien (meta-bot ≠ meta-jugador).
+
+## 2026-08-21 — Balance v2 ronda 2: Trunk domado + bots con conciencia del borde
+
+- **Trunk boost 2.30 → 1.0** (decisión de Rafa, micropass 3): fuerza
+  efectiva 110.4 → 48. Sigue 5/6 pero ahora en partidas largas (24.5 →
+  44.7 HB/partida) — domado sin matar al elefante (speed 16 intacto).
+- **Conciencia del borde en el cerebro bot** (FEEL.bots: edgeMargin/
+  edgeSteer/lookAhead — sliders gratis en el tuner): sonda de vacío por
+  delante (aware de patrones de colapso) + tirón al centro en la banda
+  de peligro; un objetivo cayendo ya no es cebo; la confusión de Toxic
+  Touch se aplica DESPUÉS a propósito. Espejo en el server
+  (computeBotInput + arenaSim en BrawlRoom) — los bots online también
+  dejan de suicidarse.
+- **Re-audit de 54 partidas**: caídas ↓ en los ágiles (Sihans 2.3→1.5,
+  Kurama 2.7→2.2), partidas 51s→68s (más pelea real), Kurama 2→3 wins.
+- **Revelación**: Sebastian y Shelly siguen 0/6 con 3.0 caídas EXACTAS
+  — sus muertes son EMPUJADOS, no de andarse al vacío. La palanca que
+  queda es de kit: el cerebro no casta defensivas reactivamente (el
+  Shell Shield de Shelly se dispara con ≥2 cerca, nunca al borde de
+  comerse un golpe). Candidato: trigger defensivo en el cerebro.
+
+## 2026-08-21 — Balance marco v2: el presupuesto dice la verdad
+
+- **Marco v2 aprobado por Rafa**: P/W/S sigue siendo el lenguaje, pero
+  'cero potencia fuera de presupuesto' — el headbuttBoost (multiplicador
+  DIRECTO de fuerza en physics.ts) y los overrides explícitos se tasan.
+  Herramienta dual-surface:  (scripts/balance-report.mjs)
+  — presupuesto efectivo en puntos P/W/S, overrides marcados con *, cruce
+  con los .tmp/audit-*.json del batch runner.
+- **Hallazgo mayor**: Trunk juega a otro juego — presupuesto efectivo
+  +50.4 (fuerza 48×2.30=110.4 vs 19.6 de Sergei, speed 16, masa +1) con
+  el roster entre 0 y +5. Decisión de diseño pendiente de Rafa (domar
+  boost→1.0 · re-derivar · jefe intencional).
+- **Ronda 1 de ajustes** (54 partidas de auditoría + re-batch): Shelly
+  boost 1.30, Kurama 1.15, Sebastian w -2→-1 (masa 0.8). Paridad server
+  sincronizada. Resultado: Kurama iguala wins con 40% menos headbutts;
+  Sebastian y Shelly SIGUEN 0/6 — la palanca no era masa/boost.
+- **Insight estructural**: el cerebro bot es uniforme y SIN conciencia
+  del borde (persigue recto hacia el vacío) → en ese meta la velocidad
+  es EL stat de supervivencia: Trunk speed16 cae 1.8/p, Shelly speed8
+  cae 3/p pese a masa máxima. W está sobretasado vs S en la práctica.
+  Caveat: el autopilot mide el meta-bot, no el meta-jugador (el cañón
+  de Sebastian necesita puntería que el cerebro no tiene).
+
 ## 2026-08-20 — Afilado slice G: determinismo + batch runner — el balance deja de ser anécdota
 
 - **Un seed = una partida entera** (src/match-rng.ts, mulberry32): el

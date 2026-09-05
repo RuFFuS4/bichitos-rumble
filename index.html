@@ -2,10 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Bichitos Rumble — Headbutt Your Rivals Into The Void</title>
   <meta name="description" content="Lightweight web arena brawler for Vibe Jam 2026. 4-player online, 9 critters, signature abilities, no signup. Free to play in your browser." />
   <meta name="theme-color" content="#0a0a18" />
+  <!-- H4 PWA: manifest para instalar el juego a pantalla completa desde el
+       navegador (Add to Home Screen). Colores = fondo del juego (#0a0a18),
+       icono = favicon-br.png (192x192 real, verificado) + SVG escalable.
+       Deliberadamente SIN service worker: fuera de alcance en H4 — el juego
+       es online-first y un SW mal cacheado es un footgun de deploys. Si
+       algún día se quiere offline/instalable "completo", apuntarlo como
+       tarea propia (workbox o SW manual + estrategia de versionado). -->
+  <link rel="manifest" href="/manifest.webmanifest" />
   <!-- Favicon — AI-generated BR mark. Multi-resolution .ico first (16/32/48/
        64/128/256 px PNG frames embedded; Windows taskbar + iOS Safari probe
        /favicon.ico before anything else). PNG fallback keeps older and edge
@@ -932,6 +940,21 @@
        (e.g. match ended on the very first frame, edge case). Entry is
        animated via .stats-enter — panel slides up + fades in, numbers
        get an easeOutCubic count-up via hud.ts setEndMatchStats(). */
+    /* H4 — share button on the end screen */
+    .end-share-btn {
+      font: 700 14px/1 'Segoe UI', Arial, sans-serif;
+      letter-spacing: 1px;
+      color: #fff;
+      background: rgba(255, 220, 92, 0.18);
+      border: 1px solid #ffdc5c;
+      border-radius: 8px;
+      padding: 10px 22px;
+      margin-top: 10px;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .end-share-btn:hover { background: rgba(255, 220, 92, 0.32); }
+
     #end-stats.end-stats {
       display: flex;
       gap: 22px;
@@ -1220,6 +1243,47 @@
     .waiting-slot.human .waiting-slot-badge { color: #4ade80; }
     .waiting-slot.bot .waiting-slot-badge { color: #ffaa44; }
     .waiting-slot.empty .waiting-slot-badge { color: rgba(255,255,255,0.35); }
+    /* H4 private rooms — share row on the waiting screen */
+    #waiting-screen .waiting-share {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 10px auto 2px;
+      max-width: 560px;
+    }
+    #waiting-screen .waiting-share-label {
+      width: 100%;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #ffdc5c;
+    }
+    #waiting-screen .waiting-share-link {
+      font: 12px/1.6 monospace;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 6px;
+      padding: 4px 10px;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #waiting-screen .waiting-share-btn {
+      font: 600 12px/1 inherit;
+      color: #fff;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    #waiting-screen .waiting-share-btn:hover { background: rgba(255,255,255,0.22); }
+
     #waiting-screen .waiting-hint {
       font-size: 13px;
       opacity: 0.55;
@@ -2261,14 +2325,15 @@
 
   <div id="title-screen" class="full-overlay hidden">
     <h1 class="game-title">BICHITOS<br><span class="rumble">RUMBLE</span></h1>
-    <p class="tagline">HEADBUTT YOUR RIVALS INTO THE VOID</p>
+    <p class="tagline" data-i18n="title-tagline">HEADBUTT YOUR RIVALS INTO THE VOID</p>
     <div class="title-mode-buttons">
-      <button id="btn-vs-bots" class="title-mode-btn selected" data-mode="bots">🤖 vs Bots</button>
-      <button id="btn-online" class="title-mode-btn" data-mode="online">🌐 Online Multiplayer (up to 4P)</button>
+      <button id="btn-vs-bots" class="title-mode-btn selected" data-mode="bots" data-i18n="title-play-bots">🤖 vs Bots</button>
+      <button id="btn-online" class="title-mode-btn" data-mode="online" data-i18n="title-play-online">🌐 Online Multiplayer (up to 4P)</button>
+      <button id="btn-friends" class="title-mode-btn" data-mode="friends" data-i18n="title-play-friends">👥 Play with Friends</button>
     </div>
-    <div class="prompt desktop-only"><kbd>◄</kbd> <kbd>►</kbd> switch · <kbd>ENTER</kbd> confirm</div>
-    <div class="prompt touch-only">Tap a mode to play</div>
-    <div class="controls-hint desktop-only">
+    <div class="prompt desktop-only" data-i18n-html="title-prompt-desktop"><kbd>◄</kbd> <kbd>►</kbd> switch · <kbd>ENTER</kbd> confirm</div>
+    <div class="prompt touch-only" data-i18n="title-prompt-touch">Tap a mode to play</div>
+    <div class="controls-hint desktop-only" data-i18n-html="title-controls-desktop">
       <span><kbd>WASD</kbd> move</span>
       <span class="sep">·</span>
       <span><kbd>SPACE</kbd> headbutt</span>
@@ -2279,10 +2344,10 @@
       <span class="sep">·</span>
       <span><kbd>R</kbd> restart</span>
     </div>
-    <div class="controls-hint touch-only">
+    <div class="controls-hint touch-only" data-i18n="title-controls-touch">
       Joystick to move · on-screen buttons for headbutt, abilities and ultimate
     </div>
-    <div class="controls-hint-gamepad desktop-only">
+    <div class="controls-hint-gamepad desktop-only" data-i18n-html="title-controls-gamepad">
       🎮 Gamepad supported — left stick move · <kbd>A</kbd> headbutt · <kbd>X</kbd> <kbd>Y</kbd> abilities · <kbd>RB</kbd> ultimate · <kbd>Start</kbd> restart
     </div>
     <a class="title-signature"
@@ -2292,14 +2357,14 @@
       by <span class="handle">@RGomezR14</span>
     </a>
     <div class="legal-links">
-      <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy</a>
+      <a href="/privacy.html" target="_blank" rel="noopener noreferrer" data-i18n="legal-privacy">Privacy</a>
       &middot;
-      <a href="/terms.html" target="_blank" rel="noopener noreferrer">Terms</a>
+      <a href="/terms.html" target="_blank" rel="noopener noreferrer" data-i18n="legal-terms">Terms</a>
     </div>
   </div>
 
   <div id="character-select" class="full-overlay hidden">
-    <h2>CHOOSE YOUR BICHITO</h2>
+    <h2 data-i18n="select-title">CHOOSE YOUR BICHITO</h2>
     <div class="select-body">
       <div id="critter-grid"></div>
       <div id="preview-pane">
@@ -2313,32 +2378,40 @@
         </div>
       </div>
     </div>
-    <div class="prompt desktop-only kbd-only"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate · <kbd>B</kbd> belts</div>
-    <div class="prompt desktop-only gamepad-only"><kbd>D-Pad</kbd> select · <kbd>A</kbd> confirm · drag to rotate · <kbd>Select</kbd> belts</div>
-    <div class="prompt touch-only">Tap a slot to select · tap again to confirm · drag preview to rotate</div>
+    <div class="prompt desktop-only kbd-only" data-i18n-html="select-prompt-kbd"><kbd>◄</kbd> <kbd>►</kbd> select · <kbd>SPACE</kbd> confirm · drag to rotate · <kbd>B</kbd> belts</div>
+    <div class="prompt desktop-only gamepad-only" data-i18n-html="select-prompt-gamepad"><kbd>D-Pad</kbd> select · <kbd>A</kbd> confirm · drag to rotate · <kbd>Select</kbd> belts</div>
+    <div class="prompt touch-only" data-i18n="select-prompt-touch">Tap a slot to select · tap again to confirm · drag preview to rotate</div>
     <button id="btn-open-belts" class="belts-trigger" type="button"
             aria-label="Open Hall of Belts">
       <span class="belts-trigger-icon">🏆</span>
-      <span class="belts-trigger-label">Belts</span>
+      <span class="belts-trigger-label" data-i18n="select-belts">Belts</span>
     </button>
   </div>
 
   <!-- Online waiting room — shown while the server is in phase 'waiting'.
        Populated by initWaitingScreen / updateWaitingScreen from hud.ts. -->
   <div id="waiting-screen" class="full-overlay hidden">
-    <h2 class="waiting-title">WAITING FOR CRITTERS</h2>
-    <div class="waiting-subtitle">Match begins when the room is full.</div>
+    <h2 class="waiting-title" data-i18n="waiting-title">WAITING FOR CRITTERS</h2>
+    <div class="waiting-subtitle" data-i18n="waiting-subtitle">Match begins when the room is full.</div>
     <div class="waiting-countdown-wrap">
-      <div class="waiting-countdown-label">Bots join in</div>
+      <div class="waiting-countdown-label" data-i18n="waiting-countdown-label">Bots join in</div>
       <div id="waiting-countdown" class="waiting-countdown">60</div>
-      <div class="waiting-countdown-unit">seconds</div>
+      <div class="waiting-countdown-unit" data-i18n="waiting-countdown-unit">seconds</div>
     </div>
     <div id="waiting-slots" class="waiting-slots"></div>
-    <div class="waiting-hint">
+    <!-- H4 private rooms: share row, hidden unless the room was created
+         via "Play with Friends" (waiting.ts populates + toggles). -->
+    <div id="waiting-share" class="waiting-share" style="display:none;">
+      <div class="waiting-share-label" data-i18n="waiting-share-label">Invite your friends:</div>
+      <code id="waiting-share-link" class="waiting-share-link"></code>
+      <button id="waiting-share-copy" class="waiting-share-btn" data-i18n="waiting-share-copy">📋 Copy link</button>
+      <button id="waiting-share-native" class="waiting-share-btn" data-i18n="waiting-share-native">📤 Share</button>
+    </div>
+    <div class="waiting-hint" data-i18n="waiting-hint">
       If the room doesn't fill in time, bots will take the remaining slots.
     </div>
-    <div class="prompt desktop-only"><kbd>T</kbd> leave room</div>
-    <div class="prompt touch-only">Tap T to leave</div>
+    <div class="prompt desktop-only" data-i18n-html="waiting-prompt-leave"><kbd>T</kbd> leave room</div>
+    <div class="prompt touch-only" data-i18n="waiting-prompt-leave-touch">Tap T to leave</div>
   </div>
 
   <!-- Spectator prompt — shown ONLY when the local player has been
@@ -2346,9 +2419,11 @@
        'playing'. Lets them leave without waiting for the match to end. -->
   <div id="spectator-prompt" class="spectator-prompt" style="display:none;">
     <span class="spectator-icon">💀</span>
-    <span class="spectator-text">You're out ·
-      <span class="desktop-only">Press <kbd>T</kbd> to leave</span>
-      <span class="touch-only">Tap T to leave</span>
+    <!-- i18n: the leading text is wrapped in its own span so the static
+         pass can swap it without nuking the sibling desktop/touch spans. -->
+    <span class="spectator-text"><span data-i18n="spectator-out">You're out ·</span>
+      <span class="desktop-only" data-i18n-html="spectator-leave-desktop">Press <kbd>T</kbd> to leave</span>
+      <span class="touch-only" data-i18n="spectator-leave-touch">Tap T to leave</span>
     </span>
   </div>
 
@@ -2359,8 +2434,8 @@
        matches the token. See src/online-identity.ts. -->
   <div id="nickname-modal" class="full-overlay hidden">
     <div class="nickname-card">
-      <h2 class="nickname-title">PICK YOUR NICKNAME</h2>
-      <p class="nickname-sub">
+      <h2 class="nickname-title" data-i18n="nickname-title">PICK YOUR NICKNAME</h2>
+      <p class="nickname-sub" data-i18n="nickname-sub">
         Needed to compete for Online Belts (Throne, Flash, Ironclad,
         Slayer, Hot Streak). Stored per device — no login, no password.
       </p>
@@ -2370,13 +2445,14 @@
         type="text"
         maxlength="16"
         placeholder="3–16 chars · letters/digits/-/_"
+        data-i18n-placeholder="nickname-placeholder"
         autocomplete="off"
         spellcheck="false"
       />
       <div id="nickname-error" class="nickname-error" aria-live="polite"></div>
       <div class="nickname-buttons">
-        <button id="btn-nickname-confirm" class="nickname-btn" type="button">▶ Play online</button>
-        <button id="btn-nickname-cancel" class="nickname-btn nickname-btn-secondary" type="button">Cancel</button>
+        <button id="btn-nickname-confirm" class="nickname-btn" type="button" data-i18n="nickname-play">▶ Play online</button>
+        <button id="btn-nickname-cancel" class="nickname-btn nickname-btn-secondary" type="button" data-i18n="nickname-cancel">Cancel</button>
       </div>
     </div>
   </div>
@@ -2386,13 +2462,13 @@
        freeze via this.paused. -->
   <div id="pause-menu" class="full-overlay hidden">
     <div class="pause-card">
-      <h2 class="pause-title">PAUSED</h2>
+      <h2 class="pause-title" data-i18n="pause-title">PAUSED</h2>
       <div class="pause-buttons">
-        <button id="btn-pause-resume" class="pause-btn" type="button">▶ Resume</button>
-        <button id="btn-pause-restart" class="pause-btn" type="button">↻ Restart match</button>
-        <button id="btn-pause-quit" class="pause-btn pause-btn-secondary" type="button">⏏ Quit to title</button>
+        <button id="btn-pause-resume" class="pause-btn" type="button" data-i18n="pause-resume">▶ Resume</button>
+        <button id="btn-pause-restart" class="pause-btn" type="button" data-i18n="pause-restart">↻ Restart match</button>
+        <button id="btn-pause-quit" class="pause-btn pause-btn-secondary" type="button" data-i18n="pause-quit">⏏ Quit to title</button>
       </div>
-      <div class="prompt desktop-only"><kbd>ESC</kbd> resume</div>
+      <div class="prompt desktop-only" data-i18n-html="pause-prompt-resume"><kbd>ESC</kbd> resume</div>
     </div>
   </div>
 
@@ -2406,20 +2482,23 @@
          sprite-belt class + removing `hidden`. -->
     <div id="belt-slot-reward" class="belt-slot-reward hidden" aria-hidden="true">
       <div class="belt-slot-medallion"></div>
-      <div class="belt-slot-label">Belt earned</div>
+      <div class="belt-slot-label" data-i18n="end-belt-earned">Belt earned</div>
     </div>
     <div id="end-stats" class="end-stats" style="display:none;"></div>
-    <div class="prompt desktop-only"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
-    <div class="prompt touch-only">Tap to play again</div>
-    <div id="end-portal-prompt" class="prompt desktop-only" style="display:none;">
+    <!-- H4 share: navigator.share con fallback clipboard (end.ts). El
+         stopPropagation evita que el tap-to-restart del overlay salte. -->
+    <button id="btn-end-share" class="end-share-btn" type="button" data-i18n="end-share">📤 Share</button>
+    <div class="prompt desktop-only" data-i18n-html="end-prompt-desktop"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
+    <div class="prompt touch-only" data-i18n="end-prompt-touch">Tap to play again</div>
+    <div id="end-portal-prompt" class="prompt desktop-only" style="display:none;" data-i18n-html="end-portal-prompt">
       <kbd class="kbd-portal-exit">P</kbd> next game 🌀 · <kbd class="kbd-portal-return">B</kbd> return to previous
     </div>
   </div>
 
   <div id="rotate-prompt">
     <div class="rotate-icon">📱</div>
-    <div class="rotate-text">Please rotate your device</div>
-    <div class="rotate-sub">Bichitos Rumble is designed for landscape</div>
+    <div class="rotate-text" data-i18n="rotate-text">Please rotate your device</div>
+    <div class="rotate-sub" data-i18n="rotate-sub">Bichitos Rumble is designed for landscape</div>
   </div>
   <div id="touch-controls">
     <div id="touch-joystick">

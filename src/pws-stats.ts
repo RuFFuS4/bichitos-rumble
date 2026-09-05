@@ -87,7 +87,11 @@ export const CRITTER_PWS: Record<string, PWS> = {
   Sihans:    { p: -2, w:  0, s:  2 }, // Trapper — fastest tier, weak hits
   Kowalski:  { p:  1, w: -1, s:  0 }, // Mage — average speed, light, solid punch
   Cheeto:    { p:  1, w: -1, s:  1 }, // Assassin — fast + light + solid punch
-  Sebastian: { p:  2, w: -2, s:  1 }, // Glass Cannon — hardest hitter, lightest
+  Sebastian: { p:  2, w: -1, s:  1 }, // Glass Cannon — hardest hitter. w -2→-1
+                                      // (2026-08-21 balance v2): a masa 0.6 el
+                                      // massRatio lo lanzaba al vacío antes de
+                                      // disparar el cañón (audit: 0/6 wins y
+                                      // 2.9 caídas/p, máximas del roster).
 };
 
 /** Resolve a critter name to its derived stats. Falls back to Sergei's

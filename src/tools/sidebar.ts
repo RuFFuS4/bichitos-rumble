@@ -34,6 +34,7 @@ import {
   downloadPatch,
   type FeelPatch,
   type AnimPersonalityPatch,
+  type AbilityPatch,
 } from './tool-storage';
 import { FEEL } from '../gamefeel';
 import { applyPatchToSource } from './apply-ui';
@@ -1298,10 +1299,11 @@ export function mountLabSidebar(devApi: DevApi): void {
   //     cast and SURVIVE restarts (same def object). Baselines are
   //     cached module-side on first sight so a rebuild after mutation
   //     can't launder a tuned value into "authored".
-  //   2. defs are built by factories with per-critter overrides, so
-  //     there is NO ToolPatch path yet (deliberate — see AFILADO_PLAN
-  //     pick 3): export is a JSON summary for manual porting into the
-  //     CRITTER_ABILITIES overrides.
+  //   2. defs are built by factories with per-critter overrides; the
+  //     export is an `ability-patch` ToolPatch keyed "SLOT.field"
+  //     (J/K/L = array position). Apply rewrites/appends the numeric
+  //     fields inside the CRITTER_ABILITIES override objects — see
+  //     applyAbilityPatch in scripts/tool-patch-core.mjs.
   const abilitiesSec = section(tuningGroup, 'Abilities (player)', { collapsed: true });
   const abilityInfo = document.createElement('div');
   abilityInfo.className = 'lab-info';
@@ -1312,13 +1314,16 @@ export function mountLabSidebar(devApi: DevApi): void {
   const abilityBaseline = new Map<string, number>(); // critter:slot:key → authored
   const abilityChanged = new Map<string, number>();  // critter:slot:key → current
   let abilityTunerCritter: string | null = null;
+  /** Slot letters by array position — MUST match the ability-patch
+   *  contract (J = 1st factory call, K = 2nd, L = 3rd). */
+  const ABILITY_SLOT_KEYS = ['J', 'K', 'L'] as const;
 
   function refreshAbilityInfo(): void {
     const n = abilityChanged.size;
     const who = abilityTunerCritter ?? '(none)';
     abilityInfo.textContent = n === 0
       ? `${who} — authored defs. Edits apply on next cast and survive restarts.`
-      : `⚡ ${who} — ${n} def value${n === 1 ? '' : 's'} tuned (export = manual port)`;
+      : `⚡ ${who} — ${n} def value${n === 1 ? '' : 's'} tuned (export = ability-patch)`;
   }
 
   function rebuildAbilityTuner(): void {
@@ -1329,13 +1334,12 @@ export function mountLabSidebar(devApi: DevApi): void {
       refreshAbilityInfo();
       return;
     }
-    const slotKeys = ['J', 'K', 'L'];
     player.abilityStates.forEach((st, slotIdx) => {
       const defRec = st.def as unknown as Record<string, number>;
       const det = document.createElement('details');
       det.style.cssText = 'margin: 4px 0; padding: 2px 0;';
       const sum = document.createElement('summary');
-      sum.textContent = `${slotKeys[slotIdx] ?? slotIdx} · ${st.def.name}`;
+      sum.textContent = `${ABILITY_SLOT_KEYS[slotIdx] ?? slotIdx} · ${st.def.name}`;
       sum.style.cssText = 'cursor: pointer; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; user-select: none;';
       det.appendChild(sum);
       abilityRowsHost.appendChild(det);
@@ -1424,23 +1428,58 @@ export function mountLabSidebar(devApi: DevApi): void {
     abilityChanged.clear();
     rebuildAbilityTuner();
   });
-  button(abilityBtns, '📦 Copy JSON', async () => {
-    if (abilityChanged.size === 0) {
+  /**
+   * Patch data (contract in tool-storage.ts AbilityPatch): per tuned
+   * critter, every def field diverging from the cached authored
+   * baseline, keyed "SLOT.field" with SLOT = J/K/L by array position.
+   * Sparse by construction — a slider round-tripped back to baseline
+   * drops out of abilityChanged and therefore out of the patch.
+   */
+  function buildAbilityPatch(): AbilityPatch {
+    const data: AbilityPatch['data'] = {};
+    for (const [bKey, v] of abilityChanged) {
+      const [critterName, slotStr, k] = bKey.split(':');
+      const slot = ABILITY_SLOT_KEYS[Number(slotStr)];
+      if (!critterName || !slot || !k) continue;
+      (data[critterName] ??= {})[`${slot}.${k}`] = v;
+    }
+    return makeToolPatch<AbilityPatch>('ability-patch', data);
+  }
+
+  button(abilityBtns, '📦 Copy patch', async () => {
+    const patch = buildAbilityPatch();
+    if (Object.keys(patch.data).length === 0) {
       abilityInfo.textContent = '(nothing tuned — move a slider first)';
       return;
     }
-    // Grouped for manual porting into CRITTER_ABILITIES overrides:
-    // { "Sergei": { "0.cooldown": 3.5 } } — slot index + field.
-    const grouped: Record<string, Record<string, number>> = {};
-    for (const [bKey, v] of abilityChanged) {
-      const [critterName, slotStr, k] = bKey.split(':');
-      (grouped[critterName!] ??= {})[`${slotStr}.${k}`] = v;
-    }
-    const json = JSON.stringify(grouped, null, 2);
-    try { await navigator.clipboard.writeText(json); } catch { /* pre fallback below */ }
-    abilityInfo.textContent = `📦 copied — paste into CRITTER_ABILITIES overrides (abilities.ts) by hand`;
-    console.log('[ability-tuner]', json);
+    await copyPatchToClipboard(patch);
+    const n = Object.keys(patch.data).length;
+    abilityInfo.textContent = `📦 ability-patch copied (${n} critter${n === 1 ? '' : 's'})`;
   });
+  button(abilityBtns, '💾 Download', () => {
+    const patch = buildAbilityPatch();
+    if (Object.keys(patch.data).length === 0) {
+      abilityInfo.textContent = '(nothing tuned — move a slider first)';
+      return;
+    }
+    downloadPatch(patch);
+  });
+  button(abilityBtns, '⚡ Apply to source', async () => {
+    const patch = buildAbilityPatch();
+    if (Object.keys(patch.data).length === 0) {
+      abilityInfo.textContent = '(nothing tuned — move a slider first)';
+      return;
+    }
+    const backup = new Map(abilityChanged);
+    await applyPatchToSource(patch, {
+      // The write triggers a Vite full-reload; the tuned values are now
+      // AUTHORED (merged into the CRITTER_ABILITIES overrides), so the
+      // divergence must not survive into the reloaded page. This tuner
+      // is session-only (no localStorage working copy to clear).
+      onBeforeApply: () => { abilityChanged.clear(); },
+      onApplyFailed: () => { for (const [k, v] of backup) abilityChanged.set(k, v); },
+    });
+  }, 'primary');
 
   rebuildAbilityTuner();
 

@@ -155,7 +155,7 @@ export function storageDivergesFromCode(key: string, codeRef: unknown): boolean 
 // in the lab are emitted. The apply-script merges in-place — entries
 // not in `data` are left untouched in the source file.
 
-export type ToolName = 'calibrate' | 'anim-lab' | 'decor-editor' | 'feel-patch' | 'anim-personality';
+export type ToolName = 'calibrate' | 'anim-lab' | 'decor-editor' | 'feel-patch' | 'anim-personality' | 'ability-patch';
 
 export interface ToolPatchBase {
   tool: ToolName;
@@ -300,7 +300,36 @@ export interface AnimPersonalityPatch extends ToolPatchBase {
   }>;
 }
 
-export type ToolPatch = CalibratePatch | AnimLabPatch | DecorEditorPatch | FeelPatch | AnimPersonalityPatch;
+/**
+ * `ability-patch`: per-critter AbilityDef tweaks from the match lab's
+ * Abilities tuner (6th tool type — closes the last dual-surface gap;
+ * the tuner used to export a manual-port JSON only).
+ *
+ * Maps to `CRITTER_ABILITIES` in src/abilities.ts. Outer keys are
+ * critter names ('Sergei'); inner keys are `"<slot>.<field>"` where the
+ * slot letter J/K/L is the POSITION of the factory call in the
+ * critter's array (J = 1st, K = 2nd, L = 3rd — same convention as the
+ * tuner UI) and the field is any numeric AbilityDef field ('cooldown',
+ * 'force', 'gripStunDuration', …). Doubly sparse: only critters the
+ * tuner touched, and per critter only fields diverging from the cached
+ * authored baseline.
+ *
+ * The apply-script rewrites the numeric token inside that call's
+ * overrides object literal (tuning comments on the line survive) or,
+ * when the field isn't in the overrides yet, APPENDS it at the end of
+ * the object. It NEVER deletes — removing an override stays a manual
+ * edit — and it refuses to guess: unknown critters, slots beyond the
+ * kit's call count, and existing non-literal values (`force: FEEL.x.y`,
+ * hex colours like `selfTintHex`) are hard errors instead of silent
+ * corruption.
+ */
+export interface AbilityPatch extends ToolPatchBase {
+  tool: 'ability-patch';
+  version: 1;
+  data: Record<string, Record<string, number>>;
+}
+
+export type ToolPatch = CalibratePatch | AnimLabPatch | DecorEditorPatch | FeelPatch | AnimPersonalityPatch | AbilityPatch;
 
 /** Build a fresh ToolPatch envelope with `generated` set to now. The
  *  caller fills `data`. `version` defaults to 1; pass 2 for anim-lab

@@ -12,6 +12,10 @@ import { defineConfig, devices } from '@playwright/test';
 //   npm run test:smoke
 export default defineConfig({
   testDir: './tests',
+  // Only *.spec.ts belongs to Playwright. Without this, the default
+  // testMatch (*.@(spec|test).ts) would also swallow the Vitest sim
+  // suite under tests/sim/**/*.test.ts (H4) and test:smoke would break.
+  testMatch: '**/*.spec.ts',
   fullyParallel: false,  // only one test file, no need to parallelize
   retries: 0,
   workers: 1,

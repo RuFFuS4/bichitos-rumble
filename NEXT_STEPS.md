@@ -121,10 +121,94 @@ Orden acordado:
    eventos idénticos. Cierra el hueco dual-surface del match runner
    headless y el volcado de recordings.
 
-**FASE DE AFILADO COMPLETA** (8/8 picks, slices A-G). Siguiente etapa
-según la dirección post-H3: mecánicas y assets a fondo. Hueco menor
-que queda del dual-surface: applier de ability-tuner (ToolPatch a
+**FASE DE AFILADO COMPLETA** (8/8 picks, slices A-G). Hueco menor que
+queda del dual-surface: applier de ability-tuner (ToolPatch a
 CRITTER_ABILITIES).
+
+## Balance v2 (2026-08-21 — primer bloque de la etapa de mecánicas)
+
+Marco, reglas, estado del roster y cola de mecánicas en
+[docs/BALANCE.md](docs/BALANCE.md). Ejecutado en un día con las
+herramientas del afilado (108+ partidas medidas):
+
+1. [x] Auditoría de balance (54 partidas, 9 critters autopilot).
+2. [x] Marco v2: `npm run balance` — cero potencia fuera de
+   presupuesto (boost y overrides tasados). Hallazgo: Trunk +50.4 de
+   presupuesto efectivo con el roster en 0..+5.
+3. [x] Ronda 1: Shelly boost 1.30, Kurama 1.15, Sebastian masa 0.8.
+4. [x] Ronda 2 (decisiones de Rafa): Trunk domado (boost→1.0, elefante
+   intacto) + bots con conciencia del borde (cliente+server) — caídas ↓
+   en 6/9, partidas 51→68s.
+5. [x] It3: Steel Shell despierta (retag defensive + trigger
+   anticipatorio del cerebro).
+6. [ ] **Siguiente**: mecánicas de balanceo para Shelly (shell que
+   refleja knockback) y Sebastian (que el cañón conecte en meta-bot) —
+   principio nuevo de Rafa: las mecánicas tienen fuerza en el
+   balanceo. Arranque natural de la fase de mecánicas y assets.
+
+## Tanda grande 2026-08-24 (autónoma) — H4 en marcha
+
+Hecho y en dev (detalle en BUILD_LOG): salas privadas + enlace + share
+(e2e verde) · i18n ES/EN 131 claves · dieta de payload 96.9→69.7 MB ·
+golden sim guardian + ability-patch (dual-surface 100%) · paridad bot
+server · 9 fixes del review adversarial aplicados.
+
+## CHECKLIST — verificada por Claude el 2026-09-05 (campaña Playwright)
+
+Evidencia en .tmp/checklist/ (report.json + capturas) y BUILD_LOG.
+
+| # | Item | Estado |
+|---|---|---|
+| 1 | Shell-reflect offline | ✅ mecánica (tests exactos + golden) — *feel* pendiente de Rafa |
+| 2 | Claw Wave de Sebastian | ✅ mecánica (test del cono + batch) — *feel* pendiente |
+| 3 | Bots con conciencia del borde | ✅ batch (caídas ↓ 6/9, partidas 51→68s) |
+| 4 | Reconnect | ✅✅ e2e: setOffline → Reconectando… → RECONNECTED en server → humano de vuelta |
+| 5 | Sala privada | ✅ e2e: A crea, B entra por enlace a la misma sala, quickmatch aislado |
+| 6 | Código de recuperación | ✅ e2e: mismo playerId+nick en contexto limpio |
+| 7 | Reflect online | ✅ mecánica (broadcast testeado) — sonido pendiente de oído |
+| 8 | Métricas | ✅ partida real → totalMatches 1, duración media 94s |
+| 9 | PWA | ✅ manifest/iconos/viewport-fit — **instalar en móvil: Rafa** |
+| 10 | Reduced motion | ✅ motionScale 0.3 con la media query, 1.0 sin ella |
+| 11 | ES en móvil | ✅ cero desbordes landscape+portrait, capturas revisadas |
+| 12 | Pase visual | ✅ 5 arenas + Hall of Belts 16/16 revisados a ojo: sin artefactos |
+| 13 | Revisión networking | ✅ review de 17 agentes → 13 confirmados, 10 arreglados (7b4a4e6) + e2e del zombi |
+| 14 | Merge dev→main + tag | ⏳ **decisión de Rafa** |
+
+**Solo tus manos (lo que no se puede simular):**
+- [ ] Sentir shell-reflect, Claw Wave y el reflect online con sonido.
+- [ ] Instalar la PWA en Android (standalone, apaisada, icono).
+- [ ] Con 2 dispositivos reales: reconnect con wifi de verdad; recuperar
+      el nick en el móvil y ver el aviso "identidad usada en otro
+      dispositivo" en el PC; entrar por enlace a una sala ya empezada
+      (alert legible); que el rival cierre la pestaña en un 1v1 (tú +1
+      win, él +1 loss); una privada completa NO debe mover el Hall of Belts.
+- [ ] Merge dev→main + tag cuando te cuadre (deploy a prod).
+
+Diferido del review (estructural): tabla multi-dispositivo para tokens
+(hoy recuperar en B invalida el token de A con aviso explícito).
+
+**Para Rafa (pendientes que solo puedes hacer tú):**
+- [ ] Playtesting: shell-reflect y Claw Wave (de la sesión anterior) +
+      probar una sala privada con alguien de verdad + ojear las 10
+      traducciones de autor (BUILD_LOG 2026-08-24 / i18n.ts).
+- [ ] Pase visual de arenas y belts tras el gltfpack (cuantiza; golden
+      no ve píxeles) y del juego en ES en móvil.
+- [ ] Revisión de la zona networking (salas privadas tocan BrawlRoom).
+- [ ] Merge dev→main + tag cuando lo des por bueno (deploy a prod).
+
+**Backlog H4 restante (por tamaño):**
+- [ ] Reconnect (allowReconnection) — el más valioso de retención.
+- [ ] Slayer Belt real (wiring lastHitBy→kills_vs_humans) + integridad
+      de leaderboards (vs bots no puntúa; rage-quit = derrota).
+- [ ] Identidad con código de recuperación · tabla matches server.
+- [ ] PWA manifest + prefers-reduced-motion (pequeños, quedaron fuera
+      de la tanda).
+- [ ] Split abilities.ts + ~20 tests Vitest del sim · shared sim
+      package (el refactor de más palanca — con el golden de guardián).
+- [ ] Diferidos del review: feedback visual del shell-reflect online,
+      calibrate en comentarios de bloque, validación del partial.
+- [ ] Payload frontera: simplificar sebastian/kermit/kurama (44 MB)
+      para el ≤50 MB de H2 (hard-stop: decisión de diseño).
 
 ## Dirección post-H3 (fijada por Rafa, 2026-08-19)
 

@@ -3,12 +3,13 @@
 // ability preview)
 // ---------------------------------------------------------------------------
 
-import { createAbilityStates } from '../abilities';
+import { createAbilityStates } from '../abilities-runtime';
 import type { CritterConfig } from '../critter';
 import type { RosterEntry } from '../roster';
 import { getCritterThumbnail } from '../slot-thumbnail';
 import { setMatchHudVisible } from './dom-shared';
 import { tagGlyph } from '../input-glyphs';
+import { t } from '../i18n';
 
 const characterSelect = document.getElementById('character-select')!;
 const critterGrid    = document.getElementById('critter-grid')!;
@@ -130,7 +131,7 @@ export function showCharacterSelect(
 
       const badge = document.createElement('div');
       badge.className = 'slot-badge';
-      badge.textContent = 'WIP';
+      badge.textContent = t('select-wip');
       slot.appendChild(badge);
 
       const capturedIdx = i;
@@ -147,7 +148,7 @@ export function showCharacterSelect(
 
       const name = document.createElement('div');
       name.className = 'slot-name';
-      name.textContent = 'Coming Soon';
+      name.textContent = t('select-coming-soon');
 
       slot.appendChild(lock);
       slot.appendChild(name);
@@ -303,7 +304,7 @@ function appendAbilityRow(critterSlug: string, slotIdx: number, key: string, nam
   if (planned) {
     const badge = document.createElement('span');
     badge.className = 'ability-info-planned';
-    badge.textContent = '(planned)';
+    badge.textContent = t('select-planned');
     row.appendChild(badge);
   }
 

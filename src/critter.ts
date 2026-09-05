@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind, isOnSlipperyZone } from './abilities';
+import { createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind, isOnSlipperyZone } from './abilities-runtime';
 import type { AbilityState } from './abilities';
 import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
@@ -94,21 +94,30 @@ export const CRITTER_PRESETS: CritterConfig[] = [
     // K + L stuns recortados en abilities.ts en proporción similar.
     // Speed 16 y headbuttForce 48 sin tocar — el cabezazo se modula
     // vía boost y la sensación de "elefante que persigue" se preserva.
+    // 2026-08-21 balance v2 (micropass 3, decisión de Rafa): boost
+    // 2.30 → 1.0. Con el boost tasado en el presupuesto, la fuerza
+    // efectiva era 110.4 (+50 pts cuando el roster vive en 0..+5).
+    // A 48 sigue doblando al segundo más fuerte — elefante intacto.
     speed: 16,
     headbuttForce: 48,
-    headbuttBoost: 2.30,
     role: 'Bruiser',
     tagline: 'Huge and unstoppable.',
   },
   { // Trickster — fast, light, evasive. Uses Frenzy as ult.
     ...deriveCritterStats('Kurama'),
     name: 'Kurama', color: 0xff6633,
+    // 2026-08-21 balance v2 (audit: 74 headbutts/partida para 2 wins —
+    // mucho ruido, poco premio): algo más de castigo por golpe.
+    headbuttBoost: 1.15,
     role: 'Trickster',
     tagline: 'Fast, sly, unpredictable.',
   },
   { // Tank — slow, heavy, crushing. Uses Frenzy as ult (berserk).
     ...deriveCritterStats('Shelly'),
     name: 'Shelly', color: 0x2d8659,
+    // 2026-08-21 balance v2 (audit: 0/6 wins, 2.6 caídas/p): el tanque
+    // que no devolvía el golpe. Boost dentro del cap 1.0-1.5 del marco.
+    headbuttBoost: 1.30,
     role: 'Tank',
     tagline: 'Heavy and wise.',
   },

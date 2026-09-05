@@ -177,6 +177,18 @@ export function onAbilityFired(room: Room, cb: (ev: AbilityFiredEvent) => void):
   room.onMessage('abilityFired', cb);
 }
 
+/** Steel Shell reflect (review 2026-08-24): el server aplica la física
+ *  del rebote pero el FEEDBACK (shake/sonido/impact flash) es local —
+ *  sin este evento el rebote online era mudo e ilegible. */
+export interface ShellReflectedEvent {
+  attackerSid: string;
+  anchoredSid: string;
+}
+
+export function onShellReflected(room: Room, cb: (ev: ShellReflectedEvent) => void): void {
+  room.onMessage('shellReflected', cb);
+}
+
 /** Payload broadcast by BrawlRoom when an Online Belt changes hands. */
 export interface BeltChangedEvent {
   belt:

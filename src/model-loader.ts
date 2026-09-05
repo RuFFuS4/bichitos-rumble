@@ -16,7 +16,12 @@ import * as THREE from 'three';
 // legacy three/examples/jsm alias while bumping r172 → r185).
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { MeshoptDecoder } from 'meshoptimizer';
+// Subpath a propósito (auditoría de payload 2026-08-24): el index del
+// paquete re-exporta encoder+simplifier+clusterizer+tangents con sus
+// wasm embebidos y sin `sideEffects` declarado — importarlo entero
+// metía ~99 KB min (35 KB gz) en el chunk eager del juego cuando solo
+// usamos el decoder (~30 KB).
+import { MeshoptDecoder } from 'meshoptimizer/decoder';
 
 // ---------------------------------------------------------------------------
 // Singleton loader setup

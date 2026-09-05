@@ -19,21 +19,24 @@
 //   initStatusLegend()  — wires the button + popup into the page once
 // ---------------------------------------------------------------------------
 
+import { t, type I18nKey } from '../i18n';
+
 interface LegendEntry {
   icon: string;
-  name: string;
-  desc: string;
+  nameKey: I18nKey;
+  descKey: I18nKey;
 }
 
+// Textos en src/i18n.ts (claves 'status-*') — aquí solo icono + claves.
 const ENTRIES: readonly LegendEntry[] = [
-  { icon: '❄️', name: 'Frozen',      desc: 'Hit by snowball — slowed and chilled.' },
-  { icon: '🐌', name: 'Slowed',      desc: 'Movement reduced (e.g. quicksand).' },
-  { icon: '☠️', name: 'Poisoned',    desc: 'Toxic cloud — slowed + limited vision.' },
-  { icon: '💫', name: 'Stunned',     desc: 'Cannot move for a brief window.' },
-  { icon: '💥', name: 'Vulnerable',  desc: 'Hits land twice as hard.' },
-  { icon: '🛡️', name: 'Steel Shell', desc: 'Invulnerable and anchored to the ground.' },
-  { icon: '🔥', name: 'Frenzy',      desc: 'Temporarily faster and heavier.' },
-  { icon: '👻', name: 'Ghost',       desc: 'Decoy / invisibility trick — bots lose track.' },
+  { icon: '❄️', nameKey: 'status-frozen',      descKey: 'status-frozen-desc' },
+  { icon: '🐌', nameKey: 'status-slowed',      descKey: 'status-slowed-desc' },
+  { icon: '☠️', nameKey: 'status-poisoned',    descKey: 'status-poisoned-desc' },
+  { icon: '💫', nameKey: 'status-stunned',     descKey: 'status-stunned-desc' },
+  { icon: '💥', nameKey: 'status-vulnerable',  descKey: 'status-vulnerable-desc' },
+  { icon: '🛡️', nameKey: 'status-steel-shell', descKey: 'status-steel-shell-desc' },
+  { icon: '🔥', nameKey: 'status-frenzy',      descKey: 'status-frenzy-desc' },
+  { icon: '👻', nameKey: 'status-ghost',       descKey: 'status-ghost-desc' },
 ];
 
 let initialised = false;
@@ -140,7 +143,7 @@ function buildPopup(): HTMLDivElement {
   popup.hidden = true;
 
   const title = document.createElement('h3');
-  title.textContent = 'Status effects';
+  title.textContent = t('status-title');
   popup.appendChild(title);
 
   const list = document.createElement('ul');
@@ -153,10 +156,10 @@ function buildPopup(): HTMLDivElement {
     const text = document.createElement('span');
     const name = document.createElement('span');
     name.className = 'legend-name';
-    name.textContent = e.name;
+    name.textContent = t(e.nameKey);
     const desc = document.createElement('span');
     desc.className = 'legend-desc';
-    desc.textContent = ' — ' + e.desc;
+    desc.textContent = ' — ' + t(e.descKey);
     text.appendChild(name);
     text.appendChild(desc);
     li.appendChild(icon);
@@ -188,7 +191,7 @@ export function initStatusLegend(): void {
   const btn = document.createElement('button');
   btn.id = 'btn-status-legend';
   btn.className = 'settings-btn';
-  btn.title = 'Status effects';
+  btn.title = t('status-title');
   btn.setAttribute('aria-label', 'Show status effects legend');
   btn.setAttribute('aria-expanded', 'false');
   btn.setAttribute('aria-controls', 'status-legend-popup');

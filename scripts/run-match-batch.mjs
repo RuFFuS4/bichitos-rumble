@@ -36,6 +36,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseArgs } from 'node:util';
+import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -78,6 +79,13 @@ Flags:
                          reload de pagina entre medias) y compara outcome +
                          secuencia de events. Imprime REPRODUCIBLE: yes/no
                          (exit 1 si no) con el primer punto de divergencia.
+  --golden-check         Corre la matriz FIJA de 3 partidas doradas y compara
+                         contra scripts/golden/sim-golden.json (exit 1 si
+                         algun evento diverge — cambio de balance detectado).
+                         Alias: npm run golden.
+  --golden-write         Regenera el golden (solo con cambios de balance
+                         INTENCIONALES; el diff del JSON documenta el cambio).
+                         Alias: npm run golden:write.
   --url=URL              Base del dev server (def: http://localhost:5173).
   --help                 Esta ayuda.
 
@@ -98,6 +106,8 @@ function parseCli(argv) {
       out: { type: 'string', default: path.join('.tmp', 'batch-results.json') },
       'dump-recordings': { type: 'string' },
       verify: { type: 'boolean', default: false },
+      'golden-write': { type: 'boolean', default: false },
+      'golden-check': { type: 'boolean', default: false },
       url: { type: 'string', default: 'http://localhost:5173' },
       help: { type: 'boolean', default: false },
     },
@@ -126,6 +136,8 @@ function parseCli(argv) {
     out: values.out,
     dumpDir: values['dump-recordings'] ?? null,
     verify: values.verify,
+    goldenWrite: values['golden-write'],
+    goldenCheck: values['golden-check'],
     url: values.url,
   };
 }
@@ -506,11 +518,118 @@ async function runVerify(browser, labUrl, cfg, participants) {
 }
 
 // ---------------------------------------------------------------------------
+// Golden mode — el guardián del balance (2026-08-24)
+// ---------------------------------------------------------------------------
+//
+// Matriz FIJA de partidas (cubre los 9 critters) cuyas secuencias de
+// eventos completas se guardan en git (scripts/golden/sim-golden.json).
+// `--golden-check` re-corre la matriz y compara: cualquier cambio en
+// physics/abilities/bots que altere el resultado de una partida CANTA
+// con la primera divergencia. Si el cambio de balance es INTENCIONAL,
+// se regenera con `--golden-write` y el diff del JSON en el commit
+// documenta el cambio de comportamiento.
+//
+// La matriz ignora --player/--bots/--seed a propósito (es fija por
+// contrato); --speed sí se respeta (no afecta al resultado: dt fijo).
+
+const GOLDEN_PATH = path.join('scripts', 'golden', 'sim-golden.json');
+const GOLDEN_MATRIX = [
+  { player: 'Sergei', bots: ['Trunk', 'Kurama', 'Shelly'], seed: 501 },
+  { player: 'Cheeto', bots: ['Kowalski', 'Sihans', 'Kermit'], seed: 502 },
+  { player: 'Sebastian', bots: ['Trunk', 'Shelly', 'Sergei'], seed: 503 },
+];
+
+async function runGoldenMatrix(browser, labUrl, cfg) {
+  const results = [];
+  for (const [i, m] of GOLDEN_MATRIX.entries()) {
+    console.log(`golden ${i + 1}/${GOLDEN_MATRIX.length}: ${m.player} vs ${m.bots.join(',')} (seed ${m.seed})...`);
+    const page = await openLabPage(browser, labUrl);
+    const r = await runOneMatch(page, {
+      player: m.player, bots: m.bots, seed: m.seed, packId: null,
+      speed: cfg.speed,
+      timeoutMs: Math.ceil((MATCH_SIM_SEC / cfg.speed) * 1000) + TIMEOUT_MARGIN_MS,
+    });
+    await page.close();
+    results.push({
+      ...m,
+      survivor: r.recording?.outcome?.survivor ?? null,
+      endReason: classifyEnd(r.recording, r.end, r.runnerTimedOut),
+      events: normalizeEvents(r.recording),
+    });
+  }
+  return results;
+}
+
+async function runGolden(browser, labUrl, cfg) {
+  const current = await runGoldenMatrix(browser, labUrl, cfg);
+
+  if (cfg.goldenWrite) {
+    const doc = {
+      version: 1,
+      generatedAtIso: new Date().toISOString(),
+      note: 'Secuencias doradas de la matriz fija. Regenerar SOLO con un cambio de balance intencional (npm run golden:write) — el diff de este fichero en el commit documenta el cambio.',
+      matrix: current.map((m) => ({ ...m, eventCount: m.events.length })),
+    };
+    await writeJson(GOLDEN_PATH, doc);
+    console.log(`\nGOLDEN escrito: ${GOLDEN_PATH} (${current.map((m) => m.events.length).join('/')} eventos)`);
+    return true;
+  }
+
+  let golden;
+  try {
+    golden = JSON.parse(readFileSync(GOLDEN_PATH, 'utf8'));
+  } catch {
+    console.error(`ERROR: no hay golden en ${GOLDEN_PATH}. Genera uno con --golden-write.`);
+    return false;
+  }
+
+  // Review 2026-08-24: matriz del golden desincronizada (entradas de
+  // menos, player/seed distintos) → mensaje guiado, no TypeError.
+  if (!Array.isArray(golden.matrix) || golden.matrix.length !== GOLDEN_MATRIX.length
+      || golden.matrix.some((g, i) => g.player !== GOLDEN_MATRIX[i].player || g.seed !== GOLDEN_MATRIX[i].seed)) {
+    console.error('ERROR: el golden guardado no coincide con la GOLDEN_MATRIX actual (¿matriz editada?). Regenera con npm run golden:write.');
+    return false;
+  }
+
+  let allOk = true;
+  for (let i = 0; i < GOLDEN_MATRIX.length; i++) {
+    const g = golden.matrix[i];
+    const c = current[i];
+    const label = `${c.player} vs ${c.bots.join(',')} (seed ${c.seed})`;
+    let firstDiv = -1;
+    const n = Math.max(g.events.length, c.events.length);
+    for (let j = 0; j < n; j++) {
+      if (g.events[j] !== c.events[j]) { firstDiv = j; break; }
+    }
+    const same = firstDiv === -1 && g.survivor === c.survivor && g.endReason === c.endReason;
+    if (same) {
+      console.log(`  OK  ${label} — ${c.events.length} eventos identicos`);
+    } else {
+      allOk = false;
+      console.log(`  DIF ${label}`);
+      if (firstDiv >= 0) {
+        console.log(`      evento #${firstDiv}: golden «${g.events[firstDiv] ?? '(fin)'}» vs actual «${c.events[firstDiv] ?? '(fin)'}»`);
+      }
+      if (g.survivor !== c.survivor || g.endReason !== c.endReason) {
+        console.log(`      outcome: golden ${g.survivor}/${g.endReason} vs actual ${c.survivor}/${c.endReason}`);
+      }
+    }
+  }
+  console.log('');
+  if (allOk) {
+    console.log('GOLDEN: sin cambios de balance — las 3 partidas doradas se reproducen exactas.');
+  } else {
+    console.log('GOLDEN: CAMBIO DE BALANCE DETECTADO. Si es intencional: npm run golden:write (y committea el diff del JSON).');
+  }
+  return allOk;
+}
+
+// ---------------------------------------------------------------------------
 // Batch mode
 // ---------------------------------------------------------------------------
 
 async function runBatch(browser, labUrl, cfg, participants) {
-  const page = await openLabPage(browser, labUrl);
+  let page = await openLabPage(browser, labUrl);
   const timeoutMs = Math.ceil((MATCH_SIM_SEC / cfg.speed) * 1000) + TIMEOUT_MARGIN_MS;
   if (cfg.dumpDir) await mkdir(cfg.dumpDir, { recursive: true });
 
@@ -544,6 +663,15 @@ async function runBatch(browser, labUrl, cfg, participants) {
       if (i === 0) throw e;
       console.log(`FALLO: ${e.message}`);
       matchResults.push({ index: i, seed, ok: false, error: e.message });
+      // Review 2026-08-24: una página muerta (Target crashed/closed,
+      // contexto destruido) envenenaba TODAS las partidas restantes —
+      // recreamos la página para que el resto del batch corra limpio.
+      const msg = String(e.message ?? '');
+      if (/Target (crashed|closed)|context was destroyed|has been closed/i.test(msg)) {
+        try { await page.close(); } catch { /* ya muerta */ }
+        page = await openLabPage(browser, labUrl);
+        console.log('  (página recreada tras el crash)');
+      }
     }
   }
   await page.close();
@@ -561,6 +689,9 @@ async function runBatch(browser, labUrl, cfg, participants) {
   };
   await writeJson(cfg.out, outDoc);
   console.log(`JSON: ${path.resolve(cfg.out)}`);
+  // Review 2026-08-24: partidas falladas ⇒ exit 1 (antes salía 0 y un
+  // `npm run batch && balance-report` encadenaba sobre datos cojos).
+  return agg.matchesFailed === 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -619,6 +750,18 @@ async function main() {
     );
     await rosterPage.close();
 
+    // Golden mode: matriz fija — valida sus nombres y salta la
+    // preparación de lineup del modo normal.
+    if (cfg.goldenWrite || cfg.goldenCheck) {
+      const inMatrix = [...new Set(GOLDEN_MATRIX.flatMap((m) => [m.player, ...m.bots]))];
+      const missing = inMatrix.filter((n) => !roster.includes(n));
+      if (missing.length > 0) {
+        throw new Error(`la matriz golden referencia critters fuera del roster: ${missing.join(', ')}`);
+      }
+      const ok = await runGolden(browser, labUrl, cfg);
+      if (!ok) exitCode = 1;
+    } else {
+
     if (!roster.includes(cfg.player)) {
       throw new Error(`player "${cfg.player}" no esta en el roster: ${roster.join(', ')}`);
     }
@@ -644,8 +787,11 @@ async function main() {
       const ok = await runVerify(browser, labUrl, cfg, participants);
       if (!ok) exitCode = 1;
     } else {
-      await runBatch(browser, labUrl, cfg, participants);
+      const ok = await runBatch(browser, labUrl, cfg, participants);
+      if (!ok) exitCode = 1;
     }
+
+    } // fin del modo normal (no-golden)
   } catch (e) {
     console.error(`ERROR: ${e.message}`);
     exitCode = 1;

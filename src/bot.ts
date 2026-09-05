@@ -1,5 +1,5 @@
 import { Critter } from './critter';
-import { activateAbility, canActivateAbility, findAbilityByTag } from './abilities';
+import { activateAbility, canActivateAbility, findAbilityByTag } from './abilities-runtime';
 import { FEEL } from './gamefeel';
 import { matchRng } from './match-rng';
 
@@ -22,8 +22,18 @@ import { matchRng } from './match-rng';
  *   - chase        : chase only, no headbutt, no abilities
  *   - ability_only : skip headbutt, still fires abilities
  */
-export function updateBot(bot: Critter, allCritters: Critter[], dt: number): void {
-  if (!bot.alive) return;
+export function updateBot(
+  bot: Critter,
+  allCritters: Critter[],
+  dt: number,
+  // Minimal arena view for edge awareness (balance v2). Optional so
+  // headless/unit contexts without an arena keep working.
+  arena?: { currentRadius: number; isOnArena(x: number, z: number): boolean },
+): void {
+  // Review 2026-08-24: guard de falling en paridad con el server (que
+  // devuelve ZERO) — un bot cayendo seguía persiguiendo/casteando en
+  // el aire y podía disparar cooldowns fantasma antes del respawn.
+  if (!bot.alive || bot.falling) { bot.hasInput = false; return; }
 
   const mode = bot.debugBotBehaviour;
 
@@ -48,6 +58,9 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
   let nearbyCount = 0;
   for (const other of allCritters) {
     if (other === bot || !other.alive) continue;
+    // Balance v2: a falling target is bait — chasing it walks the bot
+    // straight off the edge. Let gravity finish the job unassisted.
+    if (other.falling) continue;
     if (other.config.name === 'Kurama' && other.isImmune) continue;
     const dx = other.x - bot.x;
     const dz = other.z - bot.z;
@@ -81,6 +94,44 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
       nz *= FEEL.chargeRush.steerFactor;
     }
 
+    // --- Edge awareness (balance v2, 2026-08-21) -----------------------
+    // Two layers, both FEEL-tunable:
+    //   1. Void probe: if the spot ~lookAhead ahead of the chase vector
+    //      is off the arena (collapse-pattern aware), steer fully inward.
+    //   2. Radial margin: within edgeMargin of the shrinking rim, blend
+    //      an inward pull proportional to how deep into the danger band
+    //      the bot is, then renormalize.
+    // Runs BEFORE the confusion inversion on purpose: a confused bot
+    // SHOULD still be able to stumble into the void — that's the point
+    // of Toxic Touch.
+    if (arena) {
+      const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
+      if (rd > 0.01) {
+        // Review 2026-08-24: la sonda usa la DIRECCIÓN normalizada, no
+        // el vector ya escalado — durante una carga steerFactor deja
+        // nx/nz en ~0.15 y la sonda encogía a 0.17 u (miraba a sus
+        // propios pies justo cuando más rápido va hacia el vacío).
+        const dl = Math.sqrt(nx * nx + nz * nz);
+        const dirX = dl > 0.001 ? nx / dl : nx;
+        const dirZ = dl > 0.001 ? nz / dl : nz;
+        const aheadX = bot.x + dirX * FEEL.bots.lookAhead;
+        const aheadZ = bot.z + dirZ * FEEL.bots.lookAhead;
+        if (!arena.isOnArena(aheadX, aheadZ)) {
+          nx = -bot.x / rd;
+          nz = -bot.z / rd;
+        } else {
+          const danger = rd - (arena.currentRadius - FEEL.bots.edgeMargin);
+          if (danger > 0) {
+            const w = Math.min(1, danger / FEEL.bots.edgeMargin) * FEEL.bots.edgeSteer;
+            nx -= (bot.x / rd) * w;
+            nz -= (bot.z / rd) * w;
+            const len = Math.sqrt(nx * nx + nz * nz);
+            if (len > 0.01) { nx /= len; nz /= len; }
+          }
+        }
+      }
+    }
+
     // 2026-04-30 final-L — Toxic Touch confused inversion (offline bot).
     if (bot.confusedTimer > 0) { nx = -nx; nz = -nz; }
 
@@ -99,8 +150,49 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
     bot.startHeadbutt();
   }
 
+  // --- Defensive ability: reactive, NOT probabilistic (balance v2 it3).
+  // A tank that sometimes forgets the shield is not a tank — and a
+  // deterministic reflex keeps batch runs reproducible. Fires when the
+  // bot is in the edge danger band with an enemy inside punt distance:
+  // exactly the "about to be knocked into the void" moment the audit
+  // showed killing Shelly 3×/match.
+  {
+    const defensive = findAbilityByTag(bot.abilityStates, 'defensive');
+    if (defensive && canActivateAbility(defensive)) {
+      // Two triggers, both anticipatory (the shell has 0.20 s of windUp
+      // — waiting for contact range casts it into the launch):
+      //   1. Incoming attack: the nearest enemy is mid-headbutt or in a
+      //      mobility charge within defendRange × 1.6 — shield BEFORE
+      //      the punt lands, anywhere on the arena (immunity mid-arena
+      //      is correct tank play against force-48 charges).
+      //   2. Edge pressure: enemy inside defendRange while we sit in
+      //      the shrinking rim's danger band.
+      const chargeIncoming =
+        (nearest.isHeadbutting ||
+          findAbilityByTag(nearest.abilityStates, 'mobility')?.active) &&
+        nearestDist < FEEL.bots.defendRange * 1.6;
+      let edgePressure = false;
+      if (arena) {
+        const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
+        edgePressure =
+          rd > arena.currentRadius - FEEL.bots.edgeMargin &&
+          nearestDist < FEEL.bots.defendRange;
+      }
+      if (chargeIncoming || edgePressure) {
+        activateAbility(defensive, bot);
+      }
+    }
+  }
+
   // Ability fire rate multiplier (aggressive mode fires more often)
   const aggroMul = mode === 'aggressive' ? 3.0 : 1.0;
+  // Review 2026-08-24: rolls frame-rate-independientes — la tasa vive
+  // por SEGUNDO en FEEL.bots.fireRatesPerSec y se convierte con el dt
+  // real del frame. A dt=1/60 reproduce EXACTAMENTE las probabilidades
+  // históricas (golden intacto); a 144 Hz deja de castear 2.4× más y
+  // el server (30 Hz) puede espejar la misma tasa.
+  const roll = (ratePerSec: number): boolean =>
+    matchRng() < (1 - Math.pow(1 - ratePerSec, dt)) * aggroMul;
 
   // --- Mobility ability: use at mid-range to close the gap
   const mobilityAbility = findAbilityByTag(bot.abilityStates, 'mobility');
@@ -110,15 +202,25 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
     nearestDist > 3.0 &&
     nearestDist < 6.0
   ) {
-    if (matchRng() < 0.02 * aggroMul) {
+    if (roll(FEEL.bots.fireRatesPerSec.mobility)) {
       activateAbility(mobilityAbility, bot);
     }
   }
 
-  // --- AoE push ability: use when surrounded
+  // --- AoE push ability: two firing conditions by SHAPE of the def
+  // (2026-08-24 balance v2 — cañón de Sebastian, cola de BALANCE.md):
+  //   · Radial (sin coneAngleDeg): "estoy rodeado" — nearbyCount >= 2.
+  //   · Direccional (coneAngleDeg): es un cañón frontal, UNA víctima
+  //     delante dentro del radio basta. Con la condición radial, la
+  //     Claw Wave de Sebastian (force 76, su mejor arma) solo salía
+  //     cuando ya estaba rodeado y perdido — el audit lo midió en 0/6.
   const aoeAbility = findAbilityByTag(bot.abilityStates, 'aoe_push');
-  if (aoeAbility && canActivateAbility(aoeAbility) && nearbyCount >= 2) {
-    if (matchRng() < 0.015 * aggroMul) {
+  if (aoeAbility && canActivateAbility(aoeAbility)) {
+    const isCone = typeof aoeAbility.def.coneAngleDeg === 'number';
+    const fires = isCone
+      ? nearestDist < (aoeAbility.def.radius ?? 3.5) * 0.9
+      : nearbyCount >= 2;
+    if (fires && roll(isCone ? FEEL.bots.fireRatesPerSec.cone : FEEL.bots.fireRatesPerSec.radial)) {
       activateAbility(aoeAbility, bot);
     }
   }
@@ -134,7 +236,7 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
     // Cone gate: only fire if the target is roughly in front of us
     // (within ±35° of our movement vector). nx,nz already point at
     // the target, so we just need to face it before firing.
-    if (matchRng() < 0.022 * aggroMul) {
+    if (roll(FEEL.bots.fireRatesPerSec.ranged)) {
       activateAbility(rangedAbility, bot);
     }
   }
@@ -142,7 +244,7 @@ export function updateBot(bot: Critter, allCritters: Critter[], dt: number): voi
   // --- Buff ability (e.g. Frenzy): activate when close to an enemy
   const buffAbility = findAbilityByTag(bot.abilityStates, 'buff');
   if (buffAbility && canActivateAbility(buffAbility) && nearestDist < 3.5) {
-    if (matchRng() < 0.008 * aggroMul) {
+    if (roll(FEEL.bots.fireRatesPerSec.buff)) {
       activateAbility(buffAbility, bot);
     }
   }

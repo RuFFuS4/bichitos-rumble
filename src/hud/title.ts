@@ -7,8 +7,9 @@ import { setMatchHudVisible } from './dom-shared';
 const titleScreen = document.getElementById('title-screen')!;
 const btnVsBots = document.getElementById('btn-vs-bots') as HTMLButtonElement | null;
 const btnOnline = document.getElementById('btn-online') as HTMLButtonElement | null;
+const btnFriends = document.getElementById('btn-friends') as HTMLButtonElement | null;
 
-export type TitleMode = 'bots' | 'online';
+export type TitleMode = 'bots' | 'online' | 'friends';
 
 export function showTitleScreen(): void {
   setMatchHudVisible(false);
@@ -45,14 +46,20 @@ btnOnline?.addEventListener('click', () => {
   titleModeSelectHandler?.('online');
   titleModeConfirmHandler?.('online');
 });
+btnFriends?.addEventListener('click', () => {
+  titleModeSelectHandler?.('friends');
+  titleModeConfirmHandler?.('friends');
+});
 // Hover on desktop highlights the mode (keyboard focus stays in sync)
 btnVsBots?.addEventListener('mouseenter', () => titleModeSelectHandler?.('bots'));
 btnOnline?.addEventListener('mouseenter', () => titleModeSelectHandler?.('online'));
+btnFriends?.addEventListener('mouseenter', () => titleModeSelectHandler?.('friends'));
 
 /** Visually mark which title-mode button is currently selected. */
 export function updateTitleModeSelection(mode: TitleMode): void {
   btnVsBots?.classList.toggle('selected', mode === 'bots');
   btnOnline?.classList.toggle('selected', mode === 'online');
+  btnFriends?.classList.toggle('selected', mode === 'friends');
 }
 
 /** True if the online button is present (feature-gated by main.ts). */

@@ -15,6 +15,29 @@ export const FEEL = {
     velocityDeadZone: 0.15,   // below this speed → snap to 0 (kills micro-drift)
   },
 
+  // --- Bot brain (balance v2, 2026-08-21) ---
+  // Conciencia del borde: sin esto los bots persiguen recto hacia el
+  // vacío (el audit midió 2.4-3.0 caídas/partida en todo el roster).
+  bots: {
+    edgeMargin: 1.4,      // distancia al borde donde arranca la autoconservación
+    edgeSteer: 1.6,       // peso del tirón hacia el centro en pleno borde
+    lookAhead: 1.1,       // sonda de vacío por delante (aware de patrones de colapso)
+    defendRange: 2.8,     // enemigo a menos de esto + banda de peligro → defensiva
+    // Tasas de decisión POR SEGUNDO (review 2026-08-24): las antiguas
+    // probabilidades por-frame (0.02, 0.015...) asumían 60 Hz — a 144 Hz
+    // los bots casteaban 2.4× más y el server a 30 Hz la mitad. Estos
+    // valores son la conversión exacta 1-(1-p)^60 de aquellas, así que
+    // a dt=1/60 el comportamiento (y el golden) es idéntico. El roll:
+    // matchRng() < (1-(1-rate)^dt) × aggroMul.
+    fireRatesPerSec: {
+      mobility: 0.702,
+      radial: 0.596,
+      cone: 0.839,
+      ranged: 0.737,
+      buff: 0.382,
+    },
+  },
+
   // --- Headbutt ---
   headbutt: {
     anticipation: {
@@ -36,6 +59,7 @@ export const FEEL = {
     normalPushForce: 3.0,     // casual bumps are gentle nudges
     headbuttMultiplier: 3.5,  // headbutt = headbuttForce * this (Rojo: 14*3.5=49)
     anchoredBounceFactor: 1.4, // × normalPushForce — rebound applied to whoever runs into an anchored critter (Shelly Steel Shell)
+    shellReflectFactor: 0.85,  // headbutting an anchored critter reflects the attacker's OWN force × this (balance v2 mechanic)
     stunnedVulnerability: 4,  // knockback multiplier while stunTimer > 0 (Trunk Slam/Grip follow-ups)
   },
 
@@ -145,6 +169,21 @@ export const FEEL = {
     tiltAngle: 0.25,          // radians of backward lean when hit
     duration: 0.3,            // time to return to upright
   },
+
+  // --- Accessibility (H4 — prefers-reduced-motion) ---
+  // Multiplicador global de los efectos de movimiento de PANTALLA.
+  // Cubre: amplitud del camera shake y duración del hit-stop — ambos se
+  // escalan en su punto central (triggerCameraShake / triggerHitStop,
+  // más abajo), nunca en los callers. NO cubre: squash/stretch, tilt de
+  // knockback, hit flash ni animaciones de gameplay — esos comunican
+  // QUIÉN recibió el golpe (visibilidad ≠ mareo); el vector de mareo es
+  // el movimiento de cámara/congelación de frame. main.ts lo baja a 0.3
+  // en el arranque si el SO reporta prefers-reduced-motion: reduce.
+  // (El `as` interno mantiene motionScale mutable dentro del `as const`
+  // del record — es el único leaf de FEEL que se escribe en runtime.)
+  accessibility: {
+    motionScale: 1.0,
+  } as { motionScale: number },
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -154,7 +193,9 @@ export const FEEL = {
 let hitStopTimer = 0;
 
 export function triggerHitStop(duration: number): void {
-  hitStopTimer = Math.max(hitStopTimer, duration);
+  // Reduced-motion: escalado en el punto central único — ningún caller
+  // necesita conocer el ajuste (ver FEEL.accessibility).
+  hitStopTimer = Math.max(hitStopTimer, duration * FEEL.accessibility.motionScale);
 }
 
 export function applyHitStop(dt: number): number {
@@ -332,9 +373,11 @@ function lerpMeshScale(critter: Critter, tx: number, ty: number, tz: number, dt:
 let shakeAmount = 0;
 let shakeTimer = 0;
 
-/** Trigger a shake with given peak amplitude. Stacks by taking the max. */
+/** Trigger a shake with given peak amplitude. Stacks by taking the max.
+ *  Reduced-motion: la amplitud se escala AQUÍ (punto central único) por
+ *  FEEL.accessibility.motionScale — ver el comentario de ese bloque. */
 export function triggerCameraShake(intensity: number): void {
-  shakeAmount = Math.max(shakeAmount, intensity);
+  shakeAmount = Math.max(shakeAmount, intensity * FEEL.accessibility.motionScale);
   shakeTimer = FEEL.shake.decay;
 }
 
