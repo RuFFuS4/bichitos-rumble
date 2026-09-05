@@ -40,9 +40,14 @@ const inputEl       = document.getElementById('nickname-input') as HTMLInputElem
 const errorEl       = document.getElementById('nickname-error')!;
 const confirmBtn    = document.getElementById('btn-nickname-confirm') as HTMLButtonElement;
 const cancelBtn     = document.getElementById('btn-nickname-cancel') as HTMLButtonElement;
-const cardEl        = modalEl.querySelector('.nickname-card') as HTMLElement;
-const subEl         = modalEl.querySelector('.nickname-sub') as HTMLElement;
-const buttonsEl     = modalEl.querySelector('.nickname-buttons') as HTMLElement;
+// Null-safe a nivel de módulo (regresión cazada 2026-09-05): /tools.html
+// no tiene el modal y este módulo se importa transitivamente desde
+// game.ts — un querySelector sobre null aquí tumbaba el lab entero
+// (batch runner y golden incluidos). Los usos viven en funciones que
+// solo corren cuando el modal se muestra.
+const cardEl        = (modalEl?.querySelector('.nickname-card') ?? null) as HTMLElement | null;
+const subEl         = (modalEl?.querySelector('.nickname-sub') ?? null) as HTMLElement | null;
+const buttonsEl     = (modalEl?.querySelector('.nickname-buttons') ?? null) as HTMLElement | null;
 
 // Same regex as server/src/db.ts#validateNickname for snap-feedback.
 const NICK_RE = /^[a-zA-Z0-9_\-]{3,16}$/;
@@ -129,7 +134,7 @@ successEl.append(successTitleEl, viewCodeLinkEl, codeBoxEl, codeHintEl, continue
 
 // Orden en la card: [título, sub, input, error, botones] + fila de
 // recuperación + enlace + interstitial.
-cardEl.append(recoveryRowEl, recoverLinkEl, successEl);
+cardEl?.append(recoveryRowEl, recoverLinkEl, successEl);
 
 function errorMessage(reasonCode: string): string {
   switch (reasonCode) {
@@ -178,10 +183,10 @@ function setRecoveryVisible(visible: boolean): void {
 
 /** Estado visual inicial del modal (vista de registro). */
 function showRegisterView(): void {
-  subEl.style.display = '';
+  if (subEl) subEl.style.display = '';
   inputEl.style.display = '';
   errorEl.style.display = '';
-  buttonsEl.style.display = '';
+  if (buttonsEl) buttonsEl.style.display = '';
   recoverLinkEl.style.display = '';
   successEl.style.display = 'none';
   codeBoxEl.style.display = 'none';
@@ -256,10 +261,10 @@ export function ensureOnlineIdentity(): Promise<OnlineIdentity> {
     const showSuccess = (identity: OnlineIdentity, recovered: boolean) => {
       successIdentity = identity;
       showError(null);
-      subEl.style.display = 'none';
+      if (subEl) subEl.style.display = 'none';
       inputEl.style.display = 'none';
       errorEl.style.display = 'none';
-      buttonsEl.style.display = 'none';
+      if (buttonsEl) buttonsEl.style.display = 'none';
       recoverLinkEl.style.display = 'none';
       setRecoveryVisible(false);
       successTitleEl.textContent = recovered

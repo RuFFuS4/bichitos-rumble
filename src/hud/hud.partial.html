@@ -577,6 +577,9 @@
          match-active the touch buttons already cover this role, and
          the bar collides with the joystick. Hide it. */
       body.touch-mode.match-active #ability-bar-container { display: none; }
+      /* Checklist 2026-09-05: en la sala de espera online la barra de
+         habilidades asomaba entre el prompt "T · salir" y su texto. */
+      body.waiting-room #ability-bar-container { display: none !important; }
     }
 
     /* ---------- Responsive: very narrow (portrait phones that somehow

@@ -88,11 +88,16 @@ export interface WaitingScreenData {
 }
 
 export function showWaitingScreen(): void {
+  // Checklist 2026-09-05: la barra de habilidades del HUD asomaba entre
+  // el prompt "T · salir de la sala" y el texto (captura del host de
+  // sala privada). La clase en body la oculta mientras esperamos.
+  document.body.classList.add('waiting-room');
   if (!waitingScreen) return;
   waitingScreen.classList.remove('hidden');
 }
 
 export function hideWaitingScreen(): void {
+  document.body.classList.remove('waiting-room');
   if (!waitingScreen) return;
   waitingScreen.classList.add('hidden');
 }
