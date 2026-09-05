@@ -247,11 +247,13 @@ pobre"*. Diagnóstico por capas, 4 propuestas, 3 jueces y plan en
 [`docs/ARENA_V2.md`](docs/ARENA_V2.md) (art-first unánime, con injertos).
 
 **Terreno v2** (≈13 días en tandas de 1-2, UNA regeneración de golden):
-- [ ] **Fase 0 — red de seguridad y CLI**: scraper de paridad de
-      `arena-fragments` en `npm run check`, tests Vitest del generador,
-      golden de layout por hash, `scripts/arena-layout.mjs`
-      (`--json|--ascii|--svg|--sweep`), observabilidad offline del colapso
-      (el golden gana eventos `collapse_*`), docs veraces.
+- [x] **Fase 0 — red de seguridad y CLI** ✅ 2026-09-06: scraper de
+      paridad de `arena-fragments` en `npm run check`, 16 invariantes
+      Vitest del generador, golden de layout por hash de 67 semillas,
+      `npm run arena` (`--json|--ascii|--timeline|--curve|--svg|--sweep`),
+      observabilidad offline del colapso (el golden de partidas ganó 22
+      eventos `collapse_*` sin mover un solo evento de gameplay),
+      `test:sim` en CI y docs con las cifras reales.
 - [ ] **Fase 0.5 — micro-slice de gameplay** (hard-stop): medios lotes
       contiguos del patrón A (2,8 % → 100 %), `layout.pattern` explícito,
       `radiusAt(angle)` para bots/respawn/proyectiles.
@@ -310,41 +312,10 @@ Orden acordado, un slice + `golden:write` por cambio de generador:
        mecánica que hace divertidos los 8 jugadores (último superviviente
        no escala: la mitad mira) y la que da gancho a la progresión.
 2. [ ] **Terreno lógico v2** (cola de `docs/ARENA_V2.md §5`): perfiles de
-       arena (`'4p'` byte-idéntico al actual, `'8p'` r 16-17, 4 bandas,
-       islote ≥3,5 u, 150 s), tempo como fracciones de la duración,
-       patrones nuevos con regla de huérfanos, decor por receta + semilla,
-       hazards de bioma como zonas. Fuera del generador: `MAX_PLAYERS`,
-       `SPAWN_POSITIONS` derivados, HUD y sala de espera de 8.
-3. [ ] **Progresión**: XP, niveles, desbloqueos y retos diarios sobre la
-       identidad actual (código de recuperación).
-4. [ ] **Cosméticos y tienda**: skins y colores por critter (Tripo/Meshy
-       con licencia en verde), moneda blanda por jugar, anuncios
-       recompensados (CrazyGames), premium con Stripe atado a la
-       identidad. Sin cajas de botín (reguladas en varios países UE).
-5. [ ] **Steam**: wrapper de escritorio (Electron/Tauri) + Steamworks
-       (logros, overlay), soporte de mando, opciones de resolución;
-       cross-play con web gratis (mismo servidor Colyseus). Solo cuando
-       haya algo que vender y retención D7 medida.
-
-**Gate de entrada**: H5 con primer ingreso y 2+ semanas de métricas de
-`matches`. **Gate de salida**: modo por tiempo en público · perfil 8P
-jugado con 8 humanos · tienda con primera venta · build de Steam en
-beta cerrada.
-
-## H6 — Party, progresión, 8 jugadores y Steam (tras H5; ~2-3 meses)
-
-**Meta** (idea de Rafa, 2026-09-05): un juego más grande y monetizable,
-inspirado en smashkarts.io y krunker.io (party, sencillos, con buenas
-opciones de monetización), con partidas de hasta 8 y salida en Steam.
-Orden acordado, un slice + `golden:write` por cambio de generador:
-
-1. [ ] **Modo por tiempo con respawn y puntos por KO** + salas privadas
-       configurables 4/6/8 (el público sigue a 4 hasta medir). Es la
-       mecánica que hace divertidos los 8 jugadores (último superviviente
-       no escala: la mitad mira) y la que da gancho a la progresión.
-2. [ ] **Terreno lógico v2** (cola de `docs/ARENA_V2.md §5`): perfiles de
-       arena (`'4p'` byte-idéntico al actual, `'8p'` r 16-17, 4 bandas,
-       islote ≥3,5 u, 150 s), tempo como fracciones de la duración,
+       arena (`'4p'` byte-idéntico al actual; `'8p'` **provisional fijado
+       por Rafa el 2026-09-06**: r 16, islote 3,5 u, 4 bandas, 150 s con
+       primer lote a 0,2 y colapso total a 0,8 de la duración, última
+       banda resistente), tempo como fracciones de la duración,
        patrones nuevos con regla de huérfanos, decor por receta + semilla,
        hazards de bioma como zonas. Fuera del generador: `MAX_PLAYERS`,
        `SPAWN_POSITIONS` derivados, HUD y sala de espera de 8.

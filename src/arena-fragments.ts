@@ -5,7 +5,9 @@
 // and client run this with the SAME seed to produce identical layouts.
 //
 // KEEP IN SYNC with server/src/sim/arena-fragments.ts — the two files must
-// produce byte-identical output for the same seed.
+// produce byte-identical output for the same seed. Gate:
+// scripts/check-sim-parity.mjs (in `npm run check`) byte-compares both
+// copies, header block aside.
 // ---------------------------------------------------------------------------
 
 // --- Mulberry32 PRNG ---------------------------------------------------

@@ -33,8 +33,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # npm run check = tsc --noEmit + verify-critter-glbs + parity + vite build + clean-dist-raw
+      # npm run check = tsc --noEmit + verify-critter-glbs + parity (habilidades,
+      # P/W/S y espejos del sim) + vite build + clean-dist-raw + payload budget
       - run: npm run check
+      # Tests Vitest del sim determinista (incluye los invariantes del
+      # generador de arena y su golden de layout por hash). Fuera de
+      # `check` a proposito: `check` es el gate de build, esto el de logica.
+      - run: npm run test:sim
 
   server:
     name: Server (tsc)

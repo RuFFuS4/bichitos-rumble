@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAtIso": "2026-08-24T11:26:48.414Z",
+  "generatedAtIso": "2026-09-05T23:40:32.217Z",
   "note": "Secuencias doradas de la matriz fija. Regenerar SOLO con un cambio de balance intencional (npm run golden:write) — el diff de este fichero en el commit documenta el cambio.",
   "matrix": [
     {
@@ -116,6 +116,7 @@
         "headbutt|Kurama|",
         "ability_end|Sergei|Frenzy",
         "headbutt|Sergei|",
+        "collapse_warn|arena|batch 0",
         "headbutt|Kurama|",
         "headbutt|Trunk|",
         "ability_end|Kurama|Copycat",
@@ -129,6 +130,7 @@
         "ability_end|Shelly|Steel Shell",
         "headbutt|Sergei|",
         "headbutt|Kurama|",
+        "collapse_batch|arena|level=1",
         "ability_cast|Trunk|Trunk Ram",
         "ability_cast|Kurama|Fox Dash",
         "ability_end|Kurama|Fox Dash",
@@ -179,6 +181,7 @@
         "ability_end|Kurama|Mirror Trick",
         "headbutt|Kurama|",
         "ability_cast|Trunk|Trunk Slam",
+        "collapse_warn|arena|batch 1",
         "ability_end|Shelly|Saw Shell",
         "ability_end|Trunk|Trunk Slam",
         "ability_cast|Sergei|Gorilla Rush",
@@ -196,6 +199,7 @@
         "headbutt|Sergei|",
         "headbutt|Trunk|",
         "ability_cast|Trunk|Trunk Ram",
+        "collapse_batch|arena|level=2",
         "ability_end|Trunk|Trunk Ram",
         "ability_cast|Sergei|Frenzy",
         "headbutt|Sergei|",
@@ -227,6 +231,7 @@
         "ability_cast|Kurama|Fox Dash",
         "headbutt|Sergei|",
         "headbutt|Kurama|",
+        "collapse_warn|arena|batch 2",
         "ability_end|Kurama|Fox Dash",
         "headbutt|Trunk|",
         "headbutt|Sergei|",
@@ -240,6 +245,7 @@
         "headbutt|Kurama|",
         "fall|Kurama|",
         "ability_end|Trunk|Trunk Ram",
+        "collapse_batch|arena|level=3",
         "fall|Trunk|",
         "eliminate|Kurama|no lives left",
         "respawn|Trunk|",
@@ -258,12 +264,14 @@
         "headbutt|Sergei|",
         "headbutt|Trunk|",
         "ability_cast|Sergei|Frenzy",
+        "collapse_warn|arena|batch 3",
         "headbutt|Sergei|",
         "headbutt|Trunk|",
         "ability_end|Sergei|Frenzy",
         "headbutt|Sergei|",
         "headbutt|Trunk|",
         "ability_cast|Trunk|Trunk Ram",
+        "collapse_batch|arena|level=4",
         "ability_end|Trunk|Trunk Ram",
         "headbutt|Sergei|",
         "headbutt|Trunk|",
@@ -279,12 +287,14 @@
         "ability_end|Sergei|Gorilla Rush",
         "headbutt|Sergei|",
         "headbutt|Trunk|",
+        "collapse_warn|arena|batch 4",
         "headbutt|Sergei|",
         "headbutt|Trunk|",
         "ability_cast|Sergei|Gorilla Rush",
         "headbutt|Sergei|",
         "headbutt|Trunk|",
         "ability_end|Sergei|Gorilla Rush",
+        "collapse_batch|arena|level=5",
         "ability_cast|Trunk|Trunk Ram",
         "headbutt|Sergei|",
         "headbutt|Trunk|",
@@ -293,7 +303,7 @@
         "eliminate|Sergei|no lives left",
         "match_ended|arena|player_eliminated"
       ],
-      "eventCount": 278
+      "eventCount": 288
     },
     {
       "player": "Cheeto",
@@ -418,6 +428,7 @@
         "headbutt|Sihans|",
         "headbutt|Kermit|",
         "headbutt|Kowalski|",
+        "collapse_warn|arena|batch 0",
         "headbutt|Sihans|",
         "headbutt|Kermit|",
         "ability_cast|Sihans|Burrow Rush",
@@ -433,6 +444,7 @@
         "headbutt|Kowalski|",
         "headbutt|Sihans|",
         "headbutt|Kermit|",
+        "collapse_batch|arena|level=1",
         "ability_cast|Kowalski|Snowball",
         "ability_cast|Kermit|Leap Forward",
         "ability_end|Kermit|Leap Forward",
@@ -491,6 +503,7 @@
         "headbutt|Cheeto|",
         "ability_end|Kermit|Poison Cloud",
         "ability_cast|Kowalski|Ice Slide",
+        "collapse_warn|arena|batch 1",
         "ability_end|Kowalski|Ice Slide",
         "headbutt|Cheeto|",
         "headbutt|Sihans|",
@@ -506,6 +519,7 @@
         "headbutt|Sihans|",
         "headbutt|Kermit|",
         "ability_end|Kermit|Leap Forward",
+        "collapse_batch|arena|level=2",
         "headbutt|Sihans|",
         "headbutt|Kermit|",
         "headbutt|Sihans|",
@@ -564,6 +578,7 @@
         "ability_end|Sihans|Burrow Rush",
         "ability_cast|Kowalski|Ice Slide",
         "ability_end|Kowalski|Ice Slide",
+        "collapse_warn|arena|batch 2",
         "headbutt|Cheeto|",
         "headbutt|Kowalski|",
         "headbutt|Sihans|",
@@ -582,6 +597,7 @@
         "ability_end|Kermit|Leap Forward",
         "headbutt|Sihans|",
         "headbutt|Kermit|",
+        "collapse_batch|arena|level=3",
         "headbutt|Sihans|",
         "headbutt|Kermit|",
         "ability_cast|Kowalski|Snowball",
@@ -612,7 +628,7 @@
         "eliminate|Cheeto|no lives left",
         "match_ended|arena|player_eliminated"
       ],
-      "eventCount": 305
+      "eventCount": 311
     },
     {
       "player": "Sebastian",
@@ -721,6 +737,7 @@
         "ability_cast|Sergei|Gorilla Rush",
         "headbutt|Sebastian|",
         "ability_end|Sergei|Gorilla Rush",
+        "collapse_warn|arena|batch 0",
         "ability_cast|Sebastian|All-in Side Slash",
         "headbutt|Trunk|",
         "headbutt|Sergei|",
@@ -731,6 +748,7 @@
         "headbutt|Trunk|",
         "headbutt|Sergei|",
         "ability_end|Sebastian|Claw Rush",
+        "collapse_batch|arena|level=1",
         "ability_cast|Sebastian|Claw Wave",
         "ability_cast|Trunk|Trunk Ram",
         "headbutt|Sebastian|",
@@ -770,6 +788,7 @@
         "headbutt|Trunk|",
         "respawn|Sebastian|",
         "ability_end|Sebastian|Claw Rush",
+        "collapse_warn|arena|batch 1",
         "ability_end|Sebastian|Claw Wave",
         "ability_cast|Trunk|Trunk Ram",
         "headbutt|Trunk|",
@@ -777,6 +796,7 @@
         "ability_end|Trunk|Trunk Ram",
         "ability_cast|Shelly|Shell Charge",
         "ability_cast|Sergei|Gorilla Rush",
+        "collapse_batch|arena|level=2",
         "fall|Shelly|",
         "ability_end|Sergei|Gorilla Rush",
         "headbutt|Trunk|",
@@ -823,6 +843,7 @@
         "fall|Shelly|",
         "ability_end|Trunk|Trunk Ram",
         "headbutt|Sergei|",
+        "collapse_warn|arena|batch 2",
         "headbutt|Trunk|",
         "eliminate|Shelly|no lives left",
         "ability_cast|Sergei|Gorilla Rush",
@@ -835,6 +856,7 @@
         "fall|Sebastian|",
         "ability_end|Sebastian|All-in Side Slash",
         "respawn|Sebastian|",
+        "collapse_batch|arena|level=3",
         "ability_cast|Sebastian|Claw Wave",
         "headbutt|Trunk|",
         "ability_cast|Sebastian|Claw Rush",
@@ -863,7 +885,7 @@
         "eliminate|Sebastian|no lives left",
         "match_ended|arena|player_eliminated"
       ],
-      "eventCount": 237
+      "eventCount": 243
     }
   ]
 }

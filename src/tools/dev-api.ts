@@ -578,23 +578,14 @@ export class DevApi {
 
     const info = this.renderer.info;
     const arena = this.getArenaInfo();
-    // Fragment accounting:
-    //   - Each batch owns N fragments (batch.size).
-    //   - arena.collapseLevel is the number of batches that have ALREADY
-    //     collapsed, so summing batch sizes for [0..collapseLevel) gives us
-    //     the count already dropped.
-    //   - The central islet is a single fragment that never collapses, so
-    //     it's always +1 alive and +1 total on top of the batches.
-    let fragsAlive = 0;
-    let fragsTotal = 0;
-    if (arena) {
-      const totalBatched = arena.batches.reduce((s, b) => s + b.size, 0);
-      const collapsed = arena.batches
-        .slice(0, arena.collapseLevel)
-        .reduce((s, b) => s + b.size, 0);
-      fragsTotal = totalBatched + 1;        // +1 islet
-      fragsAlive = (totalBatched - collapsed) + 1;
-    }
+    // Fragment accounting: counted straight off the Arena's `alive[]`
+    // array (the same one the physics reads), islet included.
+    // Antes se derivaba sumando `batch.size` hasta `collapseLevel`, y
+    // offline `collapseLevel` valía −1 → `slice(0, -1)` daba por caídos
+    // todos los lotes menos el último y el contador nacía mintiendo
+    // (docs/ARENA_V2.md §1.3 punto 15).
+    const fragsAlive = arena?.fragmentsAlive ?? 0;
+    const fragsTotal = arena?.fragmentsTotal ?? 0;
     this.lastPerf = {
       fps: avgFps,
       frameMs: dt * 1000,
@@ -645,6 +636,12 @@ export class DevApi {
     }
   }
 
+  /** Edge-detect the collapse timeline into `collapse_warn` /
+   *  `collapse_batch` events. Works in BOTH modes since the source is now
+   *  `Arena.getCollapseState()` (via `debugGetArenaInfo`); hasta 2026-09-06
+   *  leía los campos de sincronía online, congelados offline, y por eso el
+   *  golden de partidas no tenía ni un solo evento de arena. Forma de los
+   *  eventos sin tocar: la consumen el batch runner y el golden. */
   private pollArenaEvents(): void {
     const info = this.getArenaInfo();
     if (!info) return;

@@ -2307,31 +2307,57 @@ export class Game {
     this.arena.buildFromSeed(seed, desiredPack);
   }
 
-  /** Lab-only: read-only snapshot of arena state for display panels. */
+  /** Lab-only: read-only snapshot of arena state for display panels.
+   *
+   *  Reads the Arena's PUBLIC API (`getLayout` + `getCollapseState`), so
+   *  the numbers are the live ones in both modes. Antes se casteaba a los
+   *  privados `syncedLevel` / `syncedWarning`, que offline se quedan en
+   *  −1 / −2: el lab mostraba "level −1/N", los contadores de fragmentos
+   *  de dev-api salían mal y el golden no registraba ningún evento
+   *  `collapse_*` (docs/ARENA_V2.md §1.3 punto 15). */
   public debugGetArenaInfo(): {
     seed: number;
     batches: Array<{ band: number; size: number; delay: number }>;
     collapseLevel: number;
     warningBatch: number;
     currentRadius: number;
+    fragmentsAlive: number;
+    fragmentsTotal: number;
     patternLabel: 'A (outer→inner sweep)' | 'B (axis-split)' | 'unknown';
   } | null {
-    const layout = (this.arena as unknown as { layout?: { seed: number; fragments: Array<{ band: number }>; batches: Array<{ indices: number[]; delay: number }> } }).layout;
+    const layout = this.arena.getLayout();
     if (!layout) return null;
+    const collapse = this.arena.getCollapseState();
     const batches = layout.batches.map(b => {
       const bands = [...new Set(b.indices.map(i => layout.fragments[i].band))];
       return { band: bands.length === 1 ? bands[0] : -1, size: b.indices.length, delay: b.delay };
     });
-    // Pattern heuristic: Pattern B always has 6 batches (3 per side).
-    // Pattern A has 3-5 batches, each one band.
+    // Pattern from the BAND SEQUENCE of the batches, not from their count.
+    // Pattern B (axis split) sweeps outer→inner once per half, so its bands
+    // always read 3,2,1,3,2,1; pattern A sweeps outer→inner once and, when
+    // the three bands split, also reaches 6 batches — but as 3,3,2,2,1,1.
+    // La heurística anterior (`batches.length >= 6` → B) clasificaba mal el
+    // 8,5 % de las semillas (medido en `scripts/research/arena-stats.mts`,
+    // que usa esta misma secuencia de bandas como referencia).
+    // En la fase 0.5 del plan esto pasa a ser `layout.pattern`, un campo
+    // explícito del generador, y esta derivación desaparece.
+    // Regla exacta (la misma de `scripts/arena-layout.mjs`, detectPattern):
+    // el barrido A sólo desciende de banda (3→2→1), así que CUALQUIER subida
+    // en la secuencia delata el corte por eje de B. Comparar con la cadena
+    // literal '321321' funcionaría hoy pero se rompe si el descarte
+    // defensivo de grupos vacíos (`arena-fragments.ts`) acorta la secuencia.
+    const bands = layout.batches.map(b => layout.fragments[b.indices[0]].band);
+    const isAxisSplit = bands.some((b, i) => i > 0 && b > bands[i - 1]);
     const patternLabel: 'A (outer→inner sweep)' | 'B (axis-split)' | 'unknown' =
-      layout.batches.length >= 6 ? 'B (axis-split)' : 'A (outer→inner sweep)';
+      isAxisSplit ? 'B (axis-split)' : 'A (outer→inner sweep)';
     return {
       seed: layout.seed,
       batches,
-      collapseLevel: (this.arena as unknown as { syncedLevel: number }).syncedLevel,
-      warningBatch: (this.arena as unknown as { syncedWarning: number }).syncedWarning,
+      collapseLevel: collapse.level,
+      warningBatch: collapse.warningBatch,
       currentRadius: this.arena.currentRadius,
+      fragmentsAlive: collapse.fragmentsAlive,
+      fragmentsTotal: collapse.fragmentsTotal,
       patternLabel,
     };
   }

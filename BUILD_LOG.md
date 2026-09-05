@@ -1,5 +1,72 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-06 — Terreno v2 fase 0: la red de seguridad del generador
+
+Rafa aprobó los 4 puntos abiertos del plan (`docs/ARENA_V2.md §6`):
+micro-slice de gameplay AHORA, fuera el void, dieta de props, y perfil
+8P provisional (r 16, islote 3,5 u, 4 bandas, 150 s). Registrados en
+NEXT_STEPS y ROADMAP. Arranca H4.5 con la fase 0, que es todo red de
+seguridad: cero cambios de juego, todo lo que viene después se apoya
+aquí.
+
+- **Scraper de paridad de espejos** (`scripts/check-sim-parity.mjs`, en
+  `npm run check`): compara BYTE A BYTE las copias cliente/servidor del
+  sim (hoy `arena-fragments.ts`, 9.627 bytes idénticos) ignorando solo
+  el bloque de cabecera. Hallazgo del propio trabajo: la normalización
+  no podía ser "la línea 2" como decía el plan — al arreglar la cabecera
+  autorreferente del espejo (se citaba a sí misma), cada fichero nombra
+  al OTRO y ya nunca pueden coincidir; de ahí el bloque entero con
+  presupuesto de líneas para que la tolerancia no se trague lógica.
+  Probado en rojo: `maxRadius 12→13` en una copia → exit 1 con
+  `client:58 / server:59`.
+- **16 invariantes Vitest del generador** (`tests/sim/arena-layout.test.ts`,
+  48 tests del sim en total) + **golden de layout por hash**
+  (`tests/sim/arena-layout-golden.json`, 67 semillas, FNV-1a de
+  fragments/batches con floats cuantizados, milisegundos y sin
+  navegador): separa "cambió el terreno" de "cambió el balance". El
+  testeo de mutación del revisor dejó dicho el alcance real: los
+  invariantes protegen la ESTRUCTURA, el tempo lo protege el golden
+  (subir `delayJitter` 0,2→0,6 pasa todos los invariantes y rompe los 67
+  hashes). Anotado en la cabecera del test.
+- **CLI `npm run arena`** (`scripts/arena-layout.mjs`): dibuja el disco
+  en ASCII rasterizado con la MISMA `pointInFragment` de la física,
+  `--timeline`, `--curve`, `--json`, `--svg` y `--sweep K`. Sin modo o
+  con argumento inválido sale con exit 1 (una herramienta para agentes
+  no puede devolver 0 ante una invocación mal escrita). Reproduce las
+  cifras del diagnóstico bit a bit sobre 5.000 semillas.
+- **Observabilidad del colapso**: `Arena.getCollapseState()` como API
+  pública (offline lee el estado real, online los campos `synced*`);
+  `debugGetArenaInfo` deja de castear a privados y los eventos
+  `collapse_warn`/`collapse_batch` —que ya existían— por fin se emiten
+  offline. Consecuencia esperada y verificada: `npm run golden:write`
+  añade **22 eventos de colapso** a las 3 partidas doradas y **ni un
+  solo evento de gameplay cambia de posición** (288/311/243, `npm run
+  golden` 3/3 exactas). El diff del JSON es puramente instrumentación.
+- **Patrón de colapso, una sola regla**: la heurística
+  `batches.length >= 6 → B` clasificaba mal el 8,5 % de las partidas.
+  Ahora cliente y CLI usan la misma regla exacta (hay corte por eje si y
+  solo si la secuencia de bandas SUBE en algún punto), que además
+  sobrevive al descarte de grupos vacíos. En la fase 0.5 pasa a ser un
+  campo explícito del layout.
+- **Docs veraces**: GAME_DESIGN, RULES y README decían 29 fragmentos,
+  lotes de 4-8, primer colapso a ~20 s y colapso total a ~53 s. Lo real
+  (medido sobre 5.000 semillas): 26-32 fragmentos, 4-6 lotes de 3-11,
+  primer colapso a 28,0 s en el 100 % de las semillas, total 85-107 s.
+  Corrección del revisor incorporada: 8,5-23,6 s es el retardo hasta el
+  AVISO; entre caídas pasan 11,5-26,6 s. También cayó el comentario de
+  `camera.ts` que decía que el cielo era un backdrop de cámara (es
+  `scene.background`), dato que importa para quitar el void en la fase 1.
+- **CI**: `npm run test:sim` entra en el job client (antes ni vitest ni
+  golden corrían en CI). Los dos scripts que importan `.ts` directamente
+  necesitan Node ≥ 22.18; documentado en DEV_TOOLS junto al resto de la
+  superficie programática nueva.
+- Método: 5 agentes en paralelo sobre ficheros disjuntos + 2 revisores
+  adversariales que ejecutaron todo (incluido testeo de mutación con 7
+  mutantes y una reimplementación independiente del generador para
+  validar la regla del patrón sobre 20.000 semillas). De sus 22
+  hallazgos, los 2 bloqueantes (cableado y golden sin regenerar) y 6
+  correcciones se aplicaron antes del commit.
+
 ## 2026-09-05 (tarde) — v1.7 en producción y el terreno bajo la lupa
 
 - **Merge dev→main `--no-ff` (f41fb7e) + tag `v1.7-h4-social`.** Vercel

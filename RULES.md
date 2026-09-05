@@ -9,9 +9,10 @@ Be the last critter standing in the arena.
   - Online: up to 4 humans; if the room doesn't fill in 60s, bots fill
     the remaining slots automatically.
 - **120-second** time limit.
-- **Irregular fragment arena**. Seed-deterministic, 29 fragments total
-  (1 immune centre that never falls + 28 collapsible sectors in 3
-  radial bands). Fragments fall in batches over the course of the
+- **Irregular fragment arena**. Seed-deterministic, 26-32 fragments
+  depending on the seed (1 immune centre that never falls + 25-31
+  collapsible sectors in 3 radial bands; 29 fragments is the most
+  common draw). Fragments fall in batches over the course of the
   match — the usable floor shrinks toward the centre.
 
 ## Controls
@@ -70,8 +71,10 @@ Be the last critter standing in the arena.
 - 0 lives left → permanent elimination from the match.
 
 ### Arena collapse
-- Fragments are scheduled to fall in batches. First batch ~20s into
-  the match, then every 8-10s.
+- Fragments are scheduled to fall in 4-6 batches of 3-11 sectors.
+  The first batch always falls at t = 28s (its warning starts at
+  t = 25s); later batches fall 11.5-26.6s after the previous one
+  (a scheduled delay of 8.5-23.6s plus the 3s warning).
 - **Warning**: 3s before a batch actually collapses, the affected
   fragments visibly **shake** (distributed tremor with per-fragment
   phase offsets, amplitude ≈ 8cm) and glow warm orange. A seismic
@@ -83,6 +86,13 @@ Be the last critter standing in the arena.
 ### Immune centre
 - The central islet (radius 2.5) never collapses. Guaranteed safe
   ground for the last stretch of the match.
+- Full collapse lands between t = 85s and t = 107s (mean ≈96s), so
+  the last 13-35s of the 120s match are fought on that islet.
+
+> Collapse figures measured over 5 000 seeds with
+> [`scripts/research/arena-stats.mts`](scripts/research/arena-stats.mts).
+> The plan to rework the terrain (and this tempo) is
+> [`docs/ARENA_V2.md`](docs/ARENA_V2.md).
 
 ## Win conditions
 - Last critter alive wins the match.

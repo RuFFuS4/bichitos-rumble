@@ -16,8 +16,9 @@ Cartoon squashy arcade. Game feel over realism. Every action should feel exagger
 ## Match Flow
 1. 3-second countdown
 2. 120 seconds of combat
-3. Arena collapses in batches: first ~20s in, then every 8-10s (each
-   batch gets a 3s shake+rumble warning before it actually falls)
+3. Arena collapses in 4-6 batches: the first one always falls at
+   t = 28s and the rest land 11.5-26.6s apart (a scheduling delay of
+   8.5-23.6s plus the 3s shake+rumble warning that precedes each fall)
 4. Last survivor wins (all lives spent = eliminated); if time runs
    out, most lives survive wins (ties → draw)
 
@@ -132,19 +133,33 @@ opens a full legend.
 
 ## Arena
 
-Seed-deterministic irregular fragment floor. 29 fragments:
+Seed-deterministic irregular fragment floor. 26-32 fragments per
+seed (29 is the mode):
 - 1 immune centre (radius 2.5) that never falls.
-- 28 collapsible sectors organised in 3 radial bands with angular
-  jitter.
+- 25-31 collapsible sectors organised in 3 radial bands (7-9 / 9-11 /
+  9-11 sectors) with angular jitter.
 
-Collapse happens in batches of 4-8 sectors, outer → inner, with
-8-10s between batches. First batch kicks in around t = 20s, total
-collapse lands near t = 53s of a 120s match — leaving ~67s of
-endgame on the shrinking floor + immune centre.
+Collapse happens in 4-6 batches of 3-11 sectors, always starting from
+the outer band. Consecutive falls are 11.5-26.6s apart (mean ≈15.6s):
+the generator schedules a delay of 8.5-23.6s and the 3s warning runs
+on top of it. The
+first warning fires at t = 25s and the first batch falls at t = 28s
+in 100% of seeds; full collapse lands between t = 85s and t = 107s
+(mean ≈96s) of a 120s match — leaving 13-35s of endgame on the
+immune centre (19.6 u²).
 
-Two base collapse patterns (A = outer→inner sweep; B = axis-split)
-are selected from the seed so each match has a slightly different
-breakdown.
+Two base collapse patterns are selected from the seed so each match
+has a slightly different breakdown: **A** = outer→inner band sweep,
+each band optionally split in two batches (54.5% of seeds, 4-6
+batches) and **B** = axis-split, where a random axis cuts the arena
+in two and each half is its own outer→inner sweep (45.5%, always 6
+batches).
+
+> Figures measured over 5 000 seeds with
+> [`scripts/research/arena-stats.mts`](scripts/research/arena-stats.mts)
+> (`node --experimental-strip-types`). Several of them are due to
+> change: the terreno v2 diagnosis and plan is in
+> [`docs/ARENA_V2.md`](docs/ARENA_V2.md).
 
 ### Pre-collapse warning (implemented)
 - 3s before a batch falls, its fragments **shake** with a

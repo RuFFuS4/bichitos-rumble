@@ -1,7 +1,13 @@
 // Medición del generador de arena (docs/ARENA_V2.md §1.2). Solo lectura:
 // importa el generador REAL del cliente y barre 5000 semillas. Ejecutar:
 //   node --experimental-strip-types scripts/research/arena-stats.mts
-// Base del futuro CLI scripts/arena-layout.mjs (terreno v2, fase 0).
+//
+// REGISTRO CONGELADO del diagnóstico del 2026-09-05: se conserva porque es
+// la fuente que respalda las cifras de docs/ARENA_V2.md §1.2, y se deja tal
+// cual para que sigan siendo reproducibles. Para MEDIR de aquí en adelante,
+// la herramienta viva es `npm run arena -- --sweep K`
+// (scripts/arena-layout.mjs), que reproduce estas cifras y además dibuja,
+// cronometra y exporta. Si las dos discrepan alguna vez, manda el CLI.
 
 // Análisis numérico del generador real (copia cliente). Solo lectura.
 import { generateArenaLayout, isPointOnArena, FRAG } from '../../src/arena-fragments.ts';

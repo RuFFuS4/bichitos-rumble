@@ -186,6 +186,33 @@ function createFragmentMesh(f: FragmentDef): THREE.Group {
 
 // --- Arena class ---------------------------------------------------------
 
+/**
+ * Read-only snapshot of the collapse timeline, valid in BOTH modes.
+ *
+ * The collapse has two drivers (offline `update()` vs online
+ * `syncFromServer()`) writing to two different sets of fields. Consumers
+ * (lab panels, dev-api events, match recordings) must not care which one
+ * is running, so `getCollapseState()` is the single source they read.
+ *
+ * Historia: hasta 2026-09-06 los consumidores leían `syncedLevel` /
+ * `syncedWarning` por un cast a privados, y offline esos campos se
+ * quedan en −1 / −2 para siempre → nivel "−1/N" en el lab, contadores de
+ * fragmentos equivocados y cero eventos `collapse_*` en el golden
+ * (docs/ARENA_V2.md §1.3 punto 15).
+ */
+export interface ArenaCollapseState {
+  /** Batches that have ALREADY collapsed (0 before the first one falls). */
+  level: number;
+  /** Batch currently inside its warning window; -1 when none is warning. */
+  warningBatch: number;
+  /** Total batches in the layout (0 when there is no layout yet). */
+  batchCount: number;
+  /** Fragments still standing, immune center included. */
+  fragmentsAlive: number;
+  /** Fragments in the layout, immune center included. */
+  fragmentsTotal: number;
+}
+
 export class Arena {
   currentRadius = FRAG.maxRadius;
   group: THREE.Group;
@@ -220,6 +247,12 @@ export class Arena {
   private syncedLevel = -1;
   private syncedWarning = -2;
   private syncedSeed = -1;
+  /** True once `syncFromServer` has run for the current layout: the
+   *  server owns the timeline and `level` / `warningActive` stay frozen.
+   *  Read ONLY by `getCollapseState()` to pick which pair of fields is
+   *  the live one — an explicit flag instead of testing `syncedLevel >= 0`,
+   *  which is the sentinel that made offline observability lie. */
+  private serverDriven = false;
 
   // Decorations (arena pack cosmetics) — skybox + fog + ground texture +
   // prop meshes scattered in a ring outside the playable radius. Separate
@@ -337,6 +370,7 @@ export class Arena {
     this.syncedLevel = -1;
     this.syncedWarning = -2;
     this.syncedSeed = seed;
+    this.serverDriven = false;
     this.currentRadius = FRAG.maxRadius;
     this.fallingFragments = [];
 
@@ -513,15 +547,22 @@ export class Arena {
       const f = this.layout.fragments[i];
       if (f && pointInFragment(x, z, f)) return i;
     }
-    // Pass 2: tolerant fallback — the random fragment generator leaves
-    // tiny angular gaps between sectors (sectorJitter), and authored
-    // decor placements that land inside one of those slivers would
-    // otherwise be silently dropped (5 of 11 jungle props in seed-
-    // dependent matches). For decor only, that's wasteful — we can
-    // safely attach the prop to whichever fragment is angularly
-    // closest, since the prop is visual-only and just needs SOME host
-    // group to inherit collapse motion. We still reject points that
-    // are outside the playable radius entirely (handled by callers).
+    // Pass 2: tolerant fallback for points OUTSIDE the fragment disc.
+    //
+    // Corrección 2026-09-06 (docs/ARENA_V2.md §1.3 punto 16): este
+    // comentario decía que el generador deja huecos angulares entre
+    // sectores por el `sectorJitter` y que por eso se perdían props. Es
+    // falso: los sectores son contiguos por construcción (los ángulos se
+    // ordenan y el final de cada sector ES el principio del siguiente,
+    // src/arena-fragments.ts), y las bandas cubren 0..12 sin saltos de
+    // radio. Medido: 0 fallos de cobertura en 100.000 puntos con r<12
+    // (scripts/research/arena-stats.mts) y los 73 props autorizados
+    // están todos en r≤11,5, así que hoy el pase 1 los coge todos.
+    // Lo que este pase salva de verdad es un punto fuera del disco
+    // (r>maxRadius, o r exactamente en el borde tras un cambio de
+    // radios): el prop es visual, solo necesita ALGÚN grupo anfitrión
+    // del que heredar la caída, así que lo colgamos del sector
+    // angularmente más cercano en vez de descartarlo.
     const ang = Math.atan2(z, x);
     let bestIdx = -1;
     let bestDelta = Number.POSITIVE_INFINITY;
@@ -765,9 +806,21 @@ export class Arena {
     }
   }
 
-  /** Tint every collapsible fragment's top surface with the pack's
-   *  ground texture. Leaves the immune center + bottom / side faces
-   *  alone so the arena's band structure still reads clearly. */
+  /**
+   * Map the pack's ground texture onto every fragment TOP surface.
+   *
+   * Corrección 2026-09-06 (docs/ARENA_V2.md §1.3 punto 16): este
+   * comentario decía "leaves the immune center alone". Es falso. El
+   * filtro es `receiveShadow === true`, y la tapa del centro inmune
+   * también lo lleva (`createFragmentMesh`), así que el centro recibe el
+   * mismo mapa y el mismo `color = 0xdadada` que los sectores. Efecto
+   * medido: con pack aplicado (siempre, en partida) los BAND_COLORS y el
+   * verde del centro no se ven, y la zona segura no se distingue.
+   * Se documenta, no se arregla aquí: el tinte por banda es de la fase 1
+   * del plan (`ARENA_LOOK.bandTint` + `userData.role` en vez de la
+   * heurística de `receiveShadow`). Lo único que queda fuera hoy son las
+   * caras laterales e inferiores, que no llevan `receiveShadow`.
+   */
   private applyGroundTexture(tex: THREE.Texture): void {
     for (const g of this.fragmentGroups) {
       g.traverse(child => {
@@ -871,6 +924,9 @@ export class Arena {
       // Server switched packs without re-seeding (unusual but supported).
       this.currentPackPromise = this.applyPack(packId, seed);
     }
+    // From here on the server owns the timeline. Set AFTER the build above,
+    // which resets the flag as part of starting a fresh layout.
+    this.serverDriven = true;
 
     // Apply any newly completed levels
     if (collapseLevel !== this.syncedLevel) {
@@ -969,7 +1025,11 @@ export class Arena {
   /** Dump fragment state to console. */
   dumpFragments(): void {
     if (!this.layout) { console.log('[Arena] no layout (not in a match)'); return; }
-    console.log(`[Arena] seed=${this.syncedSeed} radius=${this.currentRadius.toFixed(2)} syncedLevel=${this.syncedLevel} syncedWarn=${this.syncedWarning}`);
+    // Print the driver-agnostic state: the synced* fields stay at their
+    // sentinels in offline matches, which is why this line used to say
+    // "syncedLevel=-1" in every single-player dump.
+    const cs = this.getCollapseState();
+    console.log(`[Arena] seed=${this.syncedSeed} radius=${this.currentRadius.toFixed(2)} level=${cs.level}/${cs.batchCount} warning=${cs.warningBatch} alive=${cs.fragmentsAlive}/${cs.fragmentsTotal} driver=${this.serverDriven ? 'server' : 'local'}`);
     const byBand = new Map<number, string[]>();
     for (let i = 0; i < this.layout.fragments.length; i++) {
       const f = this.layout.fragments[i];
@@ -1030,6 +1090,44 @@ export class Arena {
     return isPointOnArena(x, z, this.layout.fragments, this.alive);
   }
 
+  /**
+   * The generated layout for the current match, or null before the first
+   * `buildFromSeed` / `syncFromServer`. Read-only by contract: it is the
+   * very object the collapse logic reads every frame, so callers must not
+   * mutate it. Exists so tooling (lab panels, dev-api) can report seed,
+   * batches and bands without casting to private fields.
+   */
+  getLayout(): ArenaLayout | null {
+    return this.layout;
+  }
+
+  /**
+   * Collapse timeline snapshot that reads the SAME in both modes.
+   * Offline the live fields are `level` / `warningActive` (driven by
+   * `update()`); online they are `syncedLevel` / `syncedWarning` (driven
+   * by `syncFromServer`). Fragment counts come from `alive[]`, the same
+   * array the physics reads, so they can't drift from the truth.
+   */
+  getCollapseState(): ArenaCollapseState {
+    let fragmentsAlive = 0;
+    for (const a of this.alive) if (a) fragmentsAlive++;
+
+    // syncedWarning starts at -2 (a "never synced" sentinel) — normalise
+    // every "no batch warning" case to -1 so consumers have one contract.
+    const level = this.serverDriven ? Math.max(0, this.syncedLevel) : this.level;
+    const rawWarning = this.serverDriven
+      ? this.syncedWarning
+      : (this.warningActive ? this.level : -1);
+
+    return {
+      level,
+      warningBatch: rawWarning < 0 ? -1 : rawWarning,
+      batchCount: this.layout?.batches.length ?? 0,
+      fragmentsAlive,
+      fragmentsTotal: this.alive.length,
+    };
+  }
+
   reset(): void {
     // Called before buildFromSeed or on phase transition
     for (const g of this.fragmentGroups) {
@@ -1052,6 +1150,7 @@ export class Arena {
     this.syncedLevel = -1;
     this.syncedWarning = -2;
     this.syncedSeed = -1;
+    this.serverDriven = false;
     this.currentRadius = FRAG.maxRadius;
     // Drop any decorations + revert skybox / fog so the menu screens
     // that follow (title, character select) paint the procedural sky.

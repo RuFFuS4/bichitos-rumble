@@ -14,8 +14,13 @@ import * as THREE from 'three';
 // 2026-04-27: tried raising `lookAt` to (0, 5, 0) to bring the
 // skybox horizon into frame; ruined gameplay framing (ring no
 // longer fully visible, critters pushed into bottom strip).
-// Reverted in 9731d64 + sky moved to a camera-attached backdrop
-// so the gameplay framing can stay locked here.
+// Reverted in 9731d64 — the framing stays locked here and the sky
+// is not the camera's problem: it's the pack's equirect panorama
+// bound as `scene.background` (`setSceneSkyboxTexture`,
+// `src/scene-atmosphere.ts`), which never moves with the camera.
+// (Este comentario decía "sky moved to a camera-attached backdrop";
+// ese backdrop nunca existió — corregido 2026-09-06, docs/ARENA_V2.md
+// §1.3 #16.)
 export const GAMEPLAY_CAM_POSITION = new THREE.Vector3(0, 23, 25);
 export const GAMEPLAY_CAM_LOOKAT = new THREE.Vector3(0, -3, 0);
 

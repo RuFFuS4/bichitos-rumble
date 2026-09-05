@@ -24,12 +24,15 @@
     "test:smoke": "playwright test",
     "test:sim": "vitest run",
     "batch": "node scripts/run-match-batch.mjs",
-    "check": "tsc --noEmit && node --test scripts/tests/tool-patch-core.test.mjs && node scripts/verify-critter-glbs.mjs && node scripts/verify-ability-parity.mjs && node scripts/check-pws-parity.mjs && vite build && node scripts/clean-dist-raw.mjs && node scripts/check-payload-budget.mjs",
+    "check": "tsc --noEmit && node --test scripts/tests/tool-patch-core.test.mjs && node scripts/verify-critter-glbs.mjs && node scripts/verify-ability-parity.mjs && node scripts/check-pws-parity.mjs && node scripts/check-sim-parity.mjs && vite build && node scripts/clean-dist-raw.mjs && node scripts/check-payload-budget.mjs",
     "doctor": "node scripts/doctor.mjs",
     "test:patch": "node --test scripts/tests/tool-patch-core.test.mjs",
     "balance": "node scripts/balance-report.mjs",
     "golden": "node scripts/run-match-batch.mjs --golden-check",
-    "golden:write": "node scripts/run-match-batch.mjs --golden-write"
+    "golden:write": "node scripts/run-match-batch.mjs --golden-write",
+    "golden:layout": "vitest run tests/sim/arena-layout.test.ts",
+    "golden:layout:write": "node --experimental-strip-types scripts/write-arena-layout-golden.mjs",
+    "arena": "node --experimental-strip-types scripts/arena-layout.mjs"
   },
   "dependencies": {
     "@colyseus/sdk": "^0.17.43",

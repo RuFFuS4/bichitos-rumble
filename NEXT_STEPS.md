@@ -25,25 +25,36 @@ Steam; ver ROADMAP). Pero *"antes de ampliar y avanzar hay que arreglar
 cosas… la generación de los terrenos es muy muy pobre"*. Diagnóstico y
 plan completo: [`docs/ARENA_V2.md`](docs/ARENA_V2.md).
 
-**Decisiones que necesita Rafa antes de arrancar** (recomendación y
-razones en `docs/ARENA_V2.md §6`):
-1. [ ] Micro-slice de gameplay (medios lotes contiguos del patrón A,
-       `layout.pattern`, `radiusAt`) en H4.5 con el único `golden:write`,
-       o dejarlo para H6. Recomendado: **ahora**.
-2. [ ] Quitar el void (cilindro + disco negro) y confiar en el skybox del
-       pack antes de construir fondo nuevo. Recomendado: **sí**, decidir
-       sobre capturas.
-3. [ ] Dieta de palmas, bambú y sakura (`optimize-arena-props.mjs`) (112-131k → ≤20k
-       tris) aunque cambie siluetas. Recomendado: **sí**, con galería
-       antes/después.
-4. [ ] Fijar provisionalmente el perfil 8P (r 16, islote 3,5, 4 bandas,
-       150 s) para que la fase 5 parametrice contra números reales.
+**Decisiones de Rafa — TOMADAS el 2026-09-06** ("vamos con los 4 puntos",
+las cuatro por la recomendación; razones en `docs/ARENA_V2.md §6`):
+1. [x] **Micro-slice de gameplay SÍ, ahora** (fase 0.5): medios lotes
+       contiguos del patrón A con rotación por semilla, `layout.pattern`
+       explícito y `radiusAt(angle)`, aprovechando el único
+       `golden:write` de H4.5. Zona hard-stop: bots, respawn y
+       proyectiles; despliegue cliente+servidor a la vez.
+2. [x] **Fuera el void** (cilindro + disco negro de `src/arena.ts`) y a
+       confiar en el skybox del pack; fondo por bioma solo donde no
+       baste (fase 3). Se decide sobre capturas de los 5 packs, y hay
+       que conservar `VOID_FLOOR` y el descarte de fragmentos que caen.
+3. [x] **Dieta de props SÍ** (palmas, bambú, sakura: 112-131k → ≤20k
+       tris con `scripts/optimize-arena-props.mjs`) antes de encender
+       ninguna sombra de props, con galería antes/después para tu ojo.
+4. [x] **Perfil 8P provisional fijado**: r 16 (804 u², ~100 u²/jugador),
+       islote 3,5 u, 4 bandas, 150 s de partida (primer lote a 0,2 y
+       colapso total a 0,8 de la duración), última banda resistente.
+       Solo condiciona la parametrización de la fase 5; se valida con
+       `?arenaView=1&profile=8p` cuando exista el perfil en H6.
 
 **Terreno v2 — fases** (alcance, ficheros y criterios en
 `docs/ARENA_V2.md §3`; cada fase en su rama, hoja de contactos como
 entregable):
-- [ ] Fase 0 — red de seguridad + CLI (`claude/fix/arena-safety-net`;
-      consulta a Rafa por bots/respawn/ci.yml).
+- [x] **Fase 0 — red de seguridad + CLI** (2026-09-06): scraper de
+      paridad de los espejos del sim en `npm run check`, 16 invariantes
+      Vitest del generador, golden de layout por hash (67 semillas, ms),
+      CLI `npm run arena` (ascii/json/timeline/curve/svg/sweep),
+      observabilidad real del colapso offline (el golden de partidas ya
+      registra `collapse_warn`/`collapse_batch`), `test:sim` en CI y
+      docs con las cifras reales. Revisado por 2 agentes adversariales.
 - [ ] Fase 0.5 — micro-slice de gameplay (si Rafa dice sí en la 1).
 - [ ] Fase 1 — el disco se convierte en un lugar
       (`claude/feature/arena-look-v2`) → **hoja de contactos y decisión

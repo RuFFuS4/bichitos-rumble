@@ -135,6 +135,46 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   commit. Ojo: correr con el dev server ASENTADO (una edición de src
   en caliente dispara HMR a mitad de partida y aborta el run).
 
+- **Terreno / generador de arena** (terreno v2 fase 0, 2026-09-06):
+  - `npm run arena -- --seed 501 --ascii` dibuja el disco EN LA TERMINAL
+    rasterizado con la misma `pointInFragment` que usa la física (no una
+    aproximación), con `--at-batch K` / `--at-seconds S` para ver el
+    estado tras N lotes caídos. Otros modos: `--json` (ArenaLayout
+    entero, pipeable a jq), `--timeline` (aviso y caída de cada lote en
+    segundos), `--curve` (área viva por instante), `--svg <ruta>` y
+    `--sweep K` (barrido determinista de K semillas: fragmentos,
+    patrón A/B, contigüidad del primer lote, colapso total, área viva).
+    Sin modo o con un argumento inválido sale con exit 1 — una
+    invocación mal escrita nunca devuelve un resumen engañoso.
+  - `npm run golden:layout` (Vitest, milisegundos, sin navegador)
+    compara el hash FNV-1a del layout de 67 semillas contra
+    `tests/sim/arena-layout-golden.json`: separa "cambió el terreno" de
+    "cambió el balance", que es lo que mide el golden de partidas.
+    Cambio intencional → `npm run golden:layout:write` y el diff del
+    JSON lo documenta. Los invariantes que lo acompañan
+    (`tests/sim/arena-layout.test.ts`, dentro de `npm run test:sim`)
+    protegen la ESTRUCTURA (cobertura sin huecos, contigüidad angular,
+    pertenencia a lotes, determinismo); el TEMPO lo protege el golden.
+  - `node scripts/check-sim-parity.mjs` (dentro de `npm run check`)
+    compara byte a byte las copias espejo cliente/servidor del sim
+    —hoy `arena-fragments.ts`— ignorando solo el bloque de cabecera
+    (que se nombran mutuamente y nunca pueden coincidir), con
+    presupuesto de líneas para que la tolerancia no se trague lógica.
+    Añadir un par futuro es una entrada más en su lista `PAIRS`.
+  - Estado del colapso en vivo: `Arena.getCollapseState()` (nivel, lote
+    en aviso, fragmentos vivos/total) alimenta `debugGetArenaInfo` y los
+    eventos `collapse_warn` / `collapse_batch` del recording, que desde
+    2026-09-06 se emiten TAMBIÉN offline (antes leían campos que solo
+    cambiaban online, así que el golden de partidas nunca vio caer la
+    arena).
+  - Requisito: `arena-layout.mjs` y `write-arena-layout-golden.mjs`
+    importan `src/arena-fragments.ts` directamente, así que necesitan
+    **Node ≥ 22.18** (type stripping). El resto del repo sigue con
+    `engines.node >= 20.19`; los npm scripts ya pasan el flag.
+  - Registro histórico: `scripts/research/arena-stats.mts` es la
+    medición congelada del diagnóstico del 2026-09-05 que respalda
+    `docs/ARENA_V2.md §1.2`. Para medir de aquí en adelante, el CLI.
+
 Huecos de AFILADO_PLAN cerrados: el applier de ability-tuner llegó el
 2026-08-24 como **`ability-patch`** (6º tool type) — ver "Tuner de
 habilidades" más abajo. Con él y el golden, TODOS los huecos
