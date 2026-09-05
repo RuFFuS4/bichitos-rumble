@@ -16,7 +16,12 @@ H0 Saneamiento ──► H1 Modernización ──► H2 Dieta payload + distribu
                                               │
                    H3 Bichitos Studio ◄───────┤ (H3 puede solaparse con H2)
                                               ▼
-                   H4 Retención + bucle social ──► H5 Monetización mínima
+                   H4 Retención + bucle social ──► H4.5 Arreglar antes de crecer
+                                                          │
+                                  H5 Monetización mínima ◄┘
+                                              │
+                                              ▼
+                   H6 Party · progresión · 8 jugadores · Steam
 ```
 
 La lógica: no se construye nada nuevo sobre cimientos ciegos (H0), no se
@@ -190,41 +195,90 @@ Doc vivo: [docs/BALANCE.md](docs/BALANCE.md). Lección de diseño (Rafa):
 balancean con mecánicas nuevas, no con más números. Esa cola abre la
 fase de mecánicas.
 
-## H4 — Retención y bucle social (~3-4 semanas)
+## H4 — Retención y bucle social ✅ CERRADO 2026-09-05 (`v1.7-h4-social`)
 
 **Meta**: razones para volver y jugadores que traen jugadores.
 
 **Social / adquisición**
-- [ ] **Salas privadas + join por enlace** (`?room=XYZ`): botón "Jugar con
+- [x] **Salas privadas + join por enlace** (`?room=XYZ`): botón "Jugar con
       amigos" (create + joinById ya lo soporta Colyseus). La petición nº1
       de un brawler 4P y nuestro bucle viral más barato.
-- [ ] **Compartir**: `navigator.share` con fallback clipboard en end screen
+- [x] **Compartir**: `navigator.share` con fallback clipboard en end screen
       y toasts de belt ("Gané con Kurama en Bichitos Rumble").
-- [ ] **i18n ES/EN** (~150 claves, detección por navigator.language).
+- [x] **i18n ES/EN** (~150 claves, detección por navigator.language).
 
 **Retención**
-- [ ] **Reconnect** (`allowReconnection`, post-Colyseus 0.17): hoy un blip
+- [x] **Reconnect** (`allowReconnection`, post-Colyseus 0.17): hoy un blip
       de red te convierte en bot para siempre.
-- [ ] **Identidad con código de recuperación** (cross-device sin login).
-- [ ] **Slayer Belt real** (el sistema está al 95%: solo falta el wiring de
+- [x] **Identidad con código de recuperación** (cross-device sin login).
+- [x] **Slayer Belt real** (el sistema está al 95%: solo falta el wiring de
       lastHitBy → kills_vs_humans) + tuning de umbrales de badges (Fase 6).
-- [ ] **Integridad de leaderboards**: partidas vs bots no puntúan
+- [x] **Integridad de leaderboards**: partidas vs bots no puntúan
       Throne/Flash/Streak; rage-quit registra derrota.
-- [ ] **Tabla `matches`** server-side: historial + métricas de retención
+- [x] **Tabla `matches`** server-side: historial + métricas de retención
       (DAU, partidas/día, curvas de abandono) + auditoría de agregados.
 
 **Juego**
-- [ ] Feel passes pendientes (Kurama primero — receta lista en NEXT_STEPS),
+- [ ] Feel passes pendientes (→ H4.5) (Kurama primero — receta lista en NEXT_STEPS),
       SFX signature por critter.
-- [ ] Split de `abilities.ts` (config/runtime/vfx) + tests Vitest del sim
+- [x] Split de `abilities.ts` (config/runtime/vfx) + tests Vitest del sim
       determinista (~20 tests) — antes de tocar gameplay en serio.
-- [ ] Shared sim package cliente/servidor (mata el scraper de paridad y
+- [ ] Shared sim package (NO-GO, ver cierre) cliente/servidor (mata el scraper de paridad y
       ~1.000 líneas duplicadas) — el refactor de más palanca del proyecto.
-- [ ] Mobile: manifest PWA, viewport-fit=cover, prefers-reduced-motion
+- [x] Mobile: manifest PWA, viewport-fit=cover, prefers-reduced-motion
       (multiplicador global en FEEL), HUD landscape polish.
 
-**Gate de salida**: 2 amigos pueden jugar juntos a propósito · un jugador
-que vuelve conserva su identidad · métricas de retención visibles.
+**Gate de salida**: 2 amigos pueden jugar juntos a propósito ✅ (sala
+privada real verificada en producción) · un jugador que vuelve conserva
+su identidad ✅ (reconnect 30 s + código de recuperación) · métricas de
+retención visibles ✅ (`/api/metrics/retention`, tabla `matches`).
+
+Cierre: hecho en dos tandas autónomas (2026-08-24) + checklist simulada
+con Playwright y review de networking (2026-09-05); detalle en
+[`BUILD_LOG.md`](BUILD_LOG.md). Los feel passes y SFX pasan a H4.5; el
+shared sim package quedó NO-GO (server `rootDir` estricto) y se sustituye
+por espejos + scraper de paridad (H4.5, terreno v2 fase 0).
+
+## H4.5 — Arreglar antes de crecer (2026-09-05 → ~3 semanas)
+
+**Meta** (fijada por Rafa el 2026-09-05): *"antes de ampliar y avanzar hay
+que arreglar cosas"*. Lo primero, la generación de terrenos, *"muy muy
+pobre"*. Diagnóstico por capas, 4 propuestas, 3 jueces y plan en
+[`docs/ARENA_V2.md`](docs/ARENA_V2.md) (art-first unánime, con injertos).
+
+**Terreno v2** (≈13 días en tandas de 1-2, UNA regeneración de golden):
+- [ ] **Fase 0 — red de seguridad y CLI**: scraper de paridad de
+      `arena-fragments` en `npm run check`, tests Vitest del generador,
+      golden de layout por hash, `scripts/arena-layout.mjs`
+      (`--json|--ascii|--svg|--sweep`), observabilidad offline del colapso
+      (el golden gana eventos `collapse_*`), docs veraces.
+- [ ] **Fase 0.5 — micro-slice de gameplay** (hard-stop): medios lotes
+      contiguos del patrón A (2,8 % → 100 %), `layout.pattern` explícito,
+      `radiusAt(angle)` para bots/respawn/proyectiles.
+- [ ] **Fase 1 — el disco se convierte en un lugar** (primer slice
+      visible): UV a escala, tinte por banda/pack/semilla, fuera el void,
+      tone mapping + sombras reales, bisel y material de acantilado,
+      `ARENA_LOOK` con dev-api + applier `look-patch`, hoja de contactos
+      `arena-shots` de los 5 packs.
+- [ ] **Fase 2 — colapso que se lee y se siente**: grietas, sag, escombros,
+      polvo, shake, orilla que cae por sectores, centro inmune hero.
+- [ ] **Fase 3 — cada bioma es un sitio**: rig de luz por pack, fondo por
+      bioma donde el skybox no baste, partículas ambientales.
+- [ ] **Fase 4 — props que pertenecen al suelo**: blob shadows, dieta
+      de palmas/bambú/sakura con `optimize-arena-props.mjs`, validador de packs en
+      `check`, `authoredRadius`, higiene (GLB crudo de 54 MB fuera de
+      git).
+- [ ] **Fase 5 — todo lo visual en función del radio**: cámara, sombras,
+      orilla y tile derivados de `maxRadius` (deja la capa lista para 8P).
+
+**Otros arreglos de H4.5**: feel pass de Kurama y SFX por critter
+(heredados de H4), limpiar nicks de prueba en prod, flecos de licencias,
+lo que salga del playtesting de Rafa.
+
+**Gate de salida**: hoja de contactos antes/después de los 5 packs
+aprobada por Rafa · `npm run check` con paridad de arena · `test:sim` en
+CI · golden de layout · `DEV_TOOLS.md §Superficie programática` al día ·
+merge a `main` con tag.
 
 ## H5 — Monetización mínima (tras H2+H4; ~2+ semanas)
 
@@ -244,18 +298,87 @@ licencias de H0 cerrado.
 **Gate de salida**: primer ingreso registrado (donación o ad revenue) ·
 decisión documentada del siguiente paso con métricas en la mano.
 
+## H6 — Party, progresión, 8 jugadores y Steam (tras H5; ~2-3 meses)
+
+**Meta** (idea de Rafa, 2026-09-05): un juego más grande y monetizable,
+inspirado en smashkarts.io y krunker.io (party, sencillos, con buenas
+opciones de monetización), con partidas de hasta 8 y salida en Steam.
+Orden acordado, un slice + `golden:write` por cambio de generador:
+
+1. [ ] **Modo por tiempo con respawn y puntos por KO** + salas privadas
+       configurables 4/6/8 (el público sigue a 4 hasta medir). Es la
+       mecánica que hace divertidos los 8 jugadores (último superviviente
+       no escala: la mitad mira) y la que da gancho a la progresión.
+2. [ ] **Terreno lógico v2** (cola de `docs/ARENA_V2.md §5`): perfiles de
+       arena (`'4p'` byte-idéntico al actual, `'8p'` r 16-17, 4 bandas,
+       islote ≥3,5 u, 150 s), tempo como fracciones de la duración,
+       patrones nuevos con regla de huérfanos, decor por receta + semilla,
+       hazards de bioma como zonas. Fuera del generador: `MAX_PLAYERS`,
+       `SPAWN_POSITIONS` derivados, HUD y sala de espera de 8.
+3. [ ] **Progresión**: XP, niveles, desbloqueos y retos diarios sobre la
+       identidad actual (código de recuperación).
+4. [ ] **Cosméticos y tienda**: skins y colores por critter (Tripo/Meshy
+       con licencia en verde), moneda blanda por jugar, anuncios
+       recompensados (CrazyGames), premium con Stripe atado a la
+       identidad. Sin cajas de botín (reguladas en varios países UE).
+5. [ ] **Steam**: wrapper de escritorio (Electron/Tauri) + Steamworks
+       (logros, overlay), soporte de mando, opciones de resolución;
+       cross-play con web gratis (mismo servidor Colyseus). Solo cuando
+       haya algo que vender y retención D7 medida.
+
+**Gate de entrada**: H5 con primer ingreso y 2+ semanas de métricas de
+`matches`. **Gate de salida**: modo por tiempo en público · perfil 8P
+jugado con 8 humanos · tienda con primera venta · build de Steam en
+beta cerrada.
+
+## H6 — Party, progresión, 8 jugadores y Steam (tras H5; ~2-3 meses)
+
+**Meta** (idea de Rafa, 2026-09-05): un juego más grande y monetizable,
+inspirado en smashkarts.io y krunker.io (party, sencillos, con buenas
+opciones de monetización), con partidas de hasta 8 y salida en Steam.
+Orden acordado, un slice + `golden:write` por cambio de generador:
+
+1. [ ] **Modo por tiempo con respawn y puntos por KO** + salas privadas
+       configurables 4/6/8 (el público sigue a 4 hasta medir). Es la
+       mecánica que hace divertidos los 8 jugadores (último superviviente
+       no escala: la mitad mira) y la que da gancho a la progresión.
+2. [ ] **Terreno lógico v2** (cola de `docs/ARENA_V2.md §5`): perfiles de
+       arena (`'4p'` byte-idéntico al actual, `'8p'` r 16-17, 4 bandas,
+       islote ≥3,5 u, 150 s), tempo como fracciones de la duración,
+       patrones nuevos con regla de huérfanos, decor por receta + semilla,
+       hazards de bioma como zonas. Fuera del generador: `MAX_PLAYERS`,
+       `SPAWN_POSITIONS` derivados, HUD y sala de espera de 8.
+3. [ ] **Progresión**: XP, niveles, desbloqueos y retos diarios sobre la
+       identidad actual (código de recuperación).
+4. [ ] **Cosméticos y tienda**: skins y colores por critter (Tripo/Meshy
+       con licencia en verde), moneda blanda por jugar, anuncios
+       recompensados (CrazyGames), premium con Stripe atado a la
+       identidad. Sin cajas de botín (reguladas en varios países UE).
+5. [ ] **Steam**: wrapper de escritorio (Electron/Tauri) + Steamworks
+       (logros, overlay), soporte de mando, opciones de resolución;
+       cross-play con web gratis (mismo servidor Colyseus). Solo cuando
+       haya algo que vender y retención D7 medida.
+
+**Gate de entrada**: H5 con primer ingreso y 2+ semanas de métricas de
+`matches`. **Gate de salida**: modo por tiempo en público · perfil 8P
+jugado con 8 humanos · tienda con primera venta · build de Steam en
+beta cerrada.
+
 ---
 
 ## Calendario orientativo
 
 | Hito | Ventana | Tag al cierre |
 |---|---|---|
-| H0 Saneamiento | 2ª quincena agosto | `v1.2-clean-base` |
-| H1 Modernización | 1ª quincena septiembre | `v1.3-modern-stack` |
-| H2 Payload + presencia | 2ª quincena septiembre | `v1.4-portal-ready` |
-| H3 Bichitos Studio | octubre | `v1.5-studio` |
-| H4 Retención + social | noviembre | `v2.0-social` |
-| H5 Monetización | diciembre | `v2.1-first-euro` |
+| H0 Saneamiento | ✅ 2026-08-17 | `v1.2-clean-base` |
+| H1 Modernización | ✅ 2026-08-18 | `v1.3-modern-stack` |
+| H2 Payload + presencia | ✅ 2026-08-19 | `v1.4-portal-ready` |
+| H3 Bichitos Studio | ✅ 2026-08-19 | `v1.5-bichitos-studio` |
+| Interludio afilado | ✅ 2026-08-20 | `v1.6-afilado` |
+| H4 Retención + social | ✅ 2026-09-05 | `v1.7-h4-social` |
+| H4.5 Arreglar antes de crecer | septiembre | `v1.8-terreno-v2` |
+| H5 Monetización | octubre | `v2.0-first-euro` |
+| H6 Party · progresión · 8P · Steam | noviembre → | `v2.x` |
 
 Los hitos H2/H3 pueden solaparse (uno es assets/infra, otro tooling). El
 calendario es orientativo — la regla que manda es el gate de salida de

@@ -1,5 +1,44 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-05 (tarde) — v1.7 en producción y el terreno bajo la lupa
+
+- **Merge dev→main `--no-ff` (f41fb7e) + tag `v1.7-h4-social`.** Vercel
+  READY en 18 s; Railway sirvió la imagen nueva a los ~30 s (autodeploy
+  Docker desde `main`, confirmado: cliente y servidor salen del mismo
+  push). Smoke de prod: título en ES, botón de amigos, manifest
+  standalone, GLB de arena a 200 KB, belts webp, 0 errores; endpoint de
+  retención 200; **sala privada real con 2 clientes Playwright** (misma
+  sala, enlace `?room=`, 2 jugadores vistos; salieron antes del arranque,
+  `matches` sigue a 0). Quedan 2 nicks `SMOKE*` en la DB de prod.
+- **Nueva dirección de Rafa**: juego más grande y monetizable
+  (referencias smashkarts.io y krunker.io), hasta 8 por partida, Steam.
+  Acordado el orden modo-por-tiempo → progresión → cosméticos → Steam,
+  interpolado en la ruta como **H6** tras H5; y antes, **H4.5 "Arreglar
+  antes de crecer"**, empezando por la generación de terrenos ("muy muy
+  pobre").
+- **Diagnóstico del terreno con un workflow de 15 agentes** (6 lectores
+  por capa, 4 propuestas art/procedural/gameplay/pipeline-first, 3
+  jueces, síntesis, crítico): **art-first unánime** (50/49/49) con
+  injertos de las otras tres. Causas contrastadas a mano contra el
+  código: `applyGroundTexture` tiñe 0xdadada todo mesh con
+  `receiveShadow` (mata `BAND_COLORS` y el centro inmune), textura
+  repetida 4×4 sobre UV de mundo (tile de 0,25 u, se colapsa a color
+  plano), void de dos mallas que tapa el skybox, cero `castShadow` en
+  partida (se paga el shadow pass sin resultado), un solo rig de luz sin
+  tone mapping para 5 biomas, y un GLB crudo de **54 MB versionado en
+  git** (`public/models/arenas/jungle/_raw/`, fuera del patrón del
+  `.gitignore`). El generador (`arena-fragments.ts`) solo varía ±1
+  sector por banda y ±14 % de jitter: radios, bandas, tempo (primer
+  colapso a 28,0 s en el 100 % de semillas) y forma son constantes.
+  Plan de 7 fases (≈13 días, una regeneración de golden) en
+  **[`docs/ARENA_V2.md`](docs/ARENA_V2.md)**; ROADMAP con H4 cerrado,
+  H4.5 y H6; NEXT_STEPS con las 4 decisiones para Rafa.
+- Lección de créditos: el workflow cayó en el crítico por límite de
+  sesión; `resumeFromRunId` recuperó los 14 agentes de caché y solo
+  re-ejecutó el crítico. Lección de herramienta: el Bash tool trunca
+  comandos largos (~10 KB) dejando comillas sin cerrar — los scripts
+  largos van con Write y se ejecutan aparte.
+
 ## 2026-09-05 — La checklist, simulada: campaña Playwright + review de networking
 
 - **12 de 14 items verificados por Claude** con una campaña Playwright

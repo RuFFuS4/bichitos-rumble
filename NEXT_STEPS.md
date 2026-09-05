@@ -8,12 +8,61 @@
 **H0 Saneamiento: ✅ `v1.2-clean-base`** · **H1 Modernización: ✅
 `v1.3-modern-stack`** · **H2 Dieta de payload + presencia base: ✅
 `v1.4-portal-ready`** (2026-08-19 — dist −59 %, huella inicial ~1,5 MB,
-itch.io publicado con donaciones; detalle en [`ROADMAP.md`](ROADMAP.md)
-y [`BUILD_LOG.md`](BUILD_LOG.md)).
+itch.io publicado con donaciones) · **H3 Bichitos Studio: ✅
+`v1.5-bichitos-studio`** · **Afilado: ✅ `v1.6-afilado`** · **H4 Retención
++ social: ✅ `v1.7-h4-social`** (2026-09-05, Vercel + Railway verificados,
+sala privada real en prod; detalle en [`ROADMAP.md`](ROADMAP.md) y
+[`BUILD_LOG.md`](BUILD_LOG.md)).
 
 ---
 
-## H3 — Bichitos Studio: tooling unificado (en curso)
+## H4.5 — Arreglar antes de crecer (EN CURSO desde 2026-09-05)
+
+Contexto: Rafa quiere un juego más grande y monetizable (referencias
+smashkarts.io y krunker.io), hasta 8 por partida y Steam — eso es **H6**
+tras H5 (orden acordado: modo por tiempo → progresión → cosméticos →
+Steam; ver ROADMAP). Pero *"antes de ampliar y avanzar hay que arreglar
+cosas… la generación de los terrenos es muy muy pobre"*. Diagnóstico y
+plan completo: [`docs/ARENA_V2.md`](docs/ARENA_V2.md).
+
+**Decisiones que necesita Rafa antes de arrancar** (recomendación y
+razones en `docs/ARENA_V2.md §6`):
+1. [ ] Micro-slice de gameplay (medios lotes contiguos del patrón A,
+       `layout.pattern`, `radiusAt`) en H4.5 con el único `golden:write`,
+       o dejarlo para H6. Recomendado: **ahora**.
+2. [ ] Quitar el void (cilindro + disco negro) y confiar en el skybox del
+       pack antes de construir fondo nuevo. Recomendado: **sí**, decidir
+       sobre capturas.
+3. [ ] Dieta de palmas, bambú y sakura (`optimize-arena-props.mjs`) (112-131k → ≤20k
+       tris) aunque cambie siluetas. Recomendado: **sí**, con galería
+       antes/después.
+4. [ ] Fijar provisionalmente el perfil 8P (r 16, islote 3,5, 4 bandas,
+       150 s) para que la fase 5 parametrice contra números reales.
+
+**Terreno v2 — fases** (alcance, ficheros y criterios en
+`docs/ARENA_V2.md §3`; cada fase en su rama, hoja de contactos como
+entregable):
+- [ ] Fase 0 — red de seguridad + CLI (`claude/fix/arena-safety-net`;
+      consulta a Rafa por bots/respawn/ci.yml).
+- [ ] Fase 0.5 — micro-slice de gameplay (si Rafa dice sí en la 1).
+- [ ] Fase 1 — el disco se convierte en un lugar
+      (`claude/feature/arena-look-v2`) → **hoja de contactos y decisión
+      de Rafa sobre el look base**.
+- [ ] Fase 2 — colapso que se lee y se siente.
+- [ ] Fase 3 — cada bioma es un sitio.
+- [ ] Fase 4 — props que pertenecen al suelo (+ higiene: GLB crudo de
+      54 MB versionado en `public/models/arenas/jungle/_raw/`).
+- [ ] Fase 5 — todo lo visual en función del radio.
+
+**Otros arreglos candidatos de H4.5**: feel pass de Kurama · SFX por
+critter · limpiar nicks `SMOKE*`/`Test*` de la DB de prod
+(`admin:delete-test`) · facturas y generador 2D (licencias) · tabla
+multi-dispositivo de tokens (diferido del review). Lo que solo pueden
+hacer tus manos sigue en §CHECKLIST más abajo.
+
+---
+
+## H3 — Bichitos Studio: tooling unificado (✅ cerrado 2026-08-19, histórico)
 
 **Meta**: las 4-5 herramientas internas (anim-lab, calibrate,
 decor-editor, tools.html, mesh2motion) se convierten en **un solo
@@ -59,7 +108,7 @@ más — unificación completa).
 
 ---
 
-## Fase de afilado (en curso — plan completo en docs/AFILADO_PLAN.md)
+## Fase de afilado (✅ completa 2026-08-20 — plan en docs/AFILADO_PLAN.md)
 
 **Decisiones de Rafa (2026-08-19)**: (1) tuning **offline-first**, el
 server (server/src/sim/*) se sincroniza al FINAL de la fase — el check
@@ -182,7 +231,8 @@ Evidencia en .tmp/checklist/ (report.json + capturas) y BUILD_LOG.
       dispositivo" en el PC; entrar por enlace a una sala ya empezada
       (alert legible); que el rival cierre la pestaña en un 1v1 (tú +1
       win, él +1 loss); una privada completa NO debe mover el Hall of Belts.
-- [ ] Merge dev→main + tag cuando te cuadre (deploy a prod).
+- [x] Merge dev→main + tag — hecho 2026-09-05 (`v1.7-h4-social`, Vercel y
+      Railway verificados, sala privada real contra prod OK).
 
 Diferido del review (estructural): tabla multi-dispositivo para tokens
 (hoy recuperar en B invalida el token de A con aviso explícito).
@@ -194,7 +244,7 @@ Diferido del review (estructural): tabla multi-dispositivo para tokens
 - [ ] Pase visual de arenas y belts tras el gltfpack (cuantiza; golden
       no ve píxeles) y del juego en ES en móvil.
 - [ ] Revisión de la zona networking (salas privadas tocan BrawlRoom).
-- [ ] Merge dev→main + tag cuando lo des por bueno (deploy a prod).
+- [x] Merge dev→main + tag — hecho 2026-09-05 (`v1.7-h4-social`).
 
 **Backlog H4 restante (por tamaño):**
 - [ ] Reconnect (allowReconnection) — el más valioso de retención.
