@@ -21,7 +21,7 @@ el lab se vuelve ilegible para quien entre después.
 > **Sibling tools** — all internal (`noindex`), accessible by URL only,
 > linked from the bottom of this sidebar:
 >
-> 1. [`animations lab`](../../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano `bichitos-mesh2motion`, dev server `:5174`) —
+> 1. [`animations lab`](../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano `bichitos-mesh2motion`, dev server `:5174`) —
 >    mesh2motion-based lab for **CREATING** animation clips and
 >    exporting GLBs. Upstream flows (Explore/Retarget) stripped;
 >    only `create.html` ships.
@@ -134,6 +134,11 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   `npm run golden:write` y el diff del JSON documenta el cambio en el
   commit. Ojo: correr con el dev server ASENTADO (una edición de src
   en caliente dispara HMR a mitad de partida y aborta el run).
+  **Después de `golden:write`, correr SIEMPRE `npm run golden`** y ver
+  3/3 antes de commitear: el 2026-09-07 una primera escritura tras un
+  cambio grande dejó el último `match_ended` truncado y la comparación
+  siguiente gritó "cambio de balance" sobre un cambio puramente visual
+  (ERROR_LOG 2026-09-07).
 
 - **Terreno / generador de arena** (terreno v2 fase 0, 2026-09-06):
   - `npm run arena -- --seed 501 --ascii` dibuja el disco EN LA TERMINAL
@@ -178,6 +183,12 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     — los cambios de color se ven al frame siguiente y los estructurales
     disparan `rebuildArenaVisuals()`, que rehace las mallas conservando
     semilla y pack sin cortar la partida.
+  - **Fondo del bioma** (no es el skybox): `src/arena-backdrop.ts` con
+    `BACKDROP_LOOK` en `src/arena-look.ts` — el mar sobre el que flota la
+    isla, con la rampa del bioma horneada en los vértices (0 bytes de
+    payload, 1 draw call). **Hueco de doble superficie conocido**:
+    `BACKDROP_LOOK` NO entra en `getArenaLook`/`setArenaLook`, así que hoy
+    solo se toca editando el fichero y recargando.
   - **Escala del suelo por bioma**: `PackDef.groundTile` en
     `src/arena-decorations.ts` (u de mundo por repetición de la textura).
     No es un capricho: las texturas traen conchas, pétalos y musgo
@@ -364,7 +375,7 @@ a fallback when clipboard / Node is unavailable.
 > Full anim-lab design in BUILD_LOG.md §"2026-04-25 Animation
 > Validation Lab". Decor system design in BUILD_LOG.md §"2026-04-25
 > In-arena decor". Full mesh2motion integration notes:
-> [`bichitos-mesh2motion/README-INTEGRATION.md`](../../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano desde H3 slice 8).
+> [`bichitos-mesh2motion/README-INTEGRATION.md`](../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano desde H3 slice 8).
 
 ## Propósito
 

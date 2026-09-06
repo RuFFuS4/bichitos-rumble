@@ -6,6 +6,26 @@
      parezca una foto mal puesta". La sección del fondo está cerrada y
      verificada; la de dioramas llega cuando termine su tanda. -->
 
+> **Estado de ejecución al 2026-09-07.** Esto es el PLAN, no el
+> inventario de lo hecho (eso vive en `NEXT_STEPS.md` §H4.5 y en
+> `BUILD_LOG.md`). Para que nadie rehaga trabajo ni dé por escrito lo que
+> no existe:
+>
+> - **Fondo**: hecho el slice del mar (plano con la rampa del bioma
+>   horneada, niebla que tiñe, sombra de la isla). Siguen pendientes el
+>   relieve, la cresta de siluetas y la **luz por bioma** — que en este
+>   documento figura como "fase 0, va sola y primero" y aún no se ha
+>   tocado.
+> - **Dioramas**: hechas la fase 0 (medición honesta) y el slice 1 (motor
+>   instanciado, 7 primitivas, recetas de los 5 biomas, canto con masa y
+>   sombras de contacto). El resto, pendiente.
+> - **No existen** `scripts/arena-metrics.mjs` ni
+>   `scripts/validate-arena-packs.mjs`, que el texto da por escritos y
+>   enganchados a `npm run check`. Quien los necesite, que los escriba.
+> - Donde el diagnóstico dice "cero instancing en el proyecto", léase
+>   "antes del slice 1": hoy hay dos (`arena-scatter.ts`,
+>   `blob-shadows.ts`).
+
 ## Fondo — que deje de parecer una foto pegada
 
 *Decisión tomada el 2026-09-07 sobre la petición literal de Rafa: «también el unificar el fondo de alguna forma para que no parezca una foto mal puesta». Tres análisis independientes (técnico, artístico, procedural) más un juicio comparado. Lo que sigue es la decisión, no el debate.*

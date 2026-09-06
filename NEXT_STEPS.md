@@ -43,9 +43,9 @@ desplegar** (`git log --oneline main..dev` los lista).
    que cliente y servidor salen a la vez.
 
 **Esperando respuesta de Rafa** (bloquean trabajo, no son opinión):
-- ¿Cómo está publicado el juego en **itch.io** — iframe de nuestro
-  dominio o zip subido? Decide si basta un flag de build (`VITE_PORTAL`)
-  para quitar el portal del Vibe Jam fuera de la web propia.
+- **Portal del Vibe Jam**: ¿fuera también en **itch** —que es un embed
+  de nuestra propia web, no un zip— o solo en la build de Steam? El
+  mecanismo ya está identificado; falta el alcance.
 - **Techos de altura del scatter**: contrato actual vs reglas de
   `docs/DIORAMAS.md §3` (decisión M2, más abajo).
 - **¿Isla como cono** flotando en mar / aire / hielo según el bioma?
@@ -117,7 +117,8 @@ entregable):
       interesa que se vea como algo denso, como un ambiente real, esto es
       muy importante para darle identidad visual"*. Medido: 11-18 props
       por bioma, casi todos entre r 7 y 11,5 (solo 1 por pack a r<8,5) y
-      cero instancing en el proyecto. Diagnóstico y plan en
+      cero instancing en el proyecto *(medido ANTES del slice 1; hoy ya
+      hay dos `InstancedMesh`)*. Diagnóstico y plan en
       [`docs/DIORAMAS.md`](docs/DIORAMAS.md). Va ANTES que la fase 1b.
       - [x] **Fase 0 (ojo limpio)** 2026-09-07: capturas honestas, props
             en paralelo.
@@ -162,8 +163,9 @@ entregable):
       **← DECIDE**: ¿te vale que el vacío deje de estar vacío? El fondo
       actual se ve en `.tmp/shots-cierre/` (`shots-fondo/` es de antes de
       los dioramas).
-- [ ] Fase 1b — sombras de contacto de critters, bisel de junta, applier
-      ToolPatch `look-patch`, panel del studio y dieta de props.
+- [ ] Fase 1b — bisel de junta, applier ToolPatch `look-patch`, panel
+      del studio y dieta de props. *(Las sombras de contacto de critters
+      salieron adelantadas en el slice 1 de dioramas: `blob-shadows.ts`.)*
 - [ ] Fase 2 — colapso que se lee y se siente.
 - [ ] Fase 3 — cada bioma es un sitio.
 - [ ] Fase 4 — props que pertenecen al suelo (+ higiene: GLB crudo de
@@ -189,11 +191,18 @@ entregable):
       los elementos"). Cohesión = paleta compartida entre scatter, props
       GLB y suelo; que los elementos se toquen y se agrupen en vez de
       flotar sueltos; sombras de contacto también en los props.
-- [ ] **Portal del Vibe Jam fuera de itch y Steam**: ver la respuesta en
-      BUILD_LOG 2026-09-07. Hoy `#portal-legend` (src/hud/hud.partial.html)
-      y el portal de salida (src/portal.ts) están SIEMPRE activos; el jam
-      terminó en mayo. Hace falta un flag de build (`VITE_PORTAL`), no
-      borrar código, porque en la web propia sigue teniendo sentido.
+- [ ] **Portal del Vibe Jam fuera de itch y Steam**: hoy `#portal-legend`
+      (`src/hud/hud.partial.html`) y el portal de salida (`src/portal.ts`)
+      están SIEMPRE activos, y el jam terminó en mayo. **Dato verificado**
+      (BUILD_LOG 2026-08-19, cierre de H2): itch.io **no sirve un zip**,
+      es un *embed fullscreen de producción* — el mismo build de nuestra
+      web dentro de un iframe. Por eso un flag de build a secas no vale:
+      apagaría el portal también en la web propia, que es donde sí lo
+      queremos. Plan: leer el interruptor de la URL (`?portal=0`), que
+      Rafa lo añada a la URL del embed en los ajustes de itch, y dejar el
+      flag de build (`VITE_PORTAL=off`) para el empaquetado de Steam, que
+      ése sí es una build aparte. **Lo único que falta decidir**: ¿fuera
+      también en itch, o solo en Steam?
 
 - [x] **Instancias de prueba mudas** (2026-09-07, commit `0bb2044`):
       *"cuando lances instancias para las pruebas silencia la musica y
@@ -370,7 +379,7 @@ Evidencia en .tmp/checklist/ (report.json + capturas) y BUILD_LOG.
 | 11 | ES en móvil | ✅ cero desbordes landscape+portrait, capturas revisadas |
 | 12 | Pase visual | ✅ 5 arenas + Hall of Belts 16/16 revisados a ojo: sin artefactos |
 | 13 | Revisión networking | ✅ review de 17 agentes → 13 confirmados, 10 arreglados (7b4a4e6) + e2e del zombi |
-| 14 | Merge dev→main + tag | ⏳ **decisión de Rafa** |
+| 14 | Merge dev→main + tag | ✅ hecho el 2026-09-05 (`v1.7-h4-social`). El SIGUIENTE merge, el de H4.5, sigue esperando decisión de Rafa |
 
 **Solo tus manos (lo que no se puede simular):**
 - [ ] Sentir shell-reflect, Claw Wave y el reflect online con sonido.

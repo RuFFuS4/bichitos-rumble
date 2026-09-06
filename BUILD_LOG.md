@@ -49,9 +49,13 @@ Ordenado, con el "cómo retomar" completo en `NEXT_STEPS.md` §Cómo retomar.
 - **Nada de esto está en producción**: en `main` sigue
   `v1.7-h4-social`, y el terreno v2, el fondo y los dioramas viven solo
   en `dev`, esperando a que Rafa mire las capturas y dé el visto bueno.
-- **Sin responder**: cómo está publicado el juego en itch.io (iframe de
-  nuestro dominio o zip subido). Es lo que decide si el portal del Vibe
-  Jam se apaga con un flag de build o hace falta otra cosa.
+- **Una pregunta menos**: la duda de cómo está publicado el juego en
+  itch.io ya estaba contestada en este mismo documento (2026-08-19): es
+  un **embed fullscreen de producción**, o sea nuestro propio build en un
+  iframe, no un zip. Cambia el plan del portal del Vibe Jam —un flag de
+  build lo apagaría también en la web propia— y deja una decisión mucho
+  más pequeña para Rafa. *(Lo encontró la auditoría del cierre; la
+  lección es mirar el BUILD_LOG antes de declarar algo "sin responder".)*
 - **Higiene de la máquina**: quedaron ~70 procesos de Chrome huérfanos de
   las tandas de hoy. Rafa pidió expresamente **no cerrarlos**. Los
   lanzaron agentes anteriores al helper, así que ésos no están mudos; los

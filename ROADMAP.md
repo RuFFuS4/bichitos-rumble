@@ -288,8 +288,9 @@ pobre"*. Diagnóstico por capas, 4 propuestas, 3 jueces y plan en
 - [ ] **Diferidos por Rafa**: shaders cartoon de los personajes (tras
       flag, como el tone mapping) y portal del Vibe Jam apagado fuera de
       la web propia (flag de build para itch/Steam).
-- [ ] **Fase 1b**: sombras de contacto de critters, bisel de junta,
-      applier ToolPatch `look-patch` + panel del studio, dieta de props.
+- [ ] **Fase 1b**: bisel de junta, applier ToolPatch `look-patch` +
+      panel del studio, dieta de props. (Las sombras de contacto de
+      critters ya cayeron con el slice 1 de dioramas.)
 - [ ] **Fase 2 — colapso que se lee y se siente**: grietas, sag, escombros,
       polvo, shake, orilla que cae por sectores, centro inmune hero.
 - [ ] **Fase 3 — cada bioma es un sitio**: rig de luz por pack, fondo por
