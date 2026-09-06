@@ -46,6 +46,7 @@ await page.waitForFunction(() => !!window.__devApi, null, { timeout: 30000 });
 await page.addStyleTag({ content: '#lab-sidebar { display: none !important; }' });
 
 for (const pack of PACKS) {
+  await page.evaluate(() => { window.__shotHist = []; });
   await page.evaluate(([p, s]) => {
     window.__devApi.startMatch('Sergei', ['Trunk', 'Kurama', 'Shelly'], { seed: s, packId: p });
   }, [pack, SEED]);
@@ -53,20 +54,49 @@ for (const pack of PACKS) {
   // llegan bastante después que el suelo (16 props en jungle tardan ~6 s
   // en local). Se espera a que el recuento de meshes se ESTABILICE en vez
   // de a un sleep a ojo, que es lo que dejaba las capturas sin props.
+  // Espera a que la escena se ESTABILICE: tres lecturas iguales seguidas,
+  // no dos. Con dos, el recuento del suelo (que llega antes que los props)
+  // se repetía y el script disparaba la foto con la arena aún vacía — así
+  // salieron las capturas de jungle sin un solo árbol.
   await page.waitForFunction(() => {
     const g = window.__game?.arena?.group;
     if (!g) return false;
     let n = 0; g.traverse((o) => { if (o.isMesh) n++; });
-    const prev = window.__shotMeshes ?? -1;
-    window.__shotMeshes = n;
-    return n > 0 && n === prev;
-  }, null, { timeout: 20000, polling: 1200 }).catch(() => {});
-  // Saltar la cuenta atrás (el "3" gigante tapa el centro del disco) y
-  // avanzar hasta el instante pedido.
-  await page.evaluate(() => window.__devApi.setFixedStep(20));
-  await page.waitForFunction((t) => (window.__devApi.snapshot?.()?.matchTime ?? 0) >= t,
-    Math.max(AT, 1.5), { timeout: 60000 }).catch(() => {});
-  await page.evaluate(() => window.__devApi.setFixedStep(null));
+    const hist = (window.__shotHist ??= []);
+    hist.push(n);
+    if (hist.length > 3) hist.shift();
+    return hist.length === 3 && hist[0] === hist[1] && hist[1] === hist[2];
+  }, null, { timeout: 25000, polling: 1000 }).catch(() => console.warn(`  ${pack}: la escena no se estabilizó`));
+  // Saltar la cuenta atrás y avanzar hasta el instante pedido.
+  //
+  // 2026-09-07: esta espera estaba ROTA y contaminó todas las capturas
+  // anteriores. Preguntaba por `__devApi.snapshot()`, que NO EXISTE (la
+  // superficie pública es getArenaInfo/getPerf/getPlayerSnapshot...), y
+  // el `?? 0` hacía que la condición no se cumpliera nunca: el
+  // waitForFunction agotaba sus 60 s CON EL JUEGO A 20x y el `.catch`
+  // mudo se lo tragaba. Resultado: cada captura salía a ~52 s de partida,
+  // con un jugador eliminado y el 95 % del decor ya caído — y sobre esas
+  // imágenes se juzgó el diorama. Ahora se lee el reloj del HUD, que es
+  // lo que ve el jugador, y si falla se dice en voz alta.
+  const readClock = () => {
+    const el = document.getElementById('hud-timer');
+    const m = el?.textContent?.match(/(\d+):(\d\d)/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  await page.waitForFunction(readClock, null, { timeout: 20000 })
+    .catch(() => { console.warn(`  ${pack}: no aparece el reloj del HUD`); });
+  if (AT > 0) {
+    await page.evaluate(() => window.__devApi.setFixedStep(20));
+    const ok = await page.waitForFunction((target) => {
+      const el = document.getElementById('hud-timer');
+      const m = el?.textContent?.match(/(\d+):(\d\d)/);
+      if (!m) return false;
+      const left = Number(m[1]) * 60 + Number(m[2]);
+      return (120 - left) >= target;
+    }, AT, { timeout: 60000 }).then(() => true).catch(() => false);
+    await page.evaluate(() => window.__devApi.setFixedStep(null));
+    if (!ok) console.warn(`  ${pack}: no se alcanzó t=${AT}s`);
+  }
   await sleep(700);
   const file = `${OUT}/${pack}${AT > 0 ? `_t${AT}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}.png`;
   await page.screenshot({ path: file });

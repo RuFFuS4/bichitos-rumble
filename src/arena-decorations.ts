@@ -486,6 +486,24 @@ export async function loadInArenaDecorations(
   packScale: number = 1.0,
 ): Promise<InArenaDecor[]> {
   if (placements.length === 0) return [];
+
+  // 2026-09-07: precarga en PARALELO de los tipos únicos. El bucle de
+  // abajo hacía `await loadModel(...)` DENTRO del for, así que los 16
+  // props de jungle esperaban en fila por 4 GLB distintos: la arena
+  // tardaba más de 20 s en poblarse y el jugador entraba a un disco
+  // pelado (se ve en las capturas de línea base a t=0). Con el modelo ya
+  // en la caché de model-loader, el await de dentro resuelve al instante
+  // y el orden de inserción se conserva.
+  const uniqueTypes = [...new Set(
+    placements.map(p => DECOR_TYPES[p.type]?.glbPath).filter((v): v is string => !!v),
+  )];
+  await Promise.all(uniqueTypes.map(path =>
+    loadModel(path).catch(err => {
+      console.debug('[arena-decorations] preload failed:', path, err);
+      return null;
+    }),
+  ));
+
   const out: InArenaDecor[] = [];
   for (const p of placements) {
     const type = DECOR_TYPES[p.type];

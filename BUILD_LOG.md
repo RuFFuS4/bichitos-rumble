@@ -1,5 +1,39 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-07 — Dioramas fase 0: mirar bien antes de tocar
+
+La tanda de dioramas (10 agentes) devolvió el plan —en
+[`docs/DIORAMAS.md`](docs/DIORAMAS.md), parte 2— y de paso destapó dos
+fallos que hacían que estuviéramos juzgando el diorama sobre imágenes
+falsas. Los dos son míos.
+
+- **El script de capturas esperaba a un método que no existe.**
+  `scripts/arena-shots.mjs` hacía `window.__devApi.snapshot()?.matchTime`
+  y `DevApi` no tiene ningún `snapshot()` público. El `?? 0` hacía que la
+  condición no se cumpliera nunca, así que el `waitForFunction` agotaba
+  sus **60 s con el juego a 20×** y el `.catch(() => {})` se lo tragaba
+  en silencio. Resultado: TODAS las capturas de `.tmp/shots-despues/`
+  están tomadas a **~52 s de partida**, con un jugador ya eliminado y el
+  95 % del decor caído (el 93-100 % vive en la banda exterior, que cae la
+  primera, a los 28 s). Sobre esas imágenes se dijo "un círculo con 4
+  cosas sueltas". Ahora la espera lee el reloj del HUD —`#hud-timer`, lo
+  que ve el jugador— y avisa por consola si no llega.
+- **Y la espera de carga se conformaba con dos lecturas iguales**, así
+  que disparaba la foto en cuanto el recuento de mallas del suelo se
+  repetía, antes de que llegaran los props. Por eso jungle salía con
+  CERO árboles. Ahora exige tres lecturas seguidas.
+- **Los props se cargaban de uno en uno.** `loadInArenaDecorations` hacía
+  `await loadModel(...)` DENTRO del bucle de placements: 16 esperas en
+  fila para 4 GLB distintos en jungle, más de 20 s hasta poblarse. Eso no
+  era solo un problema de capturas: **el jugador entraba a una arena
+  pelada y veía aparecer los árboles a mitad de cuenta atrás.** Ahora se
+  precargan en paralelo los tipos ÚNICOS y el bucle resuelve al instante
+  desde la caché.
+- Línea base honesta guardada en `.tmp/base-t0/` (t=0, los cuatro vivos).
+  Con ella el diagnóstico se sostiene igual, pero por su motivo real:
+  jungle tiene sus 16 props **en una corona pegada al canto** y el 25 %
+  central del disco está vacío en los cinco biomas.
+
 ## 2026-09-07 — El fondo deja de ser una foto: la isla flota sobre un sitio
 
 Petición de Rafa: *"unificar el fondo de alguna forma para que no parezca

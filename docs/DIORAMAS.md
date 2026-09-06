@@ -150,3 +150,221 @@ Tras este cambio dejan de verse en partida y solo sirven para la pantalla final 
 **Recomendación: conservarlas en esta tanda** con el `dispose()` de la fase 4 puesto, y **volver a mirarlo con la captura `--pose end` en la mano**. Si el remate de partida se sostiene sin ellas, se sustituyen por un gradiente procedural en un commit de una tarde y se ganan −0,27 MB de payload y −160 MB de VRAM por sesión. Es una decisión que se toma mejor con una imagen delante que ahora.
 
 *(Lo que NO necesita decisión: subir `far` de 200 a 500 y `near` de 0,1 a 0,5 en `src/camera.ts:56` es un requisito técnico del mar de r=300, con impacto medido de un bit de precisión de profundidad y nada dibujándose a menos de 0,5 u ni en el plano corto.)*
+
+---
+
+# Parte 2 — Lo que hay ENCIMA del disco
+
+<!-- Esta es la segunda mitad de docs/DIORAMAS.md: la sección del fondo (arriba)
+     se cerró y se mergeó el 2026-09-06 (a6a4d99, claude/feature/arena-backdrop).
+     Lo que sigue es la decisión sobre lo que hay ENCIMA del disco, sobre la
+     petición literal de Rafa del 2026-09-07: "hay que mejorar muy mucho o
+     directamente rehacer la generación de los dioramas… interesa que se vea
+     como algo denso, como un ambiente real". Cuatro análisis independientes
+     (assets, runtime, arte, escenografía), cuatro propuestas y dos juicios.
+     Aquí está la decisión, no el debate. -->
+
+---
+
+## 1. Por qué hoy parece "un círculo con 4 cosas sueltas"
+
+No es una impresión: es geometría de datos. **El decor vive en un collar pegado al canto y el 75 % del disco está vacío.**
+
+**Distribución radial** (parseado por mí de `src/arena-decor-layouts.ts`; disco R=12 → 452,4 u²):
+
+| pack | props | r<6 | 6–8,5 | 8,5–10 | ≥10 | r mín |
+|---|---|---|---|---|---|---|
+| jungle | 16 | **0** | 1 | 0 | 15 | 7,8 |
+| frozen_tundra | 13 | **0** | 1 | 0 | 12 | 7,5 |
+| desert_dunes | 11 | **0** | 0 | 0 | 11 | **10,4** |
+| coral_beach | 18 | **0** | 1 | 0 | 17 | 7,0 |
+| kitsune_shrine | 14* | **0** | 1 | 1 | 12 | 7,8 |
+
+*(\*73 registros en total; uno de kitsune tiene otro orden de campos y mi parser no lo coge. La conclusión no cambia.)*
+
+- **Cero props por debajo de r=6 en los cinco packs.** Esa circunferencia encierra el **25 % de la superficie** (113 u²).
+- El **44 %** del disco (r<8,5, 227 u²) contiene **4 props entre los cinco biomas**.
+- Densidad actual: 2,4–4,0 props/100 u² → **un objeto cada 28–41 u²**, es decir un círculo vacío de 3 u de radio por objeto. El critter mide 1,7 u.
+
+**Y se ve exactamente así.** En `.tmp/esc/t0/kitsune_shrine.png` (captura a t=0, disco entero, la que sirve de línea base honesta) el patio es un embaldosado plano con un collar de bambús, linternas y toriis en el borde: el ojo cuenta 5 siluetas y clasifica el resto como suelo. En `.tmp/shots-despues/desert_dunes.png` hay literalmente **dos cactus, una palmera y una roca** sobre 452 u².
+
+Las otras cinco causas, todas verificadas en el código de hoy:
+
+2. **No hay clase de prop rasante.** Altura real = `displayHeight × scale × PACK_DECOR_SCALE` (`src/arena-decorations.ts:443`). El prop más bajo del catálogo entero es `shell_beach` con 0,76 u. No existe hierba, ni hojarasca, ni guijarro: **nada que pueda ir en el centro sin tapar**.
+3. **Nada tiene sombra de contacto.** `grep castShadow src/*.ts` da **tres líneas**: `src/critter.ts:371` y `:385` (mallas procedurales que se ocultan al acoplar el GLB) y `src/scene-atmosphere.ts:77` (la key light). Ningún prop proyecta ni recibe sombra → todo se lee como pegatina. Y `ARENA_LOOK` ya tiene `critterShadowScale: 1.15` y `critterShadowOpacity: 0.34` (`src/arena-look.ts:61-62`) **sin un solo consumidor** desde la fase 1a.
+4. **Repetición sin variación.** El bucle de colocación (`src/arena-decorations.ts:484`) aplica solo `rotation.y` y una escala uniforme; los datos van de 0,85 a 1,10 (±12 %). Jungle repite **el mismo `stone_ruin_block` diez veces** y kitsune la misma linterna seis.
+5. **El diorama se borra a mitad de partida.** `node --experimental-strip-types scripts/arena-layout.mjs --seed 1 --timeline`, ejecutado hoy: lote 1 (banda 3) cae a **28,0 s**, lote 2 a **54,1 s**. Con el 95 % de los props en la banda 3, **a los 54 segundos el diorama ya no existe** y quedan ~60 s de partida sobre un plato liso.
+6. **La brújula de los comentarios está girada 180°.** `angle 1.55` (+Z) es la parte **baja** de la pantalla, la más cercana a la cámara; los comentarios de `DECOR_LAYOUTS` lo llaman "N 12h". Por eso el torii grande de kitsune y la aguja de 4,2 u de desert están plantados justo delante de la acción.
+
+**Y un aviso sobre la línea base:** `scripts/arena-shots.mjs:73` espera a `window.__devApi.snapshot?.()?.matchTime`, y **`DevApi` no tiene ningún método público `snapshot()`** (la superficie es `getArenaInfo`/`getPerf`/`getPlayerSnapshot`…; `buildSnapshot` es privado del grabador). El `?? 0` hace que la condición no se cumpla nunca, el `waitForFunction` agota sus 60 s con `setFixedStep(20)` corriendo y el `.catch(() => {})` se lo traga. Resultado: las cinco capturas de `.tmp/shots-despues/` marcan **1:08 y VIVOS: 3** — están tomadas a ~52 s, con media banda exterior ya caída y el donut blanco del Shockwave encima. **Todo el mundo, Rafa incluido, ha estado juzgando el diorama sobre imágenes en las que falta la mitad.** Arreglar eso es la fase 0 y no es negociable.
+
+---
+
+## 2. Lo que manda (presupuesto, rendimiento, determinismo, gameplay)
+
+**Payload — 5,3 MB, prestados.** `node scripts/check-payload-budget.mjs`, ejecutado hoy: `dist total: 69.7 MB (budget 75 MB)`. El top-3 son critters (`sebastian` 15,2 + `kermit` 14,2 + `kurama` 13,8 = **43,2 MB, el 62 %**); los props de arena son 14,09 MB en 32 GLB. Un GLB de árbol cuesta 1,2–1,4 MB → **caben tres o cuatro modelos nuevos en todo el proyecto**. El objetivo declarado de H2 es ≤50 MB, así que ese margen no es nuestro. **Corolario duro: la densidad tiene que costar 0 bytes o no existe.**
+
+**Triángulos — el techo con el catálogo actual.** Medido por la tanda (dos agentes coincidiendo al triángulo): jungle renderiza **900.815 tris de decor con 16 objetos**, kitsune 774.122 con 15, coral 339.396, desert 78.218, tundra 68.792. Una roca a la altura de la rodilla (`stone_ruin_block`) son 26.369 tris; la palma alta, 112.809. En comparación, **el suelo entero son 3.700–4.500 tris**: en jungle el decor es el 99,5 % de la geometría de la arena.
+
+**Rendimiento — el decor NO es el problema hoy, pero el vehículo importa.** Medido en escritorio (RTX 4090, 1280×720, GPU timer query): frame completo **1,29–1,55 ms** sobre 16,6 ms; los critters se comen 1,12–1,28 ms (75–85 %) y el decor entero 0,03–0,20 ms. El frame está limitado por **geometría, no por fill** (×9 píxeles = +14 % de tiempo). Las dos pendientes medidas que deciden la arquitectura:
+
+| vía | coste medido |
+|---|---|
+| props sueltos de alto poly | ~5,5 µs de GPU **y +1 draw call por prop** (368 props = +2,0 ms, 488 draws) |
+| instancias de geometría barata | **40.000 conos de 12 tris = +0,9 ms y 0 draw calls extra** |
+
+Y `grep -rn "InstancedMesh\|BatchedMesh\|mergeGeometries" src/` → **cero resultados**. Hoy cada prop es un `Mesh` con material clonado: 1 draw call cada uno. El suelo ya gasta 59–61 (`new THREE.Mesh(geo, [topMat, cliffMat])` en `src/arena.ts:234` son **dos** draws por sector × 29 fragmentos + 3 mallas del centro). **Móvil: sin medir.** No hay teléfono en la sesión y los dos proxies intentados se descartaron (SwiftShader da 550 ms de frame; el throttling de CDP solo modela CPU). Lo único defendible con datos propios es la forma del coste, y por eso el plan es instanciado.
+
+**Determinismo.** El servidor manda **solo `seed` + `packId`**. `mulberry32` está definido en tres sitios y **ninguno lo exporta**: `src/arena-fragments.ts:15` (gameplay), su espejo `server/src/sim/arena-fragments.ts:14` y `src/arena-decorations.ts:195` (visual). La capa nueva deriva de `mulberry32(seed ^ SAL_PROPIA ^ hash(capa))` reusando el visual, **nunca** el de fragments: `scripts/check-sim-parity.mjs` compara **byte a byte** ese par dentro de `npm run check`, y el layout está blindado por `npm run golden` y `npm run golden:layout`. El precedente exacto ya existe: `SALT_VISUAL` en `src/arena-look.ts`. No hay handshake de versión cliente↔servidor: cliente y servidor se despliegan a la vez o dos jugadores ven dioramas distintos (cosmético, pero se anota en la release).
+
+**Gameplay — la cámara, recalculada por mí (no la fórmula que circula).** Pose fija `(0,23,25) → (0,-3,0)`, fov 40 (`src/camera.ts`). Escala en pantalla: **1 u de alto ≈ 20,2 px**; el critter (1,7 u) mide 34 px. La fórmula "un prop de altura H tapa H×0,962 u" que usaban los cuatro análisis **es falsa como constante**; trazando el rayo cámara→cima→suelo:
+
+| altura | r=0 | r=5 | r=8 | r=11 | fórmula |
+|---|---|---|---|---|---|
+| 0,25 u | 0,27 | 0,22 | 0,19 | 0,15 | 0,24 |
+| 0,55 u | 0,61 | 0,49 | 0,42 | 0,34 | 0,53 |
+| 1,20 u | 1,38 | 1,10 | 0,94 | 0,77 | 1,15 |
+| 4,20 u (en r=11) | — | — | — | **3,13** | 4,04 |
+
+La fórmula **subestima en el centro y sobreestima un 26–56 % hacia fuera**. Y el arco peligroso depende de la altura, al revés de lo que se dijo: para un prop en r=11, el punto ocultado sale del disco a partir de **63°** desde +Z si H=4,2, pero a **~110°** si H=1,2 (los props altos lanzan su oclusión más lejos y la tiran fuera). Lo que manda no es "dentro o fuera" sino **cuánto suelo roba**. De ahí salen los techos del §3.
+
+Tres restricciones más, no negociables: **los props no colisionan** (nada de esto entra en `isOnArena` ni en la física); **todo lo que se ponga debe caer con su fragmento** (`findFragmentAt` en `src/arena.ts:584` + `host.attach` en `:601`, con rotX/rotZ propios por índice en `:1221`); y **el formato de `DECOR_LAYOUTS` no se toca** porque está anclado al applier `decor-editor` (`scripts/tool-patch-core.mjs:77` target, `:215` validador, `:1089` mutador) y a sus tests dentro de `npm run check`.
+
+---
+
+## 3. Plan elegido
+
+**Ganadora: la capa procedural instanciada** — de las cuatro propuestas, las dos que la defienden (motor medido + reglas de ecología) empataron a un punto en los dos juicios, y son gemelas arquitectónicas. Se funden. Se le injerta entera la escenografía (masa del canto y suelo pintado) como fase previa, y la autoría de héroes como fase final.
+
+**El razonamiento en una línea:** con props sueltos reutilizados se llega a ~×3 objetos y se gasta el presupuesto entero de triángulos y +33 draw calls; con geometría generada en código e instanciada, **860–1.700 elementos cuestan ~9.000–16.000 triángulos (el 1–1,8 % de lo que jungle ya gasta en 16 objetos), 6–8 draw calls y 0 bytes**. El ambiente denso solo puede venir de ahí; los props existentes son el acompañamiento.
+
+### Arquitectura, en tres decisiones
+
+1. **Fichero nuevo, no campo nuevo.** `src/arena-scatter-recipes.ts` (hoja plana de números, hermana de `ARENA_LOOK`/`BACKDROP_LOOK`) + `src/arena-scatter-geometry.ts` (fábrica de primitivas puras: mata en cruz 12 tris, guijarro icosaédrico 20, domo 36, decal 2, colgante 6) + `src/arena-scatter.ts` (motor). `DecorPlacement` y `DECOR_LAYOUTS` conservan su forma **exacta**: `decor-editor`, `/decor-editor.html` y sus tests siguen verdes sin tocarse.
+2. **Los `InstancedMesh` cuelgan de `arena.group`, jamás de un fragmento.** Un `InstancedMesh` tiene un padre y hay 29 fragmentos que caen con rotaciones individuales. Las instancias se **ordenan por fragmento anfitrión** (calculado con el `findFragmentAt` que ya existe) de modo que cada fragmento posee un rango contiguo; mientras un lote cae se recomponen solo esas matrices (`M_fragmento × offset_local`) y se sube el rango con `instanceMatrix.addUpdateRange()` (existe en three 0.185.1, verificado). Coste medido por la tanda: **10–24 µs/frame**, durante ~1,6 s, 4 veces por partida. Ruido. *Aviso obligatorio en el código:* `buildFromSeed` (`src/arena.ts:421`) y `reset` (`:1120`) hacen `traverse` + `geometry.dispose()` sobre **todo** descendiente de un fragmento, e `InstancedMesh` es subclase de `Mesh`; el día que alguien reparente una instancia a un fragmento "para que caiga mejor", la geometría compartida se destruye y la partida siguiente renderiza vacío.
+3. **Un stream por capa.** `mulberry32(seed ^ SALT_SCATTER ^ hash(layerId))`. La sub-sal por capa es lo que permite tocar el `count` de una especie sin reorganizar el diorama entero a cada slider.
+
+### Fases
+
+| # | Nombre | Alcance | Ficheros | Días | Payload | Render |
+|---|---|---|---|---|---|---|
+| **0** | **Ojo limpio** *(bloqueante, va primero)* | Arreglar la espera de `arena-shots.mjs` (usar `getArenaInfo()`, borrar el `.catch` mudo, `--at-seconds 0,55,95`, VFX apagados). Deduplicar la carga: `Promise.all` sobre **tipos únicos** antes del bucle (hoy `await loadModel` está dentro del `for`, `src/arena-decorations.ts:497` → 16 esperas para 4 GLB, 20–22 s hasta que jungle se puebla) y mover el guard de token dentro del bucle. `scripts/validate-arena-packs.mjs` **naciendo fallando** con el techo de 250k tri/pack. Borrar el anillo exterior inerte (`PACKS[*].props` es `[]` en los cinco desde 2026-04-25; `collapsePropBatch`, `src/arena.ts:744`, hace early-return siempre) **rescatando `computePropBatchIndex`**. | `scripts/arena-shots.mjs`, `scripts/validate-arena-packs.mjs`, `src/arena-decorations.ts`, `src/arena.ts` | 0,5 | 0 | 0 |
+| **1** | **La isla tiene masa** | `arenaHeight` 1,2 → 2,4–2,6 (relación 20:1 hoy sobre un disco de 24 u; el canto son ~25 px de un color plano y ahora recorta contra el mar de la fase de fondo). `ExtrudeGeometry({steps:3})` → sector de 132 a 268 tris, con 4 filas de vértices para una **rampa de estratos por bioma en vertex color** que sustituye al `cliffTint: 0.62` global. **Ojo:** `arenaHeight` vive en `src/arena-fragments.ts:103` **y en su espejo del servidor** (`server/src/sim/arena-fragments.ts:102`), byte-comparados por `check-sim-parity` — la edición va en los dos o se mueve a `ARENA_LOOK`. | `src/arena-fragments.ts` (+espejo), `src/arena.ts:219-234`, `src/arena-look.ts` | 0,5 | 0 | +3.944 tris, **+0 draws** |
+| **2** | **El suelo es un sitio** *(primer slice, abajo)* | Motor completo + **una** capa (`hierba_alta`) en **un** pack (jungle). | `src/arena-scatter*.ts`, 3 enganches en `src/arena.ts`, dev-api | 1 | 0 | +1 draw, ~6.500 tris |
+| **3** | **La alfombra** | Capas `decal` (2 tris) y `pebble` (20), **inclinación ±8-16° y tinte por instancia** (`instanceColor`) — lo que más rompe la sensación de clonado —, ruido de racimo para claros y espesuras, y `SCATTER_DENSITY` como válvula global. | `src/arena-scatter*.ts` | 1 | 0 | +2 draws, ~4.000 tris |
+| **4** | **Borde y canto** | Capa `fringe` anclada al **arco exterior de cada fragmento** (no a r=12 fijo): cada colapso descubre un borde **ya vestido** en vez del corte pelado de hoy. Capa `cliff`: cinturón que **cuelga por debajo de y=0** (lianas, raíces, carámbanos, repisa de coral) — la única forma de "algo fuera del disco" que no puede violar el veto del 2026-04-25 ("*read as the playable terrain extends past where you can actually walk*", escrito en `src/arena-decorations.ts:97`). Y **blob shadows instanciadas** para props y critters en 1 draw call, consumiendo por fin `critterShadowScale/Opacity`. | `src/arena-scatter.ts`, `src/arena.ts` | 1 | 0 | +3 draws, ~5.000 tris |
+| **5** | **Los cinco biomas** | Recetas de los otros 4 packs + capa `mid` (acento, 20–30 instancias) + **reglas de asociación** (`near`: helechos al pie de la palma, nieve a sotavento, musgo en las juntas) y **eje de viento único** por bioma. | `src/arena-scatter-recipes.ts` | 1,5 | 0 | ~igual ×5 |
+| **6** | **Doble superficie** | `__devApi.getScatterRecipe/setScatterRecipe` (calcados de `getArenaLook`/`setArenaLook`, `src/tools/dev-api.ts:613-645`, devolviendo también `rejected`), applier ToolPatch `scatter-patch` + su test, CLI headless `scripts/arena-scatter.mjs --json` (instancias, tris, draws, ocupación de celdas, supervivencia a 54 s, hash) y panel en `/tools.html`. Más el **test de determinismo**: construir con seed 1 dos veces y comparar `instanceMatrix` byte a byte, más 25 hashes golden (5 packs × 5 semillas). | `src/tools/dev-api.ts`, `scripts/tool-patch-core.mjs`, `scripts/tests/`, `tests/sim/` | 1 | 0 | 0 |
+| **7** | **Recomponer los héroes** | Con el applier `decor-editor` **que ya existe**: sacar los altos del arco cercano, escalonar r 4–11,5, convertir los 10 sillares idénticos de jungle en un muro caído + una escalinata, corregir la brújula de los comentarios. | `src/arena-decor-layouts.ts` (por patch) | 1 | 0 | **negativo** (−250k tris en jungle) |
+
+**Total ≈ 7,5 días · payload 0 MB · +6-8 draw calls · +15-20k triángulos por pack.** La dieta de polígonos de los 32 props (−4,45 MB y −65 % de tris medidos, iterando 3 pases del optimizador ya existente) **va en rama aparte**: no es prerrequisito de nada de esto, es prerrequisito de encender `castShadow` en héroes y de recuperar margen de payload, y su riesgo (siluetas degradadas) necesita el ojo de Rafa sobre un A/B prop a prop.
+
+### El primer slice: 1 día, jungle, una sola capa
+
+**Qué se escribe:** `makeTuft()` (3 quads cruzados, 12 tris, vertex color base oscura → punta clara, ~40 líneas); `SCATTER_RECIPES.jungle` con **una** entrada y los otros cuatro packs a `[]`; `buildScatter()` (rejilla jitterada + ruido de racimo + `pointInFragment` + orden por fragmento + `InstancedMesh`), `tickScatterFall()` y `disposeScatter()` (~180 líneas); tres enganches en `src/arena.ts` (construir tras `generateArenaLayout` en `buildFromSeed`, tickear dentro de `tickFallingFragments` en `:1248`, liberar en `:421` y `:1120`); y los getters de dev-api reusando `rebuildArenaVisuals()`.
+
+**Criterio de éxito VISUAL** — Rafa pone `.tmp/shots-scatter/jungle.png` al lado de `.tmp/esc/t0/jungle.png` y tiene que poder decir:
+
+> **"Eso ya no es una alfombra verde: es suelo de selva."**
+
+Desglosado en lo que se ve, no en lo que se mide:
+1. La hierba llega **desde r=2 hasta el labio**, y por primera vez el 25 % central tiene algo encima.
+2. Se ven **claros y espesuras**, no moqueta uniforme (si sale moqueta, el `clusterGain` está mal y se ve en la propia captura).
+3. Las palmeras que ya existían **dejan de flotar**, porque tienen maleza a los pies y un anillo limpio de 0,38 u alrededor del tronco.
+4. La captura a `--at-seconds 40` demuestra lo arriesgado el **día 1, no el día 5**: la hierba del sector caído **se fue con él**; no flota sobre el vacío ni desaparece en el sitio.
+
+**Y los números que lo acompañan:** `getPerf()` con **+1 draw call y ~+6.500 triángulos**; `npm run golden`, `golden:layout` y `test:sim` a **diff cero**; `npm run check` verde con `dist total: 69.7 MB` sin mover un decimal.
+
+**Si a ojo no convence** (riesgo nº1, y es estético, no técnico: hierba de geometría pura a 11 px de alto puede leerse como pinchos de plástico), el fallback está identificado y acotado a **medio día**: `alphaMap` de canvas 128² sobre el quad cruzado — 1 textura procedural, 0 bytes de payload, ~0,09 MB de VRAM. Y si sobra, se borra una línea.
+
+### Las reglas duras que se convierten en assert
+
+En `scripts/validate-arena-packs.mjs`, enganchado a `npm run check`, con los techos derivados de **mi** tabla de oclusión (§2), no de la fórmula errónea:
+
+- **r < 2,5** (islote inmune, escenario de los últimos 24 s): solo decals y elementos ≤ **0,25 u** (roban 0,27 u, menos que el radio del critter). *El centro respira.*
+- **r 2,5–8,5** (zona de combate, el 44 % del disco): techo **0,55 u** → roba 0,42–0,56 u, **menos de la mitad del diámetro del critter**.
+- **r 8,5–11,2**: **1,15 u** en el arco lejano (donde la silueta recorta contra el mar y no tapa nada), **0,55 u** en el arco cercano ±55° de +Z.
+- **r 11,2–12**: nada por encima de **0,6 u**, sin transparencia, sin animación y sin el color del fondo. El fleco **subraya** el borde; no lo disfraza. Nada cruza r=12.
+- **Presupuestos:** ≤25.000 tris de scatter por pack, ≤2.200 instancias, ≤10 `InstancedMesh`, y **≤250.000 tris de decor total por pack** — que hoy falla con jungle (900.815) y kitsune (774.122). *Que falle es la señal, no el problema.*
+- **Cero emisivo y saturación tope por debajo de la de los critters:** el naranja del aviso de colapso es **información**, y los bichos tienen que ser lo único saturado en pantalla.
+
+---
+
+## 4. La receta de cada bioma
+
+Mismo motor, mismas capas, distinta **estructura** — que es lo que separa "cinco discos con otra paleta" de cinco sitios. Cada bioma tiene una postal y **un** elemento que solo tiene él.
+
+**🌴 jungle — "la cima de un templo tragado por la selva".**
+Capas: `decal` hojarasca ×378 · `tuft` hierba ×538 · `frond` helecho ×149 · `pebble` guijarro con musgo ×138 · `dome` arbusto ×31 · `fringe` ×273 · `cliff` liana ×175 → **~1.680 elementos, ~15.800 tris, 7 draws.** Héroes recompuestos: **3 palmas** (de 5) solo en el arco lejano a escalas 0,8/1,0/1,3, y los diez sillares idénticos convertidos en **un muro caído de 4 bloques a distintas alturas e inclinaciones + una escalinata hundida de 3**. Asociación: helechos a 0,8–2,2 u de la base de cada palma; musgo en las juntas de los sillares.
+**Lo único:** la vegetación **desborda el borde** — helechos que asoman por el labio y lianas colgando sobre el mar de copas. Eso es lo que hace que el disco sea un trozo de selva y no una alfombra.
+
+**⛩️ kitsune_shrine — "el patio de un santuario en la niebla, con pétalos cayendo".**
+El bioma con el suelo más fuerte y los assets más baratos (los toriis son 5–9k tris). Aquí la densidad se construye con **ritual**, no con vegetación: grava rastrillada en círculos concéntricos en el centro inmune (decals planos, altura 0 — respeta que el centro respire), musgo instanciado en las juntas de las losas, **200 pétalos caídos agrupados a sotavento de la sakura**, y una **senda de 4-5 toriis pequeños en escala decreciente** marcando un eje (postal instantánea, ~30k tris). El torii grande **se mueve** del arco cercano (`angle 1.55`, donde hoy tapa 75 px de acción) al lejano.
+**Lo único:** el bermellón sobre piedra gris y niebla, y los pétalos. Mejor relación impacto/trabajo de los cinco.
+
+**❄️ frozen_tundra — "una placa de hielo a la deriva".**
+El pack más barato del catálogo (68.792 tris totales): aquí **sobra presupuesto para triplicar props reales** además del scatter. `pine_snow` cuesta 3.724 tris, así que un pinar de verdad (8–10 pinos solapando troncos, 36k tris = el 29 % de **una** palmera de jungle) es gratis comparado con lo que ya se gasta. Scatter: **200 montículos de nieve acumulados CONTRA la base de cada prop y contra el labio** (domos achatados de 0,15–0,4 u), 150 decals de placas de hielo agrietado, 60 cristales de 8 tris en racimos. Cliff: carámbanos. Témpanos existentes a escalas 0,7–1,5 e **inclinaciones distintas** — un témpano torcido lee "hielo a la deriva"; uno recto lee "cubo".
+**Lo único:** el acantilado es **hielo azul translúcido bajo una tapa de nieve blanca**. El corte vertical cuenta el bioma y además da lectura de gameplay: lo que se rompe es hielo.
+
+**🐠 coral_beach — "un banco de arena en marea baja".**
+La protagonista no son los props: es la **línea de marea**. Anillo de arena mojada en r 9,5–12 con contorno **festoneado** (jamás un arco perfecto), 250 conchas y guijarros **acumulados en esa línea, no repartidos** — la marea *ordena* los restos, y esa es la diferencia entre "playa" y "arena con cosas encima". Más 3–4 charcas de marea como decals con algas dentro, 120 decals de ondulación, y un festón de espuma en el labio. Los dos corales existentes se juntan en **un jardín denso con siluetas solapadas** en vez de repartidos de uno en uno.
+**Lo único:** el borde es **agua**. Es el único bioma donde el vacío tiene explicación diegética y hay que explotarlo.
+
+**🌵 desert_dunes — "una meseta partida en un cañón".**
+El más vacío hoy (11 props, ninguno dentro de r=10,4) y el que más gana. Todo se alinea en **un solo eje de viento**: ondulaciones de arena **en relieve** (cuñas de 0,05–0,15 u, todas paralelas — el ground texture ya tiene ondas pintadas, esto les da volumen y dirección), arena arrastrada acumulada a sotavento de cada prop, costra de sal, 10–14 rodadoras (icosaedros huecos de 20 tris). El minecart y la bandera son buen storytelling y **se mueven a r 7–9** para que sobrevivan más de 40 s; la aguja de 4,2 u sale del arco cercano.
+**Lo único:** **el viento**. Un eje, la bandera ondeando, la arena corriendo y un cordel de postes medio enterrados cruzando el disco.
+
+**Densidad por banda que produce esto** (jungle, seed 1, simulado contra el generador real): r 0–2,5 → 79 elementos (hoy 0) · r 2,5–5,5 → 263 (hoy 0) · r 5,5–8,5 → 495 (hoy 1) · r 8,5–11,2 → 493 (hoy 15) · fleco → 352. Un elemento cada ~0,28 u², frente a uno cada 28 u² hoy. **Y el 55 % vive en r<8,5**, así que a los 54 segundos —cuando hoy no queda nada— sigue habiendo diorama. Métrica bloqueante: **≥45 % de elementos vivos a t=50 s**.
+
+---
+
+## 5. Lo que descartamos y por qué
+
+**Añadir GLB nuevos.** 5,3 MB de margen prestado, 1,2–1,4 MB por árbol, y **117–149 MB de VRAM de texturas ya gastados por pack** (cada prop trae 4 mapas). Caben tres modelos en todo el proyecto. Muerto antes de empezar.
+
+**Densificar poniendo más placements en `/decor-editor.html`.** Cada uno es +1 draw call y entre 5k y 131k triángulos. 600 props sueltos = +600 draw calls; la pendiente medida es +2,0 ms con 368. Es exactamente lo que parece la solución obvia y es la trampa.
+
+**Hornear el scatter por fragmento con `mergeGeometries` en vez de instanciar.** Es la única alternativa que caía "gratis" (la malla es hija del fragmento, cero código de colapso nuevo), y por eso hubo que medirla: fusionar 750 elementos en 29 mallas cuesta **40,9 ms en caliente y 86,6 ms en frío de hilo principal bloqueado**, contra **1,23 ms** de los 750 `setMatrixAt` equivalentes — **33× más caro**, pagado en cada `buildFromSeed` (arranque, reset, cada rebuild del tuner) contra la restricción *fast restart* de CLAUDE.md, y +29 draw calls. Descartada por medición, no por gusto.
+
+**Meter el scatter dentro de `DECOR_LAYOUTS`, o añadir campos a `DecorPlacement`.** Rompería a la vez el applier `decor-editor`, el editor web y sus tests, que corren en `npm run check`. Fichero nuevo con applier hermano: cero regresión.
+
+**Un estudio de autoría nuevo que absorba `/decor-editor.html`.** Cinco días de herramienta que no se ven en pantalla, sobre un tool que funciona y tiene sus tests verdes. Choca con "protect working code" y "smallest working solution first". La autoría se hace por CLI con el applier que ya existe (fase 7).
+
+**Props altos en el arco cercano y volumen en el centro.** Un prop de 4,2 u en +Z roba 3,13 u de suelo (95 px) contra los 34 px del critter; el centro es el escenario del endgame. Se convierten en assert, no en costumbre.
+
+**Colisión en props, y cualquier cosa que toque `arena-fragments.ts`.** Movería el golden y es zona hard-stop.
+
+**Reabrir el fondo.** Ya está hecho y mergeado (`a6a4d99`): mar a y=−32, r=300, `far` 200→500, 1 draw call. Cualquier plan que presupueste días de fondo cuenta dos veces. Y sigue descartado lo que su propia sección descartó: skybox 4K, regenerar panorámicas con IA, subir la niebla, el delantal a y=−4.
+
+**Un multiplicador de densidad al pie de los props (`anchorBoost`).** Se midió y **no hace nada**: 1215 → 1214 instancias, porque a 1 elemento cada 0,27 u² la probabilidad ya está saturada. La influencia del ancla tiene que ser **cualitativa** (mezcla de especies + anillo limpio de 0,38 u), nunca cuantitativa. Quien lo implemente como número pierde el día.
+
+---
+
+## 6. Encaje en la ruta
+
+Esta campaña es una **fase 1c interpolada dentro de H4.5**, entre lo ya cerrado y lo que queda de `docs/ARENA_V2.md`:
+
+- **Hecho:** fase 0 (red de seguridad, CLI, golden de layout), fase 0.5 (el colapso se lee), fase 1a (el disco se convierte en un lugar), fondo (la isla flota sobre su bioma).
+- **Esta campaña (≈7,5 d)** se coloca **antes** de las fases 2/3, porque son las que más ganan si el suelo ya está poblado, y **absorbe** trozos de otras: de la **fase 4** se lleva las blob shadows instanciadas, `validate-arena-packs.mjs`, la carga `Promise.all` deduplicada y el borrado del anillo exterior inerte; de la **fase 3** se lleva la mitad del "cada bioma es un sitio distinto", que pasa a resolverse con recetas de scatter en vez de con partículas y assets.
+- **Fase 1b (dieta de polígonos)** deja de ser prerrequisito de la densidad y pasa a ser prerrequisito de **encender `castShadow` en héroes** y de recuperar payload (−4,45 MB medidos). **Rama aparte, en paralelo**, para no juzgar dos cambios a la vez.
+- **Fase 2 (colapso con espectáculo)** hereda un regalo: con la capa `fringe` anclada al arco de cada fragmento, lo que cae es un trozo de suelo **poblado** y el borde que queda detrás aparece **ya vestido**. Refuerzo directo de la fase 0.5.
+- **Fase 5 (todo en función del radio)** no cambia y gana un consumidor más: los `radial` de las recetas se expresan como fracción de `layout.maxRadius`, igual que `tileSize = R/3`.
+- **Salida de H4.5:** `dev → main` con merge commit; `DEV_TOOLS.md §Superficie programática` con `scatter-patch`, `setScatterRecipe` y `arena-scatter.mjs`.
+- **H5 (monetización)** no toca terreno: se monetiza el producto de H4.5, y por eso el look va antes.
+- **Se lleva H6:** recetas por perfil de arena (el `'8p'` con r 16–17 reusa las mismas capas con los radios escalados por `maxRadius`, sin reautorar nada — esa es la ventaja de que la densidad sea reglas y no posiciones), decor por receta + semilla, hazards de bioma como zonas, y el handshake de versión para salas 8p que también cierra la única grieta de determinismo que esta capa deja abierta.
+
+---
+
+## 7. Decisiones que necesita Rafa
+
+**1 — ¿Geometría generada en código, o mini-modelos?**
+La densidad sale de primitivas de 2 a 36 triángulos hechas con código (0 bytes). El riesgo es estético y no lo puedo medir: hierba de geometría pura a 11 px de alto puede leerse como pinchos de plástico en vez de como naturaleza cartoon. La palanca que más lo arregla no es la forma, es la **inclinación ±8-16° y el tinte por instancia**.
+**Recomendación: sí, procedural, y se decide mirando la captura del día 1.** Fallback identificado y acotado a medio día (`alphaMap` de canvas 128²: 1 textura procedural, 0 bytes). Si ni así, el plan B cuesta payload y assets nuevos, que es justo lo que no hay.
+
+**2 — ¿Cuánta densidad?**
+No es una decisión de ingeniería: 1.700 elementos cuestan el 1,8 % de los triángulos que jungle ya gasta hoy en 16 objetos. Es una decisión de ojo, y el riesgo real es el contrario del actual: que el suelo deje de leerse como suelo y ensucie la lectura de los critters.
+**Recomendación: arrancar en ×0,35–0,5 y subir mirando cuatro capturas del mismo barrido.** `SCATTER_DENSITY` es **un solo número** que afina toda la capa sin tocar siete recetas ni recompilar, y llega en la fase 3.
+
+**3 — ¿Recomponemos los 73 props autorados?**
+Sacar los altos del arco que tapa, escalonarlos de r 4 a 11,5 y convertir los diez sillares idénticos de jungle en un muro caído y una escalinata **es un cambio de criterio artístico sobre composición que alguien autoró a mano** (los comentarios del fichero documentan clusters con nombre e intención). Cuesta 0 bytes, 0 código nuevo, se hace entero con el applier `decor-editor` que ya existe, y devuelve ~250k triángulos en jungle — 25 veces lo que cuesta toda la capa densa.
+**Recomendación: sí, pero en la fase 7, DESPUÉS de que el scatter esté en pantalla**, con un A/B delante. Si se mueven los props a la vez que aparece la alfombra, se juzgan dos cambios en una sola imagen y no se sabe cuál funcionó.
