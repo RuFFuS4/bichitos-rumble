@@ -178,6 +178,14 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     — los cambios de color se ven al frame siguiente y los estructurales
     disparan `rebuildArenaVisuals()`, que rehace las mallas conservando
     semilla y pack sin cortar la partida.
+  - **Escala del suelo por bioma**: `PackDef.groundTile` en
+    `src/arena-decorations.ts` (u de mundo por repetición de la textura).
+    No es un capricho: las texturas traen conchas, pétalos y musgo
+    pintados, y cada una pide su tamaño (coral 9 · jungle 14 · desert 16
+    · tundra 18 · kitsune 26 = una sola vez sobre el disco). Se aplica en
+    `Arena.applyGroundTexture`, porque la textura se cachea por ruta y la
+    comparten los cinco packs. `ARENA_LOOK.tileSize` queda de fallback
+    sin pack.
   - **Diorama denso** (dioramas slice 1): `__devApi.getScatterStats()`
     devuelve instancias, draw calls y triángulos por capa;
     `__devApi.setScatterDensity(0.8)` reconstruye la capa en vivo con la

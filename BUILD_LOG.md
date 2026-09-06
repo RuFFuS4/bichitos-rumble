@@ -1,5 +1,42 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-07 — La escala del suelo es cosa de cada bioma (idea de Rafa)
+
+Rafa, sobre las capturas del slice 1: *"se sigue viendo raro… quizás de
+alguna forma se podría superponer la imagen como textura del terreno y
+que se destruya también"*. Al ir a probarlo apareció el dato que lo
+explica todo: **las texturas de suelo del proyecto no son patrones
+abstractos, traen el detalle PINTADO** — conchas, estrellas de mar y
+piedras en `coral_beach`; pétalos de sakura y musgo entre losas en
+`kitsune_shrine`. Y son de 1254², el mismo tamaño que las referencias de
+`resources/Terrenos`.
+
+Con `tileSize` global de 4 u, esos detalles se repetían **seis veces por
+diámetro**: el ojo leía la rejilla, y eso era buena parte del "raro".
+
+- **Probado el mapa único** (la idea literal: una imagen sobre todo el
+  disco, UV normalizadas): el santuario clava las losas grandes de su
+  referencia, pero la playa pierde las conchas, que quedan de 2 px. O
+  sea: la escala buena **no es global, es de cada textura**.
+- **Solución: `PackDef.groundTile`** (u de mundo por repetición, por
+  bioma), medido sobre capturas: kitsune 26 (una vez, losas a tamaño de
+  referencia), tundra 18 (placas grandes), desert 16 (los rizos de arena
+  a menos escala parecen tela), jungle 14, coral 9 (por encima de 10 las
+  conchas desaparecen). El `repeat` se fija en `applyGroundTexture`, no
+  en el cargador, porque la textura se cachea por ruta y la comparten los
+  cinco packs.
+- **Y lo de "que se destruya también" ya sale gratis**: las UV son
+  coordenadas de MUNDO, así que dos sectores vecinos continúan el dibujo
+  y el fragmento que cae se lleva su trozo de imagen.
+- Sobre la otra idea (pasar la referencia por una IA para modelarla):
+  descartada para el diorama entero — saldría un único objeto de varios
+  MB, imposible de partir en los 29 sectores que exige el colapso, con
+  escala ajena al gameplay y sin determinismo. Para props sueltos sí
+  valdría, pero el cuello de botella no son los props sino el payload.
+
+Golden 3/3 sin regenerar, 57 tests y `npm run check` en verde: sigue
+siendo capa visual pura y cero bytes nuevos.
+
 ## 2026-09-07 — Dioramas slice 1: la isla tiene masa y el suelo es un sitio
 
 Primer slice visible del diorama denso, guiado por las cinco referencias

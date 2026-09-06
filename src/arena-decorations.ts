@@ -26,7 +26,7 @@
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
 import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
-import { ARENA_LOOK, type SeaRamp, type CliffRamp } from './arena-look';
+import { type SeaRamp, type CliffRamp } from './arena-look';
 
 /** Anisotropía máxima del dispositivo, cacheada. La fija el renderer al
  *  arrancar (`setArenaTextureAnisotropy`); sin renderer (tests, headless)
@@ -86,6 +86,15 @@ interface PackDef {
   props: string[];
   /** Fog colour (hex). Picked to match the horizon band of the skybox. */
   fogColor: number;
+  /** Lado del tile de suelo EN UNIDADES DE MUNDO para este bioma. La
+   *  escala buena no es global: las texturas del proyecto traen el detalle
+   *  PINTADO (conchas y estrellas en la playa, pétalos y musgo entre losas
+   *  en el santuario) y cada una pide su tamaño. Con 4 u se repetían seis
+   *  veces por diámetro y el ojo leía la rejilla; con 24 u (el diámetro
+   *  entero) el santuario clava sus losas grandes de la referencia pero la
+   *  playa pierde las conchas, que quedan de 2 px. Idea de Rafa
+   *  (2026-09-07), medida bioma a bioma sobre capturas. */
+  groundTile: number;
   /** Rampa del mar de fondo sobre el que flota la isla (fase de fondo,
    *  docs/DIORAMAS.md). Oscuro pegado al disco para que el canto se
    *  recorte, claro al alejarse para leer distancia. */
@@ -118,6 +127,7 @@ interface PackDef {
 const PACKS: Record<ArenaPackId, PackDef> = {
   jungle: {
     props: [],
+    groundTile: 14,   // hierba y hojarasca: a 14 u la mata se lee sin repetirse
     fogColor: 0xa6c68a, // warm green horizon
     // Mar de copas: verde profundo bajo la isla (la hierba del disco está
     // en L≈78, así que el dosel tiene que quedar POR DEBAJO — hoy la foto
@@ -131,6 +141,7 @@ const PACKS: Record<ArenaPackId, PackDef> = {
   },
   frozen_tundra: {
     props: [],
+    groundTile: 18,   // placas de hielo grandes, como los anillos de la referencia
     fogColor: 0xbcc8e0, // pale lavender ice horizon
     // Banquisa: azul frío cerca, casi blanco lejos. Es el pack más claro
     // del juego, así que su movimiento es de VALOR, no de tono; el hielo
@@ -143,6 +154,7 @@ const PACKS: Record<ArenaPackId, PackDef> = {
   },
   desert_dunes: {
     props: [],
+    groundTile: 16,   // los rizos de arena piden escala grande o parecen tela
     fogColor: 0xeab88a, // dusty golden sunset horizon
     // Cañón de dunas: aquí el terreno CONTINÚA y la isla se lee como
     // meseta. Naranja quemado en la sombra del cañón, arena clara lejos.
@@ -155,6 +167,7 @@ const PACKS: Record<ArenaPackId, PackDef> = {
   },
   coral_beach: {
     props: [],
+    groundTile: 9,   // conchas y estrellas pintadas: por encima de 10 u desaparecen
     fogColor: 0x9fd9e0, // cream-turquoise sea horizon
     // Laguna: bajío junto a la isla, turquesa somero y teal profundo al
     // alejarse. Es el peor caso de partida (57,7 % del cuadro era una
@@ -167,6 +180,7 @@ const PACKS: Record<ArenaPackId, PackDef> = {
   },
   kitsune_shrine: {
     props: [],
+    groundTile: 26,   // losas del patio a tamaño de referencia, sin repetición
     fogColor: 0xd4a8c0, // dusty pink mist
     // Mar de nubes: oscuras bajo el canto (ahí el borde del vacío llegaba
     // a tener ΔL de 1,1 — literalmente invisible) y retroiluminadas hacia
@@ -350,9 +364,11 @@ function loadTexture(path: string, mode: 'ground' | 'skybox'): Promise<THREE.Tex
           // repeticiones POR UNIDAD → un tile de 25 cm, ~96 en el diámetro.
           // El mipmap lo promediaba a color plano: de ahí la sensación de
           // "plato liso" pese a haber textura cargada.
+          // El repeat lo fija `applyGroundTexture` con el tile del pack:
+          // aquí solo se deja envolviendo, porque la textura se cachea por
+          // ruta y la comparten los cinco biomas.
           tex.wrapS = THREE.RepeatWrapping;
           tex.wrapT = THREE.RepeatWrapping;
-          tex.repeat.set(1 / ARENA_LOOK.tileSize, 1 / ARENA_LOOK.tileSize);
           tex.anisotropy = getMaxAnisotropy();
           tex.colorSpace = THREE.SRGBColorSpace;
         } else {
@@ -434,6 +450,11 @@ export async function loadPackPropMeshes(
 /** Rampa del mar de fondo del pack (fase de fondo, docs/DIORAMAS.md). */
 export function getPackBackdrop(packId: ArenaPackId): SeaRamp {
   return PACKS[packId].backdrop;
+}
+
+/** Lado del tile de suelo del bioma (u de mundo). */
+export function getPackGroundTile(packId: ArenaPackId): number {
+  return PACKS[packId].groundTile;
 }
 
 export function getPackFogColor(packId: ArenaPackId): number {

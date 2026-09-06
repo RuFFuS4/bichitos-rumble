@@ -28,6 +28,7 @@ import {
   getPackFogColor,
   getPackBackdrop,
   getPackCliff,
+  getPackGroundTile,
   getPackDecorScale,
   loadInArenaDecorations,
 } from './arena-decorations';
@@ -107,6 +108,10 @@ function worldUvs(geo: THREE.BufferGeometry): void {
   const pos = geo.getAttribute('position');
   const uv = geo.getAttribute('uv');
   if (!pos || !uv) return;
+  // UV en coordenadas de MUNDO, siempre. La escala la pone el `repeat` de
+  // la textura (una por pack), así que el mismo punto del mundo cae en el
+  // mismo píxel: dos sectores vecinos continúan el dibujo, y el fragmento
+  // que cae se lleva SU trozo — que era justo la idea.
   for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i), pos.getY(i));
   uv.needsUpdate = true;
 }
@@ -344,6 +349,7 @@ function createFragmentMesh(f: FragmentDef, jitterRand = 0.5, cliffRamp: CliffRa
 
   const jitter = 1 + (jitterRand - 0.5) * 2 * ARENA_LOOK.fragmentTintJitter;
   const topGeo = new THREE.ShapeGeometry(shape);
+  worldUvs(topGeo);   // 'tile' → coords de mundo; 'disc' → 0..1 del disco
   const topMat = new THREE.MeshStandardMaterial({ color: tintForBand(f.band, jitter), side: THREE.DoubleSide });
   const top = new THREE.Mesh(topGeo, topMat);
   // CRITICAL: rotación +π/2, no −π/2. ShapeGeometry vive en XY; con +π/2
@@ -946,6 +952,11 @@ export class Arena {
     // el comentario juraba lo contrario. Como en partida siempre hay pack,
     // los colores de banda no se veían JAMÁS y la zona segura no se
     // distinguía del resto del disco.
+    // El tile del bioma se aplica AQUÍ (no en el loader): la textura se
+    // cachea por ruta y la comparten los cinco packs.
+    const tile = this.appliedPackId ? getPackGroundTile(this.appliedPackId) : ARENA_LOOK.tileSize;
+    tex.repeat.set(1 / tile, 1 / tile);
+    tex.needsUpdate = true;
     for (const g of this.fragmentGroups) {
       g.traverse(child => {
         if (!(child instanceof THREE.Mesh)) return;

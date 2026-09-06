@@ -18,7 +18,9 @@
 // ---------------------------------------------------------------------------
 
 export interface ArenaLookConfig {
-  /** Lado del tile de la textura de suelo, EN UNIDADES DE MUNDO.
+  /** Lado del tile por defecto, EN UNIDADES DE MUNDO. Cada bioma manda
+   *  sobre este valor con `PackDef.groundTile` (la escala buena depende de
+   *  lo que la textura tenga pintado); esto solo se usa sin pack.
    *  Un critter mide ~1,7 u de ancho, así que 4 u ≈ 2,5 critters por
    *  losa: se ve el patrón y se lee la escala. Antes la textura se
    *  repetía 4 veces por unidad (tile de 0,25 u) y el mipmap la

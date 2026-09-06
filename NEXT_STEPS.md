@@ -82,6 +82,12 @@ entregable):
             masa del canto (cuña con estratos por bioma) + sombras de
             contacto de critters + 6 tests. Referencias: las imágenes de
             `resources/Terrenos/*/`. **← MIRA `.tmp/shots-dioramas/*.png`.**
+      - [x] **Escala del suelo por bioma** 2026-09-07 (idea de Rafa):
+            `PackDef.groundTile`. Las texturas traen el detalle pintado y
+            a 4 u se repetían 6 veces por diámetro. Probado el mapa único
+            del disco: gana en kitsune, pierde en coral → la escala es de
+            cada bioma. Descartado modelar la referencia con IA (no se
+            puede fragmentar para el colapso).
       - [ ] Slice 2: afinar recetas sobre capturas (grietas de hielo,
             escala de acentos, `backOnly` para los altos), fleco del borde
             que se regenera al caer un sector, viento animado barato,
