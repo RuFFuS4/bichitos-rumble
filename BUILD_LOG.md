@@ -1,5 +1,53 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-07 — El fondo deja de ser una foto: la isla flota sobre un sitio
+
+Petición de Rafa: *"unificar el fondo de alguna forma para que no parezca
+una foto mal puesta"*. Tanda de 7 agentes (dos medidores, tres enfoques,
+juez y síntesis) → plan en [`docs/DIORAMAS.md`](docs/DIORAMAS.md).
+Implementado el primer slice.
+
+- **Por qué fallaba, y no era la resolución.** La cámara mira 46° hacia
+  abajo y NO rota nunca, así que **el horizonte queda 22° por encima del
+  borde superior del cuadro** en el 100 % de los frames. Todo lo que
+  llamábamos cielo era, por geometría, terreno lejano visto en picado — y
+  eso una panorámica no lo puede dar. Encima solo se veía el **7,7 %** de
+  cada imagen (ventana fija de 555×218 px de 1774×887) ampliada ×3,5 en
+  720p y **×8,2 en móvil**, con 1,44× de anamorfosis. Y las cinco no son
+  equirects: son mattes planas con el horizonte pintado fuera de sitio.
+- **Tres cosas más que lo delataban**: la niebla no podía unir nada
+  (three crea el material del fondo con `fog:false`, así que `FogExp2`
+  jamás tocaba el cielo); el fondo era **más claro que la arena en los
+  cinco packs** (+38 a +70 de luminancia: jerarquía invertida); y en
+  jungle y kitsune había tramos del borde del disco con ΔL de **0,4 y
+  1,1** — el borde del vacío, que es la información crítica del juego,
+  literalmente no se veía.
+- **La solución es geometría, no una foto mejor**: `src/arena-backdrop.ts`
+  pone un plano enorme (r=300) 32 u por debajo del disco, con la rampa de
+  color de su bioma horneada en los vértices, la perspectiva aérea y la
+  sombra de la isla incluidas. Cada bioma tiene su mar: laguna, mar de
+  nubes, dosel, banquisa, cañón de dunas. **0 bytes de payload, 1 draw
+  call.** `far` de cámara 200→500 (el plano se recortaba) y `near`
+  0,1→0,5 para recuperar precisión de profundidad.
+- **Medido antes/después** (luminancia del fondo, columna x=170): de un
+  color casi plano (185/164/146 de arriba abajo) a un degradado real
+  (coral 178/129/**94**, jungle 148/101/**71**, kitsune 162/113/**79**).
+  Pegado al canto, el fondo ya es más oscuro que la arena en los cinco.
+- **Tres errores propios que costaron tres iteraciones**, por si vuelven:
+  (1) delegué la niebla en `scene.fog` y a esa distancia lo aplana todo a
+  un color liso — hay que hornearla en el vértice; (2) el anillo tenía el
+  agujero interior a r=11 y la cámara veía por él bajo la isla; (3) el
+  remapeo radial daba NaN por una base negativa elevada a 2,2 (falta de
+  clamp), y el NaN se propaga al boundingSphere. Y una lección de método:
+  **el dev server se cayó a mitad y mis capturas medían la imagen vieja
+  del disco** porque el `| tail -2` se tragaba el error del script; hay
+  que mirar el exit code, no la última línea.
+- Verificado: `npm run check` verde, 51 tests del sim, y **golden 3/3
+  exactas sin regenerar** — todo es capa visual.
+- **Pendiente de decisión de Rafa**: el vacío deja de estar vacío (ahora
+  se cae *al agua* / *a las nubes*). Se decide sobre la captura, y se
+  revierte borrando una línea.
+
 ## 2026-09-06 — Terreno v2 fase 1a: el disco se convierte en un lugar
 
 El primer slice VISIBLE, y el que responde a la queja original. Cero

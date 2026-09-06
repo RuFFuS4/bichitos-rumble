@@ -67,6 +67,21 @@ entregable):
       luz lateral, `ARENA_LOOK` + `arena-shots`. Golden 3/3 SIN
       regenerar (todo visual). **← MIRA LAS CAPTURAS Y DECIDE**:
       `.tmp/shots-despues/*.png`.
+- [ ] **DIORAMAS — prioridad de Rafa (2026-09-07)**: *"hay que mejorar
+      muy mucho o directamente rehacer la generación de los dioramas,
+      ahora simplemente se ve como un círculo con 4 cosas sueltas e
+      interesa que se vea como algo denso, como un ambiente real, esto es
+      muy importante para darle identidad visual"*. Medido: 11-18 props
+      por bioma, casi todos entre r 7 y 11,5 (solo 1 por pack a r<8,5) y
+      cero instancing en el proyecto. Diagnóstico y plan en
+      [`docs/DIORAMAS.md`](docs/DIORAMAS.md). Va ANTES que la fase 1b.
+- [x] **FONDO — primer slice hecho (2026-09-07)**: la isla flota sobre el
+      mar de su bioma en vez de estar recortada sobre una panorámica.
+      0 bytes, 1 draw call, golden intacto. Plan completo en
+      [`docs/DIORAMAS.md`](docs/DIORAMAS.md) (relieves, cresta de
+      siluetas y luz por bioma quedan para las fases 2-5).
+      **← DECIDE**: ¿te vale que el vacío deje de estar vacío? Capturas
+      en `.tmp/shots-fondo/`.
 - [ ] Fase 1b — sombras de contacto de critters, bisel de junta, applier
       ToolPatch `look-patch`, panel del studio y dieta de props.
 - [ ] Fase 2 — colapso que se lee y se siente.

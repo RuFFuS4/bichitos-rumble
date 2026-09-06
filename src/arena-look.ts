@@ -69,3 +69,76 @@ export const ARENA_LOOK: ArenaLookConfig = {
  *  (mulberry32(seed ^ SALT)) para que añadir variación visual no desplace
  *  la salida del generador de terreno, que es gameplay y está en golden. */
 export const SALT_VISUAL = 0x9e37_79b9;
+
+// ---------------------------------------------------------------------------
+// BACKDROP_LOOK — el decorado lejano (docs/DIORAMAS.md)
+// ---------------------------------------------------------------------------
+
+/** Rampa de color del mar de un bioma: paradas [t, color] con t = 0 pegado
+ *  al disco y t = 1 en el borde exterior. Oscuro cerca y claro lejos: es
+ *  lo que recorta el canto de la isla y lee como distancia. */
+export interface SeaRamp {
+  stops: Array<[number, number]>;
+}
+
+export interface BackdropLookConfig {
+  /** Altura del mar. 32 u por debajo del disco, y por debajo de
+   *  VOID_FLOOR (-30) y de FRAGMENT_KILL_Y (-25): nada del juego lo
+   *  atraviesa nunca, y a esa distancia no se puede confundir con suelo
+   *  pisable. */
+  seaY: number;
+  /** Radio interior (bajo el borde del disco) y exterior. 300 u tapa la
+   *  panorámica al 100 % en 16:9, 21:9 y móvil retrato; con 170 asomaba
+   *  una línea de horizonte falsa en la pantalla de fin de partida. */
+  seaInnerR: number;
+  seaOuterR: number;
+  seaSegments: number;
+  seaRings: number;
+  /** Radio donde ARRANCA la rampa (el tono más oscuro). Lo que queda por
+   *  dentro no se ve nunca: lo tapa la propia isla. */
+  rampInnerR: number;
+  /** Radio donde la rampa de color se agota. La cámara solo ve de r≈40 a
+   *  r≈120, así que estirar el degradado hasta el borde del plano (300)
+   *  dejaba todo el bioma comprimido en un tercio de la escala. */
+  rampSpanR: number;
+  /** Exponente de la rampa: <1 concentra el degradado cerca del disco,
+   *  que es donde se mira. */
+  rampCurve: number;
+  /** Potencia con la que se reparten los anillos del plano: >1 concentra
+   *  geometría cerca de la isla (donde el degradado tiene que ser fino) y
+   *  la ahorra lejos, donde el color ya es constante. */
+  ringDistribution: number;
+  /** Perspectiva aérea horneada: cuánto se funde el mar hacia el color de
+   *  niebla del pack al alejarse, y con qué curva. Tope por debajo de 1
+   *  para que el horizonte no acabe en un color liso — que es el defecto
+   *  que arrastraba la panorámica. */
+  hazeMax: number;
+  hazeCurve: number;
+  /** Sombra proyectada de la isla sobre el mar: cuánto oscurece y hasta
+   *  qué distancia llega. Es lo que ancla la isla en vez de dejarla
+   *  recortada sobre el fondo. */
+  islandShadow: number;
+  islandShadowReach: number;
+  /** Dirección de la luz key en el plano (debe seguir a la de
+   *  scene-atmosphere) para que la sombra caiga del lado correcto. */
+  keyDirX: number;
+  keyDirZ: number;
+}
+
+export const BACKDROP_LOOK: BackdropLookConfig = {
+  seaY: -32,
+  seaInnerR: 0.6,
+  seaOuterR: 300,
+  seaSegments: 96,
+  seaRings: 36,
+  rampInnerR: 18,
+  rampSpanR: 115,
+  rampCurve: 0.62,
+  ringDistribution: 2.2,
+  hazeMax: 0.42,
+  hazeCurve: 0.85,
+  islandShadow: 0.55,
+  islandShadowReach: 34,
+  keyDirX: -11,
+  keyDirZ: 13,
+};

@@ -15,6 +15,7 @@ import {
 } from './arena-fragments';
 import { playArenaWarning } from './audio';
 import { ARENA_LOOK, SALT_VISUAL } from './arena-look';
+import { ArenaBackdrop } from './arena-backdrop';
 import {
   type ArenaPackId,
   layoutPackProps,
@@ -22,6 +23,7 @@ import {
   loadPackSkyboxTexture,
   loadPackPropMeshes,
   getPackFogColor,
+  getPackBackdrop,
   getPackDecorScale,
   loadInArenaDecorations,
 } from './arena-decorations';
@@ -344,6 +346,9 @@ export class Arena {
    */
   private currentPackPromise: Promise<void> = Promise.resolve();
   private sceneRef: THREE.Scene;
+  /** Decorado de fondo (mar del bioma). Es DECORADO: no colisiona, no
+   *  entra en isOnArena y se puede quitar entero sin tocar el juego. */
+  private backdrop: ArenaBackdrop | null = null;
   /** Per-prop batch association. When batch `N` collapses, every prop
    *  with `batchIndex === N` enters the falling-decoration queue. */
   private propBatchIndex: number[] = [];
@@ -496,6 +501,14 @@ export class Arena {
 
     this.clearDecorations();
     this.appliedPackId = packId;
+
+    // Decorado de fondo: síncrono y sin assets, así que está listo en el
+    // mismo frame (el skybox y los props llegan después, por red).
+    if (!this.backdrop) {
+      this.backdrop = new ArenaBackdrop();
+      this.sceneRef.add(this.backdrop.group);
+    }
+    this.backdrop.setRamp(getPackBackdrop(packId), getPackFogColor(packId));
 
     // Fog + clear colour update immediately (synchronous) so the player
     // doesn't see a "wrong horizon" frame while textures load.
@@ -691,6 +704,11 @@ export class Arena {
     this.appliedPackId = null;
     setSceneSkyboxTexture(null);
     setSceneFogColor(null);
+    if (this.backdrop) {
+      this.sceneRef.remove(this.backdrop.group);
+      this.backdrop.dispose();
+      this.backdrop = null;
+    }
     this.clearDecorations();
     // Discard any in-flight falling decoration tumbles — remove them
     // from the scene graph and drop references.

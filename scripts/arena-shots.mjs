@@ -31,7 +31,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 mkdirSync(OUT, { recursive: true });
 
 const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+// --viewport WxH: 1280x720 es el caso MAS FAVORABLE (a mas resolucion, la
+// panoramica se amplia mas). Los sets utiles son 1280x720, 1920x1080 y
+// 390x844 (movil retrato), que es donde peor se porta todo.
+const [VW, VH] = String(args.get('viewport') ?? '1280x720').split('x').map(Number);
+const page = await browser.newPage({ viewport: { width: VW || 1280, height: VH || 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message.slice(0, 140)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 140)); });
@@ -64,7 +68,7 @@ for (const pack of PACKS) {
     Math.max(AT, 1.5), { timeout: 60000 }).catch(() => {});
   await page.evaluate(() => window.__devApi.setFixedStep(null));
   await sleep(700);
-  const file = `${OUT}/${pack}${AT > 0 ? `_t${AT}` : ''}.png`;
+  const file = `${OUT}/${pack}${AT > 0 ? `_t${AT}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}.png`;
   await page.screenshot({ path: file });
   console.log(`  ${pack.padEnd(16)} → ${file}`);
 }

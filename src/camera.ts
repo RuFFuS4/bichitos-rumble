@@ -49,7 +49,12 @@ export function applyGameplayCameraPose(cam: THREE.PerspectiveCamera): void {
 }
 
 export function createCamera(): THREE.PerspectiveCamera {
-  const cam = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 200);
+  // far 200 → 500: el mar del decorado (BACKDROP_LOOK.seaOuterR = 300,
+  // src/arena-backdrop.ts) se recortaba a 200 y dejaba asomar la
+  // panorámica justo en la banda que viene a tapar. near 0.1 → 0.5
+  // recupera la precisión de profundidad que cuesta ese far: nada se
+  // dibuja a menos de 0,5 u (el plano corto del selector está a 4,5).
+  const cam = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.5, 500);
   applyGameplayCameraPose(cam);
   return cam;
 }

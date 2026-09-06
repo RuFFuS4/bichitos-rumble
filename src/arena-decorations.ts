@@ -26,7 +26,7 @@
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
 import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
-import { ARENA_LOOK } from './arena-look';
+import { ARENA_LOOK, type SeaRamp } from './arena-look';
 
 /** Anisotropía máxima del dispositivo, cacheada. La fija el renderer al
  *  arrancar (`setArenaTextureAnisotropy`); sin renderer (tests, headless)
@@ -86,6 +86,10 @@ interface PackDef {
   props: string[];
   /** Fog colour (hex). Picked to match the horizon band of the skybox. */
   fogColor: number;
+  /** Rampa del mar de fondo sobre el que flota la isla (fase de fondo,
+   *  docs/DIORAMAS.md). Oscuro pegado al disco para que el canto se
+   *  recorte, claro al alejarse para leer distancia. */
+  backdrop: SeaRamp;
   /** Per-prop uniform scale hint (default 1.0). Lets us pre-tune bulky
    *  props (the 5 MB palm, sakura tree, etc) without a second authoring
    *  pass on the GLB — applied on top of whatever the GLB ships with. */
@@ -109,22 +113,41 @@ const PACKS: Record<ArenaPackId, PackDef> = {
   jungle: {
     props: [],
     fogColor: 0xa6c68a, // warm green horizon
+    // Mar de copas: verde profundo bajo la isla (la hierba del disco está
+    // en L≈78, así que el dosel tiene que quedar POR DEBAJO — hoy la foto
+    // estaba 44 puntos por encima) aclarando a bruma cálida al fondo.
+    backdrop: { stops: [[0, 0x0c1a0f], [0.18, 0x182d1a], [0.5, 0x3f6137], [1, 0x93b483]] },
   },
   frozen_tundra: {
     props: [],
     fogColor: 0xbcc8e0, // pale lavender ice horizon
+    // Banquisa: azul frío cerca, casi blanco lejos. Es el pack más claro
+    // del juego, así que su movimiento es de VALOR, no de tono; el hielo
+    // va más oscuro que la tapa para que no se lea como pisable.
+    backdrop: { stops: [[0, 0x152230], [0.2, 0x283d50], [0.55, 0x728ca0], [1, 0xd6e2ee]] },
   },
   desert_dunes: {
     props: [],
     fogColor: 0xeab88a, // dusty golden sunset horizon
+    // Cañón de dunas: aquí el terreno CONTINÚA y la isla se lee como
+    // meseta. Naranja quemado en la sombra del cañón, arena clara lejos.
+    backdrop: { stops: [[0, 0x28160e], [0.16, 0x4b2d1a], [0.5, 0x9b6b3b], [1, 0xecc394]] },
   },
   coral_beach: {
     props: [],
     fogColor: 0x9fd9e0, // cream-turquoise sea horizon
+    // Laguna: bajío junto a la isla, turquesa somero y teal profundo al
+    // alejarse. Es el peor caso de partida (57,7 % del cuadro era una
+    // mancha turquesa sin un solo borde) y donde más gana lo generado.
+    backdrop: { stops: [[0, 0x052126], [0.14, 0x0b3d44], [0.45, 0x25868b], [1, 0x8fdfe0]] },
   },
   kitsune_shrine: {
     props: [],
     fogColor: 0xd4a8c0, // dusty pink mist
+    // Mar de nubes: oscuras bajo el canto (ahí el borde del vacío llegaba
+    // a tener ΔL de 1,1 — literalmente invisible) y retroiluminadas hacia
+    // el ciruela del pack. A este bioma hay que SUBIRLE color, no bajarlo.
+    backdrop: { stops: [[0, 0x1a141c], [0.18, 0x3a2b36], [0.5, 0x866578], [1, 0xdcc0cf]] },
   },
 };
 
@@ -380,6 +403,11 @@ export async function loadPackPropMeshes(
 }
 
 /** Fog colour for the pack, used to tint scene.fog when the pack loads. */
+/** Rampa del mar de fondo del pack (fase de fondo, docs/DIORAMAS.md). */
+export function getPackBackdrop(packId: ArenaPackId): SeaRamp {
+  return PACKS[packId].backdrop;
+}
+
 export function getPackFogColor(packId: ArenaPackId): number {
   return PACKS[packId]?.fogColor ?? 0xb6d1e8;
 }
