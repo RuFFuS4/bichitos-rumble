@@ -22,11 +22,18 @@ sala privada real en prod; detalle en [`ROADMAP.md`](ROADMAP.md) y
 de `main`** (o sea: terreno v2 + fondo + dioramas **sin desplegar**).
 
 **Lo primero de la próxima sesión, por orden:**
-1. **Rafa mira capturas y decide.** `.tmp/shots-dioramas/`,
-   `.tmp/shots-fondo/` y `.tmp/shots-despues/`. De ahí salen las tres
-   decisiones que hoy bloquean el afinado: techos del scatter (M2), isla
-   como cono, y si el fondo ya vale. Sin ellas, afinar recetas es afinar
-   contra el techo equivocado.
+1. **Rafa mira capturas y decide.** La ÚNICA hoja de contactos que
+   enseña el estado de hoy es **`.tmp/shots-cierre/`** (los 5 biomas,
+   t=0, tomada al cerrar sobre `dev` = b9a5127). Las otras son
+   históricas y **engañan si se miran como estado actual**:
+   `shots-despues/` son las capturas rotas del segundo ~52 (ver
+   ERROR_LOG), `shots-fondo/` es anterior a los dioramas y
+   `shots-dioramas/`/`shots-discmap/` son anteriores a la escala de suelo
+   por bioma. De `shots-cierre/` salen las tres decisiones que hoy
+   bloquean el afinado: techos del scatter (M2), isla como cono, y si el
+   fondo ya vale. Sin ellas, afinar recetas es afinar contra el techo
+   equivocado. Para rehacerla: dev server vivo +
+   `node scripts/arena-shots.mjs --out .tmp/shots-<lo-que-sea>`.
 2. **Relanzar el diagnóstico del feeling desde cero.** El de hoy se cortó
    sin entregar y su caché solo vive dentro de la sesión que lo lanzó. Lo
    ya medido está en el punto "Feeling de los personajes" de la cola.
@@ -99,8 +106,10 @@ entregable):
       tile de textura a escala real, tinte por banda/pack/semilla,
       acantilado con material propio, fuera el void y fuera la falda,
       luz lateral, `ARENA_LOOK` + `arena-shots`. Golden 3/3 SIN
-      regenerar (todo visual). **← MIRA LAS CAPTURAS Y DECIDE**:
-      `.tmp/shots-despues/*.png`.
+      regenerar (todo visual). *(Las capturas de `.tmp/shots-despues/`
+      con las que se juzgó esta fase estaban ROTAS —segundo ~52 de
+      partida, ver ERROR_LOG 2026-09-07—; el estado real está en
+      `.tmp/shots-cierre/`.)*
 - [ ] **DIORAMAS — prioridad de Rafa (2026-09-07)**: *"hay que mejorar
       muy mucho o directamente rehacer la generación de los dioramas,
       ahora simplemente se ve como un círculo con 4 cosas sueltas e
@@ -115,7 +124,8 @@ entregable):
             motor instanciado + 7 primitivas + recetas de los 5 biomas +
             masa del canto (cuña con estratos por bioma) + sombras de
             contacto de critters + 6 tests. Referencias: las imágenes de
-            `resources/Terrenos/*/`. **← MIRA `.tmp/shots-dioramas/*.png`.**
+            `resources/Terrenos/*/`. **← MIRA `.tmp/shots-cierre/*.png`**
+            (`shots-dioramas/` es anterior a la escala de suelo por bioma).
       - [x] **Escala del suelo por bioma** 2026-09-07 (idea de Rafa):
             `PackDef.groundTile`. Las texturas traen el detalle pintado y
             a 4 u se repetían 6 veces por diámetro. Probado el mapa único
@@ -148,8 +158,9 @@ entregable):
       0 bytes, 1 draw call, golden intacto. Plan completo en
       [`docs/DIORAMAS.md`](docs/DIORAMAS.md) (relieves, cresta de
       siluetas y luz por bioma quedan para las fases 2-5).
-      **← DECIDE**: ¿te vale que el vacío deje de estar vacío? Capturas
-      en `.tmp/shots-fondo/`.
+      **← DECIDE**: ¿te vale que el vacío deje de estar vacío? El fondo
+      actual se ve en `.tmp/shots-cierre/` (`shots-fondo/` es de antes de
+      los dioramas).
 - [ ] Fase 1b — sombras de contacto de critters, bisel de junta, applier
       ToolPatch `look-patch`, panel del studio y dieta de props.
 - [ ] Fase 2 — colapso que se lee y se siente.

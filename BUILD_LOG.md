@@ -33,6 +33,12 @@ Commit `0bb2044`.
 
 Ordenado, con el "cómo retomar" completo en `NEXT_STEPS.md` §Cómo retomar.
 
+- **Hoja de contactos honesta del estado final**: `.tmp/shots-cierre/`
+  (los 5 biomas a t=0 sobre `dev` = b9a5127), tomada ya con el navegador
+  mudo — y de paso vale como prueba del helper en los cinco packs, sin
+  un solo error de consola. Es la **única** que enseña el estado de hoy:
+  todos los demás sets del `.tmp/` son anteriores a algún cambio, o son
+  directamente los rotos del segundo ~52.
 - **El diagnóstico del *feeling* se cortó sin entregar.** Se lanzó una
   tanda de 9 agentes (física del movimiento, clips vs velocidad, lectura
   artística en tiras de capturas) y murió con la sesión anterior sin
