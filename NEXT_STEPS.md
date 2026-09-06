@@ -16,6 +16,40 @@ sala privada real en prod; detalle en [`ROADMAP.md`](ROADMAP.md) y
 
 ---
 
+## Cómo retomar — cierre del 2026-09-07
+
+Árbol limpio y todo empujado. `dev` = `0bb2044`, **10 commits por delante
+de `main`** (o sea: terreno v2 + fondo + dioramas **sin desplegar**).
+
+**Lo primero de la próxima sesión, por orden:**
+1. **Rafa mira capturas y decide.** `.tmp/shots-dioramas/`,
+   `.tmp/shots-fondo/` y `.tmp/shots-despues/`. De ahí salen las tres
+   decisiones que hoy bloquean el afinado: techos del scatter (M2), isla
+   como cono, y si el fondo ya vale. Sin ellas, afinar recetas es afinar
+   contra el techo equivocado.
+2. **Relanzar el diagnóstico del feeling desde cero.** El de hoy se cortó
+   sin entregar y su caché solo vive dentro de la sesión que lo lanzó. Lo
+   ya medido está en el punto "Feeling de los personajes" de la cola.
+3. **Decidir el despliegue**: merge `dev` → `main` con tag cuando las
+   capturas convenzan. Railway autodeploya el servidor desde `main`, así
+   que cliente y servidor salen a la vez.
+
+**Esperando respuesta de Rafa** (bloquean trabajo, no son opinión):
+- ¿Cómo está publicado el juego en **itch.io** — iframe de nuestro
+  dominio o zip subido? Decide si basta un flag de build (`VITE_PORTAL`)
+  para quitar el portal del Vibe Jam fuera de la web propia.
+- **Techos de altura del scatter**: contrato actual vs reglas de
+  `docs/DIORAMAS.md §3` (decisión M2, más abajo).
+- **¿Isla como cono** flotando en mar / aire / hielo según el bioma?
+- **¿El fondo** (mar por bioma) te vale como está?
+
+**Estado de la máquina**: quedaron ~70 procesos de Chrome de las tandas de
+hoy, sin cerrar a petición de Rafa. Los lanzaron agentes anteriores al
+helper mudo; a partir de ahora toda instancia de prueba nace muda
+(`scripts/lib/headless-browser.mjs`).
+
+---
+
 ## H4.5 — Arreglar antes de crecer (EN CURSO desde 2026-09-05)
 
 Contexto: Rafa quiere un juego más grande y monetizable (referencias
@@ -125,7 +159,8 @@ entregable):
 - [ ] Fase 5 — todo lo visual en función del radio.
 
 **Cola de Rafa (2026-09-07, por orden de lo que dijo)**:
-- [ ] **Feeling de los personajes** (EN CURSO, diagnóstico lanzado): *"se
+- [ ] **Feeling de los personajes** (PENDIENTE; el diagnóstico del
+      2026-09-07 se cortó sin entregar — relanzar de cero): *"se
       sienten pesados en vez de animalillos graciosos andando, corriendo
       y demás"*. Dato de partida: los 9 GLB SÍ traen 6-10 clips (Idle,
       Run, Fall, Victory, Defeat, habilidades), pero el clip de Run se
@@ -147,6 +182,14 @@ entregable):
       y el portal de salida (src/portal.ts) están SIEMPRE activos; el jam
       terminó en mayo. Hace falta un flag de build (`VITE_PORTAL`), no
       borrar código, porque en la web propia sigue teniendo sentido.
+
+- [x] **Instancias de prueba mudas** (2026-09-07, commit `0bb2044`):
+      *"cuando lances instancias para las pruebas silencia la musica y
+      sonidos"*. `scripts/lib/headless-browser.mjs` con doble capa
+      (`--mute-audio` + banderas de `src/audio.ts` en localStorage antes
+      del primer script), aplicado en `arena-shots.mjs`,
+      `run-match-batch.mjs` y `playwright.config.ts`. Regla escrita en
+      `CLAUDE.md` y `DEV_TOOLS.md`.
 
 **Otros arreglos candidatos de H4.5**: feel pass de Kurama · SFX por
 critter · limpiar nicks `SMOKE*`/`Test*` de la DB de prod

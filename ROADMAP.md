@@ -264,6 +264,30 @@ pobre"*. Diagnóstico por capas, 4 propuestas, 3 jueces y plan en
       gris que lo mataba, fuera), acantilado con material propio, void y
       falda eliminados, luz lateral, `ARENA_LOOK` con dev-api y
       `scripts/arena-shots.mjs`. Golden 3/3 sin regenerar.
+- [x] **Fondo — la isla flota sobre su bioma** ✅ 2026-09-07 (petición de
+      Rafa: *"unificar el fondo para que no parezca una foto mal
+      puesta"*): plano de mar con la rampa del bioma horneada en los
+      vértices, niebla que por fin tiñe algo, sombra de la isla. 0 bytes
+      de payload, 1 draw call. Adelanta media fase 3.
+- [x] **Dioramas slice 1** ✅ 2026-09-07 (petición de Rafa: *"se ve como
+      un círculo con 4 cosas sueltas"*; va ANTES de la 1b): capa densa
+      instanciada — 7 primitivas generadas por código, 5 biomas × 8 capas,
+      determinista por semilla, cada instancia cae con su fragmento —,
+      canto con masa y estratos, sombras de contacto de critters y escala
+      de textura de suelo por bioma (`groundTile`). Plan y diagnóstico en
+      [`docs/DIORAMAS.md`](docs/DIORAMAS.md).
+- [ ] **Dioramas slice 2**: cohesión de los elementos (paleta compartida
+      entre scatter, props y suelo; que se toquen y se agrupen; sombras
+      también en los props GLB), afinado de recetas sobre capturas y
+      applier ToolPatch `scatter-patch`. Espera decisiones de Rafa.
+- [ ] **Feeling de los personajes** (Rafa, 2026-09-07: *"se sienten
+      pesados en vez de animalillos graciosos andando, corriendo"*):
+      velocidad del clip ligada a la velocidad real (hoy es fija),
+      inclinación al acelerar y girar, squash al frenar, stretch al salir
+      despedido, inercia en orejas y cola. Diagnóstico a relanzar.
+- [ ] **Diferidos por Rafa**: shaders cartoon de los personajes (tras
+      flag, como el tone mapping) y portal del Vibe Jam apagado fuera de
+      la web propia (flag de build para itch/Steam).
 - [ ] **Fase 1b**: sombras de contacto de critters, bisel de junta,
       applier ToolPatch `look-patch` + panel del studio, dieta de props.
 - [ ] **Fase 2 — colapso que se lee y se siente**: grietas, sag, escombros,

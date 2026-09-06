@@ -1,5 +1,32 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-07] Las capturas de arena mentían: 52 s de partida en vez de 0
+- **Where**: `scripts/arena-shots.mjs` → espera previa a la captura.
+- **Symptom**: todas las capturas de `.tmp/shots-despues/` —las que se
+  usaron para juzgar la fase 1a— salían con el 95 % del decorado ya caído
+  y el disco medio derruido. Se juzgó el aspecto del terreno sobre
+  imágenes de una arena a punto de desaparecer.
+- **Cause**: el script esperaba a `__devApi.snapshot()`, que **no
+  existe**. El `?? 0` de la expresión hacía que la condición no se
+  cumpliera nunca, el `waitForFunction` agotaba sus 60 s… **con el juego
+  a 20× de velocidad**, y el `.catch(() => {})` se tragaba el timeout sin
+  decir nada.
+- **Fix**: esperar al reloj real del HUD (`#hud-timer`) y **gritar en
+  consola** si la espera vence, en vez de tragarse el error. Lección
+  general: un `catch` vacío alrededor de una espera convierte un bug en
+  datos falsos, que es peor que un fallo.
+
+### [2026-09-07] `golden:write` truncó el último evento y fingió un cambio de balance
+- **Where**: flujo `npm run golden:write` → `npm run golden`.
+- **Symptom**: tras un cambio grande, el golden regenerado salía sin el
+  evento `match_ended` de la última partida, y la comparación siguiente
+  gritaba "CAMBIO DE BALANCE" sobre un cambio que era puramente visual.
+- **Cause**: la primera escritura tras un cambio grande cerró el fichero
+  antes de volcar el último evento.
+- **Fix**: regla operativa — **después de `golden:write`, correr siempre
+  `npm run golden`** y comprobar que pasa 3/3 antes de commitear el JSON.
+  Un golden a medio escribir es peor que no tener golden.
+
 ### [2026-04-23] Meshy models render as dark matte metal
 - **Where**: `src/critter.ts` → `attachGlbMesh` material pass.
 - **Symptom**: Kurama, Sergei, Sihans, Sebastian looked grey/metallic

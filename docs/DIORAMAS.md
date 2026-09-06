@@ -279,6 +279,13 @@ Desglosado en lo que se ve, no en lo que se mide:
 
 ### Las reglas duras que se convierten en assert
 
+> **Ojo (2026-09-07): esto es el plan, no lo que hace el código.** El
+> slice 1 se implementó con techos más permisivos (`SCATTER_LIMITS` en
+> `src/arena-scatter-types.ts`: interior 0,4 u · arco frontal 1,2 u ·
+> trasero 2,6 u) y sin el validador de packs. Hay **una decisión abierta**
+> —cuál de las dos tablas manda— anotada en `NEXT_STEPS.md`; hasta
+> cerrarla, la referencia real es el contrato del código.
+
 En `scripts/validate-arena-packs.mjs`, enganchado a `npm run check`, con los techos derivados de **mi** tabla de oclusión (§2), no de la fórmula errónea:
 
 - **r < 2,5** (islote inmune, escenario de los últimos 24 s): solo decals y elementos ≤ **0,25 u** (roban 0,27 u, menos que el radio del critter). *El centro respira.*

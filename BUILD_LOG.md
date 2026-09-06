@@ -1,5 +1,56 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-07 (cierre) — Las instancias de prueba nacen mudas + foto del estado
+
+Petición de Rafa a media tarde: *"por favor cuando lances instancias para
+las pruebas silencia la musica y sonidos"*. Una tanda de agentes abre diez
+o quince navegadores a la vez y **cada uno arrancaba su propia música y
+sus efectos** en la máquina de Rafa mientras él trabaja.
+
+- **`scripts/lib/headless-browser.mjs`** — `launchMutedBrowser()`,
+  `muteGameAudio()`, `newMutedPage()`. Silencia por **dos vías a
+  propósito**, porque cada una tapa el agujero de la otra:
+  1. `--mute-audio` en el proceso de Chromium: corta el sonido aunque la
+     instancia se abra en modo visible, aunque el juego cambie o aunque
+     alguien añada un `<audio>` nuevo.
+  2. Las banderas `bichitos.sfxMuted` / `bichitos.musicMuted` de
+     `src/audio.ts`, escritas en `localStorage` con `addInitScript`
+     **antes del primer script** de la página: así el juego no llega ni a
+     crear los nodos de audio, y de paso los botones del HUD salen ya
+     apagados en las capturas.
+- Aplicado en los **tres** sitios que abren navegador: `arena-shots.mjs`,
+  `run-match-batch.mjs` y `playwright.config.ts` (`launchOptions.args`).
+- Verificado con una captura real, no de palabra: `jungle.png` con los
+  dos iconos de audio tachados.
+- Escrito como **regla permanente** en `CLAUDE.md` §"Test instances must
+  be SILENT" y en `DEV_TOOLS.md`, para que no dependa de que yo me acuerde
+  en la próxima sesión. Los scripts ad-hoc de `.tmp/` también deben usar
+  el helper.
+
+Commit `0bb2044`.
+
+### Lo que queda abierto al cerrar el día
+
+Ordenado, con el "cómo retomar" completo en `NEXT_STEPS.md` §Cómo retomar.
+
+- **El diagnóstico del *feeling* se cortó sin entregar.** Se lanzó una
+  tanda de 9 agentes (física del movimiento, clips vs velocidad, lectura
+  artística en tiras de capturas) y murió con la sesión anterior sin
+  dejar informe. Su caché (`resumeFromRunId`) **solo sirve dentro de la
+  misma sesión**, así que mañana se relanza de cero. No se perdió código
+  —era medición pura—, pero sí las horas de agente: la lección es no
+  dejar una tanda larga viva al final de una sesión.
+- **`dev` va 10 commits por delante de `main`**: todo el terreno v2, el
+  fondo y los dioramas están **sin desplegar**, esperando a que Rafa mire
+  las capturas y dé el visto bueno.
+- **Sin responder**: cómo está publicado el juego en itch.io (iframe de
+  nuestro dominio o zip subido). Es lo que decide si el portal del Vibe
+  Jam se apaga con un flag de build o hace falta otra cosa.
+- **Higiene de la máquina**: quedaron ~70 procesos de Chrome huérfanos de
+  las tandas de hoy. Rafa pidió expresamente **no cerrarlos**. Los
+  lanzaron agentes anteriores al helper, así que ésos no están mudos; los
+  de mañana sí.
+
 ## 2026-09-07 — La escala del suelo es cosa de cada bioma (idea de Rafa)
 
 Rafa, sobre las capturas del slice 1: *"se sigue viendo raro… quizás de
