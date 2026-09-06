@@ -18,9 +18,9 @@ sala privada real en prod; detalle en [`ROADMAP.md`](ROADMAP.md) y
 
 ## Cómo retomar — cierre del 2026-09-07
 
-Árbol limpio y todo empujado. `dev` va **12 commits por delante de
-`main`** (o sea: terreno v2 + fondo + dioramas **sin desplegar**; los dos
-últimos commits son solo esta documentación de cierre).
+Árbol limpio y todo empujado. En producción sigue **`v1.7-h4-social`**:
+todo el terreno v2, el fondo y los dioramas viven solo en `dev`, **sin
+desplegar** (`git log --oneline main..dev` los lista).
 
 **Lo primero de la próxima sesión, por orden:**
 1. **Rafa mira capturas y decide.** La ÚNICA hoja de contactos que

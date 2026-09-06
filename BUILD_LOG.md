@@ -46,9 +46,9 @@ Ordenado, con el "cómo retomar" completo en `NEXT_STEPS.md` §Cómo retomar.
   misma sesión**, así que mañana se relanza de cero. No se perdió código
   —era medición pura—, pero sí las horas de agente: la lección es no
   dejar una tanda larga viva al final de una sesión.
-- **`dev` va 12 commits por delante de `main`**: todo el terreno v2, el
-  fondo y los dioramas están **sin desplegar**, esperando a que Rafa mire
-  las capturas y dé el visto bueno.
+- **Nada de esto está en producción**: en `main` sigue
+  `v1.7-h4-social`, y el terreno v2, el fondo y los dioramas viven solo
+  en `dev`, esperando a que Rafa mire las capturas y dé el visto bueno.
 - **Sin responder**: cómo está publicado el juego en itch.io (iframe de
   nuestro dominio o zip subido). Es lo que decide si el portal del Vibe
   Jam se apaga con un flag de build o hace falta otra cosa.
