@@ -2332,24 +2332,13 @@ export class Game {
       const bands = [...new Set(b.indices.map(i => layout.fragments[i].band))];
       return { band: bands.length === 1 ? bands[0] : -1, size: b.indices.length, delay: b.delay };
     });
-    // Pattern from the BAND SEQUENCE of the batches, not from their count.
-    // Pattern B (axis split) sweeps outer→inner once per half, so its bands
-    // always read 3,2,1,3,2,1; pattern A sweeps outer→inner once and, when
-    // the three bands split, also reaches 6 batches — but as 3,3,2,2,1,1.
-    // La heurística anterior (`batches.length >= 6` → B) clasificaba mal el
-    // 8,5 % de las semillas (medido en `scripts/research/arena-stats.mts`,
-    // que usa esta misma secuencia de bandas como referencia).
-    // En la fase 0.5 del plan esto pasa a ser `layout.pattern`, un campo
-    // explícito del generador, y esta derivación desaparece.
-    // Regla exacta (la misma de `scripts/arena-layout.mjs`, detectPattern):
-    // el barrido A sólo desciende de banda (3→2→1), así que CUALQUIER subida
-    // en la secuencia delata el corte por eje de B. Comparar con la cadena
-    // literal '321321' funcionaría hoy pero se rompe si el descarte
-    // defensivo de grupos vacíos (`arena-fragments.ts`) acorta la secuencia.
-    const bands = layout.batches.map(b => layout.fragments[b.indices[0]].band);
-    const isAxisSplit = bands.some((b, i) => i > 0 && b > bands[i - 1]);
+    // 2026-09-06 (fase 0.5): el patrón lo DICE el generador
+    // (`layout.pattern`). Antes se re-derivaba aquí de la secuencia de
+    // bandas, y antes de eso con una heurística por número de lotes que
+    // fallaba en el 8,5 % de las partidas. El único que lo sabe de primera
+    // mano es quien lo elige.
     const patternLabel: 'A (outer→inner sweep)' | 'B (axis-split)' | 'unknown' =
-      isAxisSplit ? 'B (axis-split)' : 'A (outer→inner sweep)';
+      layout.pattern === 'axis-split' ? 'B (axis-split)' : 'A (outer→inner sweep)';
     return {
       seed: layout.seed,
       batches,

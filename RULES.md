@@ -75,6 +75,10 @@ Be the last critter standing in the arena.
   The first batch always falls at t = 28s (its warning starts at
   t = 25s); later batches fall 11.5-26.6s after the previous one
   (a scheduled delay of 8.5-23.6s plus the 3s warning).
+- Each batch is a **continuous arc** of the band it belongs to — the
+  floor recedes as a readable front, never as scattered teeth — and the
+  arc starts at a seed-dependent sector, so which side goes first
+  changes from match to match.
 - **Warning**: 3s before a batch actually collapses, the affected
   fragments visibly **shake** (distributed tremor with per-fragment
   phase offsets, amplitude ≈ 8cm) and glow warm orange. A seismic

@@ -1307,6 +1307,35 @@ export class Arena {
   }
 
   /**
+   * Playable radius IN ONE DIRECTION — max outer edge of the alive
+   * non-immune fragments whose arc contains `angle` (radians, world atan2
+   * convention: 0 = +X).
+   *
+   * 2026-09-06 (terreno v2 fase 0.5): `currentRadius` es el máximo GLOBAL,
+   * así que en un colapso por eje se queda en 12 mientras siga vivo un
+   * solo sector exterior, aunque medio disco haya desaparecido. Quien
+   * pregunta "¿cuánto suelo me queda?" desde una posición concreta —los
+   * bots— necesita el radio de SU dirección.
+   *
+   * Espejo de `ArenaSim.radiusAt` (server/src/sim/arena.ts): misma lógica,
+   * mismos resultados; el cliente no puede importar del servidor.
+   */
+  radiusAt(angle: number): number {
+    if (!this.layout) return FRAG.maxRadius;
+    let maxR = FRAG.immuneRadius;
+    const x = Math.cos(angle);
+    const z = Math.sin(angle);
+    for (let i = 0; i < this.layout.fragments.length; i++) {
+      const f = this.layout.fragments[i];
+      if (!this.alive[i] || f.immune) continue;
+      if (maxR >= f.outerR) continue;
+      const probe = f.outerR - 0.001;
+      if (pointInFragment(x * probe, z * probe, f)) maxR = f.outerR;
+    }
+    return maxR;
+  }
+
+  /**
    * Apply the pre-collapse shake effect to a batch.
    *
    * Writes to `fragmentGroup.position.x/z` (visual only — physics uses the

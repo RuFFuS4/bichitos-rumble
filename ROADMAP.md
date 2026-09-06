@@ -254,9 +254,11 @@ pobre"*. Diagnóstico por capas, 4 propuestas, 3 jueces y plan en
       observabilidad offline del colapso (el golden de partidas ganó 22
       eventos `collapse_*` sin mover un solo evento de gameplay),
       `test:sim` en CI y docs con las cifras reales.
-- [ ] **Fase 0.5 — micro-slice de gameplay** (hard-stop): medios lotes
-      contiguos del patrón A (2,8 % → 100 %), `layout.pattern` explícito,
-      `radiusAt(angle)` para bots/respawn/proyectiles.
+- [x] **Fase 0.5 — micro-slice de gameplay** ✅ 2026-09-06 (hard-stop):
+      lotes parciales como arco contiguo con arranque por semilla (frente
+      legible 48,3 % → 100 %), `layout.pattern` explícito y
+      `radiusAt(angle)` en bots y proyectiles (el respawn se queda: su
+      bucle ya converge al islote).
 - [ ] **Fase 1 — el disco se convierte en un lugar** (primer slice
       visible): UV a escala, tinte por banda/pack/semilla, fuera el void,
       tone mapping + sombras reales, bisel y material de acantilado,

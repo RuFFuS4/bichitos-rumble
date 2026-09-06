@@ -28,7 +28,12 @@ export function updateBot(
   dt: number,
   // Minimal arena view for edge awareness (balance v2). Optional so
   // headless/unit contexts without an arena keep working.
-  arena?: { currentRadius: number; isOnArena(x: number, z: number): boolean },
+  arena?: {
+    currentRadius: number;
+    /** Radio vivo en UNA dirección (fase 0.5) — ver Arena.radiusAt. */
+    radiusAt(angle: number): number;
+    isOnArena(x: number, z: number): boolean;
+  },
 ): void {
   // Review 2026-08-24: guard de falling en paridad con el server (que
   // devuelve ZERO) — un bot cayendo seguía persiguiendo/casteando en
@@ -120,7 +125,11 @@ export function updateBot(
           nx = -bot.x / rd;
           nz = -bot.z / rd;
         } else {
-          const danger = rd - (arena.currentRadius - FEEL.bots.edgeMargin);
+          // 2026-09-06 (fase 0.5): radio de SU dirección, no el global. Con
+          // `currentRadius` un bot plantado sobre el borde de la mitad ya
+          // caída (patrón axis-split) no sentía peligro alguno mientras
+          // sobreviviera un sector exterior en la otra punta del disco.
+          const danger = rd - (arena.radiusAt(Math.atan2(bot.z, bot.x)) - FEEL.bots.edgeMargin);
           if (danger > 0) {
             const w = Math.min(1, danger / FEEL.bots.edgeMargin) * FEEL.bots.edgeSteer;
             nx -= (bot.x / rd) * w;
@@ -175,7 +184,7 @@ export function updateBot(
       if (arena) {
         const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
         edgePressure =
-          rd > arena.currentRadius - FEEL.bots.edgeMargin &&
+          rd > arena.radiusAt(Math.atan2(bot.z, bot.x)) - FEEL.bots.edgeMargin &&
           nearestDist < FEEL.bots.defendRange;
       }
       if (chargeIncoming || edgePressure) {

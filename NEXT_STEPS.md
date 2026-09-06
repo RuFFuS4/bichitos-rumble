@@ -55,7 +55,12 @@ entregable):
       observabilidad real del colapso offline (el golden de partidas ya
       registra `collapse_warn`/`collapse_batch`), `test:sim` en CI y
       docs con las cifras reales. Revisado por 2 agentes adversariales.
-- [ ] Fase 0.5 — micro-slice de gameplay (si Rafa dice sí en la 1).
+- [x] **Fase 0.5 — micro-slice de gameplay** (2026-09-06): lotes
+      parciales como ARCO CONTIGUO con arranque por semilla (frente
+      legible en el 100 % de las partidas, antes 48,3 %),
+      `layout.pattern` explícito y `radiusAt(angle)` en bots (los dos
+      lados) y expiración de proyectiles. Golden de partidas y de layout
+      regenerados; verificado en pantalla.
 - [ ] Fase 1 — el disco se convierte en un lugar
       (`claude/feature/arena-look-v2`) → **hoja de contactos y decisión
       de Rafa sobre el look base**.

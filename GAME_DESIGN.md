@@ -153,7 +153,15 @@ has a slightly different breakdown: **A** = outer→inner band sweep,
 each band optionally split in two batches (54.5% of seeds, 4-6
 batches) and **B** = axis-split, where a random axis cuts the arena
 in two and each half is its own outer→inner sweep (45.5%, always 6
-batches).
+batches). The seed writes the choice into `layout.pattern`, so tools and
+the HUD read it instead of guessing from the batch list.
+
+Every partial batch is a CONTIGUOUS ARC of its band: when a band falls in
+two halves, each half is one continuous front, and the arc starts at a
+seed-dependent sector so the same side never goes first. Before
+2026-09-06 the halves were random picks, so the outer ring lost scattered
+teeth and the player could not read which way to run (only 2.8% of
+pattern-A matches had a readable front; now it is 100% in both patterns).
 
 > Figures measured over 5 000 seeds with
 > [`scripts/research/arena-stats.mts`](scripts/research/arena-stats.mts)

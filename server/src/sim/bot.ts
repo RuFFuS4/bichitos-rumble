@@ -71,7 +71,12 @@ const rollAt = (ratePerSec: number): boolean =>
 export function computeBotInput(
   bot: PlayerSchema,
   allPlayers: PlayerSchema[],
-  arena?: { currentRadius: number; isOnArena(x: number, z: number): boolean },
+  arena?: {
+    currentRadius: number;
+    /** Radio vivo en UNA dirección (fase 0.5) — ver ArenaSim.radiusAt. */
+    radiusAt(angle: number): number;
+    isOnArena(x: number, z: number): boolean;
+  },
 ): BotInput {
   if (!bot.alive || bot.falling) return ZERO;
 
@@ -117,7 +122,9 @@ export function computeBotInput(
         moveX = -bot.x / rd;
         moveZ = -bot.z / rd;
       } else {
-        const danger = rd - (arena.currentRadius - EDGE_MARGIN);
+        // 2026-09-06 (fase 0.5): radio de SU dirección, no el global —
+        // ver la nota en ArenaSim.radiusAt.
+        const danger = rd - (arena.radiusAt(Math.atan2(bot.z, bot.x)) - EDGE_MARGIN);
         if (danger > 0) {
           const w = Math.min(1, danger / EDGE_MARGIN) * EDGE_STEER;
           moveX -= (bot.x / rd) * w;
@@ -171,7 +178,7 @@ export function computeBotInput(
     let edgePressure = false;
     if (arena) {
       const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
-      edgePressure = rd > arena.currentRadius - EDGE_MARGIN && nearestDist < 2.8;
+      edgePressure = rd > arena.radiusAt(Math.atan2(bot.z, bot.x)) - EDGE_MARGIN && nearestDist < 2.8;
     }
     ability2 = chargeIncoming || edgePressure;
   } else if (def2?.type === 'projectile') {

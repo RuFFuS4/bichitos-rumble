@@ -45,10 +45,24 @@ export interface BatchDef {
   delay: number;       // seconds before this batch starts warning
 }
 
+/**
+ * Which macro pattern the seed picked for this match's collapse:
+ *   - 'sweep'      band-aligned outer → inner (pattern A).
+ *   - 'axis-split' the disc is cut by a random axis and each half is
+ *                  swept outer → inner in turn (pattern B).
+ *
+ * 2026-09-06: campo EXPLÍCITO. Antes cada consumidor lo re-derivaba de la
+ * secuencia de bandas y el lab usaba una heurística (`batches.length >= 6`)
+ * que fallaba en el 8,5 % de las partidas. El generador es el único que lo
+ * sabe de primera mano; que lo diga él.
+ */
+export type CollapsePattern = 'sweep' | 'axis-split';
+
 export interface ArenaLayout {
   seed: number;
   fragments: FragmentDef[];
   batches: BatchDef[];
+  pattern: CollapsePattern;
   immuneRadius: number;
   maxRadius: number;
 }
@@ -205,9 +219,30 @@ export function generateArenaLayout(seed: number): ArenaLayout {
     }
   } else {
     // Pattern A: band-aligned outer → inner, with optional intra-band split.
+    //
+    // 2026-09-06 (terreno v2 fase 0.5): la mitad que cae primero es un
+    // ARCO CONTIGUO, no una selección aleatoria. Antes se cortaba el array
+    // ya barajado, así que el primer medio lote formaba un frente continuo
+    // en el 2,8 % de las partidas (medido sobre 5000 semillas con
+    // `npm run arena -- --sweep 5000`): el anillo exterior perdía dientes
+    // sueltos por todo el disco y el jugador no podía leer hacia dónde
+    // huir. Ahora se ordena por ángulo y se ROTA el arranque, así que:
+    //   - las dos mitades son arcos contiguos (frente legible), y
+    //   - el arco no empieza siempre en el mismo sitio (si empezara en el
+    //     ángulo 0 caería siempre la mitad más cercana a la cámara: el
+    //     tempo dejaría de ser ilegible para pasar a ser aprendible, que
+    //     es peor).
+    // El arranque sale del PRIMER elemento del shuffle que ya se hizo
+    // arriba, así que no consume `rand()` extra: cualquier tirada nueva
+    // desplazaría toda la salida del generador.
     for (const bandIdx of [3, 2, 1]) {
-      const indices = byBand.get(bandIdx) ?? [];
-      if (indices.length === 0) continue;
+      const shuffled = byBand.get(bandIdx) ?? [];
+      if (shuffled.length === 0) continue;
+      // Los fragmentos se generan en orden angular dentro de cada banda,
+      // así que ordenar por índice ES ordenar por ángulo.
+      const ring = [...shuffled].sort((a, b) => a - b);
+      const startAt = Math.max(0, ring.indexOf(shuffled[0]));
+      const indices = [...ring.slice(startAt), ...ring.slice(0, startAt)];
       const splitProb = FRAG.splitProbability[bandIdx as 1 | 2 | 3] ?? 0;
       const shouldSplit = indices.length >= 6 && rand() < splitProb;
       if (shouldSplit) {
@@ -242,7 +277,14 @@ export function generateArenaLayout(seed: number): ArenaLayout {
     return { indices, delay };
   });
 
-  return { seed, fragments, batches, immuneRadius: FRAG.immuneRadius, maxRadius: FRAG.maxRadius };
+  return {
+    seed,
+    fragments,
+    batches,
+    pattern: usePatternB ? 'axis-split' : 'sweep',
+    immuneRadius: FRAG.immuneRadius,
+    maxRadius: FRAG.maxRadius,
+  };
 }
 
 // --- Point-in-fragment --------------------------------------------------

@@ -283,6 +283,83 @@ interface LayoutGolden {
   seeds: Record<string, string>;
 }
 
+// ---------------------------------------------------------------------------
+// Fase 0.5 — el colapso se lee (frentes contiguos + patrón explícito)
+// ---------------------------------------------------------------------------
+
+/**
+ * Tramos de sectores CONSECUTIVOS (en orden angular, cíclico) de una banda
+ * dentro de un lote. 1 = el lote es un arco continuo; 3-4 = cae en dientes
+ * de sierra repartidos por todo el anillo, que es lo que hacía el generador
+ * antes de la fase 0.5 (2,8 % de partidas con frente legible).
+ */
+function cyclicRuns(layout: ArenaLayout, band: number, batchIdx: number): number {
+  const ring = fragmentsOfBand(layout, band)
+    .sort((a, b) => a.startAngle - b.startAngle)
+    .map(f => f.index);
+  const inBatch = new Set(layout.batches[batchIdx].indices);
+  let runs = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const cur = inBatch.has(ring[i]);
+    const prev = inBatch.has(ring[(i - 1 + ring.length) % ring.length]);
+    if (cur && !prev) runs++;
+  }
+  return runs;
+}
+
+describe('arena layout — colapso legible (fase 0.5)', () => {
+  it('cada lote parcial de una banda es UN arco contiguo, en las 200 semillas', () => {
+    for (const seed of SEEDS) {
+      const layout = generateArenaLayout(seed);
+      for (let b = 0; b < layout.batches.length; b++) {
+        const bands = [...new Set(layout.batches[b].indices.map(i => layout.fragments[i].band))];
+        if (bands.length !== 1) continue; // lote mixto: no aplica
+        const band = bands[0];
+        const total = fragmentsOfBand(layout, band).length;
+        if (layout.batches[b].indices.length === total) continue; // banda entera
+        expect(
+          cyclicRuns(layout, band, b),
+          `seed ${seed}, lote ${b} (banda ${band}) cae en trozos sueltos: el `
+          + 'jugador no puede leer el frente. Ver la nota de mitades contiguas '
+          + 'en generateArenaLayout.',
+        ).toBe(1);
+      }
+    }
+  });
+
+  it('el arco no empieza siempre en el mismo sitio (si no, el tempo se aprende)', () => {
+    // Sin rotación por semilla, el primer lote empezaría SIEMPRE en el sector
+    // de ángulo ~0 y caería siempre la misma mitad del disco: pasaríamos de
+    // ilegible a predecible, que para el jugador es peor.
+    const starts = new Set<number>();
+    for (const seed of SEEDS) {
+      const layout = generateArenaLayout(seed);
+      if (layout.pattern !== 'sweep') continue;
+      const first = layout.batches[0];
+      const ring = fragmentsOfBand(layout, 3)
+        .sort((a, b) => a.startAngle - b.startAngle)
+        .map(f => f.index);
+      if (first.indices.length === ring.length) continue; // sin split
+      // Índice angular donde arranca el arco (el primero cuyo anterior no está).
+      const inBatch = new Set(first.indices);
+      const at = ring.findIndex((idx, i) => inBatch.has(idx) && !inBatch.has(ring[(i - 1 + ring.length) % ring.length]));
+      starts.add(at);
+    }
+    expect(starts.size, 'el arranque del primer arco no varía con la semilla').toBeGreaterThan(3);
+  });
+
+  it('layout.pattern coincide con lo que dice la secuencia de bandas', () => {
+    for (const seed of SEEDS) {
+      const layout = generateArenaLayout(seed);
+      const bands = layout.batches.map(b => layout.fragments[b.indices[0]].band);
+      // El barrido sólo desciende de banda; cualquier subida es corte por eje.
+      const derived = bands.some((b, i) => i > 0 && b > bands[i - 1]) ? 'axis-split' : 'sweep';
+      expect(layout.pattern, `seed ${seed}: pattern declarado y secuencia de bandas discrepan`)
+        .toBe(derived);
+    }
+  });
+});
+
 const golden = JSON.parse(
   readFileSync(new URL('./arena-layout-golden.json', import.meta.url), 'utf8'),
 ) as LayoutGolden;

@@ -190,8 +190,13 @@ function schedule(layout) {
  */
 function detectPattern(layout) {
   const bands = layout.batches.map((b) => layout.fragments[b.indices[0]].band);
-  for (let i = 1; i < bands.length; i++) if (bands[i] > bands[i - 1]) return { pattern: 'B', bandSeq: bands.join('') };
-  return { pattern: 'A', bandSeq: bands.join('') };
+  // Desde la fase 0.5 el generador lo dice él mismo (`layout.pattern`); la
+  // derivación por bandas se conserva como comprobación cruzada y para
+  // poder leer layouts viejos (JSON guardados antes del campo).
+  const declared = layout.pattern === 'axis-split' ? 'B' : layout.pattern === 'sweep' ? 'A' : null;
+  let derived = 'A';
+  for (let i = 1; i < bands.length; i++) if (bands[i] > bands[i - 1]) { derived = 'B'; break; }
+  return { pattern: declared ?? derived, bandSeq: bands.join(''), derived, declared };
 }
 
 /**

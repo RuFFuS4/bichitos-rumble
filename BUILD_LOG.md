@@ -1,5 +1,51 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-06 — Terreno v2 fase 0.5: el colapso por fin se lee
+
+Primer cambio de gameplay de H4.5 (zona hard-stop, aprobado por Rafa).
+Toca el generador, así que va con despliegue cliente+servidor a la vez.
+
+- **Los lotes parciales caen como un ARCO CONTIGUO.** El patrón A cortaba
+  el array ya barajado, así que el anillo exterior perdía dientes sueltos
+  repartidos por todo el disco: solo el 2,8 % de las partidas de ese
+  patrón tenían un frente legible. Ahora se ordena por ángulo y se rota
+  el arranque con el primer elemento del shuffle que ya existía —sin
+  consumir `rand()` extra, que desplazaría toda la salida—, así que las
+  dos mitades son arcos continuos y el arco no empieza siempre en el
+  mismo sitio. Medido con `npm run arena -- --sweep 5000`: **48,3 % →
+  100 %** de partidas con frente legible (contando los dos patrones).
+  La rotación no es un adorno: sin ella caería siempre la mitad más
+  cercana a la cámara y el tempo pasaría de ilegible a aprendible, que
+  para el jugador es peor (lo avisó el crítico del diagnóstico).
+- **`layout.pattern` explícito** (`'sweep' | 'axis-split'`): lo dice el
+  generador, que es el único que lo sabe. Mueren las dos re-derivaciones
+  (la heurística por número de lotes fallaba en el 8,5 % de las
+  partidas); el CLI conserva la derivación por bandas como comprobación
+  cruzada y para leer JSON antiguos.
+- **`radiusAt(angle)`** en `Arena` y `ArenaSim`: radio vivo en UNA
+  dirección. `currentRadius` es el máximo global, así que en un colapso
+  por eje se quedaba en 12 mientras sobreviviera un solo sector exterior
+  en la otra punta: un bot al borde del vacío no sentía peligro alguno.
+  Lo usan los bots (banda de peligro y presión de borde, ambos lados) y
+  la expiración de proyectiles del servidor. El **respawn NO**: su bucle
+  ya prueba 12 posiciones con `isOnArena` y converge al islote inmune;
+  cambiarlo movería el reparto sin arreglar nada. Desviación consciente
+  del plan, anotada en `docs/ARENA_V2.md`.
+- **Verificación**: 51 tests del sim (3 nuevos: arco contiguo en 200
+  semillas, arranque variable, `pattern` coherente con la secuencia de
+  bandas), paridad de espejos byte a byte, `npm run check` verde, golden
+  de layout y de partidas regenerados, y **captura en el lab** con el
+  mordisco contiguo del anillo exterior
+  (`.tmp/checklist/fase05_frente_contiguo.png`).
+- **Fleco descubierto del batch runner**: el primer `golden:write` tras
+  un cambio grande escribió una partida con un evento de menos (el
+  `match_ended` final llegaba después del corte de la grabación), y la
+  verificación siguiente cantaba un falso "CAMBIO DE BALANCE". Un
+  segundo write lo dejó estable y `npm run golden` da 3/3 exactas dos
+  veces seguidas. Regla mientras no se arregle: **después de
+  `golden:write`, correr siempre `npm run golden`**; si sale DIF sin
+  haber tocado nada, reescribir.
+
 ## 2026-09-06 — Terreno v2 fase 0: la red de seguridad del generador
 
 Rafa aprobó los 4 puntos abiertos del plan (`docs/ARENA_V2.md §6`):

@@ -38,8 +38,11 @@ function makePlayer(overrides: {
   } as unknown as PlayerSchema;
 }
 
+/** Arena de prueba: disco perfecto, así que el radio direccional
+ *  (`radiusAt`, fase 0.5) coincide con el global en todos los ángulos. */
 const arenaDisc = (radius: number) => ({
   currentRadius: radius,
+  radiusAt: (_angle: number) => radius,
   isOnArena: (x: number, z: number) => x * x + z * z <= radius * radius,
 });
 

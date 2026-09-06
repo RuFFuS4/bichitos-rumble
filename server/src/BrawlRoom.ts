@@ -1154,10 +1154,13 @@ export class BrawlRoom extends Room {
         consumed = true;
       } else {
         // Out-of-arena clamp: snowball flies past the lethal radius
-        // → expire silently. Uses arenaRadius approximation; not
-        // perfect for irregular fragments but cheap enough.
+        // → expire silently.
+        // 2026-09-06 (fase 0.5): el margen se mide contra el radio vivo de
+        // la DIRECCIÓN del proyectil (ArenaSim.radiusAt). Con el máximo
+        // global, uno que volara sobre la mitad ya caída seguía vivo hasta
+        // r > 16 aunque bajo él no quedara suelo.
         const r = Math.sqrt(pr.x * pr.x + pr.z * pr.z);
-        if (r > this.arenaSim.currentRadius + 4) {
+        if (r > this.arenaSim.radiusAt(Math.atan2(pr.z, pr.x)) + 4) {
           this.broadcast('projectileExpired', { id: pr.id, x: pr.x, z: pr.z });
           consumed = true;
         }

@@ -7,7 +7,7 @@
 // current batch index), and an approximate radius for quick checks.
 // ---------------------------------------------------------------------------
 
-import { generateArenaLayout, isPointOnArena, FRAG,
+import { generateArenaLayout, isPointOnArena, pointInFragment, FRAG,
          type ArenaLayout } from './arena-fragments.js';
 
 export class ArenaSim {
@@ -48,6 +48,36 @@ export class ArenaSim {
       if (this.alive[i] && !this.layout.fragments[i].immune) {
         maxR = Math.max(maxR, this.layout.fragments[i].outerR);
       }
+    }
+    return maxR;
+  }
+
+  /**
+   * Playable radius IN ONE DIRECTION — max outer edge of the alive
+   * non-immune fragments whose arc contains `angle` (radians, world atan2
+   * convention: 0 = +X).
+   *
+   * 2026-09-06 (terreno v2 fase 0.5): `currentRadius` es el máximo GLOBAL,
+   * así que en un colapso por eje se queda en 12 mientras siga vivo un
+   * solo sector exterior, aunque medio disco haya desaparecido. Todo el que
+   * pregunta "¿cuánto suelo me queda?" desde una posición concreta
+   * necesita el radio de SU dirección, no el del disco entero.
+   *
+   * Mismo código en `src/arena.ts` (clase Arena) — la copia visual no puede
+   * importar de aquí; ver la nota de espejos en `arena-fragments.ts`.
+   */
+  radiusAt(angle: number): number {
+    let maxR = this.layout.immuneRadius;
+    const x = Math.cos(angle);
+    const z = Math.sin(angle);
+    for (let i = 0; i < this.layout.fragments.length; i++) {
+      const f = this.layout.fragments[i];
+      if (!this.alive[i] || f.immune) continue;
+      if (maxR >= f.outerR) continue;
+      // Un punto justo dentro del borde exterior basta para saber si el
+      // sector cubre este ángulo (los sectores son anulares).
+      const probe = f.outerR - 0.001;
+      if (pointInFragment(x * probe, z * probe, f)) maxR = f.outerR;
     }
     return maxR;
   }
