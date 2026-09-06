@@ -26,6 +26,22 @@
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
 import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
+import { ARENA_LOOK } from './arena-look';
+
+/** Anisotropía máxima del dispositivo, cacheada. La fija el renderer al
+ *  arrancar (`setArenaTextureAnisotropy`); sin renderer (tests, headless)
+ *  se queda en 1 y las texturas se cargan igual. */
+let maxAnisotropy = 1;
+export function setArenaTextureAnisotropy(value: number): void {
+  maxAnisotropy = Math.max(1, Math.floor(value));
+  for (const tex of textureCache.values()) {
+    if (tex.mapping !== THREE.EquirectangularReflectionMapping) {
+      tex.anisotropy = maxAnisotropy;
+      tex.needsUpdate = true;
+    }
+  }
+}
+function getMaxAnisotropy(): number { return maxAnisotropy; }
 
 // --- Public API ----------------------------------------------------------
 
@@ -274,12 +290,19 @@ function loadTexture(path: string, mode: 'ground' | 'skybox'): Promise<THREE.Tex
       path,
       (tex) => {
         if (mode === 'ground') {
-          // Tileable across the whole arena. The ground shader uses UV
-          // coords from ExtrudeGeometry so a single repeat is enough for
-          // each fragment — the pattern loops naturally between sectors.
+          // Tileable across the whole arena. TODAS las superficies de suelo
+          // (tapas de sector, centro inmune y falda) llevan UV en
+          // COORDENADAS DE MUNDO, así que un único repeat vale para las
+          // tres y el tile mide `ARENA_LOOK.tileSize` unidades de mundo.
+          //
+          // 2026-09-06: antes era repeat 4×4 sobre UV de mundo = 4
+          // repeticiones POR UNIDAD → un tile de 25 cm, ~96 en el diámetro.
+          // El mipmap lo promediaba a color plano: de ahí la sensación de
+          // "plato liso" pese a haber textura cargada.
           tex.wrapS = THREE.RepeatWrapping;
           tex.wrapT = THREE.RepeatWrapping;
-          tex.repeat.set(4, 4);
+          tex.repeat.set(1 / ARENA_LOOK.tileSize, 1 / ARENA_LOOK.tileSize);
+          tex.anisotropy = getMaxAnisotropy();
           tex.colorSpace = THREE.SRGBColorSpace;
         } else {
           // Equirect skybox bound directly to `scene.background` via

@@ -61,9 +61,14 @@ entregable):
       `layout.pattern` explícito y `radiusAt(angle)` en bots (los dos
       lados) y expiración de proyectiles. Golden de partidas y de layout
       regenerados; verificado en pantalla.
-- [ ] Fase 1 — el disco se convierte en un lugar
-      (`claude/feature/arena-look-v2`) → **hoja de contactos y decisión
-      de Rafa sobre el look base**.
+- [x] **Fase 1a — el disco se convierte en un lugar** (2026-09-06):
+      tile de textura a escala real, tinte por banda/pack/semilla,
+      acantilado con material propio, fuera el void y fuera la falda,
+      luz lateral, `ARENA_LOOK` + `arena-shots`. Golden 3/3 SIN
+      regenerar (todo visual). **← MIRA LAS CAPTURAS Y DECIDE**:
+      `.tmp/shots-despues/*.png`.
+- [ ] Fase 1b — sombras de contacto de critters, bisel de junta, applier
+      ToolPatch `look-patch`, panel del studio y dieta de props.
 - [ ] Fase 2 — colapso que se lee y se siente.
 - [ ] Fase 3 — cada bioma es un sitio.
 - [ ] Fase 4 — props que pertenecen al suelo (+ higiene: GLB crudo de

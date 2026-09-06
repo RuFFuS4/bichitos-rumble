@@ -171,6 +171,19 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     importan `src/arena-fragments.ts` directamente, así que necesitan
     **Node ≥ 22.18** (type stripping). El resto del repo sigue con
     `engines.node >= 20.19`; los npm scripts ya pasan el flag.
+  - **Look del suelo** (fase 1a): `ARENA_LOOK` en `src/arena-look.ts` es
+    la fuente única de cómo se ve la arena (tamaño de tile, tintes por
+    banda, acantilado, emisivo del aviso, tone mapping). Desde el lab:
+    `__devApi.getArenaLook()` y `__devApi.setArenaLook({tileSize: 6})`
+    — los cambios de color se ven al frame siguiente y los estructurales
+    disparan `rebuildArenaVisuals()`, que rehace las mallas conservando
+    semilla y pack sin cortar la partida.
+  - **Hoja de contactos**: `node scripts/arena-shots.mjs [--out dir]
+    [--seed N] [--packs a,b] [--at-seconds S]` captura los 5 biomas con
+    la cámara de juego y el panel del lab oculto. Es la forma de MIRAR el
+    efecto de un cambio de `ARENA_LOOK` sin abrir el navegador: esperar
+    a que el recuento de meshes se estabilice (los GLB de decor tardan)
+    y saltar la cuenta atrás ya lo hace el script.
   - Registro histórico: `scripts/research/arena-stats.mts` es la
     medición congelada del diagnóstico del 2026-09-05 que respalda
     `docs/ARENA_V2.md §1.2`. Para medir de aquí en adelante, el CLI.

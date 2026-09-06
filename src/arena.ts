@@ -14,6 +14,7 @@ import {
   type ArenaLayout, type FragmentDef,
 } from './arena-fragments';
 import { playArenaWarning } from './audio';
+import { ARENA_LOOK, SALT_VISUAL } from './arena-look';
 import {
   type ArenaPackId,
   layoutPackProps,
@@ -39,20 +40,11 @@ const SHAKE_FREQ_LOW   = 7;     // Hz, slow ground heave
 const WARNING_EMISSIVE_COLOR = 0xff7733;   // warm orange, NOT red flash
 
 const ARC_SEGMENTS = 16;       // arc resolution per fragment shape edge
-const CENTER_SEGMENTS = 32;    // circle segments for the immune center
+// Resolución del círculo del centro inmune. Subida de 32 a 96 en la
+// fase 1: a 32 el borde del islote se veía poligonal desde la cámara
+// de juego, y es la pieza que más mira el jugador en el endgame.
+const CENTER_SEGMENTS = 96;
 
-// Outer ring "skirt" — kept as a tiny anti-gap with the skybox lower
-// hemisphere. Decoration now lives INSIDE the arena (see
-// arena-decor-layouts.ts) so the skirt has no other purpose; we keep
-// it only as a 0.5 u trim so there's no visible seam between the
-// fragment edge and the void / sky horizon.
-//
-// History:
-//   18 → 14   (first tighten pass — felt like extended-but-not-walkable terrain)
-//   14 → 12.5 (now — decoration moved inside the arena)
-const OUTER_RING_INNER_R = FRAG.maxRadius - 0.1;        //  11.9
-const OUTER_RING_OUTER_R = FRAG.maxRadius + 0.5;        //  12.5  (was 14)
-const OUTER_RING_SEGMENTS = 48;
 
 // Per-band base colors. Distinct enough that the user can SEE where one
 // band ends and the next begins (even when bands are concentric rings of
@@ -63,10 +55,55 @@ const BAND_COLORS: Record<number, number> = {
   2: 0x4a6741, // mid band
   3: 0x3a5331, // outer band — darkest
 };
-// Only the immune center uses a dedicated side-wall color. Extruded
-// sectors use a single material for top + sides (lighting + DoubleSide
-// gives enough visual variation).
-const IMMUNE_SIDE_COLOR = 0x46704b;
+// 2026-09-06 (fase 1): fuera IMMUNE_SIDE_COLOR. El canto del centro ya no
+// es un verde fijo que desentonaba en los 5 biomas: sale del mismo tinte
+// que su tapa multiplicado por ARENA_LOOK.cliffTint, igual que el resto
+// de acantilados del disco.
+
+/**
+ * Rol visual de cada mesh del suelo. Sustituye a la heurística vieja
+ * ("si tiene receiveShadow es una tapa"), que tiñó de gris hasta el
+ * centro inmune y mató los colores de banda.
+ */
+type GroundRole = 'top' | 'cliff' | 'bottom';
+
+/** mulberry32 local para lo VISUAL — stream propio (seed ^ SALT_VISUAL) para
+ *  no desplazar la salida del generador de terreno, que es gameplay. */
+function visualRand(seed: number): () => number {
+  let t = (seed ^ SALT_VISUAL) | 0;
+  return () => {
+    t = (t + 0x6D2B79F5) | 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Tinte final de un fragmento: base × banda × jitter. El resultado
+ * MULTIPLICA la textura del pack, así que se mantiene cerca del blanco
+ * (la textura pone el color; esto solo modula el brillo).
+ */
+function tintForBand(band: number, jitter: number): THREE.Color {
+  const c = new THREE.Color(ARENA_LOOK.tintBase);
+  const bandMul = ARENA_LOOK.bandTint[Math.min(band, 3)] ?? 1;
+  c.multiplyScalar(bandMul * jitter);
+  return c;
+}
+
+/**
+ * Reescribe las UV de una geometría a COORDENADAS DE MUNDO (el plano XY
+ * del shape antes de tumbarlo). ExtrudeGeometry ya las genera así; el
+ * centro (CircleGeometry, UV 0..1) y la falda (UV polares) no, y por eso
+ * las tres superficies tenían densidades de tile distintas — hasta 8×.
+ */
+function worldUvs(geo: THREE.BufferGeometry): void {
+  const pos = geo.getAttribute('position');
+  const uv = geo.getAttribute('uv');
+  if (!pos || !uv) return;
+  for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i), pos.getY(i));
+  uv.needsUpdate = true;
+}
 
 /**
  * Recursively dispose geometry + materials of every mesh under a group,
@@ -77,6 +114,24 @@ const IMMUNE_SIDE_COLOR = 0x46704b;
  * live in the texture cache in arena-decorations and are reused across
  * matches. Disposing them would force a re-decode on every reload.
  */
+/**
+ * Recorre los materiales de un mesh, sea uno o un array. Desde que los
+ * sectores llevan [tapa, acantilado] (fase 1), castear `child.material` a
+ * un único MeshStandardMaterial revienta en el primer aviso de colapso.
+ */
+function forEachMaterial(
+  child: THREE.Mesh,
+  fn: (mat: THREE.MeshStandardMaterial) => void,
+): void {
+  const mat = child.material;
+  const list = Array.isArray(mat) ? mat : [mat];
+  for (const m of list) {
+    if (m && (m as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+      fn(m as THREE.MeshStandardMaterial);
+    }
+  }
+}
+
 function disposeGroupMeshes(root: THREE.Object3D): void {
   root.traverse(child => {
     if (child instanceof THREE.Mesh) {
@@ -94,23 +149,32 @@ function disposeGroupMeshes(root: THREE.Object3D): void {
 
 // --- Fragment mesh builder -----------------------------------------------
 
-function createFragmentMesh(f: FragmentDef): THREE.Group {
+function createFragmentMesh(f: FragmentDef, jitterRand = 0.5): THREE.Group {
   const group = new THREE.Group();
   const h = FRAG.arenaHeight;
 
   if (f.immune) {
-    // Immune center: simple circle + cylinder side + bottom circle
+    // Immune center: circle + cylinder side + bottom circle. Es la ZONA
+    // SEGURA (nunca cae): tiene que distinguirse del resto del disco de
+    // un vistazo, así que va con el tinte más claro de la tabla.
     const topGeo = new THREE.CircleGeometry(f.outerR, CENTER_SEGMENTS);
-    const topMat = new THREE.MeshStandardMaterial({ color: BAND_COLORS[0], side: THREE.DoubleSide });
+    worldUvs(topGeo);
+    const topMat = new THREE.MeshStandardMaterial({
+      color: tintForBand(0, 1), side: THREE.DoubleSide,
+    });
     const top = new THREE.Mesh(topGeo, topMat);
     top.rotation.x = -Math.PI / 2;
     top.receiveShadow = true;
+    top.userData.groundRole = 'top' as GroundRole;
     group.add(top);
 
     const sideGeo = new THREE.CylinderGeometry(f.outerR, f.outerR, h, CENTER_SEGMENTS, 1, true);
-    const sideMat = new THREE.MeshStandardMaterial({ color: IMMUNE_SIDE_COLOR, side: THREE.DoubleSide });
+    const sideMat = new THREE.MeshStandardMaterial({
+      color: tintForBand(0, ARENA_LOOK.cliffTint), side: THREE.DoubleSide,
+    });
     const side = new THREE.Mesh(sideGeo, sideMat);
     side.position.y = -h / 2;
+    side.userData.groundRole = 'cliff' as GroundRole;
     group.add(side);
 
     const botGeo = new THREE.CircleGeometry(f.outerR, CENTER_SEGMENTS);
@@ -118,6 +182,7 @@ function createFragmentMesh(f: FragmentDef): THREE.Group {
     const bot = new THREE.Mesh(botGeo, botMat);
     bot.rotation.x = -Math.PI / 2;
     bot.position.y = -h;
+    bot.userData.groundRole = 'bottom' as GroundRole;
     group.add(bot);
     return group;
   }
@@ -153,15 +218,19 @@ function createFragmentMesh(f: FragmentDef): THREE.Group {
     depth: h,
     bevelEnabled: false,
   });
-  // Per-band distinct colors — important for visual legibility when
-  // a middle band collapses and the user needs to tell inner from outer
-  // alive fragments at a glance.
-  const baseColor = BAND_COLORS[f.band] ?? 0x4a6741;
-  const mat = new THREE.MeshStandardMaterial({
-    color: baseColor,
-    side: THREE.DoubleSide,
+  // ExtrudeGeometry emite DOS grupos: 0 = tapas (arriba y abajo), 1 = pared
+  // lateral. Con un solo material la pared llevaba la textura del suelo
+  // estirada y el canto no se leía; con dos, el acantilado se oscurece y
+  // la losa gana volumen. `jitter` rompe la uniformidad dentro de la banda.
+  const jitter = 1 + (jitterRand - 0.5) * 2 * ARENA_LOOK.fragmentTintJitter;
+  const topMat = new THREE.MeshStandardMaterial({
+    color: tintForBand(f.band, jitter), side: THREE.DoubleSide,
   });
-  const mesh = new THREE.Mesh(geo, mat);
+  const cliffMat = new THREE.MeshStandardMaterial({
+    color: tintForBand(f.band, jitter * ARENA_LOOK.cliffTint), side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geo, [topMat, cliffMat]);
+  mesh.userData.groundRole = 'top' as GroundRole;
   // CRITICAL: rotation direction matters here.
   //
   // ExtrudeGeometry places the shape in XY and extrudes along +Z. To lay
@@ -275,11 +344,6 @@ export class Arena {
    */
   private currentPackPromise: Promise<void> = Promise.resolve();
   private sceneRef: THREE.Scene;
-  /** Decorative "skirt" ring just outside the playable arena. Displays the
-   *  pack's ground texture and gives props a surface to sit on — without it
-   *  props appear to float above the skybox's lower hemisphere. Falls as a
-   *  single piece when the last fragment batch collapses. */
-  private outerRingMesh: THREE.Mesh | null = null;
   /** Per-prop batch association. When batch `N` collapses, every prop
    *  with `batchIndex === N` enters the falling-decoration queue. */
   private propBatchIndex: number[] = [];
@@ -313,25 +377,23 @@ export class Arena {
     this.sceneRef = scene;
     this.group = new THREE.Group();
 
-    // Void: vertical gradient cylinder fading to black
-    const voidGeo = new THREE.CylinderGeometry(40, 40, 30, 32, 1, true);
-    const voidMat = new THREE.MeshBasicMaterial({
-      color: 0x050510,
-      side: THREE.BackSide,
-      transparent: true,
-      opacity: 0.9,
-    });
-    const voidCyl = new THREE.Mesh(voidGeo, voidMat);
-    voidCyl.position.y = -15;
-    this.group.add(voidCyl);
-
-    // Dark floor at bottom of void
-    const floorGeo = new THREE.CircleGeometry(40, 32);
-    const floorMat = new THREE.MeshBasicMaterial({ color: 0x020208 });
-    const voidFloor = new THREE.Mesh(floorGeo, floorMat);
-    voidFloor.rotation.x = -Math.PI / 2;
-    voidFloor.position.y = -30;
-    this.group.add(voidFloor);
+    // 2026-09-06 (terreno v2 fase 1, decisión de Rafa): FUERA el void.
+    // Eran dos mallas —un cilindro r=40 negro al 90 % de opacidad y un
+    // disco opaco a y=−30— que tapaban el skybox del pack justo en el
+    // cono que ve la cámara (de −26° a −66°). Ese "borrón oscuro"
+    // alrededor del disco no era el cielo: era esto. Sin ellas, cada
+    // bioma asoma su propio horizonte bajo el borde de la arena.
+    //
+    // En su lugar, un anillo de sombra de contacto: da peso a la losa
+    // contra el fondo y marca el borde del vacío, que es la información
+    // más importante de la pantalla en un juego de tirar al rival fuera.
+    // Sombra de contacto: PROBADA Y DESCARTADA (2026-09-06). Un anillo
+    // oscuro con degradado bajo el disco funciona sobre fondos oscuros,
+    // pero los cinco biomas tienen horizontes CLAROS (agua turquesa,
+    // nieve, dunas) y ahí se lee como un halo sucio alrededor de la isla,
+    // no como peso. El canto del acantilado —material propio, más oscuro
+    // que la tapa— ya asienta la losa contra el fondo sin añadir geometría.
+    // Si vuelve, que sea por bioma (PackDef.look, fase 3), no global.
 
     scene.add(this.group);
   }
@@ -374,8 +436,12 @@ export class Arena {
     this.currentRadius = FRAG.maxRadius;
     this.fallingFragments = [];
 
+    // Jitter de brillo por fragmento: stream visual propio (seed ^ SALT),
+    // así que es igual en todos los clientes de una sala y NO desplaza la
+    // secuencia de `rand()` del generador de terreno (que es gameplay).
+    const vRand = visualRand(seed);
     for (const f of this.layout.fragments) {
-      const mesh = createFragmentMesh(f);
+      const mesh = createFragmentMesh(f, vRand());
       this.fragmentGroups.push(mesh);
       this.group.add(mesh);
       // Store base color so we can restore it after a warning blink ends.
@@ -443,7 +509,6 @@ export class Arena {
       .then((tex) => {
         if (myToken !== this.packApplyToken) return; // superseded
         this.applyGroundTexture(tex);
-        this.buildOuterRing(tex);
       })
       .catch((err) => {
         console.warn('[Arena] ground texture load failed:', packId, err);
@@ -578,85 +643,6 @@ export class Arena {
     return bestIdx;
   }
 
-  /**
-   * Create the decorative "skirt" ring just outside the playable arena.
-   * A flat ring (top surface) + a cylindrical outer wall, both textured
-   * with the pack's ground tile. Sits at arena height so the transition
-   * from fragment floor to skirt reads as one continuous surface.
-   */
-  private buildOuterRing(tex: THREE.Texture): void {
-    // If a previous ring exists from a rebuild-without-reset, dispose it.
-    if (this.outerRingMesh) {
-      this.group.remove(this.outerRingMesh);
-      disposeGroupMeshes(this.outerRingMesh);
-      this.outerRingMesh = null;
-    }
-
-    // Top ring: the visible surface under the props. RingGeometry's UVs
-    // are radial by default; we manually rewrite them to tiled UVs so
-    // the texture reads as a tileable floor, not a bullseye stretch.
-    const topGeo = new THREE.RingGeometry(
-      OUTER_RING_INNER_R,
-      OUTER_RING_OUTER_R,
-      OUTER_RING_SEGMENTS,
-      1,
-    );
-    // Rewrite UVs to world-space tiling so the texture doesn't fan out
-    // from the centre (default RingGeometry UVs are polar).
-    const posAttr = topGeo.getAttribute('position');
-    const uvAttr = topGeo.getAttribute('uv');
-    const tileRepeat = 3; // same visual density as the fragment tops
-    for (let i = 0; i < posAttr.count; i++) {
-      const x = posAttr.getX(i);
-      const y = posAttr.getY(i);
-      // RingGeometry is in XY plane pre-rotation; x/y map to world x/z.
-      uvAttr.setXY(
-        i,
-        (x / OUTER_RING_OUTER_R + 1) * 0.5 * tileRepeat,
-        (y / OUTER_RING_OUTER_R + 1) * 0.5 * tileRepeat,
-      );
-    }
-    uvAttr.needsUpdate = true;
-
-    const ringMat = new THREE.MeshStandardMaterial({
-      map: tex,
-      color: 0xdadada,
-      side: THREE.DoubleSide,
-    });
-    const topRing = new THREE.Mesh(topGeo, ringMat);
-    topRing.rotation.x = -Math.PI / 2;
-    topRing.receiveShadow = true;
-
-    // Outer cylindrical wall — same texture, gives the ring visible
-    // thickness matching the fragment height.
-    const wallGeo = new THREE.CylinderGeometry(
-      OUTER_RING_OUTER_R,
-      OUTER_RING_OUTER_R,
-      FRAG.arenaHeight,
-      OUTER_RING_SEGMENTS,
-      1,
-      true,
-    );
-    // Reuse the same material; the cylinder's default cylindrical UVs
-    // are fine (the texture wraps around the wall with natural seam).
-    const wall = new THREE.Mesh(wallGeo, ringMat);
-    wall.position.y = -FRAG.arenaHeight / 2;
-
-    // Bundle top + wall into a single Object3D so it falls as one piece.
-    const container = new THREE.Group();
-    container.add(topRing);
-    container.add(wall);
-    // Render order behind the playable fragments so there's no overdraw
-    // flicker at the seam.
-    topRing.renderOrder = -0.5;
-
-    this.group.add(container);
-    // outerRingMesh is typed as Mesh for convenience but we keep a Group
-    // here — only use it via this.group add/remove, never as a Mesh
-    // directly. Cast is purely so TS doesn't widen the field; Three.js
-    // treats all Object3D uniformly for scene-graph operations.
-    this.outerRingMesh = container as unknown as THREE.Mesh;
-  }
 
   /**
    * Build an array that maps prop index → batch index. The association
@@ -706,12 +692,6 @@ export class Arena {
     setSceneSkyboxTexture(null);
     setSceneFogColor(null);
     this.clearDecorations();
-    // Dispose outer ring decorative skirt
-    if (this.outerRingMesh) {
-      this.group.remove(this.outerRingMesh);
-      disposeGroupMeshes(this.outerRingMesh);
-      this.outerRingMesh = null;
-    }
     // Discard any in-flight falling decoration tumbles — remove them
     // from the scene graph and drop references.
     for (const f of this.fallingDecorations) {
@@ -762,25 +742,6 @@ export class Arena {
     }
   }
 
-  /**
-   * The outer ring "skirt" falls as a single piece with the final batch.
-   * Players see it drop after the last fragment crumbles, closing the
-   * visual beat of the arena being destroyed.
-   */
-  private collapseOuterRing(): void {
-    if (!this.outerRingMesh) return;
-    this.fallingDecorations.push({
-      object: this.outerRingMesh,
-      vy: -0.8,
-      rotX: (Math.random() - 0.5) * 0.6,
-      rotZ: (Math.random() - 0.5) * 0.6,
-      startY: this.outerRingMesh.position.y,
-    });
-    // Null out the reference — next clearPack will not try to dispose
-    // the still-falling mesh (it stays in fallingDecorations until it
-    // exits the scene and the tick disposes it there).
-    this.outerRingMesh = null;
-  }
 
   /**
    * Advance falling props + outer ring. Called from `tickVisuals` so
@@ -822,22 +783,23 @@ export class Arena {
    * caras laterales e inferiores, que no llevan `receiveShadow`.
    */
   private applyGroundTexture(tex: THREE.Texture): void {
+    // Solo pone el MAPA. El color ya lo decidió `createFragmentMesh`
+    // (banda × pack × jitter, ARENA_LOOK) y multiplica la textura.
+    //
+    // 2026-09-06: antes esta función machacaba el color de TODO mesh con
+    // `receiveShadow` a 0xdadada — incluido el centro inmune, pese a que
+    // el comentario juraba lo contrario. Como en partida siempre hay pack,
+    // los colores de banda no se veían JAMÁS y la zona segura no se
+    // distinguía del resto del disco.
     for (const g of this.fragmentGroups) {
       g.traverse(child => {
         if (!(child instanceof THREE.Mesh)) return;
-        const mat = child.material as THREE.MeshStandardMaterial;
-        if (!mat || !mat.isMeshStandardMaterial) return;
-        // Only tint the "top" mesh — the big flat face players see. On
-        // collapsible sectors that's the first mesh in the group
-        // (ExtrudeGeometry); on the immune center it's the top circle.
-        // Pragmatic heuristic: meshes with receiveShadow===true are the
-        // tops, sides/bottoms don't have it set.
-        if (!child.receiveShadow) return;
-        mat.map = tex;
-        // Lighten the tint so the texture reads clear instead of murky
-        // against the dark band colour baked into the material.
-        mat.color.setHex(0xdadada);
-        mat.needsUpdate = true;
+        const role = child.userData.groundRole as GroundRole | undefined;
+        if (role !== 'top' && role !== 'cliff') return;
+        forEachMaterial(child, mat => {
+          mat.map = tex;
+          mat.needsUpdate = true;
+        });
       });
     }
   }
@@ -849,12 +811,12 @@ export class Arena {
     for (const g of this.fragmentGroups) {
       g.traverse(child => {
         if (!(child instanceof THREE.Mesh)) return;
-        const mat = child.material as THREE.MeshStandardMaterial;
-        if (!mat || !mat.isMeshStandardMaterial) return;
-        if (mat.map) {
-          mat.map = null;
-          mat.needsUpdate = true;
-        }
+        forEachMaterial(child, mat => {
+          if (mat.map) {
+            mat.map = null;
+            mat.needsUpdate = true;
+          }
+        });
       });
     }
   }
@@ -906,6 +868,13 @@ export class Arena {
   // --- Online mode: server-driven sync -----------------------------------
 
   /** Currently-applied arena pack (null when using the default look). */
+  /** Semilla del layout construido, o null si aún no hay arena. Lo usa
+   *  `rebuildArenaVisuals()` del lab para rehacer las mallas sin cambiar
+   *  la partida en curso. */
+  get currentSeed(): number | null {
+    return this.layout ? this.layout.seed : null;
+  }
+
   getCurrentPackId(): ArenaPackId | null {
     return this.appliedPackId;
   }
@@ -930,7 +899,6 @@ export class Arena {
 
     // Apply any newly completed levels
     if (collapseLevel !== this.syncedLevel) {
-      const totalBatches = this.layout!.batches.length;
       for (let l = this.syncedLevel < 0 ? 0 : this.syncedLevel; l < collapseLevel; l++) {
         const batch = this.layout!.batches[l];
         if (!batch) continue;
@@ -939,10 +907,8 @@ export class Arena {
           this.alive[idx] = false;
           this.startFragmentFall(idx);
         }
-        // Decoration cascade: props assigned to this batch drop with it,
-        // outer ring drops with the last batch (matches offline path).
+        // Decoration cascade: props assigned to this batch drop with it.
         this.collapsePropBatch(l);
-        if (l >= totalBatches - 1) this.collapseOuterRing();
         if (this.debugLogCollapses) {
           console.log(`[Arena] collapse level=${l + 1}  batch indices=[${batch.indices.join(',')}]  radius→${this.currentRadius.toFixed(2)}`);
         }
@@ -1172,12 +1138,7 @@ export class Arena {
       this.startFragmentFall(idx);
     }
     // Decorations: every prop assigned to this batch drops now. The
-    // outer ring is kept standing until the LAST batch collapses, at
-    // which point it falls as a single piece.
     this.collapsePropBatch(this.level);
-    if (this.level >= this.layout.batches.length - 1) {
-      this.collapseOuterRing();
-    }
     this.level++;
     this.warningActive = false;
     this.timer = 0;
@@ -1355,7 +1316,11 @@ export class Arena {
     // the first 100ms of the warning.
     const intensity = 0.3 + Math.min(1, progress) * 0.7;
     const amp = SHAKE_AMP_MAX * intensity;
-    const emissiveVal = intensity * 0.65;
+    // 2026-09-06 (fase 1): el mismo 0.65 de siempre, sobre el suelo CLARO
+    // de ahora, tapaba la textura con un naranja plano. Con el tinte real
+    // el aviso se lee igual con la mitad de emisivo, y la losa sigue
+    // pareciendo losa mientras tiembla.
+    const emissiveVal = intensity * ARENA_LOOK.warningEmissive;
 
     for (const idx of indices) {
       const g = this.fragmentGroups[idx];
@@ -1378,9 +1343,10 @@ export class Arena {
       // "heating / cracking" rather than "DANGER" button blink.
       g.traverse(child => {
         if (child instanceof THREE.Mesh) {
-          const mat = child.material as THREE.MeshStandardMaterial;
-          mat.emissive.setHex(WARNING_EMISSIVE_COLOR);
-          mat.emissiveIntensity = emissiveVal;
+          forEachMaterial(child, mat => {
+            mat.emissive.setHex(WARNING_EMISSIVE_COLOR);
+            mat.emissiveIntensity = emissiveVal;
+          });
         }
       });
     }
@@ -1396,9 +1362,10 @@ export class Arena {
       g.position.set(0, 0, 0);
       g.traverse(child => {
         if (child instanceof THREE.Mesh) {
-          const mat = child.material as THREE.MeshStandardMaterial;
-          mat.emissive.setHex(0x000000);
-          mat.emissiveIntensity = 0;
+          forEachMaterial(child, mat => {
+            mat.emissive.setHex(0x000000);
+            mat.emissiveIntensity = 0;
+          });
         }
       });
     }

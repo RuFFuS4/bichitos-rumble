@@ -28,6 +28,7 @@ import {
   getHeldKeyCodes,
   getMoveVector,
 } from '../input';
+import { ARENA_LOOK } from '../arena-look';
 import { BADGE_CATALOG, type BadgeDef } from '../badges';
 import { getStats, addUnlockedBadges, clearRecentlyUnlocked } from '../stats';
 import { maybeShowBadgeToast } from '../badge-toast';
@@ -600,6 +601,53 @@ export class DevApi {
   }
 
   getPerf(): PerfSnapshot { return this.lastPerf; }
+
+  // --- Look de la arena (terreno v2 fase 1, directiva dual-surface) -------
+  //
+  // Todo lo que decide cómo se ve el suelo vive en ARENA_LOOK
+  // (src/arena-look.ts). Estos dos métodos son su superficie programática:
+  // un agente puede leer la configuración, cambiarla y mirar el resultado
+  // con `node scripts/arena-shots.mjs`, sin tocar sliders ni recompilar.
+
+  /** Configuración de look actual (copia; mutarla no afecta a nada). */
+  getArenaLook(): Record<string, unknown> {
+    return JSON.parse(JSON.stringify(ARENA_LOOK));
+  }
+
+  /**
+   * Aplica un parche parcial sobre ARENA_LOOK. Los cambios de color e
+   * intensidad se ven en el siguiente frame; los ESTRUCTURALES (tamaño de
+   * tile, tintes, resolución) necesitan reconstruir las mallas, y eso lo
+   * hace `rebuildArenaVisuals()` conservando semilla y pack — la partida
+   * en curso no se interrumpe.
+   *
+   * Devuelve las claves aplicadas y si hizo falta reconstruir, para que
+   * quien llame (UI o script) sepa qué pasó.
+   */
+  setArenaLook(patch: Record<string, unknown>): { applied: string[]; rebuilt: boolean } {
+    const STRUCTURAL = new Set(['tileSize', 'bandTint', 'tintBase', 'fragmentTintJitter', 'cliffTint']);
+    const look = ARENA_LOOK as unknown as Record<string, unknown>;
+    const applied: string[] = [];
+    let rebuild = false;
+    for (const [k, v] of Object.entries(patch)) {
+      if (!(k in look)) continue;          // refuse to guess: clave desconocida, fuera
+      if (typeof v !== typeof look[k]) continue;
+      look[k] = v;
+      applied.push(k);
+      if (STRUCTURAL.has(k)) rebuild = true;
+    }
+    if (rebuild) this.rebuildArenaVisuals();
+    return { applied, rebuilt: rebuild };
+  }
+
+  /** Reconstruye las mallas del suelo con la misma semilla y pack. Visual
+   *  puro: el layout jugable (fragmentos vivos, lotes) no se toca. */
+  rebuildArenaVisuals(): void {
+    const arena = this.game.arena;
+    const seed = arena.currentSeed;
+    if (seed === null) return;
+    arena.buildFromSeed(seed, arena.getCurrentPackId() ?? undefined);
+  }
 
   private pollGameplayEvents(): void {
     for (const c of this.game.critters) {

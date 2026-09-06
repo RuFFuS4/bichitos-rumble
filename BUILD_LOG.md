@@ -1,5 +1,58 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-06 — Terreno v2 fase 1a: el disco se convierte en un lugar
+
+El primer slice VISIBLE, y el que responde a la queja original. Cero
+gameplay: `npm run golden` da 3/3 exactas SIN regenerar, que es la prueba
+de que todo lo de abajo es capa visual.
+
+- **El tile de suelo, a escala.** `tex.repeat 4×4` sobre UV de mundo
+  significaba 4 repeticiones POR UNIDAD: un tile de 25 cm, ~96 en el
+  diámetro, que el mipmap promediaba a color plano. Ahora el tile mide
+  `ARENA_LOOK.tileSize` = 4 u (≈2,5 critters) y se reescriben a
+  coordenadas de mundo las UV del centro inmune, que iban por libre
+  (tres superficies con densidades de 0,25 / 1,25 / 2,08 u).
+- **Los colores de banda existen otra vez.** `applyGroundTexture` teñía
+  0xdadada todo mesh con `receiveShadow` —incluido el centro inmune, pese
+  a que su comentario juraba lo contrario—, así que en partida, donde
+  siempre hay pack, `BAND_COLORS` no se veía JAMÁS. Ahora cada malla
+  nace con su tinte (banda × pack × jitter por semilla, stream visual
+  propio para no tocar el gameplay) y la textura solo multiplica. La zona
+  segura vuelve a distinguirse de un vistazo.
+- **El canto se ve.** Los sectores llevan `[tapa, acantilado]` sobre los
+  dos grupos que `ExtrudeGeometry` ya emitía; el acantilado va al 62 % de
+  brillo. Requisito previo: `forEachMaterial` en shake/restore/texturas —
+  con un array de materiales, el cast a material único reventaba en el
+  primer aviso de colapso (lo avisó el crítico del diagnóstico).
+- **Fuera el void** (decisión de Rafa): eran DOS mallas, un cilindro
+  negro al 90 % y un disco opaco, y tapaban el skybox justo en el cono
+  que ve la cámara. El "borrón oscuro" nunca fue el cielo. Ahora cada
+  bioma asoma su horizonte bajo el borde de la isla.
+- **Fuera la falda exterior.** Con el void quitado dejó de tener función
+  (era su anti-gap) y pasó a leerse como una plataforma flotante — y
+  encima SOBREVIVÍA a la banda que la sostenía, porque solo caía con el
+  último lote. Fuera ella y su código de caída.
+- **Anillo de sombra: probado y descartado.** Lo construí, lo miré y
+  sobre los horizontes claros de los cinco biomas (agua turquesa, nieve,
+  dunas) se leía como un halo sucio alrededor de la isla. El canto del
+  acantilado ya da el peso. Queda anotado como opción por bioma.
+- **Aviso de colapso a 0.34 de emisivo**: el 0.65 de siempre, sobre el
+  suelo claro de ahora, tapaba la textura con un naranja plano.
+- **Luz** más lateral (elevación 60° → ~45°) y `shadow.radius` en lugar
+  de `PCFSoftShadowMap`, que three r185 deprecó (el renderer lo avisaba
+  por consola y caía a PCF). **Tone mapping NO**: afecta a los 9 critters
+  y el skybox no se tone-mapea, así que vive tras flag hasta poder
+  compararlo con el roster delante.
+- **Doble superficie**: `__devApi.getArenaLook()` / `setArenaLook(patch)`
+  (reconstruye solo si el cambio es estructural, conservando semilla y
+  pack) y `node scripts/arena-shots.mjs`, que captura los 5 biomas con la
+  cámara de juego, espera a que los GLB de decor terminen de poblar la
+  escena y salta la cuenta atrás. Es lo que me ha permitido iterar
+  mirando en vez de adivinar.
+- **Pendiente para 1b**: los critters siguen sin sombra de contacto (y se
+  nota), bisel de junta entre sectores, applier ToolPatch `look-patch` +
+  panel del studio, y la dieta de props antes de encender `castShadow`.
+
 ## 2026-09-06 — Terreno v2 fase 0.5: el colapso por fin se lee
 
 Primer cambio de gameplay de H4.5 (zona hard-stop, aprobado por Rafa).

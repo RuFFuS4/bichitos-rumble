@@ -88,7 +88,22 @@ Se hace justo después de la fase 0 y comparte con ella el ÚNICO `golden:write`
 
 Ficheros: `src/arena-fragments.ts`, `server/src/sim/arena-fragments.ts`, `server/src/sim/arena.ts`, `src/arena.ts`, `server/src/sim/bot.ts`, `src/bot.ts`, `server/src/BrawlRoom.ts`, `src/game.ts`, `tests/sim/arena-layout.test.ts`, `tests/sim/server-bot.test.ts`, `scripts/golden/sim-golden.json`, `tests/sim/arena-layout-golden.json`, `BUILD_LOG.md`. Despliegue cliente+servidor simultáneo.
 
-### Fase 1 — El disco se convierte en un lugar (1a: 2 d · 1b: 1,5–2 d, payload +0,02 MB, gameplay NO) — PRIMER SLICE DEMOSTRABLE = 1a
+### Fase 1a — El disco se convierte en un lugar ✅ HECHA 2026-09-06 (payload +0, gameplay NO)
+
+**Lo que se hizo y por qué** (decisiones tomadas sobre capturas, no sobre el plan):
+- Tile de textura a escala de mundo (`ARENA_LOOK.tileSize` 4 u ≈ 2,5 critters). Las UV del centro inmune se reescriben a coordenadas de mundo para que las tres superficies compartan densidad; antes iban 0,25 / 1,25 / 2,08 u.
+- Tinte real por banda × pack × semilla, con `userData.groundRole` en lugar de la heurística `receiveShadow`. `applyGroundTexture` ya solo pone el mapa: el color lo decide quien construye la malla.
+- Acantilado con material propio (`[tapa, cliff]` sobre los dos grupos de `ExtrudeGeometry`) y `forEachMaterial` en shake/restore/texturas — sin él, el primer aviso de colapso reventaba con un array de materiales.
+- **Void eliminado** (decisión 2 de Rafa): el "borrón oscuro" era el cilindro, no el cielo. Cada bioma asoma ahora su horizonte.
+- **Falda exterior eliminada**: al quitar el void dejó de tener función (era su anti-gap) y se leía como una plataforma flotante que además SOBREVIVÍA a la banda que la sostenía. Se va con ella su código de caída.
+- **Anillo de sombra: probado y descartado.** Sobre los horizontes claros de los cinco biomas se leía como un halo sucio. El canto del acantilado ya asienta la losa. Si vuelve, será por bioma en la fase 3.
+- Aviso de colapso a `warningEmissive` 0.34: el 0.65 de siempre, sobre el suelo claro de ahora, tapaba la textura con un naranja plano.
+- Luz key más lateral (−11, 17, 13) y `shadow.radius`; **tone mapping NO** (queda tras flag: afecta a los 9 critters y el skybox no se tone-mapea).
+- Superficie programática: `__devApi.getArenaLook()` / `setArenaLook(patch)` (reconstruye solo si el cambio es estructural) y `node scripts/arena-shots.mjs` para la hoja de contactos de los 5 packs.
+
+**Pendiente en 1b**: sombras de contacto bajo critters (siguen flotando), bisel de junta entre sectores, applier ToolPatch `look-patch` + panel del studio, dieta de props y `castShadow`.
+
+### Fase 1 (plan original) — El disco se convierte en un lugar (1a: 2 d · 1b: 1,5–2 d, payload +0,02 MB, gameplay NO)
 
 **Slice 1a** (2 d; visible en `/tools.html` desde el primer día):
 - `src/arena-look.ts` con `ARENA_LOOK` (formato plano tipo FEEL): `tileSize 4`, `bandTint [1.0, 0.95, 0.90, 0.84]`, `fragmentTintJitter 0.04`, `rimInset 0.06`, `bevelThickness 0.05`, `exposure 1.15`, `fogDensity`, `dropShadow`, `cliff` por pack.

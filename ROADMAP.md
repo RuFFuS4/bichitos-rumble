@@ -259,11 +259,13 @@ pobre"*. Diagnóstico por capas, 4 propuestas, 3 jueces y plan en
       legible 48,3 % → 100 %), `layout.pattern` explícito y
       `radiusAt(angle)` en bots y proyectiles (el respawn se queda: su
       bucle ya converge al islote).
-- [ ] **Fase 1 — el disco se convierte en un lugar** (primer slice
-      visible): UV a escala, tinte por banda/pack/semilla, fuera el void,
-      tone mapping + sombras reales, bisel y material de acantilado,
-      `ARENA_LOOK` con dev-api + applier `look-patch`, hoja de contactos
-      `arena-shots` de los 5 packs.
+- [x] **Fase 1a — el disco se convierte en un lugar** ✅ 2026-09-06:
+      tile a escala real (era 25 cm), tinte por banda/pack/semilla (el
+      gris que lo mataba, fuera), acantilado con material propio, void y
+      falda eliminados, luz lateral, `ARENA_LOOK` con dev-api y
+      `scripts/arena-shots.mjs`. Golden 3/3 sin regenerar.
+- [ ] **Fase 1b**: sombras de contacto de critters, bisel de junta,
+      applier ToolPatch `look-patch` + panel del studio, dieta de props.
 - [ ] **Fase 2 — colapso que se lee y se siente**: grietas, sag, escombros,
       polvo, shake, orilla que cae por sectores, centro inmune hero.
 - [ ] **Fase 3 — cada bioma es un sitio**: rig de luz por pack, fondo por

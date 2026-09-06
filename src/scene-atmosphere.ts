@@ -26,6 +26,8 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
+import { ARENA_LOOK } from './arena-look';
+import { setArenaTextureAnisotropy } from './arena-decorations';
 
 const DEFAULT_FOG_COLOR = 0xb6d1e8;
 const DEFAULT_CLEAR_COLOR = 0x87b0d8;
@@ -50,11 +52,28 @@ export function initSceneAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRen
   renderer.setClearColor(DEFAULT_CLEAR_COLOR);
   scene.fog = new THREE.FogExp2(DEFAULT_FOG_COLOR, 0.008);
 
+  // Terreno v2 fase 1: sombras suaves y anisotropía de las texturas de
+  // suelo. El tone mapping NO se activa aquí: afecta a TODO material
+  // `toneMapped` (los 9 critters, el selector de personaje, el lab) y el
+  // skybox no se tone-mapea, así que cambiaría el contraste de la escena
+  // entera. Vive tras `ARENA_LOOK.toneMapping` para poder compararlo con
+  // el roster delante.
+  // (PCFSoftShadowMap está deprecado en three r185 — el renderer avisa y
+  // cae a PCFShadowMap; el suavizado se pide con `shadow.radius`.)
+  setArenaTextureAnisotropy(renderer.capabilities.getMaxAnisotropy());
+  if (ARENA_LOOK.toneMapping) {
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = ARENA_LOOK.exposure;
+  }
+
   const hemi = new THREE.HemisphereLight(0x9cc7ea, 0x4a3a26, 0.55);
   scene.add(hemi);
 
+  // Key con más componente LATERAL que antes (8,25,12 → elevación 60°,
+  // casi cenital: aplastaba el relieve y dejaba las paredes del canto sin
+  // gradiente). Bajarla da sombra larga y separa tapa de acantilado.
   const key = new THREE.DirectionalLight(0xfff1d4, 1.35);
-  key.position.set(8, 25, 12);
+  key.position.set(-11, 17, 13);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
   key.shadow.camera.near = 5;
@@ -64,6 +83,7 @@ export function initSceneAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRen
   key.shadow.camera.top = 18;
   key.shadow.camera.bottom = -18;
   key.shadow.bias = -0.002;
+  key.shadow.radius = 2.5;   // borde suave sin PCFSoft (deprecado en r185)
   scene.add(key);
 
   const rim = new THREE.DirectionalLight(0x9fb4e8, 0.55);
