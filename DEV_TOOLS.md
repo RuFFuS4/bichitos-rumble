@@ -178,6 +178,15 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     — los cambios de color se ven al frame siguiente y los estructurales
     disparan `rebuildArenaVisuals()`, que rehace las mallas conservando
     semilla y pack sin cortar la partida.
+  - **Diorama denso** (dioramas slice 1): `__devApi.getScatterStats()`
+    devuelve instancias, draw calls y triángulos por capa;
+    `__devApi.setScatterDensity(0.8)` reconstruye la capa en vivo con la
+    misma semilla (0 = sin diorama, útil para comparar). Las recetas
+    viven en `src/arena-scatter-recipes.ts` (hoja de números por bioma) y
+    los techos de gameplay en `src/arena-scatter-types.ts`; `npm run
+    test:sim` incluye `tests/sim/arena-scatter.test.ts` (determinismo
+    byte a byte, techos de altura, coste). Las sombras de contacto son
+    `src/blob-shadows.ts`, un InstancedMesh para todos los critters.
   - **Hoja de contactos**: `node scripts/arena-shots.mjs [--out dir]
     [--seed N] [--packs a,b] [--at-seconds S]` captura los 5 biomas con
     la cámara de juego y el panel del lab oculto. Es la forma de MIRAR el

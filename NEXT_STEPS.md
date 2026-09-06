@@ -75,6 +75,34 @@ entregable):
       por bioma, casi todos entre r 7 y 11,5 (solo 1 por pack a r<8,5) y
       cero instancing en el proyecto. Diagnóstico y plan en
       [`docs/DIORAMAS.md`](docs/DIORAMAS.md). Va ANTES que la fase 1b.
+      - [x] **Fase 0 (ojo limpio)** 2026-09-07: capturas honestas, props
+            en paralelo.
+      - [x] **Slice 1** 2026-09-07 (`claude/feature/dioramas-1`): contrato +
+            motor instanciado + 7 primitivas + recetas de los 5 biomas +
+            masa del canto (cuña con estratos por bioma) + sombras de
+            contacto de critters + 6 tests. Referencias: las imágenes de
+            `resources/Terrenos/*/`. **← MIRA `.tmp/shots-dioramas/*.png`.**
+      - [ ] Slice 2: afinar recetas sobre capturas (grietas de hielo,
+            escala de acentos, `backOnly` para los altos), fleco del borde
+            que se regenera al caer un sector, viento animado barato,
+            recomponer los 73 props autorados (muro caído de sillares,
+            héroes fuera del arco frontal), `SCATTER_DENSITY` en el studio
+            y applier ToolPatch `scatter-patch`.
+      - [ ] Decisión de Rafa (review M2): los techos de altura del scatter
+            (`SCATTER_LIMITS`: interior 0,4 u · arco frontal ±90° 1,2 u ·
+            trasero 2,6 u) son más permisivos que las "reglas duras" de
+            `docs/DIORAMAS.md §3` (combate 0,55 · arco cercano ±55° 0,55 ·
+            fleco ≤0,6 · nada cruza r=12). Hay que cerrar UNA de las dos
+            antes de afinar recetas contra el techo equivocado. Mi
+            recomendación: mantener el contrato actual (lo que se ve en
+            las capturas) y corregir el doc — el fleco que asoma 0,6 u
+            fuera del labio es justo lo que piden tus referencias.
+      - [ ] Decisión de Rafa: ¿la isla como CONO (base que se estrecha
+            mucho más, o cerrada en punta) flotando en mar / aire / hielo
+            según el bioma? El taper de 0,82 ya apunta ahí; subirlo es un
+            número (`ARENA_LOOK.cliffTaper`) y cerrarlo en punta es media
+            tarde. El desprendimiento no se complica: cada sector lleva su
+            cuña y cae con ella.
 - [x] **FONDO — primer slice hecho (2026-09-07)**: la isla flota sobre el
       mar de su bioma en vez de estar recortada sobre una panorámica.
       0 bytes, 1 draw call, golden intacto. Plan completo en

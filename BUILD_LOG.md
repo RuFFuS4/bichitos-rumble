@@ -1,5 +1,87 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-07 — Dioramas slice 1: la isla tiene masa y el suelo es un sitio
+
+Primer slice visible del diorama denso, guiado por las cinco referencias
+de Rafa en `resources/Terrenos/*/<NOMBRE>.png` (un canto grueso con
+material de bioma, un anillo perimetral cargado en capas, centro limpio y
+detalle rasante por todas partes). Todo en `claude/feature/dioramas-1`.
+Cero bytes de payload nuevo; `npm run golden` 3/3 sin regenerar: es capa
+visual pura.
+
+- **Contrato primero** (`src/arena-scatter-types.ts`): capas con
+  primitiva, anclaje (disco o fleco del borde), banda radial, racimos,
+  escala, inclinación, paleta, viento y sombra; techos de gameplay
+  (`SCATTER_LIMITS`: ≤0,4 u en el interior, ≤1,2 u en el arco que da a la
+  cámara) y una sola válvula de densidad (`SCATTER_DENSITY`). Se escribió
+  ANTES de repartir el trabajo para que cuatro agentes en paralelo
+  hablaran el mismo idioma.
+- **Motor instanciado** (`src/arena-scatter.ts`, primer `InstancedMesh`
+  del repo): un draw call por capa, stream `mulberry32(seed ^ SALT_SCATTER
+  ^ hash(layer.id))` por capa, instancias ORDENADAS por fragmento
+  anfitrión de modo que cada sector posee un rango contiguo y, al
+  temblar o caer, se recompone solo ese rango (`applyFragmentTransform`,
+  `addUpdateRange`). La hierba cae con su losa. Siete primitivas de 2 a
+  36 triángulos generadas por código (`src/arena-scatter-geometry.ts`),
+  cacheadas y compartidas.
+- **Recetas de los cinco biomas** (`src/arena-scatter-recipes.ts`, 8
+  capas cada uno) traducidas de las referencias: hojarasca, hierba y
+  helechos bajo las palmeras; pétalos a sotavento de la sakura; cristales
+  de hielo al pie de los témpanos; huesos y piedrecitas rojas; conchas,
+  estrellas y corales de la marea. 400-475 instancias por bioma a densidad
+  0,5 y 3.400-7.250 triángulos — el 1 % de los 900.815 que la jungla ya
+  gasta en 16 objetos.
+- **La isla tiene masa** (`createFragmentMesh` en `src/arena.ts`): la
+  tapa es el contorno jugable exacto (ShapeGeometry, misma rotación que
+  exige `pointInFragment`) y debajo cuelga un acantilado propio de 2,6 u
+  con base estrechada hacia el eje (`cliffTaper` 0,82: la cuña de un
+  tronco de cono, que deja preparada la idea de Rafa de que la isla sea
+  un cono sin comprometerla), estratos por bioma en color de vértice
+  (`PackDef.cliff`) y rizado radial hasheado por ÁNGULO cuantizado, para
+  que dos sectores vecinos generen exactamente los mismos vértices en su
+  arista. La pared ya no lleva la textura de suelo estirada.
+- **Sombras de contacto** (`src/blob-shadows.ts`): un InstancedMesh con el
+  degradado horneado en alpha de vértice; los critters dejan de flotar y
+  la sombra se desvanece al saltar o caer (`syncCritterShadows` en
+  `game.ts`). Consumen por fin `critterShadowScale/Opacity`, que llevaban
+  desde la fase 1a sin usuario.
+- **Red de seguridad** (`tests/sim/arena-scatter.test.ts`, 6 tests):
+  misma semilla ⇒ `instanceMatrix` idéntico byte a byte en los cinco
+  biomas (lo que garantiza que una sala online ve el mismo diorama con
+  solo seed + packId), ninguna instancia por encima de su techo de altura
+  en 15 combinaciones, centro libre, y coste acotado (≤16 draws, ≤25k
+  tris por bioma). 57 tests del sim en total.
+- **Doble superficie**: `__devApi.getScatterStats()` /
+  `setScatterDensity(d)` (reconstruye en vivo con la misma semilla) y
+  `scripts/arena-shots.mjs` para mirar el resultado.
+- **Método y coste**: cuatro agentes sobre ficheros disjuntos (masa,
+  motor, recetas, sombras) + integración a mano. Dos cortes de créditos
+  a mitad: el motor quedó escrito pero sin acta, y la masa dejó la
+  configuración hecha y la geometría sin tocar — la rematé yo en vez de
+  relanzar una tercera tanda. Lección: en tareas largas, que cada agente
+  escriba su fichero ENTERO antes de verificar nada, para que un corte
+  deje código y no solo intención.
+- **Revisión adversarial** (1 agente, 32 comprobaciones, incluido un test
+  propio de 2.890 vértices de la tapa nueva contra `pointInFragment`: 0
+  fuera). Dos altas arregladas en el commit siguiente: el Sinkhole de
+  Sihans resucitaba el scatter de un sector ya hundido cuando su lote
+  llegaba al colapso (ahora el motor recuerda los fragmentos ocultados),
+  y `setArenaLook` no reconstruía con las claves nuevas del canto. Una
+  media aplicada: los acentos altos van solo a la mitad trasera
+  (`arc: 'back'`, campo aditivo) en vez de recortarse a arbustos enanos.
+  Quedan anotadas para Rafa: los techos de altura del contrato frente a
+  las reglas del doc (M2) y, como flecos, `FRAG.arenaHeight` muerto en
+  cliente (vive en el espejo del servidor), `rebuildArenaVisuals` no es
+  "visual puro" (resetea `alive[]`) y un sector hundido durante su propio
+  aviso se renderiza clavado en y=0 (pre-existente).
+- **Sobre capturas, ajustado a ojo**: arbustos y azaleas bajaron de 2,4 u
+  y verde casi negro a ≤1,3 u con luz (eran pedruscos); los decals de
+  arena pasaron del naranja saturado al tono de la arena (eran losetas).
+  Y una lección medida: los "papeles blancos" de la tundra no eran las
+  grietas del scatter (apagándolo, los mismos 277 píxeles blancos): son
+  las placas claras de la TEXTURA de suelo, que a 4 u de losa se ven
+  enormes. Es arte de la textura (o tileSize por pack), no del diorama.
+
 ## 2026-09-07 — Dioramas fase 0: mirar bien antes de tocar
 
 La tanda de dioramas (10 agentes) devolvió el plan —en

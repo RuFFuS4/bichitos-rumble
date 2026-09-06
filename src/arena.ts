@@ -14,8 +14,11 @@ import {
   type ArenaLayout, type FragmentDef,
 } from './arena-fragments';
 import { playArenaWarning } from './audio';
-import { ARENA_LOOK, SALT_VISUAL } from './arena-look';
+import { ARENA_LOOK, SALT_VISUAL, CLIFF_RAMP_DEFAULT, type CliffRamp } from './arena-look';
 import { ArenaBackdrop } from './arena-backdrop';
+import { ArenaScatter, type ScatterStats } from './arena-scatter';
+import { getScatterRecipe } from './arena-scatter-recipes';
+import { SCATTER_DENSITY } from './arena-scatter-types';
 import {
   type ArenaPackId,
   layoutPackProps,
@@ -24,6 +27,7 @@ import {
   loadPackPropMeshes,
   getPackFogColor,
   getPackBackdrop,
+  getPackCliff,
   getPackDecorScale,
   loadInArenaDecorations,
 } from './arena-decorations';
@@ -57,10 +61,10 @@ const BAND_COLORS: Record<number, number> = {
   2: 0x4a6741, // mid band
   3: 0x3a5331, // outer band — darkest
 };
-// 2026-09-06 (fase 1): fuera IMMUNE_SIDE_COLOR. El canto del centro ya no
-// es un verde fijo que desentonaba en los 5 biomas: sale del mismo tinte
-// que su tapa multiplicado por ARENA_LOOK.cliffTint, igual que el resto
-// de acantilados del disco.
+// 2026-09-06 (fase 1): fuera IMMUNE_SIDE_COLOR. Y 2026-09-07 (dioramas):
+// fuera también el `cliffTint` global — el canto del centro y el de cada
+// sector salen ahora de la rampa de estratos del bioma (PackDef.cliff),
+// en color de vértice, con la misma cuña y el mismo rizado.
 
 /**
  * Rol visual de cada mesh del suelo. Sustituye a la heurística vieja
@@ -150,107 +154,228 @@ function disposeGroupMeshes(root: THREE.Object3D): void {
 }
 
 // --- Fragment mesh builder -----------------------------------------------
+//
+// 2026-09-07 (dioramas, "la isla tiene masa"): el sector deja de ser un
+// ExtrudeGeometry de 1,2 u con la textura de suelo estirada por la pared.
+// Ahora es una TAPA (el contorno jugable exacto, con la textura del pack)
+// más un ACANTILADO propio: `cliffVisualHeight` de alto, base estrechada
+// hacia el eje del disco (`cliffTaper`, la cuña de un tronco de cono),
+// estratos con la rampa de color del bioma y un rizado radial que rompe
+// el cilindro perfecto. Las referencias de Rafa (resources/Terrenos) llevan
+// un canto de roca apilada, hielo en bloques o roca roja estratificada que
+// mide del orden de 1/5 del diámetro: esto es eso, en color de vértice y
+// cero bytes de payload.
+//
+// Gameplay intacto: el contorno de la tapa es `pointInFragment` tal cual y
+// `FRAG.arenaHeight` (espejo del servidor, golden) no se toca. Todo lo que
+// cuelga por debajo de y=0 es decorado.
 
-function createFragmentMesh(f: FragmentDef, jitterRand = 0.5): THREE.Group {
+/** Hash determinista en [0,1) a partir de enteros. Sirve para que el
+ *  rizado y el jitter de bloques sean iguales en todos los clientes y,
+ *  sobre todo, iguales en los dos lados de una arista compartida por dos
+ *  sectores vecinos: se hashea el ÁNGULO cuantizado, no el fragmento. */
+function hash01(...ints: number[]): number {
+  let h = 0x811c9dc5 | 0;
+  for (const v of ints) {
+    h ^= v | 0;
+    h = Math.imul(h, 0x01000193);
+    h ^= h >>> 13;
+  }
+  return (h >>> 0) / 4294967296;
+}
+
+/** Interpola una rampa de paradas [t, color]. */
+function sampleStops(stops: Array<[number, number]>, tt: number, out: THREE.Color): THREE.Color {
+  if (stops.length === 0) return out.setHex(0x808080);
+  if (tt <= stops[0]![0]) return out.setHex(stops[0]![1]);
+  for (let i = 1; i < stops.length; i++) {
+    const [t1, c1] = stops[i]!;
+    if (tt <= t1) {
+      const [t0, c0] = stops[i - 1]!;
+      const k = t1 === t0 ? 0 : (tt - t0) / (t1 - t0);
+      return out.setHex(c0).lerp(new THREE.Color(c1), k);
+    }
+  }
+  return out.setHex(stops[stops.length - 1]![1]);
+}
+
+/**
+ * Punto de la pared: el punto `(px, pz)` del contorno de la tapa, bajado a
+ * la fila `t` (0 = labio, 1 = base). El estrechamiento y el rizado se
+ * aplican RADIALMENTE respecto al eje del disco, así que dos sectores que
+ * comparten una arista producen exactamente los mismos vértices en ella.
+ * La fila 0 nunca se riza: el contorno jugable es sagrado.
+ */
+function cliffPoint(px: number, pz: number, tt: number, row: number, out: THREE.Vector3): THREE.Vector3 {
+  const r = Math.hypot(px, pz);
+  const taper = 1 - (1 - ARENA_LOOK.cliffTaper) * tt;
+  let s = taper;
+  // Ni la fila de la tapa (contorno jugable) ni la de la base se rizan:
+  // la base tiene que casar con el fondo, que va escalado por `cliffTaper`
+  // sin rizar (review B2: si no, muescas de ±0,16 u al volcar un sector).
+  const lastRow = Math.max(2, Math.floor(ARENA_LOOK.cliffStrata)) - 1;
+  if (row > 0 && row < lastRow && r > 1e-6) {
+    const angleKey = Math.round(Math.atan2(pz, px) * 4000);
+    const rough = (hash01(angleKey, row, 7) - 0.5) * 2 * ARENA_LOOK.cliffRoughness;
+    s = (r * taper + rough) / r;
+  }
+  return out.set(px * s, -tt * ARENA_LOOK.cliffVisualHeight, pz * s);
+}
+
+/**
+ * Pared del acantilado a lo largo de un contorno CERRADO (lista de puntos
+ * de la tapa, en orden). Cada tramo entre dos puntos consecutivos produce
+ * `cliffStrata − 1` quads apilados; cada quad es un "bloque" con su color
+ * de la rampa del bioma, entre continuo y plano según `cliffStrataHardness`,
+ * y con un jitter de brillo propio para que dos sillares vecinos no sean
+ * el mismo. Geometría no indexada con normales planas: lee como piedra.
+ */
+function buildCliffWall(contour: Array<[number, number]>, ramp: CliffRamp, fragIndex: number): THREE.BufferGeometry {
+  const rows = Math.max(2, Math.floor(ARENA_LOOK.cliffStrata));
+  const bands = rows - 1;
+  const n = contour.length;
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), d = new THREE.Vector3();
+  const cTop = new THREE.Color(), cBot = new THREE.Color(), cMid = new THREE.Color();
+
+  const push = (v: THREE.Vector3, col: THREE.Color) => {
+    positions.push(v.x, v.y, v.z);
+    colors.push(col.r, col.g, col.b);
+  };
+
+  for (let i = 0; i < n; i++) {
+    const [x0, z0] = contour[i]!;
+    const [x1, z1] = contour[(i + 1) % n]!;
+    for (let k = 0; k < bands; k++) {
+      const t0 = k / bands, t1 = (k + 1) / bands, tm = (k + 0.5) / bands;
+      cliffPoint(x0, z0, t0, k, a);
+      cliffPoint(x1, z1, t0, k, b);
+      cliffPoint(x1, z1, t1, k + 1, c);
+      cliffPoint(x0, z0, t1, k + 1, d);
+
+      sampleStops(ramp.stops, tm, cMid);
+      sampleStops(ramp.stops, t0, cTop).lerp(cMid, ARENA_LOOK.cliffStrataHardness);
+      sampleStops(ramp.stops, t1, cBot).lerp(cMid, ARENA_LOOK.cliffStrataHardness);
+      const jitter = 1 + (hash01(fragIndex, i, k, 3) - 0.5) * 2 * ARENA_LOOK.cliffBlockJitter;
+      cTop.multiplyScalar(jitter); cBot.multiplyScalar(jitter);
+
+      // Dos triángulos por bloque. El sentido da igual para el render
+      // (DoubleSide); las normales planas salen de computeVertexNormals.
+      push(a, cTop); push(b, cTop); push(c, cBot);
+      push(a, cTop); push(c, cBot); push(d, cBot);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function cliffMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.95,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+}
+
+/** Contorno del sector anular en el plano XZ, cerrado y en orden:
+ *  radial de arranque → arco exterior → radial de cierre → arco interior. */
+function sectorContour(f: FragmentDef): Array<[number, number]> {
+  const { innerR, outerR, startAngle, endAngle } = f;
+  const span = endAngle - startAngle;
+  const pts: Array<[number, number]> = [];
+  for (let i = 0; i <= ARC_SEGMENTS; i++) {
+    const ang = startAngle + (span * i) / ARC_SEGMENTS;
+    pts.push([Math.cos(ang) * outerR, Math.sin(ang) * outerR]);
+  }
+  for (let i = ARC_SEGMENTS; i >= 0; i--) {
+    const ang = startAngle + (span * i) / ARC_SEGMENTS;
+    pts.push([Math.cos(ang) * innerR, Math.sin(ang) * innerR]);
+  }
+  return pts;
+}
+
+function createFragmentMesh(f: FragmentDef, jitterRand = 0.5, cliffRamp: CliffRamp = CLIFF_RAMP_DEFAULT): THREE.Group {
   const group = new THREE.Group();
-  const h = FRAG.arenaHeight;
+  const H = ARENA_LOOK.cliffVisualHeight;
 
   if (f.immune) {
-    // Immune center: circle + cylinder side + bottom circle. Es la ZONA
-    // SEGURA (nunca cae): tiene que distinguirse del resto del disco de
-    // un vistazo, así que va con el tinte más claro de la tabla.
+    // Immune center: tapa + acantilado circular + fondo. Es la ZONA SEGURA
+    // (nunca cae): va con el tinte más claro de la tabla.
     const topGeo = new THREE.CircleGeometry(f.outerR, CENTER_SEGMENTS);
     worldUvs(topGeo);
-    const topMat = new THREE.MeshStandardMaterial({
-      color: tintForBand(0, 1), side: THREE.DoubleSide,
-    });
+    const topMat = new THREE.MeshStandardMaterial({ color: tintForBand(0, 1), side: THREE.DoubleSide });
     const top = new THREE.Mesh(topGeo, topMat);
     top.rotation.x = -Math.PI / 2;
     top.receiveShadow = true;
     top.userData.groundRole = 'top' as GroundRole;
     group.add(top);
 
-    const sideGeo = new THREE.CylinderGeometry(f.outerR, f.outerR, h, CENTER_SEGMENTS, 1, true);
-    const sideMat = new THREE.MeshStandardMaterial({
-      color: tintForBand(0, ARENA_LOOK.cliffTint), side: THREE.DoubleSide,
-    });
-    const side = new THREE.Mesh(sideGeo, sideMat);
-    side.position.y = -h / 2;
-    side.userData.groundRole = 'cliff' as GroundRole;
-    group.add(side);
+    const ring: Array<[number, number]> = [];
+    for (let i = 0; i < CENTER_SEGMENTS; i++) {
+      const ang = (i / CENTER_SEGMENTS) * Math.PI * 2;
+      ring.push([Math.cos(ang) * f.outerR, Math.sin(ang) * f.outerR]);
+    }
+    const cliff = new THREE.Mesh(buildCliffWall(ring, cliffRamp, f.index), cliffMaterial());
+    cliff.userData.groundRole = 'cliff' as GroundRole;
+    group.add(cliff);
 
-    const botGeo = new THREE.CircleGeometry(f.outerR, CENTER_SEGMENTS);
+    const botGeo = new THREE.CircleGeometry(f.outerR * ARENA_LOOK.cliffTaper, CENTER_SEGMENTS);
     const botMat = new THREE.MeshStandardMaterial({ color: 0x2a3a22, side: THREE.DoubleSide });
     const bot = new THREE.Mesh(botGeo, botMat);
     bot.rotation.x = -Math.PI / 2;
-    bot.position.y = -h;
+    bot.position.y = -H;
     bot.userData.groundRole = 'bottom' as GroundRole;
     group.add(bot);
     return group;
   }
 
-  // Collapsible sector: Shape → ExtrudeGeometry
+  // --- Tapa: el contorno jugable exacto, con UV de mundo para la textura.
   const shape = new THREE.Shape();
-  const { innerR, outerR, startAngle, endAngle } = f;
-  const span = endAngle - startAngle;
+  const contour = sectorContour(f);
+  shape.moveTo(contour[0]![0], contour[0]![1]);
+  for (let i = 1; i < contour.length; i++) shape.lineTo(contour[i]![0], contour[i]![1]);
+  shape.closePath();
 
-  // Trace outline: inner-start → outer-start → outer arc → inner-end → inner arc (close)
-  shape.moveTo(
-    Math.cos(startAngle) * innerR,
-    Math.sin(startAngle) * innerR,
-  );
-  shape.lineTo(
-    Math.cos(startAngle) * outerR,
-    Math.sin(startAngle) * outerR,
-  );
-  for (let i = 1; i <= ARC_SEGMENTS; i++) {
-    const a = startAngle + (span * i) / ARC_SEGMENTS;
-    shape.lineTo(Math.cos(a) * outerR, Math.sin(a) * outerR);
-  }
-  shape.lineTo(
-    Math.cos(endAngle) * innerR,
-    Math.sin(endAngle) * innerR,
-  );
-  for (let i = ARC_SEGMENTS - 1; i >= 0; i--) {
-    const a = startAngle + (span * i) / ARC_SEGMENTS;
-    shape.lineTo(Math.cos(a) * innerR, Math.sin(a) * innerR);
-  }
-
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: h,
-    bevelEnabled: false,
-  });
-  // ExtrudeGeometry emite DOS grupos: 0 = tapas (arriba y abajo), 1 = pared
-  // lateral. Con un solo material la pared llevaba la textura del suelo
-  // estirada y el canto no se leía; con dos, el acantilado se oscurece y
-  // la losa gana volumen. `jitter` rompe la uniformidad dentro de la banda.
   const jitter = 1 + (jitterRand - 0.5) * 2 * ARENA_LOOK.fragmentTintJitter;
-  const topMat = new THREE.MeshStandardMaterial({
-    color: tintForBand(f.band, jitter), side: THREE.DoubleSide,
-  });
-  const cliffMat = new THREE.MeshStandardMaterial({
-    color: tintForBand(f.band, jitter * ARENA_LOOK.cliffTint), side: THREE.DoubleSide,
-  });
-  const mesh = new THREE.Mesh(geo, [topMat, cliffMat]);
-  mesh.userData.groundRole = 'top' as GroundRole;
-  // CRITICAL: rotation direction matters here.
-  //
-  // ExtrudeGeometry places the shape in XY and extrudes along +Z. To lay
-  // it flat on XZ we rotate around X, but the SIGN of that rotation
-  // decides how shape-angle maps to world-angle:
-  //
-  //   rot X by -π/2:  (x, y, z) → (x, z, -y)   ← MIRRORS shape Y onto -Z
-  //   rot X by +π/2:  (x, y, z) → (x, -z, y)   ← shape Y → world +Z
-  //
-  // The physics `pointInFragment` uses atan2(z, x) without mirroring, so
-  // it expects shape-angle π/2 to be at world +Z. With -π/2 rotation the
-  // mesh is drawn at world -Z — visual and physics diverge. Bug reported
-  // as "visible terrain not walkable / invisible terrain walkable".
-  // Fix: use +π/2. That also extrudes DOWN naturally (back face at y=-h,
-  // front face at y=0), so no position offset is needed.
-  mesh.rotation.x = Math.PI / 2;
-  mesh.receiveShadow = true;
-  group.add(mesh);
+  const topGeo = new THREE.ShapeGeometry(shape);
+  const topMat = new THREE.MeshStandardMaterial({ color: tintForBand(f.band, jitter), side: THREE.DoubleSide });
+  const top = new THREE.Mesh(topGeo, topMat);
+  // CRITICAL: rotación +π/2, no −π/2. ShapeGeometry vive en XY; con +π/2
+  // (x, y) → (x, ·, y), así que el ángulo del shape es el ángulo de mundo
+  // que usa `pointInFragment` (atan2(z, x)). Con −π/2 se espeja en Z y el
+  // suelo visible deja de coincidir con el pisable (bug histórico:
+  // "visible terrain not walkable"). Las UV de ShapeGeometry ya son las
+  // coordenadas del shape = coordenadas de mundo: mismo tile que el centro.
+  top.rotation.x = Math.PI / 2;
+  // Con +π/2 la normal de ShapeGeometry queda hacia −Y; se ve porque el
+  // material es DoubleSide y three voltea la normal por cara. Si alguien
+  // lo pasa a FrontSide "por rendimiento", la tapa desaparece (review B4).
+  top.receiveShadow = true;
+  top.userData.groundRole = 'top' as GroundRole;
+  group.add(top);
+
+  // --- Acantilado: cuelga bajo la tapa, en coordenadas de mundo directas.
+  const cliff = new THREE.Mesh(buildCliffWall(contour, cliffRamp, f.index), cliffMaterial());
+  cliff.userData.groundRole = 'cliff' as GroundRole;
+  group.add(cliff);
+
+  // --- Fondo: solo se ve cuando el sector vuelca al caer. Escalado hacia
+  // el eje igual que la base del acantilado, para cerrar la cuña.
+  const botGeo = new THREE.ShapeGeometry(shape);
+  botGeo.scale(ARENA_LOOK.cliffTaper, ARENA_LOOK.cliffTaper, 1);
+  const botColor = new THREE.Color();
+  sampleStops(cliffRamp.stops, 1, botColor);
+  const bot = new THREE.Mesh(botGeo, new THREE.MeshStandardMaterial({ color: botColor, side: THREE.DoubleSide }));
+  bot.rotation.x = Math.PI / 2;
+  bot.position.y = -H;
+  bot.userData.groundRole = 'bottom' as GroundRole;
+  group.add(bot);
 
   return group;
 }
@@ -349,6 +474,13 @@ export class Arena {
   /** Decorado de fondo (mar del bioma). Es DECORADO: no colisiona, no
    *  entra en isOnArena y se puede quitar entero sin tocar el juego. */
   private backdrop: ArenaBackdrop | null = null;
+  /** Capa densa del diorama (hierba, guijarros, conchas… instanciados por
+   *  bioma). Cuelga de `this.group`, NUNCA de un fragmento: al reconstruir,
+   *  los fragmentos disponen su geometría recursivamente y la del scatter
+   *  es compartida. Se le avisa de cada fragmento que tiembla o cae para
+   *  que su rango de instancias se mueva con él. */
+  private scatter: ArenaScatter | null = null;
+  private scatterDensity = SCATTER_DENSITY;
   /** Per-prop batch association. When batch `N` collapses, every prop
    *  with `batchIndex === N` enters the falling-decoration queue. */
   private propBatchIndex: number[] = [];
@@ -445,8 +577,9 @@ export class Arena {
     // así que es igual en todos los clientes de una sala y NO desplaza la
     // secuencia de `rand()` del generador de terreno (que es gameplay).
     const vRand = visualRand(seed);
+    const cliffRamp = packId ? getPackCliff(packId) : CLIFF_RAMP_DEFAULT;
     for (const f of this.layout.fragments) {
-      const mesh = createFragmentMesh(f, vRand());
+      const mesh = createFragmentMesh(f, vRand(), cliffRamp);
       this.fragmentGroups.push(mesh);
       this.group.add(mesh);
       // Store base color so we can restore it after a warning blink ends.
@@ -509,6 +642,9 @@ export class Arena {
       this.sceneRef.add(this.backdrop.group);
     }
     this.backdrop.setRamp(getPackBackdrop(packId), getPackFogColor(packId));
+
+    // Capa densa: síncrona y sin assets, lista en el mismo frame que el suelo.
+    this.rebuildScatter();
 
     // Fog + clear colour update immediately (synchronous) so the player
     // doesn't see a "wrong horizon" frame while textures load.
@@ -709,6 +845,7 @@ export class Arena {
       this.backdrop.dispose();
       this.backdrop = null;
     }
+    this.scatter?.dispose();
     this.clearDecorations();
     // Discard any in-flight falling decoration tumbles — remove them
     // from the scene graph and drop references.
@@ -813,7 +950,11 @@ export class Arena {
       g.traverse(child => {
         if (!(child instanceof THREE.Mesh)) return;
         const role = child.userData.groundRole as GroundRole | undefined;
-        if (role !== 'top' && role !== 'cliff') return;
+        // Solo la TAPA lleva el mapa del pack. El acantilado tiene su
+        // propia rampa de estratos en color de vértice: la textura de
+        // suelo estirada por la pared era justo lo que lo hacía leer
+        // como una losa fina y no como una isla.
+        if (role !== 'top') return;
         forEachMaterial(child, mat => {
           mat.map = tex;
           mat.needsUpdate = true;
@@ -891,6 +1032,45 @@ export class Arena {
    *  la partida en curso. */
   get currentSeed(): number | null {
     return this.layout ? this.layout.seed : null;
+  }
+
+  /** Coste de la capa densa (instancias, draw calls, triángulos) para el
+   *  lab y el CLI; null si no hay pack aplicado. */
+  scatterStats(): ScatterStats | null {
+    return this.scatter?.stats() ?? null;
+  }
+
+  /** Válvula global de densidad (0..1+). Reconstruye la capa con la misma
+   *  semilla y el mismo pack, sin cortar la partida. Doble superficie:
+   *  lo llama el lab y `__devApi.setScatterDensity`. */
+  setScatterDensity(density: number): void {
+    this.scatterDensity = Math.max(0, density);
+    this.rebuildScatter();
+  }
+
+  /** (Re)construye la capa densa con el layout, el pack y la semilla en
+   *  curso. Determinista: misma semilla + mismo pack ⇒ mismas matrices en
+   *  todos los clientes de la sala (el servidor solo manda seed + packId). */
+  private rebuildScatter(): void {
+    if (!this.layout || !this.appliedPackId) return;
+    if (!this.scatter) {
+      this.scatter = new ArenaScatter();
+      this.group.add(this.scatter.group);
+    }
+    this.scatter.build({
+      layout: this.layout,
+      recipe: getScatterRecipe(this.appliedPackId),
+      seed: this.layout.seed,
+      density: this.scatterDensity,
+      hostOf: (x, z) => {
+        const i = this.findFragmentAt(x, z);
+        return i >= 0 ? i : null;
+      },
+    });
+    // Reconstrucción a mitad de partida: lo que ya cayó, cae.
+    for (let i = 0; i < this.alive.length; i++) {
+      if (!this.alive[i]) this.scatter.hideFragment(i);
+    }
   }
 
   getCurrentPackId(): ArenaPackId | null {
@@ -1114,6 +1294,7 @@ export class Arena {
 
   reset(): void {
     // Called before buildFromSeed or on phase transition
+    this.scatter?.dispose();
     for (const g of this.fragmentGroups) {
       g.traverse(child => {
         if (child instanceof THREE.Mesh) {
@@ -1260,9 +1441,16 @@ export class Arena {
       g.position.y = ff.startY;
       g.rotation.x += ff.rotX * dt;
       g.rotation.z += ff.rotZ * dt;
+      // La hierba, las conchas y los guijarros de este sector caen CON él:
+      // se recompone solo su rango de instancias con la matriz del grupo.
+      if (this.scatter) {
+        g.updateMatrix();
+        this.scatter.applyFragmentTransform(ff.idx, g.matrix);
+      }
       if (g.position.y > this.FRAGMENT_KILL_Y) {
         keep.push(ff);
       } else {
+        this.scatter?.hideFragment(ff.idx);
         // Past the death plane — hide + reset transforms so a future
         // seed rebuild starts from a clean slate.
         g.visible = false;
@@ -1356,6 +1544,10 @@ export class Arena {
         Math.cos(t * SHAKE_FREQ_MID  + phase * 0.8) * 0.30 +
         Math.cos(t * SHAKE_FREQ_LOW  + phase * 1.7) * 0.15;
       g.position.set(sx * amp, 0, sz * amp);
+      if (this.scatter) {
+        g.updateMatrix();
+        this.scatter.applyFragmentTransform(idx, g.matrix);
+      }
 
       // Warm orange emissive pulse — not red alarm flash. Suggests
       // "heating / cracking" rather than "DANGER" button blink.
@@ -1378,6 +1570,14 @@ export class Arena {
       // ever comes back (debug, restart), it must render at its original
       // position, not at the last shake offset frame.
       g.position.set(0, 0, 0);
+      if (this.scatter) {
+        // Review 2026-09-07 (A1): un sector hundido por el Sinkhole de
+        // Sihans ya está `visible=false` cuando su lote llega al colapso;
+        // aplicarle la identidad devolvía sus hierbas a `local` y
+        // reaparecían flotando en el hueco. Oculto se queda oculto.
+        if (!g.visible) this.scatter.hideFragment(idx);
+        else { g.updateMatrix(); this.scatter.applyFragmentTransform(idx, g.matrix); }
+      }
       g.traverse(child => {
         if (child instanceof THREE.Mesh) {
           forEachMaterial(child, mat => {

@@ -625,7 +625,13 @@ export class DevApi {
    * quien llame (UI o script) sepa qué pasó.
    */
   setArenaLook(patch: Record<string, unknown>): { applied: string[]; rebuilt: boolean } {
-    const STRUCTURAL = new Set(['tileSize', 'bandTint', 'tintBase', 'fragmentTintJitter', 'cliffTint']);
+    // Review 2026-09-07 (A2): las claves del canto se hornean en la malla,
+    // así que también piden reconstruir. `cliffTint` ya no existe.
+    const STRUCTURAL = new Set([
+      'tileSize', 'bandTint', 'tintBase', 'fragmentTintJitter',
+      'cliffVisualHeight', 'cliffTaper', 'cliffStrata', 'cliffRoughness',
+      'cliffStrataHardness', 'cliffBlockJitter',
+    ]);
     const look = ARENA_LOOK as unknown as Record<string, unknown>;
     const applied: string[] = [];
     let rebuild = false;
@@ -638,6 +644,19 @@ export class DevApi {
     }
     if (rebuild) this.rebuildArenaVisuals();
     return { applied, rebuilt: rebuild };
+  }
+
+  /** Coste de la capa densa del diorama (instancias, draws, triángulos por
+   *  capa). null si no hay pack aplicado. */
+  getScatterStats() {
+    return this.game.arena.scatterStats();
+  }
+
+  /** Válvula global de densidad del diorama. Reconstruye la capa en vivo y
+   *  devuelve el coste resultante, para afinar mirando cifras. */
+  setScatterDensity(density: number) {
+    this.game.arena.setScatterDensity(density);
+    return this.game.arena.scatterStats();
   }
 
   /** Reconstruye las mallas del suelo con la misma semilla y pack. Visual

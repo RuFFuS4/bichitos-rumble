@@ -26,7 +26,7 @@
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
 import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
-import { ARENA_LOOK, type SeaRamp } from './arena-look';
+import { ARENA_LOOK, type SeaRamp, type CliffRamp } from './arena-look';
 
 /** Anisotropía máxima del dispositivo, cacheada. La fija el renderer al
  *  arrancar (`setArenaTextureAnisotropy`); sin renderer (tests, headless)
@@ -90,6 +90,12 @@ interface PackDef {
    *  docs/DIORAMAS.md). Oscuro pegado al disco para que el canto se
    *  recorte, claro al alejarse para leer distancia. */
   backdrop: SeaRamp;
+  /** Estratos del canto de la isla, de arriba (t = 0, el labio bajo la
+   *  tapa) abajo (t = 1, la base). Es lo que convierte la pared del
+   *  disco en acantilado DE ESTE bioma: roca apilada con musgo, bloques
+   *  de hielo, roca roja estratificada (docs/DIORAMAS.md parte 2, fase
+   *  "la isla tiene masa"). Va en vertex color; sin textura nueva. */
+  cliff: CliffRamp;
   /** Per-prop uniform scale hint (default 1.0). Lets us pre-tune bulky
    *  props (the 5 MB palm, sakura tree, etc) without a second authoring
    *  pass on the GLB — applied on top of whatever the GLB ships with. */
@@ -117,6 +123,11 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     // en L≈78, así que el dosel tiene que quedar POR DEBAJO — hoy la foto
     // estaba 44 puntos por encima) aclarando a bruma cálida al fondo.
     backdrop: { stops: [[0, 0x0c1a0f], [0.18, 0x182d1a], [0.5, 0x3f6137], [1, 0x93b483]] },
+    // Labio de musgo → tierra oscura con raíces → sillares de piedra
+    // tostada (los bloques de la referencia JUNGLE TROPIC) → base en
+    // sombra. El verde del labio es lo que hace que la hierba parezca
+    // colgar sobre el canto y no acabar en un corte.
+    cliff: { stops: [[0, 0x5a6a2c], [0.14, 0x4e3620], [0.3, 0x6b4a2a], [0.5, 0x9a7a48], [0.8, 0x7e6238], [1, 0x4a3820]] },
   },
   frozen_tundra: {
     props: [],
@@ -125,6 +136,10 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     // del juego, así que su movimiento es de VALOR, no de tono; el hielo
     // va más oscuro que la tapa para que no se lea como pisable.
     backdrop: { stops: [[0, 0x152230], [0.2, 0x283d50], [0.55, 0x728ca0], [1, 0xd6e2ee]] },
+    // Tapa de nieve → hielo claro → azul profundo. Es el bioma donde el
+    // corte vertical cuenta más: lo que se rompe es hielo, y el azul
+    // saturado bajo la nieve blanca es la firma de FROZEN TUNDRA.
+    cliff: { stops: [[0, 0xf4f8fc], [0.1, 0xd6ecf8], [0.35, 0x8fd0f2], [0.65, 0x4fa4e0], [1, 0x2a6cb0]] },
   },
   desert_dunes: {
     props: [],
@@ -132,6 +147,11 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     // Cañón de dunas: aquí el terreno CONTINÚA y la isla se lee como
     // meseta. Naranja quemado en la sombra del cañón, arena clara lejos.
     backdrop: { stops: [[0, 0x28160e], [0.16, 0x4b2d1a], [0.5, 0x9b6b3b], [1, 0xecc394]] },
+    // Arena en el labio → roca roja → veta ocre → roja otra vez → base
+    // oscura: la meseta estratificada de DESERT DUNES. Es la rampa con más
+    // paradas porque el estrato ocre en medio es lo que la hace desierto
+    // y no ladrillo.
+    cliff: { stops: [[0, 0xe0aa5c], [0.1, 0xb84a2c], [0.4, 0xd48a46], [0.55, 0xa8402a], [0.8, 0xc4703e], [1, 0x74291a]] },
   },
   coral_beach: {
     props: [],
@@ -140,6 +160,10 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     // alejarse. Es el peor caso de partida (57,7 % del cuadro era una
     // mancha turquesa sin un solo borde) y donde más gana lo generado.
     backdrop: { stops: [[0, 0x052126], [0.14, 0x0b3d44], [0.45, 0x25868b], [1, 0x8fdfe0]] },
+    // Arena mojada → roca gris → verde-teal de algas hacia la línea de
+    // agua: la roca de CORAL REEF BEACH se hunde en la laguna y la parte
+    // baja del canto va del color del mar del backdrop, no del suelo.
+    cliff: { stops: [[0, 0xe6d3a6], [0.12, 0x9a9a92], [0.45, 0x7a7e7a], [0.7, 0x5e8c80], [1, 0x3a5c58]] },
   },
   kitsune_shrine: {
     props: [],
@@ -148,6 +172,10 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     // a tener ΔL de 1,1 — literalmente invisible) y retroiluminadas hacia
     // el ciruela del pack. A este bioma hay que SUBIRLE color, no bajarlo.
     backdrop: { stops: [[0, 0x1a141c], [0.18, 0x3a2b36], [0.5, 0x866578], [1, 0xdcc0cf]] },
+    // Musgo en el labio → sillares grises apilados que se oscurecen hacia
+    // la base: la muralla del patio de KITSUNE SHRINE. Sin color: aquí
+    // el bermellón y los pétalos van encima, y el canto es piedra.
+    cliff: { stops: [[0, 0x6b7d4a], [0.12, 0x8a877e], [0.45, 0x736f68], [0.75, 0x5e5a55], [1, 0x3f3c3a]] },
   },
 };
 
@@ -410,6 +438,12 @@ export function getPackBackdrop(packId: ArenaPackId): SeaRamp {
 
 export function getPackFogColor(packId: ArenaPackId): number {
   return PACKS[packId]?.fogColor ?? 0xb6d1e8;
+}
+
+/** Rampa de estratos del canto del pack (vertex color de la pared de cada
+ *  fragmento, `src/arena.ts`). */
+export function getPackCliff(packId: ArenaPackId): CliffRamp {
+  return PACKS[packId].cliff;
 }
 
 // ---------------------------------------------------------------------------

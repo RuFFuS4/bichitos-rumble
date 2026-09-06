@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { Arena } from './arena';
+import { ARENA_LOOK } from './arena-look';
+import { BlobShadows, BLOB_SHADOW } from './blob-shadows';
 import { Critter, CRITTER_PRESETS, type CritterConfig } from './critter';
 import { updatePlayer } from './player';
 import { consumeMenuAction, clearMenuActions } from './input';
@@ -199,11 +201,21 @@ export class Game {
    *  when the player enters online mode. Sent with match-result writes so
    *  the server can credit stats to the right player row. Null offline. */
   private onlineIdentity: OnlineIdentity | null = null;
+  /** Pool de sombras de contacto y el slot que ocupa cada critter vivo en
+   *  la escena. Se reconcilia cada frame en syncCritterShadows. */
+  private blobShadows: BlobShadows;
+  private critterShadowSlots = new Map<Critter, number>();
 
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.arena = new Arena(scene);
+    // Sombras de contacto de los critters (dioramas, 2026-09-07). Nada en
+    // el juego proyecta sombra real —los critters gordos tienen hasta 1,9 M
+    // de triángulos y castShadow es inviable— y por eso todo flotaba sobre
+    // el suelo. Un InstancedMesh, un draw call, se actualiza en syncCritterShadows.
+    this.blobShadows = new BlobShadows();
+    scene.add(this.blobShadows.mesh);
 
     // Initial "background" roster for the title and character select phases.
     // These critters are disposed and rebuilt at enterCountdown with the
@@ -2174,6 +2186,36 @@ export class Game {
           }
         }
         break;
+    }
+    this.syncCritterShadows();
+  }
+
+  /**
+   * Reconcilia el pool de sombras con los critters que hay en escena esta
+   * fase (menú, offline u online): cada uno tiene su slot mientras exista
+   * y lo devuelve al desaparecer. La sombra sigue la posición del critter
+   * y se desvanece al despegar del suelo (salto, caída), que es lo que
+   * hace legible la altura en un juego cenital.
+   */
+  private syncCritterShadows(): void {
+    const active = this.getActiveCritters();
+    for (const [c, slot] of this.critterShadowSlots) {
+      if (!active.includes(c)) {
+        this.blobShadows.remove(slot);
+        this.critterShadowSlots.delete(c);
+      }
+    }
+    for (const c of active) {
+      let slot = this.critterShadowSlots.get(c);
+      if (slot === undefined) {
+        slot = this.blobShadows.add();
+        if (slot < 0) continue;
+        this.critterShadowSlots.set(c, slot);
+      }
+      const height = Math.max(0, c.mesh.position.y);
+      const fade = Math.max(0, 1 - height / BLOB_SHADOW.fadeHeight);
+      const opacity = c.alive && !c.falling ? ARENA_LOOK.critterShadowOpacity * fade : 0;
+      this.blobShadows.set(slot, c.x, c.z, c.radius * ARENA_LOOK.critterShadowScale, opacity);
     }
   }
 

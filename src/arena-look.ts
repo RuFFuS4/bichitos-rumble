@@ -34,9 +34,32 @@ export interface ArenaLookConfig {
   /** Variación de brillo por fragmento (±fracción). Rompe la uniformidad
    *  de banda sin que se note como "manchas". Determinista por semilla. */
   fragmentTintJitter: number;
-  /** Multiplicador de brillo de la pared lateral (canto del acantilado)
-   *  respecto a la tapa del mismo fragmento. */
-  cliffTint: number;
+  /** Altura VISUAL del canto (u): cuánto acantilado cuelga bajo la tapa.
+   *  NO es la de gameplay (`FRAG.arenaHeight`, 1,2 u, espejada en el
+   *  servidor y blindada por golden): el suelo pisable no se entera. Las
+   *  referencias de Rafa llevan un canto de ~1/5 del diámetro; 2,6 u
+   *  sobre 24 u se queda algo por debajo para no robar cuadro al mar. */
+  cliffVisualHeight: number;
+  /** Radio de la base respecto al de la tapa (1 = cilindro). 0,82 es la
+   *  cuña de un tronco de cono: deja preparada la lectura "la isla es un
+   *  cono" sin comprometerla. La cuña apunta al eje del disco, no al
+   *  centro de cada sector, para que las paredes de bandas contiguas
+   *  sigan coincidiendo. */
+  cliffTaper: number;
+  /** Filas de vértices de la pared (≥ 2): `cliffStrata − 1` estratos,
+   *  cada uno una hilada de bloques con su color de la rampa del bioma.
+   *  Estructural: cada fila cuesta 2 tris por columna y pared. */
+  cliffStrata: number;
+  /** Rizado radial ±u por fila y por columna de la pared, determinista
+   *  por índice de fragmento. 0 = cilindro perfecto. La fila de la tapa
+   *  no se riza nunca: el contorno jugable es sagrado. */
+  cliffRoughness: number;
+  /** 0 = degradado continuo entre paradas de la rampa; 1 = cada estrato
+   *  de un color plano (sillares). */
+  cliffStrataHardness: number;
+  /** Variación de brillo por bloque (±fracción): lo que hace que dos
+   *  sillares vecinos no sean el mismo. */
+  cliffBlockJitter: number;
   /** Sombra de contacto bajo cada critter (blob). Radio en múltiplos del
    *  radio del critter, y opacidad máxima cuando está en el suelo. */
   critterShadowScale: number;
@@ -57,7 +80,12 @@ export const ARENA_LOOK: ArenaLookConfig = {
   bandTint: [1.0, 0.94, 0.88, 0.82],
   tintBase: 0xe6e6e6,
   fragmentTintJitter: 0.05,
-  cliffTint: 0.62,
+  cliffVisualHeight: 2.6,
+  cliffTaper: 0.82,
+  cliffStrata: 5,
+  cliffRoughness: 0.16,
+  cliffStrataHardness: 0.65,
+  cliffBlockJitter: 0.07,
   critterShadowScale: 1.15,
   critterShadowOpacity: 0.34,
   warningEmissive: 0.34,
@@ -69,6 +97,26 @@ export const ARENA_LOOK: ArenaLookConfig = {
  *  (mulberry32(seed ^ SALT)) para que añadir variación visual no desplace
  *  la salida del generador de terreno, que es gameplay y está en golden. */
 export const SALT_VISUAL = 0x9e37_79b9;
+
+// ---------------------------------------------------------------------------
+// CliffRamp — los estratos del canto de la isla (docs/DIORAMAS.md parte 2)
+// ---------------------------------------------------------------------------
+
+/** Rampa de estratos del canto: paradas [t, color] con t = 0 en el labio
+ *  (justo bajo la tapa) y t = 1 en la base. Cada bioma cuenta su corte
+ *  vertical con ella: tierra → raíz → roca en jungle, nieve → hielo azul
+ *  en tundra, roca roja estratificada en desert. Misma forma que SeaRamp
+ *  a propósito: son la misma idea (color por vértice a lo largo de una
+ *  coordenada), sobre superficies distintas. */
+export interface CliffRamp {
+  stops: Array<[number, number]>;
+}
+
+/** Canto sin pack (menús, lab sin bioma): roca neutra que no compite con
+ *  los colores de banda planos. */
+export const CLIFF_RAMP_DEFAULT: CliffRamp = {
+  stops: [[0, 0x7a7466], [0.4, 0x6a655a], [1, 0x45413a]],
+};
 
 // ---------------------------------------------------------------------------
 // BACKDROP_LOOK — el decorado lejano (docs/DIORAMAS.md)
