@@ -195,6 +195,14 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     test:sim` incluye `tests/sim/arena-scatter.test.ts` (determinismo
     byte a byte, techos de altura, coste). Las sombras de contacto son
     `src/blob-shadows.ts`, un InstancedMesh para todos los critters.
+  - **Instancias de prueba mudas** (directiva de Rafa 2026-09-07):
+    `scripts/lib/headless-browser.mjs` (`launchMutedBrowser`,
+    `muteGameAudio`, `newMutedPage`). Silencia por dos vías —
+    `--mute-audio` en Chromium y las banderas de `src/audio.ts` en
+    localStorage antes del primer script — así que la instancia no suena
+    ni en headed, y en las capturas los botones del HUD ya salen
+    apagados. Ya aplicado en `arena-shots.mjs`, `run-match-batch.mjs` y
+    `playwright.config.ts`; úsalo en cualquier script nuevo.
   - **Hoja de contactos**: `node scripts/arena-shots.mjs [--out dir]
     [--seed N] [--packs a,b] [--at-seconds S]` captura los 5 biomas con
     la cámara de juego y el panel del lab oculto. Es la forma de MIRAR el

@@ -24,6 +24,11 @@ export default defineConfig({
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
     headless: true,
+    // Toda instancia de pruebas nace MUDA (directiva de Rafa 2026-09-07):
+    // una tanda abre muchas a la vez y cada una arrancaba su música.
+    // Ver scripts/lib/headless-browser.mjs para los scripts que no pasan
+    // por esta config (capturas, batch runner, campañas ad-hoc).
+    launchOptions: { args: ['--mute-audio'] },
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },

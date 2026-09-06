@@ -12,8 +12,8 @@
 //                                [--at-seconds 0] [--packs a,b]
 // ---------------------------------------------------------------------------
 
-import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+import { launchMutedBrowser, muteGameAudio } from './lib/headless-browser.mjs';
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i++) {
@@ -30,12 +30,13 @@ const PACKS = args.get('packs') ? String(args.get('packs')).split(',') : ALL;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 mkdirSync(OUT, { recursive: true });
 
-const browser = await chromium.launch({ headless: true });
+const browser = await launchMutedBrowser();
 // --viewport WxH: 1280x720 es el caso MAS FAVORABLE (a mas resolucion, la
 // panoramica se amplia mas). Los sets utiles son 1280x720, 1920x1080 y
 // 390x844 (movil retrato), que es donde peor se porta todo.
 const [VW, VH] = String(args.get('viewport') ?? '1280x720').split('x').map(Number);
 const page = await browser.newPage({ viewport: { width: VW || 1280, height: VH || 720 } });
+await muteGameAudio(page);   // silencio también dentro del juego (directiva de Rafa)
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message.slice(0, 140)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 140)); });

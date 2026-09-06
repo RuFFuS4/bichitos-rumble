@@ -36,6 +36,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseArgs } from 'node:util';
+import { MUTE_ARGS, muteGameAudio } from './lib/headless-browser.mjs';
 import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -197,6 +198,7 @@ async function probeServer(labUrl) {
 
 async function openLabPage(browser, labUrl) {
   const page = await browser.newPage();
+  await muteGameAudio(page);
   // Forward page-side errors to the runner's stderr so a broken build is
   // visible instead of silently producing a hung poll.
   page.on('pageerror', (e) => console.error(`[pageerror] ${e.message}`));
@@ -739,7 +741,9 @@ async function main() {
   await probeServer(labUrl);
 
   const chromium = await loadChromium();
-  const browser = await chromium.launch({ headless: true });
+  // Mudo siempre: una tanda abre decenas de partidas seguidas (directiva
+  // de Rafa 2026-09-07). Ver scripts/lib/headless-browser.mjs.
+  const browser = await chromium.launch({ headless: true, args: MUTE_ARGS });
   let exitCode = 0;
   try {
     // Roster comes from the live page (single source of truth) so the

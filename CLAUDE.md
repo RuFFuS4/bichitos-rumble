@@ -94,6 +94,26 @@ is a view on top). Current agent surface is catalogued in DEV_TOOLS.md
 Known gaps (tracked in docs/AFILADO_PLAN.md): ability-tuner applier,
 headless recording dump, headless match runner.
 
+## Test instances must be SILENT (directiva de Rafa, 2026-09-07)
+
+Every browser instance launched for testing — screenshots, batch runner,
+Playwright campaigns, ad-hoc scripts — MUST start muted. A tanda opens
+many at once and each one used to start its own music and SFX.
+
+Use `scripts/lib/headless-browser.mjs`:
+
+```js
+import { launchMutedBrowser, muteGameAudio } from './lib/headless-browser.mjs';
+const browser = await launchMutedBrowser();      // --mute-audio
+const page = await browser.newPage();
+await muteGameAudio(page);                        // + flags del juego
+```
+
+Two layers on purpose: `--mute-audio` kills the audio even in headed mode
+or if the game changes, and the localStorage flags stop the game from
+creating audio nodes at all (and the HUD shows muted in screenshots).
+`playwright.config.ts` already passes `--mute-audio` for `npm run test:smoke`.
+
 ## Coding rules
 - Keep code modular and typed
 - Prefer simple architecture
