@@ -124,6 +124,30 @@ entregable):
       54 MB versionado en `public/models/arenas/jungle/_raw/`).
 - [ ] Fase 5 — todo lo visual en función del radio.
 
+**Cola de Rafa (2026-09-07, por orden de lo que dijo)**:
+- [ ] **Feeling de los personajes** (EN CURSO, diagnóstico lanzado): *"se
+      sienten pesados en vez de animalillos graciosos andando, corriendo
+      y demás"*. Dato de partida: los 9 GLB SÍ traen 6-10 clips (Idle,
+      Run, Fall, Victory, Defeat, habilidades), pero el clip de Run se
+      reproduce a velocidad FIJA (`meta.speed ?? 1`), así que un critter
+      a 8 u/s y otro a 18 u/s mueven las patas igual y los pies patinan.
+      Falta además el vocabulario cartoon: inclinación al acelerar y al
+      girar, squash al frenar, stretch al salir despedido, anticipación,
+      e inercia en orejas y cola.
+- [ ] **Shaders cartoon para los personajes** (Rafa: "más adelante").
+      Ojo al precedente de la fase 1a: activar tone mapping o PMREM toca
+      TODA la escena; un toon shader es lo mismo pero peor. Va tras flag
+      y con comparativa del roster de nueve delante.
+- [ ] **Dioramas, segunda pasada** (Rafa: "no parecen muy cohesionados
+      los elementos"). Cohesión = paleta compartida entre scatter, props
+      GLB y suelo; que los elementos se toquen y se agrupen en vez de
+      flotar sueltos; sombras de contacto también en los props.
+- [ ] **Portal del Vibe Jam fuera de itch y Steam**: ver la respuesta en
+      BUILD_LOG 2026-09-07. Hoy `#portal-legend` (src/hud/hud.partial.html)
+      y el portal de salida (src/portal.ts) están SIEMPRE activos; el jam
+      terminó en mayo. Hace falta un flag de build (`VITE_PORTAL`), no
+      borrar código, porque en la web propia sigue teniendo sentido.
+
 **Otros arreglos candidatos de H4.5**: feel pass de Kurama · SFX por
 critter · limpiar nicks `SMOKE*`/`Test*` de la DB de prod
 (`admin:delete-test`) · facturas y generador 2D (licencias) · tabla
