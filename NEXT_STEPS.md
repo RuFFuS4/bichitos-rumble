@@ -18,13 +18,14 @@ sala privada real en prod; detalle en [`ROADMAP.md`](ROADMAP.md) y
 
 ## Cómo retomar — cierre del 2026-09-07
 
-Árbol limpio y todo empujado. `dev` = `0bb2044`, **10 commits por delante
-de `main`** (o sea: terreno v2 + fondo + dioramas **sin desplegar**).
+Árbol limpio y todo empujado. `dev` va **12 commits por delante de
+`main`** (o sea: terreno v2 + fondo + dioramas **sin desplegar**; los dos
+últimos commits son solo esta documentación de cierre).
 
 **Lo primero de la próxima sesión, por orden:**
 1. **Rafa mira capturas y decide.** La ÚNICA hoja de contactos que
    enseña el estado de hoy es **`.tmp/shots-cierre/`** (los 5 biomas,
-   t=0, tomada al cerrar sobre `dev` = b9a5127). Las otras son
+   t=0, tomada al cerrar sobre el `dev` de hoy). Las otras son
    históricas y **engañan si se miran como estado actual**:
    `shots-despues/` son las capturas rotas del segundo ~52 (ver
    ERROR_LOG), `shots-fondo/` es anterior a los dioramas y

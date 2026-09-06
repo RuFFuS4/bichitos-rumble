@@ -34,7 +34,7 @@ Commit `0bb2044`.
 Ordenado, con el "cómo retomar" completo en `NEXT_STEPS.md` §Cómo retomar.
 
 - **Hoja de contactos honesta del estado final**: `.tmp/shots-cierre/`
-  (los 5 biomas a t=0 sobre `dev` = b9a5127), tomada ya con el navegador
+  (los 5 biomas a t=0 sobre el `dev` de hoy), tomada ya con el navegador
   mudo — y de paso vale como prueba del helper en los cinco packs, sin
   un solo error de consola. Es la **única** que enseña el estado de hoy:
   todos los demás sets del `.tmp/` son anteriores a algún cambio, o son
@@ -46,7 +46,7 @@ Ordenado, con el "cómo retomar" completo en `NEXT_STEPS.md` §Cómo retomar.
   misma sesión**, así que mañana se relanza de cero. No se perdió código
   —era medición pura—, pero sí las horas de agente: la lección es no
   dejar una tanda larga viva al final de una sesión.
-- **`dev` va 10 commits por delante de `main`**: todo el terreno v2, el
+- **`dev` va 12 commits por delante de `main`**: todo el terreno v2, el
   fondo y los dioramas están **sin desplegar**, esperando a que Rafa mire
   las capturas y dé el visto bueno.
 - **Sin responder**: cómo está publicado el juego en itch.io (iframe de
