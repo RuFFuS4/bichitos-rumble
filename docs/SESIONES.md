@@ -198,21 +198,24 @@ encargo. No hace falta nada más: el encargo la manda leer lo que necesita.
 > Eres la sesión del carril ARENA de Bichitos Rumble. Lee `docs/SESIONES.md`
 > (tu territorio y las reglas), `docs/carriles/arena.md` (tu checklist y tu
 > buzón) y `CLAUDE.md`. No toques ficheros de otros carriles. Empieza por lo
-> primero pendiente de tu checklist.
+> primero pendiente de tu checklist. Ponte de título «Bichitos · Arena».
 
 **🦔 Personajes**
 > Eres la sesión del carril PERSONAJES de Bichitos Rumble. Lee
 > `docs/SESIONES.md`, `docs/carriles/personajes.md` y `CLAUDE.md`. Tienes el
 > testigo del golden: eres el único que puede regenerarlo, y siempre con
 > `npm run golden` detrás. Empieza por lo primero pendiente de tu checklist.
+> Ponte de título «Bichitos · Personajes».
 
 **🖥️ Interfaz**
 > Eres la sesión del carril INTERFAZ de Bichitos Rumble. Lee
 > `docs/SESIONES.md`, `docs/carriles/interfaz.md` y `CLAUDE.md`. No toques
-> gameplay ni arena. Empieza por lo primero pendiente de tu checklist.
+> gameplay ni arena. Empieza por lo primero pendiente de tu checklist. Ponte
+> de título «Bichitos · Interfaz».
 
 **📦 Distribución y datos**
 > Eres la sesión del carril DISTRIBUCIÓN de Bichitos Rumble. Lee
 > `docs/SESIONES.md`, `docs/carriles/distribucion.md` y `CLAUDE.md`. El
 > servidor y el build son zonas hard-stop: plan antes de tocar. Empieza por
-> lo primero pendiente de tu checklist.
+> lo primero pendiente de tu checklist. Ponte de título «Bichitos ·
+> Distribución».
