@@ -114,6 +114,29 @@ or if the game changes, and the localStorage flags stop the game from
 creating audio nodes at all (and the HUD shows muted in screenshots).
 `playwright.config.ts` already passes `--mute-audio` for `npm run test:smoke`.
 
+## Sessions are split by lane (directiva de Rafa, 2026-09-16)
+
+Work is split across separate sessions — one per area — so each context
+stays small and cheap. **Read [`docs/SESIONES.md`](docs/SESIONES.md) before
+touching anything**: it says which files belong to your lane (arena ·
+personajes · interfaz · distribución), which are shared ground that needs
+explicit permission (`src/game.ts`, `src/tools/dev-api.ts`, the trunk
+docs), and which lane holds the golden token. Your lane's checklist is
+`docs/carriles/<carril>.md`.
+
+Two rules that are not conventions but physics:
+
+- **One active session at a time on this folder.** Every session opened
+  here shares the same checkout and the same files on disk; two at once
+  means one switching branches while the other edits. Real parallelism
+  needs a git worktree (costs: its own `npm install`, and no `resources/`
+  nor `.tmp/`, which are gitignored).
+- **Never leave an unmerged branch or a dirty tree between sessions.**
+  The next lane starts blind and will trip over it.
+
+Cross-lane work: don't edit what isn't yours — leave the note in
+`docs/carriles/<the-other>.md` §Buzón and carry on.
+
 ## Coding rules
 - Keep code modular and typed
 - Prefer simple architecture

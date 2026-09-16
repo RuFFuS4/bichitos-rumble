@@ -14,6 +14,15 @@ itch.io publicado con donaciones) · **H3 Bichitos Studio: ✅
 sala privada real en prod; detalle en [`ROADMAP.md`](ROADMAP.md) y
 [`BUILD_LOG.md`](BUILD_LOG.md)).
 
+> **Desde el 2026-09-16 el trabajo va repartido en cuatro carriles**, cada
+> uno con su sesión y su checklist en [`docs/carriles/`](docs/carriles/):
+> [arena](docs/carriles/arena.md) · [personajes](docs/carriles/personajes.md)
+> · [interfaz](docs/carriles/interfaz.md) ·
+> [distribución](docs/carriles/distribucion.md). El protocolo —qué
+> ficheros son de quién, la tierra de nadie, el testigo del golden— está
+> en [`docs/SESIONES.md`](docs/SESIONES.md). Este documento sigue siendo el
+> estado global y el sitio de las decisiones que esperan a Rafa.
+
 ---
 
 ## Cómo retomar — cierre del 2026-09-07
