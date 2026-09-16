@@ -25,7 +25,13 @@ sala privada real en prod; detalle en [`ROADMAP.md`](ROADMAP.md) y
 
 ---
 
-## Cómo retomar — cierre del 2026-09-07
+## Cómo retomar — cierre del 2026-09-16
+
+**Antes que nada**: abrir **las cuatro sesiones por carril** y cerrar la
+sesión larga que lo tocaba todo — decidido el 2026-09-16, protocolo y
+encargos en [`docs/SESIONES.md`](docs/SESIONES.md). A partir de ahí, cada
+punto de esta lista lo recoge el carril que lo tiene en su checklist
+([`docs/carriles/`](docs/carriles/)).
 
 Árbol limpio y todo empujado. En producción sigue **`v1.7-h4-social`**:
 todo el terreno v2, el fondo y los dioramas viven solo en `dev`, **sin
@@ -60,10 +66,11 @@ desplegar** (`git log --oneline main..dev` los lista).
 - **¿Isla como cono** flotando en mar / aire / hielo según el bioma?
 - **¿El fondo** (mar por bioma) te vale como está?
 
-**Estado de la máquina**: quedaron ~70 procesos de Chrome de las tandas de
-hoy, sin cerrar a petición de Rafa. Los lanzaron agentes anteriores al
-helper mudo; a partir de ahora toda instancia de prueba nace muda
-(`scripts/lib/headless-browser.mjs`).
+**Estado de la máquina** (comprobado el 2026-09-16): no queda vivo ningún
+navegador de automatización —los ~70 Chrome huérfanos del cierre anterior
+se fueron solos; los que hay ahora son el navegador de Rafa— ni el dev
+server, así que el puerto 5173 está libre. Toda instancia de prueba nace
+muda (`scripts/lib/headless-browser.mjs`).
 
 ---
 

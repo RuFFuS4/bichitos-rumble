@@ -1,5 +1,53 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-16 — El proyecto se parte en cuatro sesiones, una por carril
+
+Rafa: *"vamos a usar la estrategia de separar en diferentes sesiones dentro
+del proyecto los diferentes aspectos que estemos trabajando, lo único que
+hay que tener cuidado es en no pisarnos"*. El motivo es el coste: una
+sesión que lo toca todo arrastra un contexto enorme y se paga entero en
+cada turno.
+
+**El riesgo real no era de git.** Todas las sesiones abiertas en esta
+carpeta comparten **el mismo checkout y los mismos ficheros en disco**: dos
+trabajando a la vez no dan un conflicto de merge que se resuelve, dan una
+sesión cambiando de rama mientras la otra edita. Ninguna convención de
+nombres arregla eso, así que la regla es **una sesión activa a la vez** —
+tener las cuatro abiertas y dormidas es justo lo que se busca.
+
+Medido antes de recomendar, porque de ahí salía la decisión: el repo
+versiona **375 ficheros, 170 MB**, así que un worktree es barato en disco;
+lo caro es su propio `npm install` (304 MB) y que **no vería `resources/`**
+(5,4 GB de arte local, en .gitignore) ni `.tmp/`. Por turnos no hay
+fricción ninguna, así que el worktree queda para si algún día hace falta
+paralelismo de verdad.
+
+- **`docs/SESIONES.md`**: el reparto fichero a fichero de los cuatro
+  carriles (arena · personajes · interfaz · distribución), la **tierra de
+  nadie** que los cuatro quieren tocar (`game.ts` con sus 2.410 líneas,
+  `dev-api.ts` con 1.290 —la doble superficie hace que todos quieran
+  añadirle métodos— y los docs troncales), el **testigo del golden** para
+  que dos carriles no se borren la prueba del balance, el protocolo de
+  apertura y cierre, y el encargo listo para pegar en cada sesión nueva.
+- **`docs/carriles/*.md`**: checklist corto por carril, con lo pendiente
+  ordenado, lo que no puede romper y un **buzón** — el patrón que ya
+  funciona en el nexo: si necesitas algo de un fichero ajeno, dejas la nota
+  en vez de editarlo.
+- La regla va también en `CLAUDE.md` y su espejo `AGENTS.md`, que se cargan
+  solos: así la lee cualquier sesión aunque nadie se acuerde de contarlo.
+
+**Una decisión de reparto que conviene recordar**: Rafa dijo "dioramas y
+las físicas de las cosas". La física del **decorado** (qué le pasa a un prop
+cuando su sector cae) es del carril ARENA; `physics.ts` —la física del
+bicho— se queda en PERSONAJES, porque es donde vive el *feeling* que hay
+que arreglar.
+
+**Queda pendiente lo único que no puedo hacer yo: abrir las cuatro
+sesiones.** No tengo forma de crear una; Rafa abre sesión nueva en esta
+carpeta y pega el encargo del carril (cada uno se pone su propio título).
+Y la sesión larga que lo tocaba todo se cierra en cuanto existan las otras:
+es la que está costando cara.
+
 ## 2026-09-07 (cierre) — Las instancias de prueba nacen mudas + foto del estado
 
 Petición de Rafa a media tarde: *"por favor cuando lances instancias para
