@@ -20,7 +20,7 @@ export const SIM = {
     frictionHalfLife: 0.08,
     idleFrictionHalfLife: 0.03,
     maxSpeed: 20,
-    accelerationScale: 1.6,
+    accelerationScale: 2.2, // 1.6 → 2.2 on 2026-09-21 (docs/FEELING.md §7) — mirror of FEEL
     velocityDeadZone: 0.15,
   },
 
@@ -28,13 +28,24 @@ export const SIM = {
     anticipation: 0.12,
     lunge: 0.15,
     cooldown: 0.45,
-    velocityBoost: 4.0,
+    velocityBoost: 4.7, // 4.0 × √1.375 with the 2026-09-21 speed-up — mirror of FEEL.headbutt.lunge
     recoilFactor: 0.35,
   },
 
   collision: {
     normalPushForce: 3.0,
     headbuttMultiplier: 3.5,
+    // × normalPushForce — rebound off an anchored critter (Shelly Steel
+    // Shell). Was a hardcoded 1.4 in sim/physics.ts; 1.4 × 1.375 with the
+    // 2026-09-21 speed-up. Mirror of FEEL.collision.anchoredBounceFactor.
+    anchoredBounceFactor: 1.925,
+  },
+
+  bots: {
+    // Fraction of the player's acceleration a bot runs with. Online bots
+    // used to push at the full 1.0 while offline ones ran at 0.55; both
+    // are 0.7 since 2026-09-21. Mirror of FEEL.bots.moveAccelFactor.
+    moveAccelFactor: 0.7,
   },
 
   chargeRush: {

@@ -269,7 +269,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'frenzy',       cooldown: 20.0, duration: 4.5, windUp: 0.40,
       frenzySpeedMult: 1.15, frenzyMassMult: 1.50,
       sinkholeL: true, holeRadius: 3.0, holeDuration: 5.0,
-      holeForce: 14, holeCastOffset: 4.0 },
+      holeForce: 19.25, holeCastOffset: 4.0 }, // 14 × 1.375 (2026-09-21 speed-up) — mirror of src/abilities.ts
   ],
 
   // Kowalski — Mage: K is now a real frontal SNOWBALL projectile

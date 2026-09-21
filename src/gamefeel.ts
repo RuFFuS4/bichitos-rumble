@@ -11,7 +11,12 @@ export const FEEL = {
     frictionHalfLife: 0.08,   // seconds for velocity to halve (slightly less aggressive for higher top speed)
     idleFrictionHalfLife: 0.03, // much faster stop when no input is held
     maxSpeed: 20,             // raised to let Rojo actually feel fast
-    accelerationScale: 1.6,   // snappy response
+    // 2026-09-21 (Rafa): 1.6 → 2.2 (×1.375). La mediana del roster pasa de
+    // 1,8 a 2,5 alturas/s reales, dentro de la franja de los brawlers
+    // cenitales (2,0-3,2). Solo sube la punta: el tiempo de arrancada y la
+    // distancia de los golpes los fija la fricción, que no se toca.
+    // Espejo: SIM.movement.accelerationScale. docs/FEELING.md §7.
+    accelerationScale: 2.2,
     velocityDeadZone: 0.15,   // below this speed → snap to 0 (kills micro-drift)
   },
 
@@ -46,9 +51,10 @@ export const FEEL = {
   // vacío (el audit midió 2.4-3.0 caídas/partida en todo el roster).
   bots: {
     // Fracción de la aceleración del jugador con la que corre un bot.
-    // Estaba escrita a mano en bot.ts (0.55); el espejo online es
-    // SIM.bots.moveAccelFactor (server/src/sim/config.ts).
-    moveAccelFactor: 0.55,
+    // Estaba escrita a mano en bot.ts (0.55) y online no existía (1.0).
+    // 2026-09-21 (Rafa): 0.7 en los dos lados — el bot corre en vez de
+    // pasear y el humano le saca 1,43×. Espejo: SIM.bots.moveAccelFactor.
+    moveAccelFactor: 0.7,
     edgeMargin: 1.4,      // distancia al borde donde arranca la autoconservación
     edgeSteer: 1.6,       // peso del tirón hacia el centro en pleno borde
     lookAhead: 1.1,       // sonda de vacío por delante (aware de patrones de colapso)
@@ -78,7 +84,7 @@ export const FEEL = {
     lunge: {
       duration: 0.15,         // snap forward (shorter = sharper)
       headExtend: 0.45,       // head reaches further
-      velocityBoost: 4.0,     // micro-lunge: critter steps into the hit
+      velocityBoost: 4.7,     // micro-lunge: critter steps into the hit (4.0 × √1.375 with the 2026-09-21 speed-up, so it still stands out from the run)
     },
     cooldown: 0.45,           // recovery time
     recoilFactor: 0.35,       // attacker bounces back on connect
@@ -88,7 +94,7 @@ export const FEEL = {
   collision: {
     normalPushForce: 3.0,     // casual bumps are gentle nudges
     headbuttMultiplier: 3.5,  // headbutt = headbuttForce * this (Rojo: 14*3.5=49)
-    anchoredBounceFactor: 1.4, // × normalPushForce — rebound applied to whoever runs into an anchored critter (Shelly Steel Shell)
+    anchoredBounceFactor: 1.925, // × normalPushForce — rebound applied to whoever runs into an anchored critter (Shelly Steel Shell). 1.4 × 1.375 with the 2026-09-21 speed-up: a faster runner must still bounce off
     shellReflectFactor: 0.85,  // headbutting an anchored critter reflects the attacker's OWN force × this (balance v2 mechanic)
     stunnedVulnerability: 4,  // knockback multiplier while stunTimer > 0 (Trunk Slam/Grip follow-ups)
   },

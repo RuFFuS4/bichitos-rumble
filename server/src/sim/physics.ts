@@ -100,7 +100,7 @@ export function resolveCollisions(
         // "running into Shelly does nothing" behaviour Rafa flagged.
         const aAnchored = isAnchored(a);
         const bAnchored = isAnchored(b);
-        const BOUNCE = SIM.collision.normalPushForce * 1.4;
+        const BOUNCE = SIM.collision.normalPushForce * SIM.collision.anchoredBounceFactor;
         // 2026-08-24 balance v2 — shell reflect (espejo del cliente,
         // src/physics.ts): headbuttear al anclado devuelve tu propia
         // fuerza × SHELL_REFLECT. Mantener en sync con

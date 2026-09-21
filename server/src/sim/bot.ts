@@ -16,6 +16,7 @@
 
 import type { PlayerSchema } from '../state/PlayerSchema.js';
 import { getAbilityKit } from './abilities.js';
+import { SIM } from './config.js';
 
 export interface BotInput {
   moveX: number;
@@ -190,5 +191,11 @@ export function computeBotInput(
   }
   const ultimate = false; // conservative: let bots not spam ultimates online
 
-  return { moveX, moveZ, headbutt, ability1, ability2, ultimate };
+  // Bot pace: the move vector's length IS the acceleration fraction
+  // (BrawlRoom only renormalises when it exceeds 1), so scaling it here
+  // runs online bots at the same moveAccelFactor as offline ones. Applied
+  // on the way out, AFTER the LOOK_AHEAD edge probe used the unit
+  // direction — scaling earlier would shrink the probe.
+  const pace = SIM.bots.moveAccelFactor;
+  return { moveX: moveX * pace, moveZ: moveZ * pace, headbutt, ability1, ability2, ultimate };
 }
