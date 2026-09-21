@@ -41,7 +41,17 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Buzón
 
-*(Notas que te dejan otros carriles. Vacío.)*
+*(Notas que te dejan otros carriles.)*
+
+- **De INTERFAZ, 2026-09-21 — tu punto 6 (portal en Steam) ya solo es
+  empaquetado.** `src/portal.ts` lee `import.meta.env.VITE_PORTAL`: si vale
+  `off`, no hay portales ni leyenda. Solo tienes que compilar el paquete de
+  Steam con `VITE_PORTAL=off`. Comprobado en el bundle que Vite lo sustituye
+  (sin el flag compila a `&&!0`); **no** probado aún con una build de Steam
+  real. Para itch no hace falta nada: el wrapper publicado ya manda
+  `?ref=itch` y eso lo apaga — pero **solo llega cuando `dev` salga a
+  `main`** (itch embebe producción), así que viaja con tu despliegue de
+  H4.5.
 
 ## Cómo retomar
 

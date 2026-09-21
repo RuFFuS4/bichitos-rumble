@@ -534,6 +534,10 @@
     /* Portal toggle button (mobile only, match-active only) */
     #btn-portal-toggle { display: none; }
     body.touch-mode.match-active #btn-portal-toggle { display: flex; }
+    /* Portal switched off (?ref=itch / ?portal=0 / VITE_PORTAL=off — see portal.ts).
+       !important: it has to beat the match-active / touch-mode rules above. */
+    body.portal-off #portal-legend,
+    body.portal-off #btn-portal-toggle { display: none !important; }
 
     /* ---------- HUD bot badge (lives row) ---------- */
     .lives-row .lives-bot-badge {

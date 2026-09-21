@@ -286,8 +286,9 @@ pobre"*. Diagnóstico por capas, 4 propuestas, 3 jueces y plan en
       inclinación al acelerar y girar, squash al frenar, stretch al salir
       despedido, inercia en orejas y cola. Diagnóstico a relanzar.
 - [ ] **Diferidos por Rafa**: shaders cartoon de los personajes (tras
-      flag, como el tone mapping) y portal del Vibe Jam apagado fuera de
-      la web propia (flag de build para itch/Steam).
+      flag, como el tone mapping). *(El otro diferido, el portal del Vibe
+      Jam apagado fuera de la web propia, se hizo el 2026-09-21: `?ref=itch`
+      / `?portal=0` / `VITE_PORTAL=off` — ver NEXT_STEPS.)*
 - [ ] **Fase 1b**: bisel de junta, applier ToolPatch `look-patch` +
       panel del studio, dieta de props. (Las sombras de contacto de
       critters ya cayeron con el slice 1 de dioramas.)

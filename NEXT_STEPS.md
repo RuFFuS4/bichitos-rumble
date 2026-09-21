@@ -58,9 +58,6 @@ desplegar** (`git log --oneline main..dev` los lista).
    que cliente y servidor salen a la vez.
 
 **Esperando respuesta de Rafa** (bloquean trabajo, no son opinión):
-- **Portal del Vibe Jam**: ¿fuera también en **itch** —que es un embed
-  de nuestra propia web, no un zip— o solo en la build de Steam? El
-  mecanismo ya está identificado; falta el alcance.
 - **Techos de altura del scatter**: contrato actual vs reglas de
   `docs/DIORAMAS.md §3` (decisión M2, más abajo).
 - **¿Isla como cono** flotando en mar / aire / hielo según el bioma?
@@ -207,18 +204,12 @@ entregable):
       los elementos"). Cohesión = paleta compartida entre scatter, props
       GLB y suelo; que los elementos se toquen y se agrupen en vez de
       flotar sueltos; sombras de contacto también en los props.
-- [ ] **Portal del Vibe Jam fuera de itch y Steam**: hoy `#portal-legend`
-      (`src/hud/hud.partial.html`) y el portal de salida (`src/portal.ts`)
-      están SIEMPRE activos, y el jam terminó en mayo. **Dato verificado**
-      (BUILD_LOG 2026-08-19, cierre de H2): itch.io **no sirve un zip**,
-      es un *embed fullscreen de producción* — el mismo build de nuestra
-      web dentro de un iframe. Por eso un flag de build a secas no vale:
-      apagaría el portal también en la web propia, que es donde sí lo
-      queremos. Plan: leer el interruptor de la URL (`?portal=0`), que
-      Rafa lo añada a la URL del embed en los ajustes de itch, y dejar el
-      flag de build (`VITE_PORTAL=off`) para el empaquetado de Steam, que
-      ése sí es una build aparte. **Lo único que falta decidir**: ¿fuera
-      también en itch, o solo en Steam?
+- [x] **Portal del Vibe Jam fuera de itch y Steam** (2026-09-21, carril
+      INTERFAZ; Rafa: fuera en los dos). Se apaga con `?ref=itch` —lo que
+      ya manda el wrapper publicado en itch, así que no hay que resubir
+      nada—, con `?portal=0` o compilando con `VITE_PORTAL=off` (Steam).
+      Detalle en [`docs/carriles/interfaz.md`](docs/carriles/interfaz.md)
+      §Hecho. **Llega a itch con el próximo `dev` → `main`.**
 
 - [x] **Instancias de prueba mudas** (2026-09-07, commit `0bb2044`):
       *"cuando lances instancias para las pruebas silencia la musica y

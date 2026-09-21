@@ -1,5 +1,38 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-21 — [Interfaz] El portal del Vibe Jam se apaga en itch y Steam
+
+Rafa decide el alcance que faltaba: **fuera de la web propia, en itch y
+en Steam**. En la web se queda como está.
+
+El plan heredado pedía que Rafa volviera a subir el zip de itch con
+`?portal=0` en la URL. Antes de pedírselo se leyó en vivo el wrapper
+publicado (`html-classic.itch.zone/html/18849633/index.html`): es un
+iframe a `https://www.bichitosrumble.com/?ref=itch`. Nadie en el código
+lee ese `ref=itch` salvo `portal.ts`, que lo ignoraba (el protocolo del
+jam solo mira `ref` con `?portal=true`). Así que **ese `ref=itch` ya es
+el interruptor de itch** y el re-upload sobra — que no es poco: la vez
+anterior el upload falló en silencio y el flag `embed` hubo que marcarlo
+a mano.
+
+- `src/portal.ts`: el portal se apaga con `?ref=itch`, `?portal=0` o
+  `VITE_PORTAL=off` al compilar (Steam). Apagado = sin portales en la
+  escena, sin leyenda, sin botón 🌀 táctil, y un `?portal=true` entrante
+  se ignora. Pone `body.portal-off` y `hud.partial.html` oculta sus
+  piezas con eso. **`game.ts` no se toca**: sin mallas, `updatePortals`
+  no puede disparar, ni offline ni online.
+- `tests/smoke.spec.ts`: el test base ahora exige **un** portal en la web
+  propia (si no, los de apagado pasarían en falso) y dos tests nuevos
+  exigen cero con `?portal=0` y con `?ref=itch`. El aro se cuenta por su
+  geometría exacta porque los VFX de habilidades también usan toros.
+- Trampa encontrada al verificar: `debugStartOfflineMatch` (el camino del
+  lab y del batch runner) **no crea portales**, así que una comprobación
+  por ahí da "0 portales" siempre. Hay que ir por el flujo real
+  (`enterCountdown`).
+- **Llega a itch cuando `dev` salga a `main`**: itch embebe producción.
+  Viaja con el despliegue de H4.5 (carril DISTRIBUCIÓN, nota en su
+  buzón junto con el flag de Steam).
+
 ## 2026-09-16 — El proyecto se parte en cuatro sesiones, una por carril
 
 Rafa: *"vamos a usar la estrategia de separar en diferentes sesiones dentro

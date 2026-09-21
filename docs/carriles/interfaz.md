@@ -5,21 +5,13 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Pendiente (por orden)
 
-1. **Portal del Vibe Jam fuera de itch y Steam.** Hoy `#portal-legend`
-   (`src/hud/hud.partial.html`) y el portal de salida (`src/portal.ts`)
-   están **siempre** activos, y el jam terminó en mayo.
-   Dato verificado (BUILD_LOG 2026-08-19): **itch no sirve un zip, sirve
-   un embed fullscreen de producción** — el mismo build que la web. Por
-   eso un flag de build a secas no vale: apagaría el portal también donde
-   sí lo queremos.
-   - Mecanismo tuyo: leer el interruptor de la URL (`?portal=0`).
-   - El flag de build para el empaquetado de Steam (`VITE_PORTAL=off`) es
-     del carril DISTRIBUCIÓN → nota en su buzón.
-   - **Falta que Rafa decida el alcance**: ¿fuera también en itch, o solo
-     en Steam?
-2. **Reestructura del HUD en móvil** (diferido de la era jam: "la versión
+1. **Reestructura del HUD en móvil** (diferido de la era jam: "la versión
    actual es correcta, no ideal"). Mide antes de rediseñar.
-3. **Audio**: eres el dueño de `src/audio.ts`. Si cambias las claves
+   Dato ya medido (2026-09-21): con el portal apagado
+   (`body.portal-off`) la esquina de vidas TL sigue a `top: 118px`, que
+   es "debajo de la leyenda del portal" — queda un hueco donde estaba la
+   leyenda. Entra en esta reestructura, no merece parche suelto.
+2. **Audio**: eres el dueño de `src/audio.ts`. Si cambias las claves
    `bichitos.sfxMuted` / `bichitos.musicMuted`, avisa a todos los
    carriles — las lee `scripts/lib/headless-browser.mjs` y de ellas
    depende que las instancias de prueba nazcan mudas (directiva de Rafa).
@@ -41,8 +33,27 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles. Vacío.)*
 
+## Hecho
+
+- **2026-09-21 — Portal del Vibe Jam apagado en itch y Steam** (decisión
+  de Rafa: fuera de la web propia, en los dos). Todo en `src/portal.ts` +
+  una regla CSS en `hud.partial.html`; `game.ts` sin tocar. Tres
+  interruptores, cualquiera lo apaga (sin portales, sin leyenda, sin botón
+  🌀 táctil, y un `?portal=true` entrante se ignora):
+  - `?ref=itch` — lo que **ya** manda el wrapper publicado en itch
+    (374 B, un iframe a `https://www.bichitosrumble.com/?ref=itch`,
+    leído en vivo el 2026-09-21). Por eso **no hay que resubir el zip**.
+  - `?portal=0` — manual, cualquier host (futuros portales tipo
+    CrazyGames, QA).
+  - `VITE_PORTAL=off` al compilar — el paquete de Steam; lo pone el carril
+    DISTRIBUCIÓN (nota en su buzón).
+  Cubierto por `tests/smoke.spec.ts` (el test base exige 1 portal en la
+  web propia; los de `?portal=0` y `?ref=itch`, 0 y la leyenda oculta).
+  **Llega a itch cuando `dev` salga a `main`** — itch embebe producción.
+
 ## Cómo retomar
 
-**2026-09-16** — carril recién creado, sin trabajo empezado. El punto 1
-está a la espera de una decisión de Rafa sobre el alcance; el mecanismo ya
-está identificado y es media tarde de trabajo.
+**2026-09-21** — punto del portal cerrado en `dev`, pendiente solo del
+despliegue (lo lleva DISTRIBUCIÓN junto con el de H4.5). Siguiente: la
+reestructura del HUD en móvil — empieza midiendo (capturas a 390×844 y
+1280×720 con `body.touch-mode`) antes de proponer nada.

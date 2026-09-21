@@ -8,6 +8,17 @@
 // Start portal: only if URL has ?portal=true AND ?ref=. Lets the player
 //   return to the game they came from. 5-second grace period after spawn.
 //
+// Kill switch: the jam ended in May 2026 and the webring only belongs on
+//   our own site (Rafa, 2026-09-21: off on itch.io and Steam). Any of
+//   these turns everything off — no portals, no HUD legend, and an
+//   incoming ?portal=true is ignored:
+//     · `?portal=0` in the URL (manual switch, any host).
+//     · `?ref=itch`: the itch.io embed is our own 374 B wrapper iframing
+//       the PRODUCTION build with that tag, so a build flag can't tell
+//       them apart — the URL is the only difference.
+//     · VITE_PORTAL=off at build time (the Steam package).
+//   The body gets `portal-off` so the HUD CSS can hide its bits.
+//
 // This module is self-contained: no imports from gameplay code (Critter,
 // Game, etc.). Receives coordinates via function params.
 //
@@ -22,7 +33,11 @@ import { getDisplayRoster } from './roster';
 // ---------------------------------------------------------------------------
 
 const params = new URLSearchParams(window.location.search);
-let portalActive = params.get('portal') === 'true';
+const portalEnabled = params.get('portal') !== '0'
+  && params.get('ref') !== 'itch'
+  && import.meta.env.VITE_PORTAL !== 'off';
+if (!portalEnabled) document.body.classList.add('portal-off');
+let portalActive = portalEnabled && params.get('portal') === 'true';
 let refUrl = params.get('ref') || null;
 const incomingUsername = params.get('username') || null;
 
@@ -162,6 +177,7 @@ export function initPortals(scene: THREE.Scene): void {
   graceTimer = GRACE_PERIOD;
   expanded = false;
   expansionT = 0;
+  if (!portalEnabled) return; // no meshes → updatePortals never triggers
 
   // Exit portal — always present
   exitPortal = createPortalMesh(EXIT_COLOR, 'NEXT GAME');
