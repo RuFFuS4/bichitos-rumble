@@ -14,11 +14,12 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
      ARENA, y el cono entró en `dev` ese mismo día (7d6c56c), junto con
      el corte 1 del feeling de PERSONAJES (ef3c857: capa visual, golden
      3/3 según su carril).
-   - **Pendiente de Rafa.** En `dev` sigue el fondo del **mar**, y Rafa
-     lo rechazó el 2026-09-21 (ver `docs/carriles/arena.md`). Su
-     sustituto, el fondo v2 (la isla en el cielo), está en construcción.
-     Hay que decidir si se despliega ya con el mar o se espera al fondo
-     v2.
+   - **Decisión de Rafa (2026-09-21): se espera al fondo v2.** En `dev`
+     sigue el fondo del **mar**, que Rafa rechazó (ver
+     `docs/carriles/arena.md`). H4.5 sale cuando ARENA cierre el slice
+     F0 del cielo y Rafa lo apruebe. No sale un fondo rechazado. El corte
+     1 del feeling de PERSONAJES viaja en el mismo despliegue: sus
+     capturas también las ve Rafa.
    - **Antes de desplegar, sea cual sea el SHA:**
      - repetir la verificación: como mínimo `check`, `test:sim`, golden,
        smoke, la partida online de 2 clientes y los 5 biomas;
@@ -48,21 +49,63 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
    mecanismo ya está hecho (INTERFAZ, 2026-09-21, ver Buzón); falta
    compilar y probar el paquete de Steam con el flag. **No** hay que
    ponerlo en Vercel: la web propia mantiene el portal.
-7. **Versión del sim en el join** — el riesgo que dejó a la vista H4.5.
-   El servidor no comprueba la versión del cliente, y cada cliente
-   deriva en local qué fragmentos caen. Cada cambio del generador de
-   arena desincroniza a quien tenga una pestaña vieja abierta: se cae
-   pisando suelo que ve entero. Plan antes de H5 o del próximo cambio
-   del generador: una constante en los espejos del sim que vaya en las
-   opciones de join, y que `BrawlRoom.onJoin` rechace con "hay versión
-   nueva, recarga" si no coincide. Los clientes v1.7 ya pintan el
-   mensaje del servidor (`connect-failed-server-said`). **Zona
-   hard-stop, plan antes**; toca también `src/game.ts` (tierra de
-   nadie) y los espejos de ARENA.
+7. **Guard de versión cliente↔servidor — hecho el 2026-09-21; entra en
+   H4.5.**
+   - **El plan.** Salió de 3 diseños puntuados por 3 jueces. Rafa aprobó
+     que entre en H4.5, con los extras D1 a D4: recargar con un clic,
+     huella del código del generador, interruptor de emergencia y
+     permiso a ARENA en `docs/SESIONES.md`.
+   - **Cómo funciona.** `NET_PROTOCOL = 2` en `server/src/protocol.ts`
+     (fuente única). El guard es el `onAuth` estático de `BrawlRoom`, más
+     el eco en `GameState.protocol`. El test
+     `tests/sim/net-protocol.test.ts` obliga a subir la versión. Todo
+     descrito en `ONLINE.md` → "Versión de protocolo".
+   - **Verificado el 2026-09-21** (12 agentes en 5 frentes, pruebas en
+     `scratchpad/verify-proto/`):
+     - Los rechazos dan HTTP 523 en `joinOrCreate`, `create`, `join` y
+       `joinById`, sin crear sala, y llevan CORS.
+     - Una pestaña v1.7 real (construida desde main) contra el servidor
+       nuevo recibe su alert con "Hay una versión nueva…".
+     - El cliente nuevo contra el servidor de main muestra "se está
+       actualizando" en 45-85 ms.
+     - El confirm de recarga recarga, y conserva `?room=`.
+     - Docker lleva el guard. Del bundle solo cambia el chunk de red.
+     - Las huellas son idénticas en LF y en CRLF.
+
+     Salieron cinco arreglos:
+     - el eco no se cuelga si la sala muere;
+     - la salida es acotada;
+     - la sonda `/health` va antes del join (el caso del 4º asiento);
+     - el chunk renombrado ofrece recargar;
+     - el interruptor admite "off" sin distinguir mayúsculas.
+
+     Una **segunda verificación** (4 agentes, `scratchpad/reverify/`)
+     los probó:
+     - 4º asiento con 3 pestañas v1.7 reales esperando: la sala sigue
+       3/3, sin cuenta atrás ni derrotas. Con el código anterior, el
+       fallo se reproduce.
+     - Falla abierta (`/health` en 404 o colgado): el eco lo saca.
+     - El cuelgue termina en 1,5 s.
+     - El chunk borrado muestra el confirm.
+     - El `/health` de producción lleva CORS.
+
+     De ahí, tres retoques: el rollback siempre de los dos lados, sin
+     espera al salir de una sala ya muerta, y sin red no se ofrece
+     recargar. Sin comprobar: el 523 a través del edge de Railway (se
+     comprueba en el paso 3 del runbook), si el iframe de itch permite
+     `confirm`, y la regex del chunk en Firefox y Safari (contrastada
+     solo con sus textos).
+   - **Lo que queda para otro día.** El catálogo de `DEV_TOOLS.md`
+     §"Superficie programática" y la entrada de `BUILD_LOG.md`. Hoy ya
+     los tocaron los otros tres carriles, así que van en el día del
+     despliegue.
 8. **Huecos del pipeline** (zona hard-stop, plan antes):
    - El CI nunca arranca la imagen del servidor ni prueba el bundle de
-     producción. Faltan `docker run` + `curl /health`, y un smoke contra
-     `vite build && vite preview`.
+     producción. Faltan dos cosas:
+     - `docker run` + `curl /health`, con el guard: que `/health` traiga
+       `protocol`, que `POST {}` dé 523 `client_outdated` y que con el
+       número correcto dé 200;
+     - un smoke contra `vite build && vite preview`.
    - `engines.node` es `>=20.19`: Vercel compila con 24.x y sube de
      major solo, mientras CI y Docker usan 22. Hay que fijarlo.
    - `/health` no dice qué commit sirve.
@@ -73,6 +116,15 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
    servidor (vía `@colyseus/ws-transport`). Ya está en producción y
    H4.5 no lo cambia. Arreglo: slice aparte con `npm audit fix` u
    override, más tsc, docker build y una sala local.
+10. **Lo de `BrawlRoom.ts` que pide PERSONAJES** (Buzón, 2026-09-21):
+    - suavizar el bicho local en online (extrapolar con `vx/vz` entre
+      parches);
+    - la zona muerta de velocidad con input;
+    - el factor de aceleración de los bots online.
+
+    **Espera a que Rafa apruebe su plan de velocidad** (`docs/FEELING.md`
+    §7). Todo es zona hard-stop y sale con cliente y servidor a la vez.
+    El suavizado vive en `src/game.ts` (tierra de nadie).
 
 ## Verificación previa de H4.5 (2026-09-21)
 
@@ -92,7 +144,7 @@ checkout principal. Sobre `302ba8e`, y repetido en `2317564`
 | Offline, 5 biomas | 0 errores, 0 respuestas 404 |
 | Espejo del sim cliente↔server | 50.072 semillas y 620.100 pasos sin diferencias |
 | Protocolo, DB, deps, Dockerfile, vercel.json, variables de entorno | sin cambios frente a main; sin migraciones |
-| **Cliente v1.7 contra servidor nuevo** | **54 % de las semillas colapsan distinto**: ver punto 7. Asumido para este despliegue porque el tráfico online es ≈0 (`/api/metrics/retention`: 0 partidas en 16 días) |
+| **Cliente v1.7 contra servidor nuevo** | **54 % de las semillas colapsan distinto**. Resuelto con el guard de versión (punto 7): la pestaña v1.7 se rechaza con "recarga" en vez de jugar desincronizada. Tráfico online actual ≈0 (`/api/metrics/retention`: 0 partidas en 16 días) |
 
 **Lecciones de la verificación:**
 - **Congelar el SHA.** `dev` avanzó a mitad de la verificación porque
@@ -117,6 +169,12 @@ Desde el worktree de distribución, nunca desde el checkout principal.
   - `curl -s https://bichitos-rumble-production.up.railway.app/health`
     y anotar el uptime;
   - hashes de `assets/index-*.js` en `https://www.bichitosrumble.com/`.
+- **Pestaña testigo:** abre `https://www.bichitosrumble.com/` (v1.7),
+  **entra al online una vez y sal**, y déjala abierta sin recargar. Así
+  tiene cargado su chunk de red: el despliegue lo renombra y Vercel da
+  404 al viejo. Una pestaña que no lo cargó fallaría con "Failed to fetch
+  dynamically imported module", que también es seguro pero no prueba el
+  guard. Al final tiene que recibir el rechazo.
 - Puntos de rollback (anotados el 2026-09-21):
   - Vercel: `dpl_9LKsaf69bRibyTWN8AkTgnngh5dH` (f41fb7e).
   - Railway: el despliegue de f41fb7e del 2026-09-05.
@@ -144,8 +202,18 @@ git push origin main          # dispara Vercel y Railway a la vez
   permanente: arregla el que falla o haz rollback del otro ya.
 
 **3. Después**
-- `/health` con uptime de segundos y `/api/leaderboard` con 200 (el
-  volumen de la DB sigue montado).
+- `/health` con uptime de segundos, `protocol: 2` y
+  `protocolGuard: "on"` (eso marca el final de la ventana), y
+  `/api/leaderboard` con 200 (el volumen de la DB sigue montado).
+- Guard vivo, **solo después de que `/health` diga `protocol: 2` y
+  `protocolGuard: "on"`** (contra v1.7 o con el guard apagado, esta
+  sonda crea una sala):
+  `curl -s -X POST -H 'content-type: application/json' -d '{}' https://bichitos-rumble-production.up.railway.app/matchmake/joinOrCreate/brawl`
+  tiene que devolver 523 con `client_outdated`, y no crea sala. Es la
+  primera vez que se prueba que el edge de Railway deja pasar el 523 con
+  su cuerpo. Después,
+  en la pestaña testigo v1.7, Online tiene que dar el alert con "Hay una
+  versión nueva…".
 - El `index-*.js` de www ha cambiado; `/` sale con `max-age=0` y
   `/assets/*` con `immutable`.
 - El `release` de Sentry es el SHA corto del merge.
@@ -161,9 +229,21 @@ git push origin main          # dispara Vercel y Railway a la vez
   worktree. Por último, BUILD_LOG con los tiempos medidos de la
   ventana.
 
-**Rollback**: siempre los dos lados a la vez, porque la
-desincronización va en ambos sentidos. Los datos no corren riesgo: no
-hay migraciones.
+**Rollback**: siempre los dos lados a la vez. Con el guard, un lado
+desparejado ya no desincroniza: deja el online parado con un mensaje
+("actualizándose" o "recarga"). Pero sigue sin funcionar. Los datos no
+corren riesgo: no hay migraciones.
+- **Si el que rechaza es el servidor** (el propio guard echa a todo el
+  mundo con `/health` en `protocol: 2`): primero `NET_PROTOCOL_GUARD=off`
+  en las variables de Railway, sin revertir nada.
+- **Si el que rechaza es el cliente** ("actualizándose" o "recarga" con
+  `/health` ya en `protocol: 2`): el interruptor no sirve. Rollback de
+  **los dos lados** (Vercel `dpl_9LKsaf69…` + Railway f41fb7e). Solo
+  Vercel serviría v1.7 contra un servidor con guard: todos recibirían
+  "recarga", y la recarga volvería a traer v1.7, en bucle.
+- **`no_state_from_server`** no es de versión: la sala murió o no mandó
+  estado. Mira los logs de Railway; si pasa siempre tras el despliegue,
+  rollback de los dos lados.
 - Vercel: Instant Rollback a `dpl_9LKsaf69…`. Ojo: tras un instant
   rollback, los siguientes push a main no pasan a producción hasta que
   vuelvas a promover.
@@ -225,6 +305,8 @@ hay migraciones.
      rompe `tests/sim/server-bot.test.ts:60-109`).
   Y el despliegue: cualquier cambio de velocidad tiene que salir con
   cliente y servidor a la vez.
+  → *Leído el 2026-09-21. Queda como punto 10, a la espera de que Rafa
+  apruebe el plan de velocidad.*
 
 ## Cómo retomar
 
@@ -238,13 +320,16 @@ hay migraciones.
     `SUBMISSION_CHECKLIST.md` traían versiones y tamaños de la jam;
   - las derivas del sim que salieron, avisadas en los buzones de ARENA
     y PERSONAJES.
-- **Lo siguiente** es el punto 1. El cono ya está en `dev`; falta que
-  Rafa decida si sale con el fondo del mar o se espera al fondo v2.
-  Después: repetir la verificación sobre ese SHA, capturas a Rafa y
-  runbook.
-- **Mientras tanto** se puede avanzar sin nadie: el plan del punto 7
-  (versión del sim en el join), que conviene tener aprobado antes del
-  siguiente cambio del generador, o el 8.
+- **2026-09-22: el guard de versión (punto 7) está en `dev`**,
+  verificado dos veces. Ya forma parte de lo que saldrá en v1.8.
+- **Lo siguiente** es el punto 1. El slice F0 del fondo v2 ya está en
+  `dev`, pero falta que Rafa apruebe sus hojas (ver
+  `docs/carriles/arena.md`). Con eso: repetir la verificación sobre ese
+  SHA, que ahora incluye el guard (curl de `/health` y `POST {}`, y la
+  pestaña v1.7 contra el servidor nuevo); pasar las capturas a Rafa; y
+  seguir el runbook.
+- **Mientras tanto** se puede avanzar sin nadie en el 8 (huecos del
+  pipeline, zona hard-stop: plan antes) o en el 9.
 - **Cómo se trabajó:** este carril lo hizo en su propio worktree
   (`.claude/worktrees/distribucion`). Las cuatro sesiones se abrieron a
   la vez sobre el mismo checkout (ver `docs/SESIONES.md`, la regla de

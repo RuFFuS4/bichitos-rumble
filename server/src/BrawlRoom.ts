@@ -21,8 +21,11 @@
 //     all_humans_left — no room ever disposes mid-match unrecorded.
 // ---------------------------------------------------------------------------
 
-import { Room, type Client } from 'colyseus';
+import { Room, type Client, type AuthContext } from 'colyseus';
 import { GameState } from './state/GameState.js';
+import {
+  clientProtocolOf, judgeProtocol, isGuardEnabled, rejectMessage, countRejection,
+} from './net-protocol-guard.js';
 import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
 import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed, isOnSlipperyZone, type ActiveZoneSnapshot } from './sim/physics.js';
@@ -61,6 +64,8 @@ interface JoinOptions {
    *  it comes from the BD once the identity verifies. */
   playerId?: string;
   playerToken?: string;
+  /** NET_PROTOCOL del cliente (server/src/protocol.ts). Ausente = v1.7. */
+  protocol?: unknown;
 }
 
 /**
@@ -186,6 +191,25 @@ export class BrawlRoom extends Room {
     ttl: number; radius: number; impulse: number; slowDuration: number;
   }> = [];
   private projectileCounter = 0;
+
+  /**
+   * Guard de versión (2026-09-21, ONLINE.md → "Versión de protocolo").
+   * ESTÁTICO a propósito: Colyseus 0.17 lo llama (MatchMaker.callOnAuth) en
+   * joinOrCreate, create y join ANTES de buscar o crear sala, y en joinById
+   * después de encontrar la sala y ver que no está cerrada; en todos, antes
+   * de reservar asiento. Un cliente de otra versión no llega a sentarse en
+   * ninguna sala ni a crear una. Las reconexiones no pasan por aquí, y está
+   * bien: las salas mueren con cada despliegue.
+   */
+  static async onAuth(_token: string | undefined, options: JoinOptions = {}, context?: AuthContext) {
+    if (!isGuardEnabled()) return true;
+    const clientProtocol = clientProtocolOf(options.protocol);
+    const verdict = judgeProtocol(clientProtocol);
+    if (verdict === 'ok') return true;
+    countRejection();
+    console.log(`[BrawlRoom] rejected join: ${verdict} (client ${clientProtocol})`);
+    throw new Error(rejectMessage(verdict, clientProtocol, context?.headers?.get?.('accept-language')));
+  }
 
   onCreate(_options: unknown) {
     this.tickInterval = 1000 / SIM.tickRate;

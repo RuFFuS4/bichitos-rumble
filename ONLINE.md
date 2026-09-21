@@ -273,19 +273,10 @@ del doc.)
   `BrawlRoom.ts` `recordOnlineBeltStats`): **desplegar sin partidas
   vivas**. Arreglo futuro, zona hard-stop: `onBeforeShutdown` que cierre
   con un `endReason` propio sin tocar cinturones.
-- **Versiones cliente↔servidor sin handshake**. El join no lleva
-  ninguna versión, y el servidor solo manda `arenaSeed`, `arenaPackId`,
-  nivel y lote del colapso: **cada cliente deriva en local qué
-  fragmentos caen**. Si un despliegue cambia el generador de la arena
-  (H4.5 lo cambia: el 54 % de las semillas reparten distinto los lotes),
-  un cliente de una versión contra un servidor de otra pinta suelo
-  donde la física ya lo ha tirado. Pasa en la ventana del despliegue
-  (Vercel termina antes que Railway) y en cualquier pestaña vieja
-  abierta, que no se recarga sola (no hay service worker ni aviso de
-  versión). Arreglo planificado para antes de H5 (zona hard-stop): una
-  versión del sim en las opciones de join y rechazo con "recarga la
-  página" si no coincide. **Nunca** mandar geometría por la red para
-  taparlo.
+- **Versiones cliente↔servidor: guard desde v1.8** — ver "Versión de
+  protocolo" abajo. Hasta v1.7 no había ninguno. Lo que sigue sin
+  cubrir: una pestaña vieja no se entera de que hay versión nueva hasta
+  que intenta entrar al online (no hay service worker ni sondeo).
 - **Sin matchmaking por región/latencia**. Un único pool global. El
   servidor está en Railway (región fija); la latencia depende de dónde
   estén los jugadores.
@@ -302,6 +293,89 @@ del doc.)
 - **`SIM.match.duration` duplicado**. Cliente usa `FEEL.match.duration`,
   server usa `SIM.match.duration`. Si divergen, el matchTimer no cuadra.
   Tenerlo presente al tocar tuning de duración.
+
+---
+
+## Versión de protocolo (guard cliente↔servidor, desde v1.8)
+
+**El problema.** El servidor solo manda `arenaSeed`, `arenaPackId`,
+nivel y lote del colapso: **cada cliente deriva en local qué fragmentos
+caen**. Si una versión cambia el generador de la arena (H4.5 lo cambia:
+el 54 % de las semillas reparten distinto los lotes), un cliente de una
+versión contra un servidor de otra pinta suelo donde la física ya lo
+tiró. Pasa en la ventana del despliegue (Vercel termina ~20 s tras el
+push, Railway ~70 s) y en cualquier pestaña vieja abierta. **Nunca**
+mandar geometría por la red para taparlo.
+
+**La pieza.** Un entero, `NET_PROTOCOL`, en `server/src/protocol.ts`:
+fuente única, sin imports. El servidor lo compila y el cliente lo
+importa con `../server/src/protocol`. v1.7 no manda nada y cuenta como
+1; v1.8 (H4.5) es la **2**.
+
+| Paso | Dónde | Qué pasa |
+|---|---|---|
+| Sonda | `src/network.ts` | Antes del join, `GET /health` (tope 2 s; cuesta ~1 RTT). Si anuncia otro número, o no trae `protocol` (servidor v1.7), no se entra: `server_outdated`/`client_outdated`. Así nadie ocupa asiento en una sala de otra versión: como 4º humano le arrancaría la cuenta atrás y se llevaría una derrota. Falla **abierta**: si `/health` no responde, decide el eco, y en ese caso raro el hueco del 4º asiento vuelve a existir. `/health` lleva CORS (lo pone el router de Colyseus). |
+| Ida | `src/network.ts` | `protocol: NET_PROTOCOL` en las opciones de `create`, `joinById` y `joinOrCreate` (el único sitio del repo que hace join). |
+| Guard | `BrawlRoom.onAuth` (estático) + `server/src/net-protocol-guard.ts` | Colyseus 0.17 lo llama en `joinOrCreate`, `create` y `join` **antes** de buscar o crear sala; en `joinById`, después de encontrarla y ver que no está cerrada (una sala inexistente da antes un 522 "not found"). En todos, antes de reservar asiento. Si no coincide lanza un `Error` que llega al cliente como `MatchMakeError` **HTTP 523**: texto bilingüe (español primero si la primera etiqueta de `Accept-Language` es `es`) acabado en `(client_outdated 1<2)` o `(server_outdated 3>2)`. Las reconexiones no pasan por aquí. |
+| Eco | `GameState.protocol` (último campo) | El cliente espera el primer estado (tope 8 s, o antes si la sala muere) y, si no trae su mismo número, sale de la sala sin reconexión y lanza `server_outdated`/`client_outdated` (o `no_state_from_server`). Es la red de seguridad contra un servidor **viejo**, que no tiene guard, si la sonda no llegó a saberlo. |
+| UX | `src/game.ts` + `src/i18n.ts` | `client_outdated` → "Hay una versión nueva… ¿Recargar?" y recarga con Aceptar. Lo mismo si el chunk de red ya no existe, porque cada despliegue lo renombra y Vercel da 404 al viejo; sin red, en cambio, no se ofrece recargar. `server_outdated` → "El servidor se está actualizando, prueba en un minuto". `no_state_from_server` → el "no se ha podido conectar" de siempre. |
+
+**Qué ve cada uno:**
+- **Pestaña v1.7 contra servidor v1.8.** Su código no se puede tocar, así
+  que cae en su alert genérico con uno de estos dos textos:
+  - Si ya había cargado el chunk de red (había entrado al online antes):
+    "No se ha podido conectar… El servidor dice: Hay una versión nueva
+    del juego: recarga la página para jugar online. / A new version…".
+  - Si no lo había cargado: "…El servidor dice: Failed to fetch
+    dynamically imported module…". Su chunk ya no existe en Vercel. Es
+    un fallo seguro: tampoco llega a jugar.
+
+  En los dos casos el offline sigue funcionando.
+- **Cliente v1.8 contra servidor v1.7** (la ventana, o si falla el build
+  de Railway): la sonda ve un `/health` sin `protocol` y no llega a
+  entrar: "El servidor se está actualizando". Si la sonda falla, entra
+  un instante, lee el eco (no hay campo) y sale con el mismo aviso.
+
+**Cuándo subir `NET_PROTOCOL`** (y AÑADIR su fila en
+`LAYOUT_BY_PROTOCOL`):
+- **Automático:** `tests/sim/net-protocol.test.ts` (dentro de
+  `npm run test:sim`, que corre en el CI) compara dos huellas:
+  - la del golden de layout: si el reparto del suelo cambia, falla y
+    dice qué número y qué fila poner;
+  - la del código de `server/src/sim/arena-fragments.ts`: si cambia sin
+    mover el golden, obliga a decidir entre subir o actualizar solo
+    `GENERATOR_FINGERPRINT`.
+- **A mano:** quitar o renombrar un campo del estado, cambiar la forma
+  de un mensaje, cambiar el significado de una opción de join, o añadir
+  algo que un cliente viejo no sepa pintar (un bicho nuevo).
+- **No hace falta** por balance y física (manda el servidor), campos
+  nuevos al final del estado, packs (el cliente degrada a `jungle`) ni
+  cambios solo de cliente.
+- **Steam:** un cliente empaquetado no puede recargar, así que cada
+  subida exigirá sacar a la vez la actualización del paquete.
+
+**Superficie programática:**
+- `GET /health` → `protocol`, `protocolGuard` (`on`/`off`) y
+  `rejectedJoins` desde el arranque.
+- `POST /matchmake/joinOrCreate/brawl` con cuerpo `{}` → 523 con
+  `client_outdated`. No crea sala, **pero solo si el guard está vivo**.
+  Contra un servidor v1.7 o con el guard apagado, crea una sala y
+  reserva un asiento. Así que primero `GET /health` y confirmar
+  `protocol: 2` y `protocolGuard: "on"`; solo entonces sirve contra
+  producción.
+- `npx vitest run tests/sim/net-protocol.test.ts` imprime las huellas
+  nuevas cuando algo cambia.
+
+**Emergencia:** `NET_PROTOCOL_GUARD=off` en las variables de Railway
+apaga el rechazo **del servidor** sin revertir `main`. El arranque lo
+avisa en el log y `/health` dice `off`; acepta "off" sin distinguir
+mayúsculas.
+- **Sirve para** un fallo del propio guard (rechaza a todo el mundo con
+  los dos lados en el mismo número) y para dejar jugar a las pestañas
+  v1.7, que vuelven a jugar desincronizadas: solo en un apuro.
+- **No sirve para** un desparejo de versiones: un cliente v1.8 o
+  posterior de otro número se va solo con la sonda o el eco. Eso se
+  arregla con rollback de los dos lados.
 
 ---
 

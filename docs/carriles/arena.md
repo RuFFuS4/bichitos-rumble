@@ -154,6 +154,18 @@ el orden de trabajo.
   lo lean los bots. Aparte: si subimos la velocidad de suelo ×1,4-1,5,
   los 3 s de aviso del colapso sobran para un humano; valóralo tras el
   playtest, sin prisa.
+- **De DISTRIBUCIÓN, 2026-09-21 (actualiza el punto 3 de arriba) — el
+  guard de versión ya existe, y te afecta en una cosa.** Rafa lo aprobó
+  y entra en el despliegue de H4.5. La regla nueva: si cambias
+  `arena-fragments.ts` (los dos lados) o regeneras el golden de layout,
+  **`npm run test:sim` falla** (`tests/sim/net-protocol.test.ts`) y te
+  dice exactamente qué poner en `server/src/protocol.ts`. Si cambió el
+  reparto del suelo, sube `NET_PROTOCOL` y añade su fila. Si solo tocaste
+  un comentario o un refactor sin efecto, actualiza
+  `GENERATOR_FINGERPRINT`. Rafa te da permiso permanente para esas
+  líneas, en el mismo commit (`docs/SESIONES.md`). Ojo: `test:sim` no
+  está dentro de `npm run check`; córrelo aparte, como ya haces al
+  regenerar el golden. Detalle en `ONLINE.md` → "Versión de protocolo".
 
 ## Cómo retomar
 

@@ -896,6 +896,18 @@ export class Game {
         // 'room_already_started' in the race window before the lock
         // lands. Same copy for both.
         alert(t('connect-room-started'));
+      } else if (msg.includes('client_outdated')
+        || (navigator.onLine !== false && /dynamically imported module|Importing a module script failed/i.test(msg))) {
+        // Guard de versión (ONLINE.md): esta pestaña es de una versión
+        // vieja. También cuando el chunk de red ya no existe (cada
+        // despliegue lo renombra y Vercel da 404 al viejo) — salvo sin red,
+        // donde recargar tiraría la partida offline. Vercel sirve `/` sin
+        // caché → recargar trae la nueva.
+        if (confirm(t('connect-client-outdated'))) location.reload();
+      } else if (msg.includes('server_outdated')) {
+        alert(t('connect-server-outdated'));
+      } else if (msg.includes('no_state_from_server')) {
+        alert(t('connect-failed'));
       } else {
         const detail = msg ? `\n\n${tf('connect-failed-server-said', { msg })}` : '';
         alert(t('connect-failed') + detail);

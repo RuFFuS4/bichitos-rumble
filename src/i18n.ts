@@ -187,6 +187,11 @@ const DICT = {
                                 es: 'No se ha podido conectar con el servidor multijugador.\n\nEn dev: asegúrate de que el servidor está en marcha (cd server && npm run dev).\nEn prod: contacta con el dueño del sitio.' },
   'connect-failed-server-said': { en: 'Server said: {msg}',
                                   es: 'El servidor dice: {msg}' },
+  // Guard de versión cliente↔servidor (DISTRIBUCIÓN, 2026-09-21, con permiso de Rafa)
+  'connect-client-outdated':  { en: 'There is a new version of Bichitos Rumble.\n\nReload the page to play online?',
+                                es: 'Hay una versión nueva de Bichitos Rumble.\n\n¿Recargar la página para jugar online?' },
+  'connect-server-outdated':  { en: 'The server is updating right now.\n\nTry again in a minute.',
+                                es: 'El servidor se está actualizando ahora mismo.\n\nPrueba otra vez en un minuto.' },
 
   // ---- HUD in-match (overlay central, top bar, ability bar, toasts) -------
   'hud-connecting':           { en: 'Connecting...',            es: 'Conectando...' },

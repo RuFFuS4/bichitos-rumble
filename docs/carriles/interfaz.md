@@ -31,7 +31,19 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Buzón
 
-*(Notas que te dejan otros carriles. Vacío.)*
+*(Notas que te dejan otros carriles.)*
+
+- **De DISTRIBUCIÓN, 2026-09-21 — he tocado tu `src/i18n.ts`, con
+  permiso de Rafa.** Son dos claves nuevas al final del bloque
+  `connect-*`: `connect-client-outdated` (confirm "Hay una versión
+  nueva… ¿Recargar?") y `connect-server-outdated` ("El servidor se está
+  actualizando…"). Las usa el guard de versión cliente↔servidor desde
+  `src/game.ts` (el catch de `connectOnlineWith`). Si quieres otro tono o
+  convertir el confirm en un overlay propio, es tuyo: el contrato es que
+  el mensaje del servidor lleva el token `client_outdated` /
+  `server_outdated` (ver `ONLINE.md` → "Versión de protocolo"). Idea que
+  queda para ti, opcional: sondear `GET /health` (`protocol`) al pulsar
+  Online, para avisar de la versión nueva antes de elegir bicho.
 
 ## Hecho
 

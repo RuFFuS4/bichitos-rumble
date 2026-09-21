@@ -16,9 +16,101 @@
 // ---------------------------------------------------------------------------
 
 import { Client, Callbacks, type Room } from '@colyseus/sdk';
+// Fuente única de la versión del contrato de red, compartida con el servidor
+// (sin imports dentro, por eso el cliente puede tirar de server/src).
+import { NET_PROTOCOL } from '../server/src/protocol';
 
 export interface JoinBrawlOptions {
   critterName?: string;
+}
+
+/** Tope para recibir el primer estado de la sala tras unirse. Llega en
+ *  milisegundos; si no llega, no hay partida posible de todas formas. */
+const FIRST_STATE_TIMEOUT_MS = 8000;
+/** Tope de la sonda /health previa al join (falla abierta: pasado el tope
+ *  se sigue y decide el eco, así que no merece esperar más). */
+const HEALTH_PROBE_TIMEOUT_MS = 2000;
+/** Tope para despedirse de una sala de otra versión (como
+ *  ABANDON_ROOM_WAIT_MS en game.ts): un leave nunca debe colgar el join. */
+const LEAVE_WAIT_MS = 1500;
+
+/** Error con el token que reconoce el catch de game.ts, en formato
+ *  "cliente ? servidor", igual que el texto del rechazo del servidor. */
+function versionError(theirs: number): Error {
+  const serverIsOlder = theirs < NET_PROTOCOL;
+  const verdict = serverIsOlder ? 'server_outdated' : 'client_outdated';
+  return new Error(`${verdict} (${NET_PROTOCOL}${serverIsOlder ? '>' : '<'}${theirs})`);
+}
+
+/**
+ * Sonda previa al join: qué protocolo anuncia el `/health` del servidor
+ * (ws(s)://host → http(s)://host/health). `undefined` = servidor anterior al
+ * guard (v1.7), `null` = no se sabe.
+ *
+ * Por qué antes de entrar: contra un servidor viejo el eco de abajo nos saca
+ * igual, pero ya habríamos ocupado asiento; como 4º humano eso le arranca la
+ * cuenta atrás a la sala y le apunta una derrota a nuestra identidad
+ * (reproducido en la verificación del 2026-09-21). Falla ABIERTA: si /health
+ * no responde, se sigue y el eco decide.
+ */
+async function probeServerProtocol(serverUrl: string): Promise<number | undefined | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HEALTH_PROBE_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${serverUrl.replace(/^ws/i, 'http').replace(/\/+$/, '')}/health`, {
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { protocol?: unknown };
+    return typeof body.protocol === 'number' ? body.protocol : undefined;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Espera al primer estado de la sala (el SDK resuelve el join ANTES de
+ * recibirlo) y devuelve el `protocol` que el servidor lleva en él:
+ * `undefined` = servidor anterior al guard (v1.7), `null` = no llegó ningún
+ * estado (tope, o la sala murió antes).
+ */
+function readServerProtocol(room: Room): Promise<number | undefined | null> {
+  const protocolOf = (state: unknown): number | undefined => {
+    const p = (state as { protocol?: unknown } | undefined)?.protocol;
+    return typeof p === 'number' ? p : undefined;
+  };
+  const arrived = (state: unknown) => (state as { phase?: unknown } | undefined)?.phase !== undefined;
+  if (arrived(room.state)) return Promise.resolve(protocolOf(room.state));
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (value: number | undefined | null) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), FIRST_STATE_TIMEOUT_MS);
+    room.onStateChange.once((state) => finish(protocolOf(state)));
+    // Si la sala muere antes del primer estado no llegará ninguno: sin esto
+    // el join se quedaría en "Conectando…" hasta el tope (reproducido con la
+    // Room real del SDK en la verificación del 2026-09-21).
+    room.onLeave(() => finish(null));
+  });
+}
+
+/** Salir de una sala de otra versión sin reconexión ni cuelgues. */
+async function leaveQuietly(room: Room): Promise<void> {
+  room.reconnection.enabled = false;
+  // Con el socket ya cerrado, leave() nunca emite onLeave: esperaríamos el
+  // tope entero para nada.
+  if (room.connection?.isOpen !== true) return;
+  await Promise.race([
+    room.leave(true).catch(() => undefined),
+    new Promise<void>((resolve) => setTimeout(resolve, LEAVE_WAIT_MS)),
+  ]);
 }
 
 /** How to land in a room (H4 — private rooms):
@@ -44,14 +136,29 @@ export async function connectToBrawl(
   mode: BrawlJoinMode = undefined,
 ): Promise<Room> {
   console.log('[Network] connecting to', serverUrl, 'with options', options, 'mode', mode ?? 'quick');
+  // Guard de versión (ONLINE.md → "Versión de protocolo"), en tres capas:
+  // 1. la sonda /health evita sentarse en una sala de otra versión;
+  const advertised = await probeServerProtocol(serverUrl);
+  if (advertised !== null && advertised !== NET_PROTOCOL) throw versionError(advertised ?? 1);
+  // 2. el servidor rechaza en su onAuth un protocol distinto del suyo;
   const client = new Client(serverUrl);
+  const joinOptions = { ...options, protocol: NET_PROTOCOL };
   let room: Room;
   if (mode && 'createPrivate' in mode) {
-    room = await client.create('brawl', { ...options, private: true });
+    room = await client.create('brawl', { ...joinOptions, private: true });
   } else if (mode && 'joinRoomId' in mode) {
-    room = await client.joinById(mode.joinRoomId, options);
+    room = await client.joinById(mode.joinRoomId, joinOptions);
   } else {
-    room = await client.joinOrCreate('brawl', options);
+    room = await client.joinOrCreate('brawl', joinOptions);
+  }
+  // 3. el eco: un servidor VIEJO no tiene guard y nos deja entrar si la
+  // sonda no llegó a saberlo. Su estado no trae `protocol` (o trae otro):
+  // salir antes de jugar. Los tokens los reconoce el catch de game.ts.
+  const serverProtocol = await readServerProtocol(room);
+  if (serverProtocol !== NET_PROTOCOL) {
+    await leaveQuietly(room);
+    if (serverProtocol === null) throw new Error('no_state_from_server');
+    throw versionError(serverProtocol ?? 1);
   }
   // H4 reconnect (2026-08-24): allowReconnection YA está en el server
   // (BrawlRoom.onLeave, gracia de 30 s con bot-takeover mientras tanto),

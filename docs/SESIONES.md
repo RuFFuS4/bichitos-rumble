@@ -64,6 +64,12 @@ O sea: viable, pero con fricción. Por turnos no hay ninguna.
 - `public/models/arenas/**` · las texturas de suelo y skybox de `public/images/`
 - `docs/ARENA_V2.md` · `docs/DIORAMAS.md` · `ARENA_PROMPTS.md`
 - `tests/sim/arena-*.test.ts` + `tests/sim/arena-layout-golden.json`
+- **Excepción concedida por Rafa (2026-09-21):** las líneas de versión de
+  `server/src/protocol.ts` (`NET_PROTOCOL`, su fila en
+  `LAYOUT_BY_PROTOCOL` y `GENERATOR_FINGERPRINT`). El fichero es de
+  DISTRIBUCIÓN, pero ARENA las sube **en el mismo commit** en que cambia
+  el generador o regenera el golden de layout. `npm run test:sim` falla y
+  dice qué poner (ver `ONLINE.md` → "Versión de protocolo").
 - Tu checklist: [`docs/carriles/arena.md`](carriles/arena.md)
 
 **No tuyo:** critters, HUD, servidor (salvo los espejos de arriba).
