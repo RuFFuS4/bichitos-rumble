@@ -38,15 +38,17 @@ export interface ArenaLookConfig {
   fragmentTintJitter: number;
   /** Altura VISUAL del canto (u): cuánto acantilado cuelga bajo la tapa.
    *  NO es la de gameplay (`FRAG.arenaHeight`, 1,2 u, espejada en el
-   *  servidor y blindada por golden): el suelo pisable no se entera. Las
-   *  referencias de Rafa llevan un canto de ~1/5 del diámetro; 2,6 u
-   *  sobre 24 u se queda algo por debajo para no robar cuadro al mar. */
+   *  servidor y blindada por golden): el suelo pisable no se entera.
+   *  Decisión de Rafa (2026-09-21): la isla es un CONO EN PUNTA que flota,
+   *  así que el canto es la panza entera — 9 u sobre 24 de diámetro. La
+   *  cámara de juego no la ve nunca (A/B en `.tmp/shots-cono/`); se lee
+   *  con cámara baja: pantalla final, capturas de tienda y sectores que
+   *  vuelcan al caer. */
   cliffVisualHeight: number;
-  /** Radio de la base respecto al de la tapa (1 = cilindro). 0,82 es la
-   *  cuña de un tronco de cono: deja preparada la lectura "la isla es un
-   *  cono" sin comprometerla. La cuña apunta al eje del disco, no al
-   *  centro de cada sector, para que las paredes de bandas contiguas
-   *  sigan coincidiendo. */
+  /** Radio de la base respecto al de la tapa (1 = cilindro, 0 = punta).
+   *  0,08 cierra el cono casi en punta sin degenerar los triángulos del
+   *  fondo. La cuña apunta al eje del disco, no al centro de cada sector,
+   *  para que las paredes de bandas contiguas sigan coincidiendo. */
   cliffTaper: number;
   /** Filas de vértices de la pared (≥ 2): `cliffStrata − 1` estratos,
    *  cada uno una hilada de bloques con su color de la rampa del bioma.
@@ -82,12 +84,16 @@ export const ARENA_LOOK: ArenaLookConfig = {
   bandTint: [1.0, 0.94, 0.88, 0.82],
   tintBase: 0xe6e6e6,
   fragmentTintJitter: 0.05,
-  cliffVisualHeight: 2.6,
-  cliffTaper: 0.82,
-  cliffStrata: 5,
-  cliffRoughness: 0.16,
-  cliffStrataHardness: 0.65,
-  cliffBlockJitter: 0.07,
+  // Cono en punta (2026-09-21): el doble de estratos para que 9 u de
+  // panza sigan leyéndose como hiladas de ~1 u, más rizado y jitter para
+  // que la punta sea roca y no una peonza lisa. Coste medido: +10,5k tris
+  // (0,5 % en jungle), +0 draws.
+  cliffVisualHeight: 9,
+  cliffTaper: 0.08,
+  cliffStrata: 10,
+  cliffRoughness: 0.45,
+  cliffStrataHardness: 0.9,
+  cliffBlockJitter: 0.14,
   critterShadowScale: 1.15,
   critterShadowOpacity: 0.34,
   warningEmissive: 0.34,

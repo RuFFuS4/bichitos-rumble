@@ -330,8 +330,14 @@ function createFragmentMesh(f: FragmentDef, jitterRand = 0.5, cliffRamp: CliffRa
     cliff.userData.groundRole = 'cliff' as GroundRole;
     group.add(cliff);
 
+    // Mismo color que el fondo de los sectores (el final de la rampa del
+    // bioma), no un verde fijo que desentonaba en los cuatro packs que no
+    // son jungle.
     const botGeo = new THREE.CircleGeometry(f.outerR * ARENA_LOOK.cliffTaper, CENTER_SEGMENTS);
-    const botMat = new THREE.MeshStandardMaterial({ color: 0x2a3a22, side: THREE.DoubleSide });
+    const botMat = new THREE.MeshStandardMaterial({
+      color: sampleStops(cliffRamp.stops, 1, new THREE.Color()),
+      side: THREE.DoubleSide,
+    });
     const bot = new THREE.Mesh(botGeo, botMat);
     bot.rotation.x = -Math.PI / 2;
     bot.position.y = -H;

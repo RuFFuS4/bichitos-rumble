@@ -79,16 +79,20 @@ for (const pack of PACKS) {
   // con un jugador eliminado y el 95 % del decor ya caído — y sobre esas
   // imágenes se juzgó el diorama. Ahora se lee el reloj del HUD, que es
   // lo que ve el jugador, y si falla se dice en voz alta.
-  const readClock = () => {
-    const el = document.getElementById('hud-timer');
-    const m = el?.textContent?.match(/(\d+):(\d\d)/);
-    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
-  };
-  await page.waitForFunction(readClock, null, { timeout: 20000 })
-    .catch(() => { console.warn(`  ${pack}: no aparece el reloj del HUD`); });
+  //
+  // 2026-09-21: con varios packs y --at-seconds, del segundo pack en
+  // adelante las capturas salían en la cuenta atrás (disco entero) con el
+  // reloj marcando el t pedido. El HUD NO reinicia el reloj al empezar la
+  // cuenta atrás de una partida nueva: sigue enseñando el de la anterior
+  // hasta que la fase pasa a `playing`. Así que el reloj solo vale como
+  // medida EN `playing`; antes se mira la fase.
+  const fresh = await page.waitForFunction(() => window.__game?.phase === 'countdown', null, { timeout: 20000 })
+    .then(() => true).catch(() => false);
+  if (!fresh) console.warn(`  ${pack}: la partida nueva no llega a la cuenta atrás`);
   if (AT > 0) {
     await page.evaluate(() => window.__devApi.setFixedStep(20));
     const ok = await page.waitForFunction((target) => {
+      if (window.__game?.phase !== 'playing') return false;
       const el = document.getElementById('hud-timer');
       const m = el?.textContent?.match(/(\d+):(\d\d)/);
       if (!m) return false;

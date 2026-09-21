@@ -12,10 +12,12 @@
 > no existe:
 >
 > - **Fondo**: hecho el slice del mar (plano con la rampa del bioma
->   horneada, niebla que tiñe, sombra de la isla). Siguen pendientes el
->   relieve, la cresta de siluetas y la **luz por bioma** — que en este
->   documento figura como "fase 0, va sola y primero" y aún no se ha
->   tocado.
+>   horneada, niebla que tiñe, sombra de la isla). **Rafa lo rechazó el
+>   2026-09-21** con cuatro quejas («no se lee qué hay abajo», «está
+>   vacío», «quiero cielo, no suelo», «fuera la foto del final»). El plan
+>   que lo sustituye es **«Fondo v2 — la isla en el cielo»**, más abajo, y
+>   anula las §2-§6 de esta parte en lo que las contradiga. La luz por
+>   bioma pasa a ser su F3.
 > - **Dioramas**: hechas la fase 0 (medición honesta) y el slice 1 (motor
 >   instanciado, 7 primitivas, recetas de los 5 biomas, canto con masa y
 >   sombras de contacto). El resto, pendiente.
@@ -173,6 +175,498 @@ Tras este cambio dejan de verse en partida y solo sirven para la pantalla final 
 
 ---
 
+## Fondo v2: la isla en el cielo (plan del 2026-09-21)
+
+*Esto responde al veredicto de Rafa del 2026-09-21 sobre el fondo actual: marcó las cuatro quejas. Hubo cuatro propuestas (geometría, textura de Rafa, shader y escenografía) y dos juicios independientes. Los dos eligieron la de geometría, con 46,5 y 48,5 sobre 60, así que no hay empate que deshacer.*
+
+*Lo que sigue es esa propuesta con lo mejor de las otras tres injertado. Todas las cifras están rehechas sobre el código de `1865521`. Es la decisión, no el debate.*
+
+*Después, un verificador adversarial revisó 62 afirmaciones contra el código. Encontró 8 errores y 13 huecos, y están corregidos aquí. El que más pesa: `bandTint` multiplica en espacio lineal, así que el techo de jungle es ≈25 y no 18,6, y desaparece la decisión del «abismo casi negro».*
+
+*Qué se tomó de cada una:*
+- *De textura-rafa: los pisos de nubes y el sitio que le toca a `clouds.png`.*
+- *De shader: el reloj de `tickVisuals`, el color de limpiado, la CLI sin navegador y una única dirección de key.*
+- *De escenografía: el cuello de nubes, los islotes dentro del slice, la vida y la hoja de contactos ampliada.*
+
+***Este plan anula las §2-§6 de arriba en todo lo que las contradiga.** Ya no hay mar bajo la isla, y la foto también se va de la pantalla final.*
+
+---
+
+### 1. Qué cambia respecto al plan anterior, y por qué
+
+| Queja de Rafa | Qué había | Qué cambia |
+|---|---|---|
+| 1. «No se lee qué hay abajo» | Un anillo a y=−32 con un degradado horneado (`src/arena-backdrop.ts:47-159`). De lejos, un color liso. | Cada bioma tiene su «abajo»: un abismo de su color, islotes a varias profundidades y, desde F1, lo que cuelga de ellos (lianas, carámbanos, cascadas). |
+| 2. «Está vacío, falta mundo» | Los relieves y la cresta del plan anterior (§2, fase 3) no se llegaron a hacer. | Islotes hermanos entre r 45 y 200 u (6-8 genéricos ya en el slice), nubes en tres pisos, torres de cúmulo y una firma por bioma. |
+| 3. «Quiero cielo, no suelo» | El concepto era «isla sobre un mar a y=−32» (§2, línea 77): un plano bajo la isla, que se lee como suelo lejano. | **Cambia el concepto.** Bajo la isla no hay nada continuo. Justo debajo hay un pozo de cielo. El mar de nubes empieza entre 48 y 64 u por debajo del disco y se abre en cráter alrededor del pozo. |
+| 4. «La foto, el horizonte del final» | Dos cosas: `scene.background` con la panorámica (`src/arena.ts:678-685`), que asoma con cámara baja, y el borde del mar de r=300, que la cámara de victoria ve como una raya entre −6,2° y −6,9°. | Todo generado. Una cúpula con color por latitud que sigue a la cámara, y nubes lejanas que se funden al 100 % con el color del horizonte. Cero fotos, también en la pantalla final. |
+
+**Por qué falló abril** (autopsia hecha en el historial):
+
+- **`0f4788e`**: una cúpula `ShaderMaterial` de r=200 centrada en el origen, con el degradado calculado por `vWorldPos.y/200`. Como la cámara mira 46° hacia abajo, solo se veía la banda baja.
+- **`9047031`**, revertido 22 min 23 s después en `9b33e99` con el mensaje «covered the visible frame in white»:
+  - Montaje: `clouds.png` (el mismo fichero que hoy está en `resources/Terrenos/`, 837.335 B) repetida 4×4 en un plano de 140×140 a y=−18, con opacidad 0,85 y `fog:false`. Encima, un cartel vertical de 90×25 en (0,−25,−50).
+  - Por qué tapó el cuadro: todos los rayos de juego van hacia abajo, así que un plano 18 u por debajo del disco llena el fondo entero.
+  - Por qué de blanco: los píxeles opacos de `clouds.png` tienen L de 205 a 255 (mediana 250, medido), más claros que cualquier arena (L 78-135).
+  - Por qué se leía como foto: un cartel frontal visto desde 32-46° por encima es la «foto mal puesta».
+  - Fueron 6,5 MB de PNG y no se hizo ninguna captura antes.
+- **`b054e96`**: quitó las esferas texturizadas por las costuras («vertical seams… depending on the GPU»). También quitó el plano de nubes de 80×80 porque dejaba «a visible step where it ended».
+
+**Reglas que salen de ahí:**
+1. Nada con textura sobre un plano.
+2. Nada claro pegado al canto.
+3. El color del cielo sale de la dirección del rayo: una cúpula pegada a la cámara, con color por latitud y sin UV. Sin UV no hay costura.
+4. Ninguna capa termina dentro del cuadro. Lo que llega al horizonte se funde al 100 % con su color.
+5. Cada capa se juzga con capturas de todas las poses antes del merge.
+
+**Cifras corregidas.** Tres de las cuatro propuestas arrastraban estos errores:
+- **El mar tiene 6.912 triángulos**, no 1.344: 96×36×2, con `seaRings: 36` en `src/arena-look.ts:189`. El comentario de `src/arena-backdrop.ts:27` es del prototipo 96×7 (§2, línea 91).
+- **Banda de −10° en la victoria.** Desde la cámara de victoria (y=2,5), un rayo a −10° corta y=−50 a 298 u, no a 360. Los 360 u corresponden a −8,3°. Por eso la banda de −8,3° a −12° sí toca geometría si hay nubes hasta r 340.
+- **`scripts/arena-shots.mjs` tiene 111 líneas.** No tiene ni `pose` ni `camera`.
+- **`FRAGMENT_KILL_Y` está en `src/arena.ts:1439`.**
+- **El `visible=false` de `src/critter.ts:1182` solo corre en `eliminate()`.** Con vidas, el bicho no se oculta: `respawnAt` lo teletransporta arriba.
+
+---
+
+### 2. Concepto
+
+**La isla cuelga sobre un pozo de cielo.** Justo debajo hay un abismo del color de su bioma. Alrededor, un mar de nubes con relieve se abre en cráter en torno a ella. Entre medias flotan islotes hermanos a varias alturas: si ves islas más abajo que tú, estás alto. Al fondo, que solo se ve con cámara baja, hay torres de cúmulo y un horizonte de bruma sin línea.
+
+Todo es geometría con color de vértice: 0 bytes, sin GLSL, y con `InstancedMesh` como el scatter.
+
+**Lo que lo hace barato y seguro es que la cámara de juego no rota nunca** (§1). Todo lo que depende de la vista se calcula una vez al construir:
+- dónde no puede haber nada claro (el pasillo del canto, §8);
+- cuánta bruma lleva cada nube;
+- qué queda tapado por el disco.
+
+**Tres profundidades:**
+1. el cuello de nubes en sombra que abraza la punta del cono;
+2. el mar de nubes y los islotes;
+3. el abismo, que es la cúpula y no un suelo.
+
+---
+
+### 3. Capas
+
+| Capa | Qué es | Técnica | Dónde | Draws | Tris | Fase |
+|---|---|---|---|---|---|---|
+| **Cúpula** | Cielo arriba, bruma en el horizonte, abismo abajo. | Esfera de 48 columnas. Las filas de latitud van en las elevaciones de las paradas, no repartidas por igual, para que el techo del abismo empiece justo donde toca. `BackSide`, `MeshBasicMaterial` (`vertexColors`, `fog:false`, `depthWrite:false`, `dithering:true`). Sigue a la cámara en su `onBeforeRender` con `this.matrixWorld.copyPosition(camera.matrixWorld)`, como hace `WebGLBackground.js:116`. Mover `position` no basta: la `modelViewMatrix` (`WebGLRenderer.js:2128`) usa `matrixWorld`, que ya se calculó en `:1635`. | r 420 (`far` 500) | 1 | ≈2,2k | F0 |
+| **Nubes cercanas (C2) + cuello** | Mar de nubes, pared del pozo y cuello en sombra alrededor de la punta. | `InstancedMesh` de un bulto: semiesfera 14×3 = 70 tris, con base plana y alto 0,75 del radio. Rampa vertical en el color de vértice (cima 1,0, panza `cloudBelly` 0,8). Tinte y bruma en `instanceColor`. | **Nubes, 330 instancias:** cimas a y −64 en el borde del pozo, que suben a −48 desde r 190. Van del borde del pozo (r ≈95-165, lo fija el pasillo) a r 220. **Cuello, 30 instancias:** y −7…−16, r 5-19, teñidas al techo del abismo. | 1 | 25,2k | F0 |
+| **Nubes lejanas (C3)** | La banda que se funde con el horizonte. | Otro `InstancedMesh` con un bulto de 8×2 = 24 tris y **color de vértice plano**. | Centros en r 225-340 (ningún bulto de 25-45 u baja de r 180, que es lo que alcanza el cuadro 16:9 en las esquinas a y≈−56), **cimas** en y ≈ −48…−56, 160 instancias | 1 | 3,8k | F0 |
+| **Islotes genéricos** | Dan la escala: la isla es una de muchas. | `InstancedMesh` de un minicono de 16 lados (112 tris). La tapa lleva `PackDef.sky.isletTop`, un campo nuevo (el suelo del pack es una textura y no tiene un color que leer), **más oscuro y desaturado que la arena** para que no parezca una plataforma a la que saltar. La panza lleva su `CliffRamp`. `MeshLambertMaterial` iluminado, `fog:false`, con bruma hacia el abismo en `instanceColor`. | 6-8 islotes, al menos 3 dentro del cuadro de juego. r 45-110, cima en y −28…−60, radio 1,5-6 u. | 1 | ≤0,9k | F0 |
+| Jirones (C1) | El aire entre la isla y el mar. | Bultos pequeños en la malla de C2. | y −20…−30, r 25-70, solo en las alas y las esquinas | 0 | +2,8k | F1 |
+| Firmas | Corona y colgante de cada bioma (§4). | Primitivas del scatter (`dome` 36 tris, `shard` 8, `log` 24) más una cinta vertical opaca para las cascadas. | Sobre y bajo los islotes | 2 | ~2k | F1 |
+| Torres de cúmulo | Rompen el horizonte de la victoria. | Pilas de bultos en la malla de C2. | r 260-360, y −48…+45. Desde la cámara de juego quedan entre +5° y −17°, por encima del techo del cuadro. | 0 | +4,9k | F2 |
+| Fondo del pozo | Profundidad del «abajo». | Bultos en la malla de C2 con el tinte del abismo: por debajo del techo dentro del pasillo, ±15 de L fuera. | y −150…−175, r 0-160, 60 instancias | 0 | +4,2k | F2 |
+| Deriva | Las nubes se mueven y la isla no. | Las instancias que no tocan el pasillo **en el arco que recorren en una partida** (≈12° en 120 s) pasan a una malla gemela que gira. Comprobar la órbita entera dejaría quieto casi todo C2 entre r 95 y 165, porque la huella del pasillo va de r≈15 por delante a r≈100-130 por detrás. | 0,1°/s, ≤0,35 u/s en lo que se ve en juego (r 193) | 1 | 0 | F2 |
+| Vida | Aves por debajo de la isla; nieve, pétalos o polvo cayendo al vacío. | Un `InstancedMesh` con matrices calculadas en CPU. Órbitas y columnas de caída se comprueban contra el pasillo al construir. | Por debajo de y −12 | 1 | ≤0,3k | F2 |
+| **Sale el mar** | Anillo a y=−32, r=300 | — | — | −1 | −6,9k | F0 (A/B), se borra en F4 |
+| **Sale la foto** | El pase de `scene.background`: una caja de 12 tris que va primera en la lista opaca (`WebGLBackground.js:168`) y sobrepinta el cuadro entero. | — | — | −1 | −12 | F0 (A/B), se borra en F4 |
+
+Todas las capas cuestan 0 bytes. Cada cifra de la tabla es una clave de `BACKDROP_LOOK` o de `PackDef.sky` (§9).
+
+**Por qué hay una malla plana para las nubes lejanas.**
+- `instanceColor` **multiplica** el color de vértice: `vColor.rgb *= instanceColor.rgb` en `color_vertex.glsl.js`.
+- Con la rampa, una nube al 100 % de bruma sigue teniendo la panza un 20 % más oscura que el horizonte. Eso devuelve la raya del §1 entre −10° y −13° desde la cámara de victoria.
+- Con color de vértice plano, `instanceColor` es el color final exacto. A r ≥ 280 vale lo mismo que el horizonte de la cúpula, y la nube desaparece sin borde.
+- **Regla general:** lo que se funde con el abismo oscuro puede llevar rampa, porque oscurecer sí se puede multiplicando. Lo que se funde con el horizonte claro va en malla plana.
+
+**Bruma.** Sigue `smoothstep(120, 280, r)` hacia el color del horizonte.
+- En juego, lo visible llega a r 154-193 en 16:9, así que la bruma se queda en 0,12-0,43. Es lo mismo que el `hazeMax` 0,42 del mar de hoy.
+- Desde la victoria, a r 280 la bruma es del 100 %.
+
+**Relleno de píxeles.**
+- El grupo del fondo pasa de `renderOrder` −10 a +5. Hoy (`src/arena-backdrop.ts:172`) se pinta el primero y todo lo demás lo sobrepinta.
+- Dentro del grupo, la cúpula es la última de los opacos.
+- Así la GPU descarta por profundidad lo que tapan el disco, las nubes y los islotes. La cúpula, que es `MeshBasic` sin luz, solo sombrea el cielo que de verdad se ve.
+- Hoy la foto y el mar se pintan enteros por debajo del disco.
+
+**Forma de los bultos.** Sale de `clouds.png` como referencia medida, no como textura: base plana, relación ancho/alto 1,32, tamaños en razón 1:8 y dos o tres tintas planas.
+
+---
+
+### 4. Los cinco biomas
+
+Lo que hay detrás del canto tiene que separarse de la banda exterior del disco en |ΔL| ≥ 45. Eso deja dos salidas por bioma: un **pozo oscuro**, por debajo de un techo, o un **pozo claro**, por encima de un suelo:
+
+> techo = L_arena × 0,906 − 45 · suelo = L_arena × 0,906 + 45
+
+- 0,906 es lo que la banda exterior (`bandTint` 0,82, `src/arena-look.ts:84`) oscurece **medido en sRGB**. El 0,82 multiplica en espacio lineal (`tintForBand`, `src/arena.ts:94-98`: `new THREE.Color(hex)` pasa a lineal, `multiplyScalar` y la salida se codifica a sRGB). Comprobado: sRGB 78 → 70,7.
+- L_arena sale de la línea base del §1. Esa línea se midió sobre `.tmp/shots-despues/`, que estaban contaminadas (segundo ~52 y donut del Shockwave). Por eso los techos y los suelos son de partida: manda la medida del canto (`--metrics`, §12).
+
+| Bioma | Abajo (techo del pozo oscuro · suelo del claro) | Alrededor | Elemento único |
+|---|---|---|---|
+| **coral_beach** | Laguna del cielo: turquesa profundo que baja a azul marino, sin verde, porque no es agua. **Techo 58,8** · suelo 148,8. | Atolones con charca turquesa y palmera hechas con primitivas. Cúmulos crema con panza aguamarina, cobertura 35 %. | Cascadas: cintas blancas que caen de los atolones y se funden al color del abismo. Salen de las charcas de `CORAL REEF BEACH.png`. |
+| **jungle** | Sima verde húmeda con bruma. Oscura, se queda en L ≤25 y se lee como un agujero. Clara, es una bruma verde-blanca de L ≥115 detrás de un canto oscuro, que se lee como cielo con niebla. **Techo 25,3** · suelo 115,3 (**decisión 2**). | Islotes-maceta con copas apiladas (`dome`). Jirones de bruma. | Raíces y lianas que cuelgan de los islotes y de la punta del cono. |
+| **frozen_tundra** | Abismo azul frío, de `0x152230` a `0x283d50`. **Techo 77,2**, el más holgado · suelo 167,2. | Icebergs invertidos (un `shard` grande con tapa nevada y la punta azul hacia abajo) a todas las profundidades. Nubes finas blanco-lavanda, 30 %. | Carámbanos. En F2, nieve que cae y marca la profundidad. |
+| **desert_dunes** | Cañón de polvo naranja quemado. **Techo 52,3** · suelo 142,3. | Mesas voladoras con la misma `CliffRamp` estratificada que la isla, para que se lean como hermanas. Calima ocre plana, con poca rampa. | Cascadas de arena. En F2, buitres dando vueltas **por debajo** de la isla. |
+| **kitsune_shrine** | Mar de nubes ciruela al anochecer, el más cerrado (70 %). Es la bruma violeta que hay bajo la isla en `KITSUNE SHRINE.png`. **Techo 47,8** · suelo 137,8. | Rocas con torii bermellón (un torii de primitivas, ~50 tris). | Un camino de 5-7 toriis sobre rocas que baja hacia el abismo. En F2, pétalos cayendo. |
+
+**Punto de partida del color.** El abismo oscuro arranca con la parada t=0 de cada `SeaRamp` actual (`src/arena-decorations.ts:135-188`). Esa parada (L de 22 a 32) **ya cumple el techo en los cinco packs**, jungle incluido (22,2 ≤ 25,3). Donde un techo holgado lo permita, el abismo sube hacia él: cuanto más claro y saturado, más se lee como cielo y menos como agujero (riesgo 6).
+
+**Cobertura.** Ningún bioma pasa del 70 %: por encima, el mar de nubes se lee como moqueta (riesgo 1).
+
+**Modelos GLB.** Los héroes de §2 (`torii_gate_large`, `iceberg_*`, de 5-7k tris cada uno) quedan como opción de F1, solo si las primitivas no dan la firma.
+
+---
+
+### 5. Pose de juego y pose de victoria
+
+**Juego.** La cámara está en (0,23,25) mirando a (0,−3,0), con fov 40 (`src/camera.ts:24-25` y `:57`). Todos los rayos van hacia abajo; el borde inferior del cuadro está siempre en −66,0°. Simulación de rayos propia:
+
+| Formato | Techo del cuadro | Disco en pantalla | Radio visible a y=−28 | a y=−48 | a y=−64 |
+|---|---|---|---|---|---|
+| 16:9 | −22,1° | 31 % | r ≤105 | r ≤154 | r ≤193 |
+| 21:9 | −20,2° | 23 % | ≤122 | ≤176 | ≤219 |
+| 390×844 | −25,9° | 68 % | ≤81 | ≤122 | ≤155 |
+
+**Qué se ve en juego:**
+- **Franja de arriba:** la pared del pozo y el mar de nubes (C2).
+- **Alas:** islotes y, desde F1, jirones (C1).
+- **Bajo el labio frontal (−60,5° a −66°):** el pozo, el cuello y, desde F2, el fondo del pozo.
+- **Lo que el disco tapa:** a y=−56, la silueta del labio r=12 es un círculo de radio 41,2 u (12·79/23) centrado en z=−60,9. Va de z≈−102 por detrás a z≈−20 por delante, con **±41 u de semianchura** por los lados (el punto lateral queda a 73,5 u del eje, que no es lo mismo). Es el pozo. Los islotes de r 45-73 caben por los lados.
+- **No se ven:** la panza del cono (sus caras quedan de espaldas a la cámara); C3 (a y=−56 el cuadro llega como mucho a r≈174 en las esquinas 16:9, y ningún bulto de C3 baja de r 180); las torres; el horizonte.
+- **En móvil retrato** el disco se sale del cuadro por los lados, así que el fondo son solo dos franjas, arriba y abajo.
+
+**Victoria** (`src/game.ts:1793-1808`). La cámara se pone 4,5 u delante del bicho, a 2,5 de alto, mirando a su pecho (y=1,2). Eso da una inclinación de −16,11°, techo del cuadro en +3,89°, borde inferior en −36,11° y el horizonte al 10,3 % del borde superior. Es la única pose con cielo. Por bandas:
+
+| Banda | Qué se ve |
+|---|---|
+| +3,9° a 0° | Degradado de cielo de la cúpula. Desde F2, torres de cúmulo. |
+| 0° a −8,3° | Bruma del horizonte (`fogColor`). Los rayos cortan y=−50 más allá de 360 u, así que ahí solo hay cúpula. |
+| −8,3° a −12° | C3 plana, que llega al 100 % del color del horizonte a r 280. A −10° el rayo corta y=−50 a 298 u y las cimas (y=−48) a 286 u. Si la raya vuelve, vuelve aquí: C3 existe para esto. **Condición en la cúpula:** tiene que seguir exactamente del color del horizonte (`fogColor`) desde 0° hasta −13°, con una fila de latitud en −13°. Si se oscurece antes, C3 al 100 % de bruma deja de coincidir con lo que tiene detrás y la raya vuelve. |
+| −12° a −36° | C2 con rampa, islotes, cuello, y la panza si la cámara queda sobre el vacío. |
+
+**Plano general y derrota.** El plano general (`src/game.ts:1837`) tiene el techo en −2,59° (−2,21° en las esquinas). La derrota (`src/game.ts:1813`), en −9,74° (−8,31° en las esquinas). En los dos, el techo cae en la banda de bruma o en C3, y ninguno ve cielo.
+
+**El paso de una pose a otra.** Es un lerp de `dt·2,5` (`src/main.ts:458`). La cúpula sigue a la cámara en cada frame y las nubes son 3D, así que el lerp da paralaje gratis. Lo único que depende de la vista es la cúpula, más el plan B de la decisión 3, que se reorienta en `onBeforeRender`.
+
+**La pantalla final offline está congelada.** La rama `'ended'` (`src/game.ts:2156-2160`) solo llama a `updateFalling` y `c.update`, no a `arena.tickVisuals`. Online sí sigue, porque `tickVisuals` va en cada sync (`src/game.ts:1291`). Justo la pose que ve el horizonte se queda sin deriva ni vida. F2 añade esa llamada con una línea en `game.ts`: tierra de nadie, diff mínimo.
+
+---
+
+### 6. Luz (panza del cono incluida)
+
+**Por qué la panza sale negra.** Medido sobre el cono de `cliffTaper` 0,08 y 9 u (`src/arena-look.ts:91-92`):
+- La pared tiene normal (0,632 hacia fuera; −0,775): mira 50,8° hacia abajo.
+- La key está en (−11,17,13), con 44,9° de elevación (`src/scene-atmosphere.ts:75-76`). Sobre la panza da n·L ≤ −0,10 en cualquier azimut.
+- La rim, en (−10,14,−14) (`:89-90`), da como mucho +0,001.
+- Ninguna direccional la toca. Solo le llega el hemisferio, y con un peso de 0,89 del lado del suelo: `0x4a3a26` × 0,55 (`:69`). Sale marrón casi negro.
+
+**F0, en el slice y detrás del flag:**
+- `hemi` pasa a ser una referencia de módulo. Su `groundColor` es, por pack, el rebote del mar de nubes:
+
+  | Pack | `groundColor` |
+  |---|---|
+  | coral | `0x6fb3b5` |
+  | jungle | `0x5f7a55` |
+  | tundra | `0x8a9cc0` |
+  | desert | `0xa8784a` |
+  | kitsune | `0x9a7890` |
+
+  La intensidad pasa de 0,55 a 0,7. Es la ficción del concepto: debajo hay cielo iluminado, no tierra.
+- **El rebote se probó en vivo, pero no con estos colores:** columna `c2_rebote` de `.tmp/shots-cono2/_hoja_bajo.png`, solo en jungle, kitsune y tundra, con un único `groundColor` `0xc8d8e0` a intensidad 0,8 para los tres. Los colores por pack de esta tabla están sin probar. Se prueban en la hoja del slice.
+- **Objetivo con la pose `low`:** panza con L entre 70 y 110, y siempre al menos 30 por debajo del labio.
+- **Afecta también a la parte de abajo de los 9 bichos.** Va la nota a PERSONAJES (§7) y una hoja A/B del roster.
+- **Plan B que no toca a nadie:** un emisivo de rebote de 0,12-0,2 solo en el material del canto (`cliffMaterial`, `src/arena.ts:281`), dejando el hemisferio como estaba.
+
+**F3:**
+- **Rig completo por bioma.** Es la «fase 0» de §2, que sigue sin hacer. `PackDef.sky.light` lleva azimut, elevación, color e intensidad de key y rim, y se aplica con `applyPackLighting()`. Elevaciones de la key para empezar: coral 50°, jungle 35°, desert 35°, kitsune 30°, tundra 25°.
+- **Una sola dirección de key por pack alimenta tres cosas:** la luz, el lado claro de las nubes y el halo de sol de la cúpula.
+  - El halo es ancho (±20°), para que a 7,5° por celda se interpole sin facetas.
+  - `BACKDROP_LOOK.keyDirX/Z` (`src/arena-look.ts:198-199`), que hoy se copian a mano, pasan a derivarse de esa dirección.
+  - Así el sol y el cielo no pueden desfasarse. Hoy desert está desfasado 164° (§1, síntoma 7).
+- **La punta de cada `CliffRamp`** no baja del 55 % de la L del labio.
+- **No se añade una cuarta direccional de rebote.** Encarece cada fragmento de los 9 bichos, que ya se llevan el 75-85 % del frame.
+- **F3 cambia a los bichos bastante más que el rebote del hemisferio.** Una key de 25-50° de elevación les cambia el modelado y les alarga la sombra, y el frustum de sombra es de ±18 u (`src/scene-atmosphere.ts:81-84`). F3 lleva su propio A/B del roster y su propia nota en el buzón de PERSONAJES, antes del merge.
+
+**Qué lleva luz.**
+- La cúpula y las nubes son `MeshBasic` con el sombreado horneado.
+- Los islotes sí van iluminados, con Lambert: son hermanos de la isla y reciben la misma luz.
+- Los islotes van con `fog:false`. La `FogExp2` a 60-150 u los lavaría entre un 20 % y un 76 % hacia el `fogColor` claro, y competirían con la arena.
+
+**Tone mapping.** Sin la foto, nada escapa del tone mapping: `WebGLBackground.js:151` lo apagaba para el fondo sRGB. `ARENA_LOOK.toneMapping` pasa a ser coherente en toda la escena. Se sigue activando con el roster delante.
+
+---
+
+### 7. La caída
+
+**Hoy.**
+- El bicho cae a 12 u/s durante 0,8 s: 9,6 u en total (`src/gamefeel.ts:111-113`; `updateFalling` en `src/critter.ts:1137-1149`).
+- Si le quedan vidas, `respawnAt` lo teletransporta arriba. En la última, `eliminate()` pone `visible=false` (`src/critter.ts:1182`).
+- En los dos casos desaparece en el aire, a la altura de la punta del cono.
+
+**Qué se ve de verdad.** Medido con rayos desde la pose de juego, con el bicho cayendo desde r=12,8:
+- Por la mitad trasera del borde, el disco lo tapa cuando lleva 0,6-2 u de caída.
+- Por el frente, sale del cuadro por abajo a y −4,6.
+- Solo en los arcos delanteros-laterales, entre ~45° y 70° del frente a cada lado, se le ve llegar a −9,6.
+- En móvil retrato sale del cuadro casi al instante, salvo por el frente.
+
+Conclusión: la caída se cuenta en sus primeros 5 u y en el instante en que el bicho desaparece. Nada que se ponga a y≈−60 bajo el borde se ve desde ningún azimut: queda fuera de cuadro o pegado al borde inferior. Por eso el destello va en el punto donde desaparece.
+
+**Ficción:** el cielo se lo traga. Sin destino ni salpicadura.
+
+**Lo que hace ARENA:**
+- **F0:** el cuello (y −7…−16, r 5-19) rodea la punta. En los arcos donde se ve desaparecer, el bicho desaparece dentro de una nube en sombra.
+- **F4, destello:** `dust-puff.ts` se generaliza a `spawnVanishPuff(pos, tinte)`, en el punto exacto de la desaparición y con el tinte de nube del pack.
+  - **No basta con una línea en `src/game.ts:2100`** (antes de `c.respawnAt`). Eso solo cubre el respawn offline. Se quedan fuera la última vida (`eliminate()` se llama dentro de `Critter.updateFalling`, `src/critter.ts:1145`, y nunca vuelve por `game.ts:2098-2101`), la rama `'ended'` y el online, donde el respawn lo decide el servidor.
+  - **Cómo sí:** se detecta el flanco «cayendo → no cayendo o invisible» de cada bicho en el tick de visuales, igual que hace `pollGameplayEvents` en `src/tools/dev-api.ts`. Cubre offline, online y última vida sin tocar `critter.ts`. El sitio del enganche (`game.ts`, tierra de nadie) se decide en F4, con diff mínimo y dicho en el commit.
+- **F4, fragmentos:** encogen a la mitad entre y −15 y −25, dentro de `tickFallingFragments` (`src/arena.ts:1446`), antes de `FRAGMENT_KILL_Y` (`src/arena.ts:1439`).
+
+**Nota para el buzón de PERSONAJES** (`docs/carriles/personajes.md` §Buzón, para pegar tal cual):
+
+> **De ARENA, 2026-09-21: fondo v2 (docs/DIORAMAS.md, «Fondo v2»).** La isla pasa a flotar en el cielo, y caer es «que te trague el abismo». Hay tres cosas en vuestro terreno; ninguna es urgente.
+>
+> 1. **Caída.** En `updateFalling` (critter.ts:1137-1149): que la escala baje de 1 a 0,2 en los últimos 0,3 s y, si os gusta, que la caída acelere en vez de ir a 12 u/s constantes.
+>    - **Sin tocar la opacidad.** `fadeAlpha` fuerza `transparent` y `depthWrite=false` (critter.ts:806-812), y ese es el camino de ordenación del bug de Sergei (critter.ts:704-716).
+>    - Los valores nuevos, en `FEEL.lives` (gamefeel.ts:108-114). `respawnDelay` sigue en 0,8 s.
+>    - Comprobad `npm run golden` 3/3.
+> 2. **Eliminación.** El mismo encogido antes del `visible=false` de `eliminate()` (critter.ts:1182).
+> 3. **Rebote de luz.** El suelo del hemisferio pasa de `0x4a3a26` a un color por bioma, y eso aclara la parte de abajo de los 9 bichos.
+>    - Mirad `.tmp/shots-cielo/_roster_ab.png`.
+>    - Si no os convence, decídnoslo: ARENA tiene un plan B que no os toca (emisivo solo en el canto).
+
+---
+
+### 8. Legibilidad
+
+**El pasillo del canto.**
+- **Qué es.** Como la cámara de juego es fija, el generador conoce la silueta del disco vista desde ella: 256 direcciones del labio r=12 vistas desde (0,23,25). Los rayos que rozan el labio bajan a 31,9° por detrás, 39,7° por los lados y 60,5° por delante (verificado).
+- **Cómo se construye.** El pasillo es esa silueta **entera**, incluido todo lo que el disco tapa, ensanchada un margen δ de 2,5° (≈45 px a 720p):
+  - 1,0° de margen visual;
+  - 1,5° por el temblor de cámara, en el peor caso. No son los 0,45 u base: Trunk Slam lleva `shakeBoost` 1,4, así que `triggerCameraShake(0,45·1,4)` da **0,63 u** (`src/gamefeel.ts:125`, `src/abilities.ts:724`, `src/abilities-runtime.ts:254` y `:318`), y x e y tiemblan por separado (`src/gamefeel.ts:402-403`). Sobre el labio frontal, a 26,4 u, son 1,4-1,5°. (`DIORAMAS.md:43` arrastra el mismo 0,45.)
+- **Qué se rechaza.** Toda instancia **clara** (nubes, islotes, firmas, vida) cuya esfera envolvente toque el pasillo.
+- **Qué se permite.** Las instancias **oscuras** (cuello, fondo del pozo) pueden quedar dentro, pero solo si su color máximo no supera el techo del abismo del pack. `getBackdropStats().corridorViolations` tiene que dar 0.
+- **La cúpula** pinta el techo del abismo entre −29,4° (el labio trasero, −31,9°, más δ) y −63,0° (el labio frontal, −60,5°, menos δ). Lleva filas de latitud justo en esas dos elevaciones.
+
+**Aguanta el colapso por construcción.**
+- El colapso solo quita disco: la silueta encoge, y lo que queda al descubierto estaba dentro del pasillo, donde solo hay cúpula o nubes oscuras.
+- No hace falta una tabla por azimut que se actualice en `startFragmentFall` (`src/arena.ts:1419`).
+- Vale igual en 16:9, 21:9 y retrato, porque el pasillo depende de la cámara, no del formato.
+- Aun así se mide a t=0, 29 y 50 s.
+
+**Contrato de luminancia y saturación:**
+- ΔL del canto: mediana ≥45 y mínimo local ≥15 (§2).
+- La arena es lo más claro de media: L del fondo < L de la arena − 20.
+- Saturación del fondo entre 0,4 y 0,9 veces la de la arena. Es el gate que funciona en los dos sentidos, de §2.
+- Como mucho, el 8 % del fondo por encima del percentil 75 de la arena (decisión 1).
+
+**Nada que se lea como suelo pisable:**
+- Bajo la isla no hay nada continuo: está el pozo.
+- Las nubes están al menos 48 u por debajo del disco y tienen huecos (cobertura ≤70 %).
+- Los islotes tienen la cima a y ≤ −28, quedan a ≥33 u en horizontal del labio y miden ≤6 u de radio.
+- Nada del fondo sube por encima de y=−5 dentro de r<25.
+
+**Los bichos, siempre por encima:** el fondo no lleva emisivo, la deriva es ≤0,35 u/s y la vida nunca se dibuja sobre el disco (el pasillo la rechaza).
+
+**Pozo claro (decisión 2).** Si un bioma va con pozo claro, el contrato de arriba se invierte solo para ese pack: |ΔL| ≥ 45 con el fondo **por encima**, y la regla «L del fondo < L de la arena − 20» deja de aplicarse. Esa regla la puso el plan anterior, no Rafa, y choca de frente con «quiero cielo» en un pack de arena oscura. Lo que no cambia es que los bichos sean lo más saturado de la pantalla.
+
+---
+
+### 9. Doble superficie y determinismo
+
+**Las hojas de valores:**
+- **`BACKDROP_LOOK`** (`src/arena-look.ts`) guarda lo global y lo estructural:
+  - `mode: 'sky' | 'sea'`;
+  - cúpula, pisos de nubes, cuello e islotes;
+  - `corridorDeg`;
+  - bruma: `hazeStartR` 120, `hazeEndR` 280;
+  - `cloudBelly` 0,8, `driftDegPerSec` y `mobileDensity`.
+- **`PackDef.sky`** (`src/arena-decorations.ts`) guarda lo de cada bioma:
+  - las paradas de la cúpula por elevación;
+  - los tintes de cima y panza de las nubes y la cobertura;
+  - `hemiGround` con su intensidad;
+  - desde F3, `light`; desde F1, la receta de la firma.
+
+**En vivo.** Métodos nuevos al final de `src/tools/dev-api.ts`, con diff mínimo:
+- `getBackdropLook()`.
+- `setBackdropLook(patch)` y `setPackSky(id, patch)`. Devuelven `{applied, rebuilt, rejected}`. Hoy `setArenaLook` no avisa de las claves que no conoce (`src/tools/dev-api.ts:639`). Devuelve `applied`, así que quien compare lo ve, pero un agente que no compare cree que la aplicó.
+- `getBackdropStats()`: draws, tris e instancias por capa, rechazos y violaciones del pasillo, `buildMs`, `hash` y `maxExtent`. Este último es el radio más lejano que alcanza cualquier geometría del fondo, y tiene que quedar dentro de la cúpula con margen: r 420 − 16,5 u, que es lo que se desplaza la cámara de victoria. C3 llega hasta 340 + 45 y las torres hasta 360 más su bulto: están a ~20 u del límite, y si algo pasa de ahí la cúpula lo recorta.
+- `setCameraPose(nombre | pose | null)`.
+
+**Desde la CLI:**
+- Desde el slice: `arena-shots.mjs --pose … --scatter 0 --metrics`.
+- En F4:
+  - **`scripts/arena-sky.mjs --json`, sin navegador.** Corre con `node --experimental-strip-types`, como `golden:layout:write` (`package.json:34`). Importa el módulo de colocación y la rampa de la cúpula, que son TS puro, y devuelve instancias, rechazos, tris, draws, color por elevación, el ΔL previsto contra la banda exterior y el hash.
+  - **Esto condiciona el slice desde el primer día.** Node no resuelve imports relativos sin extensión, y el tsconfig no tiene `allowImportingTsExtensions`. `arena-backdrop.ts` importa `./arena-look` y `./arena-fragments`. Así que la colocación va en un módulo **hoja**, que solo importa `three` e `import type`, y recibe `BACKDROP_LOOK` y la sky del pack por parámetro.
+  - **El applier `look-patch`** en `tool-patch-core.mjs`, que es tierra de nadie.
+  - **La entrada en `DEV_TOOLS.md`**, §«Superficie programática» (línea 95).
+
+**Determinismo:**
+- Cada capa usa `mulberry32(seed ^ SALT_BACKDROP ^ hash(capa))`. `SALT_BACKDROP` va junto a `SALT_VISUAL` (`src/arena-look.ts:107`) y sigue el mismo patrón que `visualRand` (`src/arena.ts:77-86`). Nunca se usa el generador de layout.
+- La deriva va con el reloj de la partida, a través de `Arena.tickVisuals` (`src/arena.ts:1009`), no con `performance.now()`. A t=0 el ángulo es 0, la pausa la congela y las capturas se pueden reproducir.
+- Nada colisiona ni entra en `isOnArena`.
+- `npm run golden` da 3/3 y `golden:layout` pasa, los dos sin regenerar.
+- En F4 se añade `tests/sim/arena-backdrop.test.ts`: dos construcciones con la semilla 1 tienen que dar `instanceMatrix` e `instanceColor` idénticos byte a byte. El mismo test comprueba `maxExtent`.
+- **`mobileDensity` cambia el número de instancias, y con él el hash.** La aceptación «mismo hash con la misma semilla» se mide siempre con la misma clase de dispositivo, y el test fija la de escritorio. Dos jugadores en una sala pueden ver fondos distintos si uno va en móvil; es cosmético, y se anota.
+
+---
+
+### 10. Qué se retira y qué se reutiliza
+
+**Se retira.** En F0 queda detrás de `mode: 'sea'` para el A/B; se borra en F4.
+
+- **La foto:**
+  - la carga en `applyPack` (`src/arena.ts:678-685`) y la limpieza en `clearPack` (`:853`);
+  - `setSceneSkyboxTexture` (`src/scene-atmosphere.ts:104-115`);
+  - `skyboxTexturePath` y `loadPackSkyboxTexture` (`src/arena-decorations.ts:333-334` y `:407-409`), junto con la rama `skybox` de `loadTexture` (`:374-386`).
+
+  Al quitarla se cierra la fuga del `textureCache` (`:348`): unos 32 MB de VRAM por pack jugado, 160 MB después de jugar los cinco.
+- **Los ficheros:** `public/images/skyboxes/*.webp`, que son 270.120 B del dist, y `_raw/`, con 7,1 MB en disco. `_raw/` ya queda fuera del dist gracias a `clean-dist-raw.mjs`.
+- **Dos consumidores sin carril asignado en SESIONES.md.** Hace falta pedir permiso para tocarlos:
+  - el segundo cargador de la foto, en `src/decoreditor/main.ts:418`;
+  - la línea 30 de `scripts/compress-images.mjs`.
+- **El mar:**
+  - `buildSeaGeometry` y `paintSeaColors` (`src/arena-backdrop.ts:47-77` y `:108-159`);
+  - las claves del mar en `BACKDROP_LOOK` (`src/arena-look.ts:133-200`);
+  - `PackDef.backdrop` y `getPackBackdrop` (`src/arena-decorations.ts:101`, `:135-188` y `:451`).
+- **Comentarios que ya mienten:**
+  - `src/arena-backdrop.ts:27` dice 1.344 tris; son 6.912.
+  - `src/camera.ts:14-23` dice que el cielo es la foto.
+  - `src/camera.ts:52-56` justifica el `far` con el mar. El `far` se queda en 500, porque la cúpula tiene r 420 y va pegada a la cámara.
+
+**Se reutiliza:**
+- **Color:**
+  - `sampleRamp` (`src/arena-backdrop.ts:80-93`) para las paradas de la cúpula y los tintes;
+  - el `fogColor` de cada pack, que pasa a ser la banda de bruma del horizonte (la `FogExp2` no cambia);
+  - la parada t=0 de cada `SeaRamp`, como semilla del abismo;
+  - `CliffRamp` y el color de suelo, para los islotes.
+- **Geometría:** el patrón `InstancedMesh` + `instanceColor` de `arena-scatter.ts` y `blob-shadows.ts`, y las primitivas del scatter para las firmas.
+- **Luz y efectos:** `keyDirX/Z` desde F3; `dust-puff.ts` para el destello.
+- **Herramientas:** `arena-shots.mjs`, con `--viewport`, `--at-seconds`, `--packs` y el navegador mudo.
+
+---
+
+### 11. Fases
+
+| Fase | Qué | Días | Bytes (dist) | Draws | Tris |
+|---|---|---|---|---|---|
+| F0 | El slice (§12) | 1 | 0 | +2 | +25,2k |
+| F1 | Jirones (C1) y las firmas de los cinco biomas: corona, colgante y elemento único | 1 | 0 | +2 | +4,8k |
+| F2 | Torres del horizonte, fondo del pozo, deriva (malla gemela que gira) y vida. Plan B de `clouds.png` si la decisión 3 lo pide. | 1 | 0 (+11,6 KB con plan B) | +2 (+3) | +9,4k |
+| F3 | Luz por bioma: key, rim, halo del sol y rampa de la punta | 0,5 | 0 | 0 | 0 |
+| F4 | Caída (destello, fragmentos y nota enviada a PERSONAJES), `arena-sky.mjs`, `look-patch`, test de determinismo, métricas de jerarquía, y borrar el mar, las fotos y los cargadores | 1 | −270.120 | 0 | 0 |
+| **Total** | | **4,5** | **−270.120 B** (−0,26 MB con plan B) | **+6 (+7)** | **≈+39,4k** |
+
+**Cuánto pesa el total:**
+- **Triángulos:** los ≈39k extra son un 3,6 % sobre 1,10 M (§2, línea 97).
+- **Coste de GPU:** con la pendiente medida (40.000 conos de 12 tris = +0,9 ms, línea 234), unos +0,07 ms. Con los 6 draws, ≈+0,1 ms sobre los 1,29-1,55 ms de escritorio.
+- **VRAM:** −32 MB por pack.
+- **Móvil:** sin medir. `mobileDensity` 0,5 (media densidad cuando `isLikelyMobile()`, `src/input.ts:157`) queda preparada, pero no se activa sin una cifra.
+
+---
+
+### 12. Primer slice (1 día)
+
+**Rama:** `claude/feature/arena-fondo-v2-cielo`, sacada de `dev` (`docs/SESIONES.md`, protocolo, paso 3).
+
+**Alcance exacto:**
+1. **`src/arena-backdrop.ts`.** Un modo `sky` que convive con el `sea` actual. Contiene:
+   - cúpula, C2 con el cuello, C3 plana e islotes genéricos;
+   - el pasillo del canto: rechazo de las instancias claras y comprobación de las oscuras;
+   - bruma por radio y `stats()` con hash.
+
+   La construcción pasa a `build(sky, fogColor, seed)`.
+2. **`src/arena-look.ts`.** Las claves nuevas de `BACKDROP_LOOK` (§9) y `SALT_BACKDROP`.
+3. **`src/arena-decorations.ts`.** `PackDef.sky` en los cinco packs, más `getPackSky()`. Los colores de primera pasada salen de `fogColor` y de la parada t=0 del mar.
+4. **`src/arena.ts`.** `applyPack` (`:652-656`) construye con la semilla. En modo `sky` no carga la foto (`:678-685`) y pone el color de limpiado al del abismo: así, un frame sin fondo nunca sale claro. **Orden:** `setSceneFogColor` reescribe el color de limpiado con el `fogColor` (`src/scene-atmosphere.ts:129`) en cada `applyPack` (`src/arena.ts:663`) y en `clearPack`, así que `setSceneClearColor` va **después**, o se pisa.
+5. **`src/scene-atmosphere.ts`:**
+   - `hemi` como referencia de módulo, con `setSceneHemiGround(color, intensidad)`;
+   - `setSceneClearColor`;
+   - una pose forzada para las capturas, `setCameraPoseOverride(pose | null)`. Se aplica en `scene.onBeforeRender`, que three llama antes de calcular el frustum (`WebGLRenderer.js:1650` frente a `:1658`), y **termina con `camera.updateMatrixWorld()`**. Sin eso no se aplica en ese frame: `scene.updateMatrixWorld` (`:1635`) y `camera.updateMatrixWorld` (`:1639`) ya corrieron, y la cámara es hija de la escena (`src/main.ts:161`). Además, `main.ts` reescribe la `position` en cada frame (`updateCameraShake`, `src/gamefeel.ts:395`), así que el override pone posición **y** orientación. Así `main.ts` no se toca.
+6. **`src/tools/dev-api.ts`.** Los seis métodos del §9, al final del fichero.
+7. **`scripts/arena-shots.mjs`:**
+   - `--pose game|victory|wide|defeat|low`. Las tres del medio replican las fórmulas de `src/game.ts:1793`, `:1813` y `:1837` con el bicho en el centro. `low` es la cámara de juego girada 0,52 rad en X: posición (0; 7,54; 33,12) mirando a (0; −2,60; −1,49), con −16,3° de inclinación. Es exactamente el encuadre de `.tmp/shots-cono*/*__bajo.png`, que se hizo girando la escena −0,52 rad, y ahora se puede reproducir.
+   - `--scatter 0`.
+   - `--metrics`: el ΔL del canto en 64 azimuts, proyectando el labio con la cámara conocida. Toma una muestra 6 px dentro y otra 6 px fuera, y lo guarda en un JSON junto a los PNG. **El labio sale del contorno vivo**: los fragmentos que siguen en pie, vía `getArenaInfo()`, y no un r=12 fijo. Si no, a t=29/50 las muestras de «dentro» caen en fondo, en los azimuts de los sectores caídos. Se descartan los azimuts que quedan fuera de cuadro (en 390×844 los labios laterales salen del cuadro) y los tapados por props o bichos.
+
+**Fuera del slice:** C1, firmas, torres, fondo del pozo, deriva, vida, la key por bioma, la caída, la CLI sin navegador, el applier, el test de vitest y el borrado de ficheros. `src/game.ts` y `src/main.ts` no se tocan.
+
+**Criterio visual para Rafa.** Se mira sobre la hoja `.tmp/shots-cielo/_hoja.png`, que junta:
+- los 5 packs en seis poses: juego 16:9 a t=0, juego 390×844, victoria, plano general, derrota y baja;
+- jungle y kitsune en juego a t=29 y t=50;
+- la misma hoja en modo `sea`, para comparar.
+
+Aparte van dos hojas más:
+- `_roster_ab.png`: tres partidas de cuatro bichos cubren a los nueve, en `sky` y en `sea`.
+- `_pozo_ab.png`: jungle y kitsune con pozo oscuro y con pozo claro (decisión 2), en juego y en victoria. Se hace en vivo con `setPackSky`, sin código extra.
+
+> **«La isla flota en el aire: debajo hay un pozo de cielo y nubes que se alejan, alrededor hay otras islas, el borde se sigue con el dedo y en la pantalla final no hay foto ni raya de horizonte.»**
+
+Desglosado en lo que tiene que verse:
+1. En juego, tapando el disco con la mano quedan nubes con huecos, no una moqueta ni un suelo.
+2. El borde del disco se sigue con el dedo en toda la vuelta, también a t=50 con medio disco caído.
+3. En la victoria hay cielo arriba, bruma en el horizonte y nubes que se alejan, sin línea y sin foto.
+4. Con la cámara baja, la panza se lee como roca iluminada desde abajo, encima de un cuello de nubes en sombra, y no como una mancha negra.
+5. En los cinco packs hay algo a media distancia (los islotes), no solo un degradado. En 16:9 se ven al menos 3 islotes; en 390×844, al menos 2.
+
+**Lo que este slice NO demuestra, y cuándo se demuestra.** Así nadie da por resuelta una queja que no lo está:
+- **Queja 1 («qué hay abajo»):** el slice solo entrega el color del abismo y los islotes genéricos. Lo que hace reconocible cada bioma (lianas, carámbanos, cascadas, toriis) llega en **F1**. Su criterio es: tapando el disco con la mano, Rafa dice el bioma sin ver el suelo.
+- **Queja 2 («falta mundo»):** en juego, la media distancia descansa en los islotes (slice) y en C1 y las firmas (F1). Las torres (F2) solo se ven en la victoria.
+- **Queja 3 («cielo»):** en la pose de juego nunca se ve cielo; todos los rayos bajan, de −22° a −66°. El «aire» se lee por el mar de nubes visto desde arriba, los islotes más abajo y el color del pozo. Por eso el slice lleva el A/B de pozo oscuro y claro (decisión 2, riesgo 6).
+
+**Cifras de aceptación:**
+
+| Qué | Umbral | Cómo se mide |
+|---|---|---|
+| Foto | 0 % | `scene.background === null` en modo `sky` |
+| ΔL del canto | Mediana ≥45 y mínimo local ≥15, en 5 packs × 3 viewports (1280×720, 1920×1080, 390×844) × t 0/29/50 | `--metrics` |
+| Pasillo | 0 instancias claras dentro, 0 oscuras por encima del techo | `getBackdropStats().corridorViolations` |
+| Coste | +2 draws y +25,2k tris netos (±10 %) | `getBackdropStats()` y `getPerf()` (`src/tools/dev-api.ts:603`) |
+| GPU | **Sin medir en el slice.** `getPerf().frameMs` es `dt·1000`, el intervalo de rAF atado al vsync (`src/tools/dev-api.ts:592`), no tiempo de GPU. Los 1,29-1,55 ms del §2 salieron de una timer query (`.tmp/measure/gputime.mjs`) que no está en el repo. Estimación: ≈+0,1 ms. Medirlo exige recuperar ese script. | — |
+| Construcción | ≤5 ms por pack (*fast restart*) | `buildMs` |
+| Bytes | 0 en el dist | `npm run check` |
+| Determinismo | Mismo hash con la misma semilla, hash distinto con otra | `getBackdropStats().hash` |
+| Gameplay | `golden` 3/3 y `golden:layout`, sin regenerar | npm |
+
+**Cómo se deshace:**
+- En vivo: `__devApi.setBackdropLook({ mode: 'sea' })`. Vuelven el mar, la foto y el hemisferio de siempre.
+- En el código: `BACKDROP_LOOK.mode = 'sea'`.
+- O no se mergea la rama.
+
+Los `.webp` siguen en disco hasta F4. Fuera del carril solo hay que deshacer los seis métodos añadidos al final de `src/tools/dev-api.ts`.
+
+---
+
+### 13. Riesgos
+
+| # | Riesgo | Se ve en la captura si… | Arreglo |
+|---|---|---|---|
+| 1 | Moqueta de algodón: el mar de nubes se lee como nieve pisable, sobre todo en tundra y en la victoria. | Tapando el disco queda una superficie continua; hay bultos iguales hasta el horizonte; o en tundra la franja de nubes tiene ΔL < 20 contra el disco. | Cobertura ≤70 %, bultos que crecen con la distancia, tres pisos (C1 en F1), deriva (F2) y huecos que enseñen al menos un 30 % de abismo. |
+| 2 | Vacío otra vez: un tercio del cuadro es abismo oscuro. | Más del 50 % del fondo con lapVar < 15 (el fondo actual está entre 9 y 29, §1). | Islotes ya en el slice; firmas y C1 en F1; fondo del pozo y vida en F2. |
+| 3 | Segundo horizonte, o nubes facetadas en la victoria. | Una fila con un salto de ΔL > 8 en al menos el 50 % del ancho, entre −3° y −25°; o tramos rectos de más de 12 px en el contorno de una nube a 1080p. | C3 plana al 100 % del horizonte antes de r 280; panza de C2 suave (`cloudBelly`); torres de 20 lados; plan B de `clouds.png` (decisión 3). |
+| 4 | El rebote de luz cambia el aspecto de los bichos. | En `_roster_ab.png`, las barrigas cambian de tono. | Ajustar la intensidad por pack. Si PERSONAJES o Rafa lo rechazan, emisivo solo en el canto (`src/arena.ts:281`). |
+| 5 | Móvil sin medir. | — | Instanciado y pocas draws; `mobileDensity` 0,5 lista. Medir con un teléfono antes de subir las cifras. |
+| 6 | **El pozo se lee como agujero o como noche, no como cielo.** Es el riesgo de la queja 3. En la pose de juego la mayor parte del fondo es el color del pozo, y en jungle ese color es casi negro (L ≤25). | Tapando el disco con la mano, el fondo parece un hueco negro con nubes alrededor, no aire. Se mira en `_pozo_ab.png`. | Subir el abismo hasta su techo en los packs holgados (tundra, coral, desert). En jungle, y en kitsune si hace falta, pozo claro (decisión 2). |
+| 7 | **Un islote se lee como plataforma a la que saltar.** | Un islote con la tapa del color de la arena, iluminado por la key, cerca del borde del cuadro. | Tapa `isletTop` más oscura y desaturada que la arena, cima a y ≤ −28, a ≥33 u en horizontal del labio y bruma hacia el abismo. Si aun así engaña, más profundidad antes que más distancia. |
+
+---
+
+### 14. Decisiones para Rafa
+
+> **Rafa aprobó el plan el 2026-09-21, con el fondo v2 antes que el slice 2 de dioramas.** La decisión 1 queda en **sí, con las tres condiciones**. La 3 queda en **`clouds.png` solo si hace falta, en F2, y nunca en juego**. La 2 se decide sobre `_pozo_ab.png` del slice.
+
+1. **¿Pueden las nubes de la franja alta ser más claras que la arena?**
+   - Por qué importa: en juego, el «cielo» son nubes vistas desde arriba con el sol encima, y lo que se lee como nube es una nube clara.
+   - Si todo el fondo tiene que quedar 20 puntos de L por debajo de la arena (§2), en jungle (arena L 77,6) las nubes no pueden pasar de L 58, y entonces parecen rocas o moqueta.
+   - **Recomendación: sí**, con tres condiciones:
+     - fuera del pasillo del canto, así que el ΔL ≥45 no se toca;
+     - la media del fondo sigue 20 puntos por debajo de la arena;
+     - como mucho, el 8 % del fondo por encima del percentil 75 de la arena.
+2. **¿Pozo oscuro o pozo claro?**
+   - *(Sustituye a la decisión que planteaba la síntesis, «jungle: ¿abismo casi negro, L ≤18,6?». Esa venía de aplicar `bandTint` en sRGB. Bien hecha la cuenta, el techo de jungle es 25,3 y la parada actual ya cumple.)*
+   - Por qué importa: el contraste del canto se puede conseguir con el fondo más oscuro que la arena o más claro. Con el pozo oscuro, en jungle queda casi negro (L ≤25) y se puede leer como un agujero en vez de como cielo (riesgo 6). Con el pozo claro, jungle tiene una bruma verde-blanca de L ≥115 detrás de un canto oscuro, y la arena se recorta a contraluz. Eso rompe la regla «la arena es lo más claro de la pantalla», pero esa regla la puso el plan anterior, no tú.
+   - **Recomendación: decidirlo mirando `_pozo_ab.png`**, que el slice ya incluye: jungle y kitsune con las dos versiones, en juego y en victoria. Por defecto, pozo oscuro en los cinco, subido hasta su techo, que en tundra, coral y desert es holgado. Si jungle se lee como agujero, jungle pasa a claro.
+3. **¿Se usa `clouds.png`?**
+   - **En el slice, no.** Hay tres motivos:
+     - sobre un plano ya falló (`9047031`);
+     - son nubes de perfil, que no pintan nada en una cámara de juego que siempre mira hacia abajo;
+     - en RGBA, el 59 % de los texels tiene alfa 0 con RGB negro, lo que deja halos grises con el mipmap, y hay un damero de transparencia horneado en la cola de una nube (x ≈1060-1215, y ≈530-600, comprobado).
+   - **Su sitio** es la banda del horizonte de las poses bajas: billboards cilíndricos con `alphaTest`, usando solo el canal alfa (WebP 512² q85 = 11,6 KB) y teñidos por vértice.
+   - **Recomendación: autorizarlo con condición.** Entra en F2 solo si en la hoja de victoria del slice las nubes planas se ven facetadas o recortadas. En la pose de juego, nunca.
+
+---
+
 # Parte 2 — Lo que hay ENCIMA del disco
 
 <!-- Esta es la segunda mitad de docs/DIORAMAS.md: la sección del fondo (arriba)
@@ -299,19 +793,24 @@ Desglosado en lo que se ve, no en lo que se mide:
 
 ### Las reglas duras que se convierten en assert
 
-> **Ojo (2026-09-07): esto es el plan, no lo que hace el código.** El
-> slice 1 se implementó con techos más permisivos (`SCATTER_LIMITS` en
-> `src/arena-scatter-types.ts`: interior 0,4 u · arco frontal 1,2 u ·
-> trasero 2,6 u) y sin el validador de packs. Hay **una decisión abierta**
-> —cuál de las dos tablas manda— anotada en `NEXT_STEPS.md`; hasta
-> cerrarla, la referencia real es el contrato del código.
+> **Decidido por Rafa el 2026-09-21: manda el contrato del código.** La
+> tabla de techos que proponía este plan (0,25 u en el islote, 0,55 u en
+> la zona de combate y en el arco cercano ±55°, 1,15 u en el lejano, nada
+> cruzando r=12) queda **retirada**. Se eligió mirando `.tmp/shots-cierre/`:
+> el fleco que asoma por fuera del labio es justo lo que enseñan las
+> referencias de `resources/Terrenos/`, y la tabla del plan lo prohibía.
+> Lo de abajo es lo que el código hace cumplir hoy.
 
-En `scripts/validate-arena-packs.mjs`, enganchado a `npm run check`, con los techos derivados de **mi** tabla de oclusión (§2), no de la fórmula errónea:
+**Techos de altura** — `SCATTER_LIMITS` en `src/arena-scatter-types.ts`. Los aplica el motor (`src/arena-scatter.ts`, recorta la escala de la instancia que se pase y avisa por consola) y los comprueba `tests/sim/arena-scatter.test.ts`, que recalcula la altura real de cada instancia desde su matriz:
 
-- **r < 2,5** (islote inmune, escenario de los últimos 24 s): solo decals y elementos ≤ **0,25 u** (roban 0,27 u, menos que el radio del critter). *El centro respira.*
-- **r 2,5–8,5** (zona de combate, el 44 % del disco): techo **0,55 u** → roba 0,42–0,56 u, **menos de la mitad del diámetro del critter**.
-- **r 8,5–11,2**: **1,15 u** en el arco lejano (donde la silueta recorta contra el mar y no tapa nada), **0,55 u** en el arco cercano ±55° de +Z.
-- **r 11,2–12**: nada por encima de **0,6 u**, sin transparencia, sin animación y sin el color del fondo. El fleco **subraya** el borde; no lo disfraza. Nada cruza r=12.
+- **r < 8,5** (islote y zona de combate): **0,4 u**. Es más estricto que la tabla retirada: roba menos de la mitad del diámetro del critter en todo el interior.
+- **r ≥ 8,5, arco frontal** (z ≥ 0: ±90° de +Z, la mitad que da a la cámara): **1,2 u**.
+- **r ≥ 8,5, arco trasero**: **2,6 u**. Ahí la silueta se recorta contra el fondo y no tapa acción.
+- **El fleco puede asomar por fuera del labio**: los centros quedan siempre dentro de `layout.maxRadius`, pero la geometría de las capas de borde sobresale hasta ~0,6 u (`src/arena-scatter-recipes.ts`, cabecera). Nada de eso colisiona ni entra en `isOnArena`.
+- Estos techos solo gobiernan el **scatter**. Los props GLB autorados (`DECOR_LAYOUTS`) no pasan por aquí: el torii grande de kitsune y la aguja de desert siguen plantados en el arco frontal, y eso se arregla en la recomposición de héroes (fase 7), no con un techo.
+
+**Sigue siendo objetivo, sin validador escrito** (`scripts/validate-arena-packs.mjs` no existe):
+
 - **Presupuestos:** ≤25.000 tris de scatter por pack, ≤2.200 instancias, ≤10 `InstancedMesh`, y **≤250.000 tris de decor total por pack** — que hoy falla con jungle (900.815) y kitsune (774.122). *Que falle es la señal, no el problema.*
 - **Cero emisivo y saturación tope por debajo de la de los critters:** el naranja del aviso de colapso es **información**, y los bichos tienen que ser lo único saturado en pantalla.
 

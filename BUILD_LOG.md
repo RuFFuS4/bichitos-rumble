@@ -1,5 +1,57 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-21 — [Arena] Las tres decisiones: techos del código, isla en cono y el fondo se rehace en el cielo
+
+Las tres decisiones que bloqueaban el carril se cerraron mirando capturas.
+
+**Techos del scatter: manda el código** (`SCATTER_LIMITS`). La tabla que
+proponía `docs/DIORAMAS.md §3` queda retirada, y el doc cuenta ahora lo
+que el código hace cumplir. El motivo: el fleco que asoma por fuera del
+labio es justo lo que enseñan las referencias, y la tabla lo prohibía.
+
+**La isla es un cono en punta.** Antes de decidir se hizo un A/B sin tocar
+código, con `setArenaLook` en vivo: `.tmp/shots-cono/`. Resultado: **en la
+cámara de juego las tres variantes salen idénticas**; el cono solo se lee
+con cámara baja (pantalla final, capturas de tienda) y en los sectores que
+vuelcan al caer.
+- Los valores: `cliffTaper` 0,08, 9 u de alto y 10 estratos con más
+  rizado. Coste: +10,5k tris y 0 draws. Golden 3/3 sin regenerar.
+- La panza sale algo oscura porque mira hacia abajo y solo le llega el
+  hemisferio. El rebote desde las nubes se probó en vivo y la arregla,
+  pero va con la luz del fondo v2.
+
+**El fondo del mar no vale.** Rafa marcó las cuatro quejas: «no se lee qué
+hay abajo», «está vacío», **«quiero cielo, no suelo»** y «fuera la foto
+del final». Es un cambio de concepto: la isla ya no flota sobre un mar a
+y=−32, cuelga sobre un pozo de cielo.
+- **Cómo se diseñó el sustituto.** Cuatro propuestas en paralelo:
+  geometría, la textura `clouds.png` de Rafa, shader y escenografía
+  primero. Dos jueces eligieron la misma, geometría. Después, síntesis y
+  un verificador adversarial que revisó 62 afirmaciones contra el código.
+- **Lo que cazó el verificador**, y hubiera costado caro:
+  - `bandTint` multiplica en lineal, no en sRGB. La decisión «abismo
+    casi negro en jungle» era un error de cuenta.
+  - Los hooks `onBeforeRender` sin `updateMatrixWorld` no se aplican en
+    ese frame.
+  - `getPerf()` no mide GPU (`frameMs` es el intervalo de rAF).
+  - La métrica del canto con el labio fijo en r=12 no mide nada a t=29.
+- **Rafa lo aprobó** y va por delante de los dioramas.
+  - Decisiones: nubes más claras que la arena sí, con condiciones;
+    `clouds.png` solo si hace falta, en F2 y nunca en juego.
+  - Queda abierta la decisión 2 (pozo oscuro o claro), que se decide
+    sobre el A/B del slice.
+  - Plan: `docs/DIORAMAS.md` §«Fondo v2».
+  - Por qué falló el intento de abril: `9047031`, revertido a los 22 min.
+    Un plano con `clouds.png` 18 u por debajo tapaba todo el cuadro en
+    blanco.
+
+**Trampa de herramientas arreglada.** `scripts/arena-shots.mjs` con
+varios packs y `--at-seconds` sacaba del segundo pack en adelante la
+**cuenta atrás**, con el reloj marcando el t pedido. El HUD no reinicia
+el reloj hasta `playing` y seguía enseñando el de la partida anterior.
+Ahora se espera por `__game.phase`. Es la misma familia de fallo que el
+del 2026-09-07: capturas que mienten sobre el instante.
+
 ## 2026-09-21 — [PERSONAJES] El feeling, medido: las patas siguen al suelo y el cuerpo por fin se inclina
 
 Petición de Rafa del 2026-09-07: *"se sienten pesados en vez de

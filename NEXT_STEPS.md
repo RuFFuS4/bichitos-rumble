@@ -38,7 +38,8 @@ todo el terreno v2, el fondo y los dioramas viven solo en `dev`, **sin
 desplegar** (`git log --oneline main..dev` los lista).
 
 **Lo primero de la próxima sesión, por orden:**
-1. **Rafa mira capturas y decide.** La ÚNICA hoja de contactos que
+1. ✅ *Hecho el 2026-09-21 por el carril ARENA: decididas las tres (ver
+   «Esperando respuesta» justo abajo).* **Rafa mira capturas y decide.** La ÚNICA hoja de contactos que
    enseña el estado de hoy es **`.tmp/shots-cierre/`** (los 5 biomas,
    t=0, tomada al cerrar sobre el `dev` de hoy). Las otras son
    históricas y **engañan si se miran como estado actual**:
@@ -58,10 +59,11 @@ desplegar** (`git log --oneline main..dev` los lista).
    que cliente y servidor salen a la vez.
 
 **Esperando respuesta de Rafa** (bloquean trabajo, no son opinión):
-- **Techos de altura del scatter**: contrato actual vs reglas de
-  `docs/DIORAMAS.md §3` (decisión M2, más abajo).
-- **¿Isla como cono** flotando en mar / aire / hielo según el bioma?
-- **¿El fondo** (mar por bioma) te vale como está?
+- ~~Techos del scatter, isla como cono, ¿vale el fondo?~~ **Decididas el
+  2026-09-21** (BUILD_LOG [Arena]): manda el código, la isla ya es un
+  cono en punta y el fondo se rehace como «isla en el cielo»
+  (`docs/carriles/arena.md`). Queda solo la decisión 2 del fondo v2, que
+  se toma sobre las capturas de su slice.
 
 **Estado de la máquina** (comprobado el 2026-09-16): no queda vivo ningún
 navegador de automatización —los ~70 Chrome huérfanos del cierre anterior
@@ -153,7 +155,8 @@ entregable):
             recomponer los 73 props autorados (muro caído de sillares,
             héroes fuera del arco frontal), `SCATTER_DENSITY` en el studio
             y applier ToolPatch `scatter-patch`.
-      - [ ] Decisión de Rafa (review M2): los techos de altura del scatter
+      - [x] **Decidido 2026-09-21: manda el código** (DIORAMAS §3
+            corregido). Era: decisión de Rafa (review M2): los techos de altura del scatter
             (`SCATTER_LIMITS`: interior 0,4 u · arco frontal ±90° 1,2 u ·
             trasero 2,6 u) son más permisivos que las "reglas duras" de
             `docs/DIORAMAS.md §3` (combate 0,55 · arco cercano ±55° 0,55 ·
@@ -162,7 +165,8 @@ entregable):
             recomendación: mantener el contrato actual (lo que se ve en
             las capturas) y corregir el doc — el fleco que asoma 0,6 u
             fuera del labio es justo lo que piden tus referencias.
-      - [ ] Decisión de Rafa: ¿la isla como CONO (base que se estrecha
+      - [x] **Hecho 2026-09-21: cono en punta** (`cliffTaper` 0,08, 9 u,
+            10 estratos). Era: decisión de Rafa: ¿la isla como CONO (base que se estrecha
             mucho más, o cerrada en punta) flotando en mar / aire / hielo
             según el bioma? El taper de 0,82 ya apunta ahí; subirlo es un
             número (`ARENA_LOOK.cliffTaper`) y cerrarlo en punta es media
@@ -173,9 +177,9 @@ entregable):
       0 bytes, 1 draw call, golden intacto. Plan completo en
       [`docs/DIORAMAS.md`](docs/DIORAMAS.md) (relieves, cresta de
       siluetas y luz por bioma quedan para las fases 2-5).
-      **← DECIDE**: ¿te vale que el vacío deje de estar vacío? El fondo
-      actual se ve en `.tmp/shots-cierre/` (`shots-fondo/` es de antes de
-      los dioramas).
+      **Decidido 2026-09-21: NO vale.** Se rehace como «isla en el
+      cielo», con plan aprobado en `docs/DIORAMAS.md` §«Fondo v2». Va antes
+      que el slice 2 de dioramas.
 - [ ] Fase 1b — bisel de junta, applier ToolPatch `look-patch`, panel
       del studio y dieta de props. *(Las sombras de contacto de critters
       salieron adelantadas en el slice 1 de dioramas: `blob-shadows.ts`.)*
