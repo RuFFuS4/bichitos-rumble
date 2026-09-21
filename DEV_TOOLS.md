@@ -126,7 +126,10 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   saca velocidad real, ritmo de patas, patinaje del pie, inclinación,
   balanceo, fotogramas de la media vuelta y altura en partida; `--video`
   graba el MP4 (GPU por defecto, mudo como siempre). `--feel=S.K=N`
-  prueba otros valores de FEEL sin tocar código.
+  prueba otros valores de FEEL sin tocar código. Los dos `--feel` escriben
+  en `window.__feel`, el `FEEL` que usa el juego (lo expone
+  `src/tools/main.ts`); un `import('/src/gamefeel.ts')` desde la página
+  NO sirve tras una recarga en caliente (ERROR_LOG 2026-09-22).
 - **Batch runner headless** (afilado slice G — LA herramienta
   Claude-first): con el dev server vivo,
   `npm run batch -- --matches=20 --seed=1 --player=Shelly --bots=Trunk,Sergei,Kurama --speed=8`

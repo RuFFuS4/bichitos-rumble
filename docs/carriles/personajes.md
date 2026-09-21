@@ -19,13 +19,21 @@ antes de commitear el JSON.
          los nueve miden 1,66-1,71 en partida y no hay salto en el «¡YA!»
          (`FEELING.md §3.1`).
    - [x] **Ritmo por bicho** — Rafa: *"bastante mejor que antes"*.
-   - [ ] **Velocidad de suelo** — Rafa pide recomendación (`FEELING.md
-         §7`). Es gameplay: zona hard-stop, golden:write, espejo del
-         servidor y despliegue cliente+servidor a la vez.
-   - [ ] **Corte 2** (`§5`): giro con peso en el hijo visual, acentos de
-         arranque y frenada, reacciones al golpe/cabezazo que hoy se
-         pintan en mallas ocultas, y personalidad con el rango real del
-         roster (velocidad 8..18).
+   - [x] **Velocidad de suelo** — hecha el 2026-09-22 (`FEELING.md
+         §7.7`): zona muerta arreglada, `accelerationScale` 2,2, bots a
+         0,7 en los dos lados, retoques acoplados, paridad `FEEL`↔`SIM`,
+         y capa visual (giro de ~150 ms, patas a la velocidad real).
+         **No sale a producción** sin el suavizado online del bicho local
+         (buzón de DISTRIBUCIÓN).
+   - [ ] **Gusto pendiente** (`§7.7`): Kowalski patina ×2 con su clip de
+         zancada diminuta; revisar los sesgos de `FEEL.runCadence` de
+         Kermit, Cheeto y Shelly con la velocidad nueva; y si las rondas
+         se sienten cortas al jugar (−13 % en solo-bots), hablarlo con
+         ARENA (colapso) o tocar vidas.
+   - [ ] **Corte 2** (`§5`): ~~giro con peso~~ (hecho con la velocidad),
+         acentos de arranque y frenada, reacciones al golpe/cabezazo que
+         hoy se pintan en mallas ocultas, y personalidad con el rango real
+         del roster (velocidad 8..18).
    - [ ] Vocabulario que sigue faltando después del corte 2: stretch al
          salir despedido, anticipación antes de la habilidad, inercia en
          orejas y cola.
@@ -129,10 +137,13 @@ antes de commitear el JSON.
 
 ## Cómo retomar
 
-**2026-09-21** — diagnóstico del feeling entregado y corte 1 en `dev`
-(golden 3/3 sin regenerar: todo visual). Lee `docs/FEELING.md` §6: sin
-la decisión de tamaños de Rafa no afines el ritmo por bicho. Si no ha
-contestado, el corte 2 (§5) no depende de ella y se puede empezar.
+**2026-09-22** — en `dev`: feeling corte 1, tamaño 1,7, velocidad ×1,375
+con bots a 0,7 y el giro de ~150 ms (`docs/FEELING.md` §7.7). El golden
+lo regeneró este carril tres veces en la rama de la velocidad, siempre
+con 3/3 detrás. Lo siguiente: lo que Rafa diga del vídeo
+`.tmp/velocidad-final/` (gusto: Kowalski, sesgos de ritmo, duración de
+las rondas) y el resto del corte 2 (§5: acentos de arranque y frenada,
+reacciones visibles al golpe).
 
 Herramientas del carril: `scripts/critter-motion.mjs` (mide velocidad
 real, ritmo de patas, patinaje, inclinación, balanceo, fotogramas de la

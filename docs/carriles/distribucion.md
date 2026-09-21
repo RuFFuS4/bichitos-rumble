@@ -308,6 +308,28 @@ corren riesgo: no hay migraciones.
   → *Leído el 2026-09-21. Queda como punto 10, a la espera de que Rafa
   apruebe el plan de velocidad.*
 
+  **Actualización, 2026-09-21 (noche) — Rafa aprobó el plan y ya está
+  hecho en la rama `claude/feature/personajes-velocidad`** (entra en
+  `dev` cuando pase la verificación):
+  - Velocidad `accelerationScale` 1,6 → 2,2, bots a 0,7 **en los dos
+    lados**, y los retoques acoplados (holeForce, rebote anclado,
+    embestida). Todo lo del servidor está en `server/src/sim/*` (espejos
+    de PERSONAJES): **no hace falta tocar `BrawlRoom.ts` para la
+    velocidad**. El factor de los bots online lo aplica
+    `computeBotInput` al devolver el vector (después de la sonda), así
+    que el punto 3 de arriba ya no te toca.
+  - `tests/sim/feel-sim-parity.test.ts` (nuevo) compara 20 pares
+    `FEEL` ↔ `SIM`: si alguien cambia un lado solo, `test:sim` falla.
+  - **Lo que te pido** (tu fichero): el espejo de la zona muerta en
+    `BrawlRoom.ts:1476` → `if (!data.hasInput && speed < deadZone)`. A
+    30 Hz solo afecta a Shelly ralentizada o en el hielo, así que no
+    bloquea nada.
+  - **Condición de despliegue que propongo** (va en el plan de
+    `docs/FEELING.md §7.6`; la decisión final es de Rafa): el suavizado
+    del bicho local en online (punto 1) antes de sacar la velocidad
+    nueva a producción. Si `dev` sale a `main` sin él, online se verán
+    tirones de ~9-12 px.
+
 ## Cómo retomar
 
 **2026-09-21** — primera sesión del carril.
