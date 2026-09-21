@@ -589,8 +589,13 @@ export class Critter {
     this.vz *= friction;
 
     // Dead zone: kill micro-drift (exponential decay never reaches true zero)
+    // — only when coasting. With input held it zeroed the very velocity
+    // the critter was building: at high refresh rates one frame's
+    // acceleration stays under the threshold, so Shelly could not start
+    // moving at ≥120 Hz, Sergei at ≥144 Hz, and the Shelly bot not even
+    // at 60 Hz (docs/FEELING.md §7.4).
     const speed = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
-    if (speed < FEEL.movement.velocityDeadZone) {
+    if (!this.hasInput && speed < FEEL.movement.velocityDeadZone) {
       this.vx = 0;
       this.vz = 0;
     } else if (speed > FEEL.movement.maxSpeed) {
