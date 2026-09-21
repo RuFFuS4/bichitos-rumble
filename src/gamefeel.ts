@@ -29,6 +29,8 @@ export const FEEL = {
     runRateMin: 0.45,         // timeScale mínimo del clip Run: arrancar y frenar no van a cámara lenta
     runCadenceMaxHz: 6,       // techo de ciclos/s: por encima el pie patina antes que girar como un ventilador
     topSpeedReach: 0.9,       // fracción de la velocidad terminal a la que el cuerpo ya va inclinado del todo
+    groundSpeedSmoothing: 0.06, // s — suavizado de la velocidad de suelo que marca el ritmo de las patas (en online absorbe los saltos de posición entre parches)
+    turnHalfLife: 0.025,      // s — el MODELO tarda esto en recorrer la mitad de un giro (≈90 % en 80 ms); la orientación de juego sigue siendo instantánea
   },
 
   // Cadencia de carrera por bicho (claves = RosterEntry.id), relativa a la

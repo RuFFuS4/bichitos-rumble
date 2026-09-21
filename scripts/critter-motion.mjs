@@ -44,7 +44,9 @@ const ROUTE = [[0, []], [20, ['KeyW']], [100, []], [125, ['KeyS']], [175, ['KeyD
 const STEADY = [80, 100];     // steps of steady run towards -z (for speed/lean/rate)
 const REVERSE_AT = 125;       // W released at 100, S pressed here: the 180° reversal
 const START = { x: 0, z: 4.5 };
-const FRAME = { x0: -2.2, x1: 3.2, z0: -1.2, z1: 5.6, yTop: 2.9 };
+// Covers the whole route at the 2026-09-21 speed (the fastest critter
+// travels ~6 u on the long leg); the old box cropped Kurama out.
+const FRAME = { x0: -2.6, x1: 4.8, z0: -3.2, z1: 5.8, yTop: 2.9 };
 
 const { values: opt } = parseArgs({
   options: {
@@ -109,6 +111,8 @@ for (const name of opt.critters.split(',')) {
     api.setAllBotsBehaviour('idle');
     const p = g.critters[0];
     p.x = START.x; p.z = START.z; p.vx = 0; p.vz = 0; p.mesh.rotation.y = Math.PI;
+    // The placement is a teleport, not a turn: no model lag to start with.
+    p.visualYawLag = 0; p.lastFacingY = Number.NaN;
     const b = g.critters[1]; b.x = -9; b.z = -6; b.vx = 0; b.vz = 0;
     // Real height: skinned vertices, not the bind-pose box.
     const V = p.mesh.position.constructor;
@@ -159,7 +163,9 @@ for (const name of opt.critters.split(',')) {
         const p = window.__game.critters[0];
         const run = p.skeletal?.actions?.run;
         ok({
-          v: Math.hypot(p.vx, p.vz), ry: p.mesh.rotation.y,
+          v: Math.hypot(p.vx, p.vz), ground: p.groundSpeed ?? Math.hypot(p.vx, p.vz),
+          // what is SEEN: gameplay facing + the model's turn lag
+          ry: p.mesh.rotation.y + (p.visualPivot ? p.visualPivot.rotation.y : 0),
           state: p.skeletal?.getCurrentState() ?? null,
           rate: run ? run.getEffectiveTimeScale() : null,
           lean: p.glbMesh.rotation.x, sway: p.glbMesh.rotation.z,
@@ -173,6 +179,9 @@ for (const name of opt.critters.split(',')) {
 
   const steady = frames.slice(STEADY[0], STEADY[1]);
   const vTop = median(steady.map((f) => f.v));
+  // Ground actually covered: the position moves BEFORE friction, so it is
+  // ×1.155 the stored |v| at 60 Hz — this is what the legs must match.
+  const groundTop = median(steady.map((f) => f.ground));
   const rate = median(steady.map((f) => f.rate ?? 0));
   const gait = RUN_GAIT[setup.id];
   // 180° reversal: frames from the first change of heading until it
@@ -186,7 +195,9 @@ for (const name of opt.critters.split(',')) {
     vTop: +vTop.toFixed(2),
     runRate: +rate.toFixed(2),
     cyclesPerSec: setup.runDur ? +(rate / setup.runDur).toFixed(2) : null,
-    footSlip: gait ? +(vTop / (gait.stride * setup.scale * rate)).toFixed(2) : null,
+    groundTop: +groundTop.toFixed(2),
+    heightsPerSec: +(groundTop / setup.height).toFixed(2),
+    footSlip: gait ? +(groundTop / (gait.stride * setup.scale * rate)).toFixed(2) : null,
     leanDeg: +(median(steady.map((f) => f.lean)) * 180 / Math.PI).toFixed(1),
     swayDeg: +(Math.max(...steady.map((f) => Math.abs(f.sway))) * 180 / Math.PI).toFixed(1),
     reverseFrames: turnEnd >= 0 && turnStart >= 0 ? turnEnd - turnStart + 1 : null,

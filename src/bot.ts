@@ -146,6 +146,7 @@ export function updateBot(
 
     const accel = bot.effectiveSpeed * FEEL.movement.accelerationScale * FEEL.bots.moveAccelFactor;
     bot.moveAccel = Math.hypot(nx, nz) * accel;
+    bot.pace = FEEL.bots.moveAccelFactor;
     bot.vx += nx * accel * dt;
     bot.vz += nz * accel * dt;
   }
