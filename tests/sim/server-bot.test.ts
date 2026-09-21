@@ -8,6 +8,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PlayerSchema } from '../../server/src/state/PlayerSchema.js';
 import { computeBotInput } from '../../server/src/sim/bot.js';
+import { SIM } from '../../server/src/sim/config.js';
+
+/** The move vector's LENGTH is the bot's pace (fraction of a player's
+ *  acceleration) — 0.7 since the 2026-09-21 speed-up; the direction is
+ *  what the brain decides. */
+const PACE = SIM.bots.moveAccelFactor;
 
 interface AbilityLike {
   abilityType: string;
@@ -57,7 +63,7 @@ describe('server bot — computeBotInput', () => {
     const near = makePlayer({ sessionId: 'near', x: 1.5, z: 0 });
     const far = makePlayer({ sessionId: 'far', x: 0, z: 8 });
     const input = computeBotInput(bot, [bot, near, far]);
-    expect(input.moveX).toBeCloseTo(1, 6); // toward `near`, not `far`
+    expect(input.moveX).toBeCloseTo(PACE, 6); // toward `near`, not `far`
     expect(input.moveZ).toBeCloseTo(0, 6);
     expect(input.headbutt).toBe(true); // 1.5 < 2.0
   });
@@ -68,7 +74,7 @@ describe('server bot — computeBotInput', () => {
     const fallingNear = makePlayer({ sessionId: 'f', x: 1, z: 0, falling: true });
     const alive = makePlayer({ sessionId: 'a', x: 0, z: 5 });
     const input = computeBotInput(bot, [bot, fallingNear, alive]);
-    expect(input.moveZ).toBeCloseTo(1, 6); // chases the alive one
+    expect(input.moveZ).toBeCloseTo(PACE, 6); // chases the alive one
     expect(input.moveX).toBeCloseTo(0, 6);
     expect(input.headbutt).toBe(false); // 5 u away
   });
@@ -85,7 +91,7 @@ describe('server bot — computeBotInput', () => {
     // Post-respawn immunity on a NON-Kurama does not hide the target.
     const immuneSergei = makePlayer({ sessionId: 's', x: 2, z: 0, immunityTimer: 1.0 });
     const chased = computeBotInput(bot, [bot, immuneSergei]);
-    expect(chased.moveX).toBeCloseTo(1, 6);
+    expect(chased.moveX).toBeCloseTo(PACE, 6);
   });
 
   it('edge awareness: void directly ahead (isOnArena false at the probe) → full turn toward center', () => {
@@ -94,7 +100,19 @@ describe('server bot — computeBotInput', () => {
     const target = makePlayer({ sessionId: 't', x: 14, z: 0 }); // straight off the rim
     const input = computeBotInput(bot, [bot, target], arenaDisc(12));
     // probe at x = 11.5 + 1.1 = 12.6 > 12 → off arena → steer = -pos/|pos|
-    expect(input.moveX).toBeCloseTo(-1, 10);
+    expect(input.moveX).toBeCloseTo(-PACE, 10);
+    expect(Math.abs(input.moveZ)).toBeLessThan(1e-10);
+  });
+
+  it('the pace is applied AFTER the void probe (a pre-scaled vector would shorten the probe)', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9999);
+    const bot = makePlayer({ sessionId: 'bot', x: 11.0, z: 0 });
+    const target = makePlayer({ sessionId: 't', x: 14, z: 0 });
+    const input = computeBotInput(bot, [bot, target], arenaDisc(12));
+    // full probe: 11 + 1.1 = 12.1 > 12 → void → full turn inward at PACE.
+    // (Scaled first it would probe 11 + 0.77 = 11.77, see solid ground and
+    // only blend — the bot would walk further out.)
+    expect(input.moveX).toBeCloseTo(-PACE, 10);
     expect(Math.abs(input.moveZ)).toBeLessThan(1e-10);
   });
 
@@ -103,10 +121,10 @@ describe('server bot — computeBotInput', () => {
     const bot = makePlayer({ sessionId: 'bot', x: 11, z: 0 }); // rd 11 > 12 - 1.4
     const target = makePlayer({ sessionId: 't', x: 11, z: 5 }); // tangential chase
     const input = computeBotInput(bot, [bot, target], arenaDisc(12));
-    // danger 0.4 → w = (0.4/1.4)·1.6 ≈ 0.457 → normalized (-0.416, 0.909)
-    expect(input.moveX).toBeLessThan(-0.3); // pulled toward center (−x)
-    expect(input.moveZ).toBeGreaterThan(0.85); // still going for the target
-    expect(Math.hypot(input.moveX, input.moveZ)).toBeCloseTo(1, 6);
+    // danger 0.4 → w = (0.4/1.4)·1.6 ≈ 0.457 → normalized (-0.416, 0.909) × PACE
+    expect(input.moveX).toBeLessThan(-0.3 * PACE); // pulled toward center (−x)
+    expect(input.moveZ).toBeGreaterThan(0.85 * PACE); // still going for the target
+    expect(Math.hypot(input.moveX, input.moveZ)).toBeCloseTo(PACE, 6);
   });
 
   it('Steel Shell trigger is DETERMINISTIC: incoming pressure raises the shell, calm does not', () => {

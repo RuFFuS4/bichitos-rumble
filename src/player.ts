@@ -37,6 +37,8 @@ export function updatePlayer(
   critter.hasInput = mx !== 0 || mz !== 0;
 
   const accel = critter.effectiveSpeed * FEEL.movement.accelerationScale;
+  critter.moveAccel = Math.hypot(mx, mz) * accel;
+  critter.pace = 1;
   critter.vx += mx * accel * dt;
   critter.vz += mz * accel * dt;
 

@@ -973,7 +973,9 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       sinkholeL: true,
       holeRadius: 3.0,
       holeDuration: 5.0,
-      holeForce: 14,
+      // 14 × 1.375 (2026-09-21 speed-up): the pull is an acceleration that
+      // competes with the victim's own — unscaled, the trap stops trapping.
+      holeForce: 19.25,
       holeCastOffset: 4.0,
     }),
   ],

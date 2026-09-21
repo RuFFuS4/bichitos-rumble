@@ -180,6 +180,31 @@ export class Critter {
   vz = 0;
   alive = true;
   hasInput = false;
+  /** Acceleration (u/s²) the controller pushed this frame — written by
+   *  player.ts / bot.ts. The dead zone uses it to tell a real push from
+   *  stick drift or a rooted critter (see update()). */
+  moveAccel = 0;
+  /** Fraction of a player's acceleration this critter's controller uses:
+   *  1 for a player, FEEL.bots.moveAccelFactor for an offline bot
+   *  (written by bot.ts). Presentation only — the run pose normalises by
+   *  the critter's REAL top speed, and a bot's is lower. */
+  pace = 1;
+  /** Ground speed actually covered (u/s), smoothed — what the legs should
+   *  match. Measured from position deltas, so it is right offline (where
+   *  the position moves BEFORE friction, ×1.155 the stored |v| at 60 Hz)
+   *  and online (where the position arrives in server patches). */
+  groundSpeed = 0;
+  private groundX = NaN;
+  private groundZ = NaN;
+  /** Visual-only pivot between `mesh` (gameplay facing) and `glbMesh`.
+   *  Its yaw lags the facing so the model turns over ~80 ms instead of
+   *  snapping 180° in one frame (see critter-animation tickTurn). */
+  visualPivot: THREE.Group | null = null;
+  /** Yaw (rad) the model still trails the gameplay facing by. */
+  visualYawLag = 0;
+  /** Facing seen last frame, to catch the jumps the lag absorbs. NaN =
+   *  not seen yet (the next frame adopts the facing without lag). */
+  lastFacingY = NaN;
   lives = FEEL.lives.default;
   immunityTimer = 0;
   /** v0.11 — Kurama Mirror Trick: while > 0 the GLB mesh is
@@ -589,8 +614,18 @@ export class Critter {
     this.vz *= friction;
 
     // Dead zone: kill micro-drift (exponential decay never reaches true zero)
+    // — only when coasting. With input held it zeroed the very velocity
+    // the critter was building: at high refresh rates one frame's
+    // acceleration stays under the threshold, so Shelly could not start
+    // moving at ≥120 Hz, Sergei at ≥144 Hz, and the Shelly bot not even
+    // at 60 Hz (docs/FEELING.md §7.4). "Coasting" also covers a push too
+    // weak to ever clear the dead zone even at terminal velocity (a
+    // gamepad stick drifting just past its own dead zone, a rooted or
+    // stunned critter) — frame-rate independent, unlike the old test.
     const speed = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
-    if (speed < FEEL.movement.velocityDeadZone) {
+    const pushTerminal = (this.moveAccel * halfLife) / Math.LN2;
+    const coasting = !this.hasInput || pushTerminal < FEEL.movement.velocityDeadZone;
+    if (coasting && speed < FEEL.movement.velocityDeadZone) {
       this.vx = 0;
       this.vz = 0;
     } else if (speed > FEEL.movement.maxSpeed) {
@@ -920,7 +955,16 @@ export class Critter {
       }
     });
 
-    this.mesh.add(group);
+    // The GLB hangs from a visual pivot so its yaw can trail the gameplay
+    // facing (mesh.rotation.y, which headbutts and abilities fire along)
+    // without touching it. World transforms of glbMesh include the pivot,
+    // so anything that snapshots them (Kurama's decoy) copies what is seen.
+    const pivot = new THREE.Group();
+    this.mesh.add(pivot);
+    pivot.add(group);
+    this.visualPivot = pivot;
+    this.visualYawLag = 0;
+    this.lastFacingY = NaN;
     this.glbMesh = group;
 
     // Measure bind-pose silhouette FIRST, before the mixer touches the
@@ -1066,6 +1110,7 @@ export class Critter {
   }
 
   private tickSkeletal(dt: number): void {
+    this.trackGroundSpeed(dt);
     if (!this.skeletal) return;
 
     // Ability cast edges — play the corresponding clip exactly once
@@ -1103,9 +1148,9 @@ export class Critter {
       const vMag = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
       const moving = vMag > FEEL.movement.velocityDeadZone * 2;
       this.skeletal.play(moving ? 'run' : 'idle');
-      // The legs follow the real ground speed (visual only — see
+      // The legs follow the ground actually covered (visual only — see
       // runPlaybackRate). Without a measured gait the authored rate stays.
-      const rate = moving ? runPlaybackRate(this, vMag) : null;
+      const rate = moving ? runPlaybackRate(this, this.groundSpeed) : null;
       if (rate !== null) this.skeletal.setCurrentTimeScale('run', rate);
     }
 
@@ -1172,6 +1217,7 @@ export class Critter {
     // critter never looks toward the void.
     this.mesh.rotation.y = Math.atan2(-x, -z);
     this.mesh.position.y = 0;
+    this.resetVisualMotion();
     this.immunityTimer = FEEL.lives.immunityDuration;
     playSound('respawn');
     this.isHeadbutting = false;
@@ -1228,7 +1274,38 @@ export class Critter {
       }
     });
     this.glbMesh = null;
+    this.visualPivot = null;
     this.glbMaterials = [];
+  }
+
+  /** A teleport (respawn, new match) is neither a run nor a turn: drop
+   *  the ground-speed history and the turn lag so the model doesn't
+   *  sprint in place or spin on the spot when it reappears. */
+  private resetVisualMotion(): void {
+    this.groundSpeed = 0;
+    this.groundX = NaN;
+    this.groundZ = NaN;
+    this.visualYawLag = 0;
+    // NaN = "take whatever facing the next frame has" — the caller may set
+    // the spawn facing after this (reset() is followed by game placement).
+    this.lastFacingY = NaN;
+    if (this.visualPivot) this.visualPivot.rotation.y = 0;
+  }
+
+  /** Smoothed ground speed from the position delta of this frame. Jumps
+   *  faster than any run (respawn, blink, a late network patch) are not
+   *  running and are skipped. Visual only. */
+  private trackGroundSpeed(dt: number): void {
+    if (dt <= 0) return;
+    if (Number.isFinite(this.groundX)) {
+      const inst = Math.hypot(this.x - this.groundX, this.z - this.groundZ) / dt;
+      if (inst <= FEEL.movement.maxSpeed * 1.5) {
+        this.groundSpeed += (inst - this.groundSpeed) *
+          Math.min(1, dt / FEEL.locomotion.groundSpeedSmoothing);
+      }
+    }
+    this.groundX = this.x;
+    this.groundZ = this.z;
   }
 
   reset(x: number, z: number): void {
@@ -1258,6 +1335,7 @@ export class Critter {
     this.lastStatsHeadbutting = false;
     this.lastStatsFalling = false;
     this.lastStatsAbilityActive = [false, false, false];
+    this.resetVisualMotion();
   }
 }
 

@@ -311,3 +311,53 @@ Sihans en alguna partida. D. `accelerationScale` + retoques acoplados en
 cliente y `server/src/sim/*` (espejos de este carril), golden:write.
 E. Bots online (BrawlRoom.ts, DISTRIBUCIÓN). F. Capa visual. Despliegue
 cliente + servidor a la vez, con el suavizado online hecho.
+
+### 7.7 Hecho (2026-09-22, rama `claude/feature/personajes-velocidad`)
+
+Rafa: *"1 sí, 2 sí, 3 sí, 4 identidad"* — zona muerta, velocidad **2,2**
+(la recomendada), bots a **0,7** iguales offline y online, y Shelly lenta
+por identidad. Cinco commits, cada uno con su golden:
+
+| Paso | Qué | Golden |
+|---|---|---|
+| A | Zona muerta solo sin input (bug de producción) | regenerado |
+| B | `0,55` → `FEEL.bots.moveAccelFactor` | 3/3 sin regenerar |
+| D | `accelerationScale` 2,2 · bots 0,7 (cliente y `SIM`; online se aplica al salir de `computeBotInput`, tras la sonda) · `holeForce` 19,25 · `anchoredBounceFactor` 1,925 · embestida 4,7 · test de paridad `FEEL`↔`SIM` | regenerado |
+| E | Verificación: stick con deriva, paridad a 50 pares, `--feel` que no llegaba, runner que se colgaba | regenerado |
+| F | Capa visual: giro de ~150 ms en un pivote hijo, patas a la velocidad de suelo real, bots que se inclinan como corredores | 3/3 sin regenerar |
+
+**Verificación** (48+48 partidas solo-bots con las mismas semillas,
+bootstrap por partidas enteras, y revisión adversarial del diff):
+- La velocidad se aplicó exacta: crucero ×1,742 (esperado ×1,75).
+- **Mejora**: enganche 25 % → 31 % (IC por encima de 0). La conversión
+  de cabezazos en caídas no cambia.
+- **Más caídas en el borde, sobre todo con rival cerca**: más empujones
+  donde duele, o sea más acción. Las salidas «solas» por el borde quedan
+  dentro del ruido. Ampliar la detección del borde de los bots (1,5/1,9
+  y 1,9/2,45 frente a 1,1/1,4) no cambió nada medible, así que se queda.
+- **Partidas solo-bots un 13 % más cortas** (57 frente a 66 s). En
+  offline eso mide cuánto tarda en caer el piloto automático del
+  jugador, no una ronda con un humano. Si al jugarlo se hacen cortas,
+  las palancas son el ritmo del colapso (ARENA) o las vidas.
+- Hallazgo confirmado y arreglado: con la zona muerta condicionada al
+  input, un stick con deriva hacía resbalar sin fin. Ahora cuenta como
+  parado todo empuje que ni a velocidad terminal supera la zona muerta.
+
+**Medido después del paso F** (`critter-motion`, los nueve):
+
+| | Sergei | Trunk | Kurama | Shelly | Kermit | Sihans | Kowalski | Cheeto | Sebastian |
+|---|---|---|---|---|---|---|---|---|---|
+| Alturas/s reales | 2,13 | 2,57 | 2,95 | 1,28 | 2,49 | 2,94 | 2,09 | 2,47 | 2,48 |
+| Ciclos de zancada/s | 5,6 | 2,1 | 6 (techo) | 1,3 | 2,2 | 5,6 | 6 (techo) | 2,8 | 6 (techo) |
+| Pie (1 = apoyado) | 1,00 | 1,00 | 1,04 | 0,77 | 0,63 | 1,00 | **2,17** | 0,67 | 1,33 |
+
+Media vuelta: 9 fotogramas (antes 1). **Pendiente de gusto**: Kowalski
+patina ×2 (su clip pediría ~13 pasos/s: o se acepta como deslizamiento
+de pingüino, o se alarga su zancada en `bichitos-mesh2motion`); Kermit,
+Cheeto y Shelly llevan las patas algo más rápidas que el suelo por los
+sesgos de `FEEL.runCadence`, que eran de antes de la velocidad nueva.
+
+**Queda fuera de este carril**: el espejo de la zona muerta en
+`BrawlRoom.ts:1476` y el suavizado del bicho local en online (buzón de
+DISTRIBUCIÓN). Hasta que exista ese suavizado, la velocidad nueva no
+debería salir a producción.

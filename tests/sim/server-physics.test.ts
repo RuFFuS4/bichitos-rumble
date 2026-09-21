@@ -107,11 +107,12 @@ describe('server physics — resolveCollisions', () => {
     expect(Math.abs(sihans.vx)).toBeLessThan(Math.abs(seb.vx));
   });
 
-  it('anchored bounce without headbutt: running into Steel Shell rebounds at normalPush × 1.4', () => {
+  it('anchored bounce without headbutt: running into Steel Shell rebounds at normalPush × 1.925', () => {
     const runner = makePlayer({ sessionId: 'run', critterName: 'Sergei', x: 0, z: 0 });
     const shelly = makeAnchoredShelly(1.0, 0);
     resolveCollisions([runner, shelly]);
-    expect(runner.vx).toBeCloseTo(-3.0 * 1.4, 10); // -4.2
+    // 1.4 × 1.375 since the 2026-09-21 speed-up (SIM.collision.anchoredBounceFactor)
+    expect(runner.vx).toBeCloseTo(-3.0 * 1.925, 10); // -5.775
     expect(shelly.vx).toBe(0);
   });
 

@@ -1,5 +1,47 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-22] `--feel` cambiaba una copia de FEEL que el juego no leía
+- **Where**: `scripts/run-match-batch.mjs` y `scripts/critter-motion.mjs`,
+  opción `--feel`.
+- **Symptom**: dos tandas de 48 partidas con los bots mirando el borde
+  a 1,5 u y a 1,9 u dieron EXACTAMENTE los mismos resultados que sin
+  tocar nada, partida a partida.
+- **Cause**: los scripts hacían `import('/src/gamefeel.ts')` desde la
+  página. Tras editar `gamefeel.ts` con el dev server vivo, Vite reescribe
+  los imports del juego a `/src/gamefeel.ts?t=<sello>`: otro módulo, otro
+  objeto `FEEL`. El cambio iba a una copia que nadie leía, sin error. (El
+  estudio de velocidad del 2026-09-21 sí fue válido: aquel servidor no
+  había recargado `gamefeel.ts`, y la velocidad medida escaló con el
+  factor.)
+- **Fix**: `src/tools/main.ts` expone `window.__feel` (el objeto que usa
+  el juego) y los dos scripts lo usan o fallan en voz alta. Lección: toda
+  herramienta de «qué pasaría si» tiene que comprobar que su cambio llega;
+  un override que no puede fallar tampoco puede avisar de que no ha hecho
+  nada.
+
+### [2026-09-21] Con monitores rápidos había bichos que no podían arrancar
+- **Where**: `src/critter.ts` → `update()`, la zona muerta de velocidad
+  (`FEEL.movement.velocityDeadZone` 0,15). Espejo en
+  `server/src/BrawlRoom.ts:1476`.
+- **Symptom**: pulsando una dirección desde parado, Shelly no se movía a
+  120 Hz o más, Sergei y Kowalski a 144, Trunk a 165 y Kurama a 240. El
+  bot Shelly no arrancaba ni a 60 Hz, y cualquier bicho ralentizado
+  (arena de Sihans, bola de nieve, wind-ups de ground pound y frenzy) se
+  quedaba clavado. En producción desde que existe la zona muerta; nadie
+  lo vio porque se juega a 60 Hz.
+- **Cause**: la zona muerta anulaba la velocidad aunque hubiera input. A
+  más Hz, menos velocidad gana cada fotograma (`speed × accel × dt`), y
+  si tras la fricción queda por debajo de 0,15 se pone a cero antes de
+  poder acumularse. La física era correcta a 60 Hz y rota a cualquier
+  otra frecuencia.
+- **Fix**: zona muerta solo sin input (`!this.hasInput`). Golden
+  regenerado. Lo encontró la auditoría del estudio de velocidad
+  (`docs/FEELING.md §7.4`) y se verificó con el bucle real a 60/120/144/
+  165/240 Hz. Lección: todo umbral por fotograma sobre algo que crece
+  con `dt` es un bug de frecuencia de refresco esperando a pasar; hay
+  que probar la física a varios `dt`, no solo al de la máquina de
+  desarrollo.
+
 ### [2026-09-07] Las capturas de arena mentían: 52 s de partida en vez de 0
 - **Where**: `scripts/arena-shots.mjs` → espera previa a la captura.
 - **Symptom**: todas las capturas de `.tmp/shots-despues/` —las que se

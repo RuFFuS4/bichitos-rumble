@@ -248,13 +248,34 @@ async function openLabPage(browser, labUrl) {
 // One match
 // ---------------------------------------------------------------------------
 
+/**
+ * page.evaluate with a deadline. A renderer that stops answering (seen
+ * 2026-09-22: one seed froze the page mid-match) made the progress poll
+ * below await forever — the stall/hard-cap checks live INSIDE that loop,
+ * so they never ran and the batch hung for good. On timeout this throws a
+ * "pagina colgada" error, which runBatch treats like a crashed target.
+ */
+const PAGE_HANG_MS = 60_000;
+function evaluateWithDeadline(page, fn, arg) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`pagina colgada: ${PAGE_HANG_MS / 1000} s sin responder`)), PAGE_HANG_MS);
+  });
+  return Promise.race([page.evaluate(fn, arg), deadline]).finally(() => clearTimeout(timer));
+}
+
 async function runOneMatch(page, { player, bots, seed, packId, speed, timeoutMs, feel = {} }) {
   // --feel what-ifs: mutate the page's live FEEL (same module instance the
   // game reads every frame) before the match. Every call re-applies them,
   // so a page recreated after a crash gets them too.
   if (Object.keys(feel).length > 0) {
-    await page.evaluate(async (feel) => {
-      const { FEEL } = await import('/src/gamefeel.ts');
+    await page.evaluate((feel) => {
+      // window.__feel is the instance the game reads (src/tools/main.ts).
+      // A page-side import('/src/gamefeel.ts') is a DIFFERENT module once
+      // Vite has hot-reloaded the file (the game imports it as ?t=<stamp>)
+      // and the override silently missed — so no fallback, fail loudly.
+      const FEEL = window.__feel;
+      if (!FEEL) throw new Error('--feel: la pagina no expone window.__feel (¿tools.html antiguo?)');
       for (const [p, v] of Object.entries(feel)) {
         const [sec, key] = p.split('.');
         if (typeof FEEL[sec]?.[key] !== 'number') throw new Error(`--feel: FEEL.${p} no existe o no es numerico`);
@@ -305,7 +326,7 @@ async function runOneMatch(page, { player, bots, seed, packId, speed, timeoutMs,
     let lastPhase = null;
     let lastProgressAt = Date.now();
     for (;;) {
-      const s = await page.evaluate(() => {
+      const s = await evaluateWithDeadline(page, () => {
         const rec = window.__devApi.getRecording();
         const g = window.__game;
         return {
@@ -327,7 +348,7 @@ async function runOneMatch(page, { player, bots, seed, packId, speed, timeoutMs,
     }
   })();
 
-  const payload = await page.evaluate(({ ended }) => {
+  const payload = await evaluateWithDeadline(page, ({ ended }) => {
     const api = window.__devApi;
     const g = window.__game;
     const idx = typeof g.playerIndex === 'number' ? g.playerIndex : 0;
@@ -715,7 +736,7 @@ async function runBatch(browser, labUrl, cfg, participants) {
       // contexto destruido) envenenaba TODAS las partidas restantes —
       // recreamos la página para que el resto del batch corra limpio.
       const msg = String(e.message ?? '');
-      if (/Target (crashed|closed)|context was destroyed|has been closed/i.test(msg)) {
+      if (/Target (crashed|closed)|context was destroyed|has been closed|pagina colgada/i.test(msg)) {
         try { await page.close(); } catch { /* ya muerta */ }
         page = await openLabPage(browser, labUrl);
         console.log('  (página recreada tras el crash)');

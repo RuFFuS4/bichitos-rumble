@@ -14,6 +14,43 @@ Rafa decide sobre las hojas de la F0 del fondo v2:
     contrato del pozo.
 - **El rebote del hemisferio se queda**: la parte de abajo de los bichos
   sale un poco más clara y fría. PERSONAJES tiene la nota en su buzón.
+## 2026-09-22 — [PERSONAJES] Más rápidos, sin bichos que no arrancan, y verificado a 96 partidas
+
+Rafa aprobó el plan del estudio de velocidad (*"1 sí, 2 sí, 3 sí, 4
+identidad"*). Cinco commits en `claude/feature/personajes-velocidad`,
+cada uno con su golden, integrados con merge commit para que cada cambio
+de balance tenga su motivo en el historial:
+
+- **Zona muerta** (bug de producción, ERROR_LOG): solo actúa al soltar y
+  cuando el empuje no podría superarla ni a velocidad terminal. Ya no hay
+  bichos que no arrancan a 120-240 Hz, y un stick con deriva no resbala.
+- **Velocidad**: `accelerationScale` 1,6 → 2,2 (mediana 2,5 alturas/s
+  reales, la franja de los brawlers cenitales). Fricción y `maxSpeed`
+  intactos: los golpes llegan igual de lejos.
+- **Bots** a 0,7 de la aceleración del jugador **offline y online**
+  (antes 0,55 offline y 1,0 online). Todo en `server/src/sim/*`: para la
+  velocidad no hace falta tocar `BrawlRoom.ts`.
+- **Retoques acoplados**: Sinkhole ×1,375, rebote del caparazón ×1,375,
+  embestida del cabezazo ×√1,375.
+- **Paridad**: `tests/sim/feel-sim-parity.test.ts` compara 50 pares
+  `FEEL`↔`SIM`; las constantes del bot y del caparazón que el servidor
+  llevaba a mano pasan a `SIM`.
+- **Visual**: giro de ~150 ms en un pivote hijo (la orientación de juego
+  sigue instantánea), patas a la velocidad de suelo real (+15,5 %), y los
+  bots se inclinan como corredores.
+
+**Verificación**: 48+48 partidas solo-bots con las mismas semillas y
+bootstrap por partidas, más una revisión adversarial del diff con dos
+escépticos por hallazgo. Enganche 25 % → 31 %; más caídas en el borde
+(sobre todo empujados); partidas solo-bots −13 % (57 s). Ampliar la
+detección del borde de los bots no cambió nada medible.
+
+**Dos fallos de herramienta cazados por el camino** (ERROR_LOG): `--feel`
+escribía en una copia de `FEEL` tras una recarga en caliente, y el batch
+runner se colgaba si la página dejaba de responder.
+
+**No sale a producción** hasta que DISTRIBUCIÓN suavice el bicho local en
+online (tirones de ~9-12 px a la velocidad nueva). Nota en su buzón.
 
 ## 2026-09-21 — [Arena] Fondo v2, F0: la isla ya flota en el cielo
 

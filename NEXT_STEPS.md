@@ -196,9 +196,11 @@ entregable):
       patas siguen al suelo, la inclinación y el balanceo pasan de 2° a
       12° y de 0,5° a 4°, golden intacto. Todo en
       [`docs/FEELING.md`](docs/FEELING.md). Tamaños arreglados (Rafa:
-      1,7 para todos). **← DECIDE (§7.6)**: arreglar el bug de la zona
-      muerta (hay bichos que no arrancan con monitores ≥120 Hz) y la
-      velocidad de suelo recomendada (`accelerationScale` 2,2 o 2,4).
+      1,7 para todos). **Velocidad de suelo hecha el 2026-09-22**
+      (`FEELING.md §7.7`): bug de la zona muerta arreglado,
+      `accelerationScale` 2,2, bots a 0,7 offline y online, giro de
+      ~150 ms. **Condición de despliegue**: el suavizado del bicho local
+      en online (DISTRIBUCIÓN) antes de sacarla a producción.
 - [ ] **Shaders cartoon para los personajes** (Rafa: "más adelante").
       Ojo al precedente de la fase 1a: activar tone mapping o PMREM toca
       TODA la escena; un toon shader es lo mismo pero peor. Va tras flag

@@ -14,7 +14,8 @@
 //            skipPhysics, the Run clip's phase, RUN_GAIT (measured stride)
 //            and FEEL.locomotion / FEEL.runCadence (taste)
 //   - writes: body.position.y, glbMesh.position.y, glbMesh.rotation.x,
-//             glbMesh.rotation.z, glbMesh.scale.{x,y,z}
+//             glbMesh.rotation.z, glbMesh.scale.{x,y,z},
+//             visualPivot.rotation.y (the model's turn lag)
 //
 // Works identically in online and offline. In online mode Critter.update()
 // runs with skipPhysics=true; vx/vz/isHeadbutting are set from the server
@@ -114,7 +115,46 @@ const SPEED_DEADZONE = 0.3;  // below this we still apply idle-only bob
  */
 function runTopSpeed(critter: Critter): number {
   const m = FEEL.movement;
-  return (critter.config.speed * m.accelerationScale * m.frictionHalfLife) / Math.LN2;
+  // A bot runs at a fraction of a player's acceleration, so its top speed
+  // is lower — without this a bot never passed ~57 % run intensity and
+  // looked like it was strolling. Offline bots write `pace` (bot.ts);
+  // online ones are flagged by the server (isBot) and use the same FEEL
+  // value their SIM mirror is pinned to.
+  const pace = critter.isBot ? FEEL.bots.moveAccelFactor : critter.pace;
+  return (critter.config.speed * m.accelerationScale * pace * m.frictionHalfLife) / Math.LN2;
+}
+
+/**
+ * Visual turn: the gameplay facing (mesh.rotation.y) still snaps to the
+ * velocity every frame — headbutts and abilities fire along it — but the
+ * model hangs from `visualPivot`, whose yaw absorbs each jump and decays
+ * with FEEL.locomotion.turnHalfLife (≈90 % in 80 ms). A 180° reversal
+ * reads as a quick turn instead of a one-frame flip. When a blow starts
+ * (headbutt wind-up/lunge, any ability) the lag snaps to 0 so it comes
+ * out of the critter's front.
+ */
+function tickTurn(critter: Critter, dt: number): void {
+  const pivot = critter.visualPivot;
+  if (!pivot) return;
+  const facing = critter.mesh.rotation.y;
+  if (!Number.isFinite(critter.lastFacingY)) critter.lastFacingY = facing;
+  const jump = wrapAngle(facing - critter.lastFacingY);
+  critter.lastFacingY = facing;
+  const striking =
+    critter.headbuttAnticipating ||
+    critter.isHeadbutting ||
+    critter.abilityStates.some((s) => s.active);
+  if (striking) {
+    critter.visualYawLag = 0;
+  } else {
+    critter.visualYawLag = wrapAngle(critter.visualYawLag - jump);
+    critter.visualYawLag *= Math.pow(0.5, dt / FEEL.locomotion.turnHalfLife);
+  }
+  pivot.rotation.y = critter.visualYawLag;
+}
+
+function wrapAngle(a: number): number {
+  return Math.atan2(Math.sin(a), Math.cos(a));
 }
 
 /**
@@ -165,6 +205,8 @@ const SWAY_LERP = 25;
 export function tickProceduralAnimation(critter: Critter, dt: number): void {
   const p = critter.animPersonality;
   const t = performance.now() * 0.001;
+
+  tickTurn(critter, dt);
 
   // Skeletal suppression: when a "heavy" clip is active the procedural
   // layer steps back from the root transforms it would otherwise fight
