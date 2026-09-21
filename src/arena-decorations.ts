@@ -26,7 +26,7 @@
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
 import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
-import { type SeaRamp, type CliffRamp } from './arena-look';
+import { type SeaRamp, type CliffRamp, type PackSky } from './arena-look';
 
 /** Anisotropía máxima del dispositivo, cacheada. La fija el renderer al
  *  arrancar (`setArenaTextureAnisotropy`); sin renderer (tests, headless)
@@ -105,6 +105,11 @@ interface PackDef {
    *  de hielo, roca roja estratificada (docs/DIORAMAS.md parte 2, fase
    *  "la isla tiene masa"). Va en vertex color; sin textura nueva. */
   cliff: CliffRamp;
+  /** Cielo del bioma (fondo v2, docs/DIORAMAS.md §«Fondo v2»). El pozo
+   *  lleva su techo y su suelo de luma como datos (`abyssCeiling` /
+   *  `abyssFloor`, plan §4 corregido a sRGB). Los `abyss` de aquí van por
+   *  debajo del techo con margen. */
+  sky: PackSky;
   /** Per-prop uniform scale hint (default 1.0). Lets us pre-tune bulky
    *  props (the 5 MB palm, sakura tree, etc) without a second authoring
    *  pass on the GLB — applied on top of whatever the GLB ships with. */
@@ -138,6 +143,15 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     // sombra. El verde del labio es lo que hace que la hierba parezca
     // colgar sobre el canto y no acabar en un corte.
     cliff: { stops: [[0, 0x5a6a2c], [0.14, 0x4e3620], [0.3, 0x6b4a2a], [0.5, 0x9a7a48], [0.8, 0x7e6238], [1, 0x4a3820]] },
+    // Sima verde con bruma. Pozo a luma ~21 (techo 25): el más cerrado
+    // porque la hierba del disco es la arena más oscura del juego. Si en
+    // el A/B se lee como agujero, jungle pasa a pozo claro (decisión 2).
+    sky: {
+      zenith: 0x8fc0b8, abyss: 0x0c1a0f, abyssDeep: 0x07100a,
+      pit: 'dark', abyssCeiling: 25.3, abyssFloor: 115.3,
+      cloudTop: 0xc4d4b0, cloudFar: 0xb4c8a0, coverage: 0.4,
+      isletTop: 0x46642e, hemiGround: 0x5f7a55, hemiIntensity: 0.7,
+    },
   },
   frozen_tundra: {
     props: [],
@@ -151,6 +165,14 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     // corte vertical cuenta más: lo que se rompe es hielo, y el azul
     // saturado bajo la nieve blanca es la firma de FROZEN TUNDRA.
     cliff: { stops: [[0, 0xf4f8fc], [0.1, 0xd6ecf8], [0.35, 0x8fd0f2], [0.65, 0x4fa4e0], [1, 0x2a6cb0]] },
+    // Abismo azul frío (luma ~63, techo 77, el más holgado). Nubes finas
+    // blanco-lavanda y poca cobertura: el hielo ya es claro de por sí.
+    sky: {
+      zenith: 0x8fb4e8, abyss: 0x264466, abyssDeep: 0x13253a,
+      pit: 'dark', abyssCeiling: 77.2, abyssFloor: 167.2,
+      cloudTop: 0xeef0fa, cloudFar: 0xdde4f2, coverage: 0.34,
+      isletTop: 0xa6b6c8, hemiGround: 0x8a9cc0, hemiIntensity: 0.7,
+    },
   },
   desert_dunes: {
     props: [],
@@ -164,6 +186,13 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     // paradas porque el estrato ocre en medio es lo que la hace desierto
     // y no ladrillo.
     cliff: { stops: [[0, 0xe0aa5c], [0.1, 0xb84a2c], [0.4, 0xd48a46], [0.55, 0xa8402a], [0.8, 0xc4703e], [1, 0x74291a]] },
+    // Cañón de polvo naranja quemado (luma ~42, techo 52) y calima ocre.
+    sky: {
+      zenith: 0x9cc0e0, abyss: 0x44220f, abyssDeep: 0x241208,
+      pit: 'dark', abyssCeiling: 52.3, abyssFloor: 142.3,
+      cloudTop: 0xf0d2a8, cloudFar: 0xe8c49a, coverage: 0.38,
+      isletTop: 0xa27a48, hemiGround: 0xa8784a, hemiIntensity: 0.7,
+    },
   },
   coral_beach: {
     props: [],
@@ -177,6 +206,14 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     // agua: la roca de CORAL REEF BEACH se hunde en la laguna y la parte
     // baja del canto va del color del mar del backdrop, no del suelo.
     cliff: { stops: [[0, 0xe6d3a6], [0.12, 0x9a9a92], [0.45, 0x7a7e7a], [0.7, 0x5e8c80], [1, 0x3a5c58]] },
+    // Laguna del cielo: turquesa profundo a azul marino, sin verde —no es
+    // agua— (luma ~47, techo 59). Cúmulos crema con panza aguamarina.
+    sky: {
+      zenith: 0x7fd0f0, abyss: 0x0b3a52, abyssDeep: 0x06202e,
+      pit: 'dark', abyssCeiling: 58.8, abyssFloor: 148.8,
+      cloudTop: 0xfff2dc, cloudFar: 0xe8f4ee, coverage: 0.38,
+      isletTop: 0xb09e74, hemiGround: 0x6fb3b5, hemiIntensity: 0.7,
+    },
   },
   kitsune_shrine: {
     props: [],
@@ -190,6 +227,16 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     // la base: la muralla del patio de KITSUNE SHRINE. Sin color: aquí
     // el bermellón y los pétalos van encima, y el canto es piedra.
     cliff: { stops: [[0, 0x6b7d4a], [0.12, 0x8a877e], [0.45, 0x736f68], [0.75, 0x5e5a55], [1, 0x3f3c3a]] },
+    // Mar de nubes ciruela al anochecer (luma ~38, techo 48): el más
+    // cubierto, la bruma violeta de bajo la isla en KITSUNE SHRINE.png. La
+    // cobertura la limita la decisión 1: ≤8 % del fondo más claro que el
+    // p75 de la arena, medido con `arena-shots --metrics --scatter 0`.
+    sky: {
+      zenith: 0xb89ac8, abyss: 0x2f1f36, abyssDeep: 0x1a111e,
+      pit: 'dark', abyssCeiling: 47.8, abyssFloor: 137.8,
+      cloudTop: 0xdcbccf, cloudFar: 0xd8b4c8, coverage: 0.45,
+      isletTop: 0x86867a, hemiGround: 0x9a7890, hemiIntensity: 0.7,
+    },
   },
 };
 
@@ -450,6 +497,31 @@ export async function loadPackPropMeshes(
 /** Rampa del mar de fondo del pack (fase de fondo, docs/DIORAMAS.md). */
 export function getPackBackdrop(packId: ArenaPackId): SeaRamp {
   return PACKS[packId].backdrop;
+}
+
+/** Cielo del bioma (fondo v2). */
+export function getPackSky(packId: ArenaPackId): PackSky {
+  return PACKS[packId].sky;
+}
+
+/**
+ * Parche en vivo sobre el cielo de un bioma (superficie programática: lo
+ * llama `__devApi.setPackSky`). Devuelve qué claves aplicó y cuáles
+ * rechazó por desconocidas o de otro tipo, para que quien llama no crea
+ * que aplicó lo que no existe. No reconstruye: eso lo decide quien llama.
+ */
+export function patchPackSky(packId: ArenaPackId, patch: Record<string, unknown>): { applied: string[]; rejected: string[] } {
+  const applied: string[] = [];
+  const rejected: string[] = [];
+  if (!Object.prototype.hasOwnProperty.call(PACKS, packId)) return { applied, rejected: Object.keys(patch) };
+  const sky = PACKS[packId].sky as unknown as Record<string, unknown>;
+  for (const [k, v] of Object.entries(patch)) {
+    const badPit = k === 'pit' && v !== 'dark' && v !== 'light';
+    if (!Object.prototype.hasOwnProperty.call(sky, k) || typeof v !== typeof sky[k] || badPit) { rejected.push(k); continue; }
+    sky[k] = v;
+    applied.push(k);
+  }
+  return { applied, rejected };
 }
 
 /** Lado del tile de suelo del bioma (u de mundo). */

@@ -1,5 +1,69 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-21 — [Arena] Fondo v2, F0: la isla ya flota en el cielo
+
+El slice F0 del plan aprobado hoy (`docs/DIORAMAS.md` §«Fondo v2»):
+
+- **Sin foto:** fuera la foto también en la pantalla final, y sin raya de
+  horizonte. Lo sustituye una cúpula generada con color por latitud que
+  sigue a la cámara.
+- **Nubes:** un mar de cúmulos abierto en cráter alrededor de la isla, un
+  cuello de nubes en sombra bajo la punta del cono y nubes lejanas que se
+  funden con el horizonte.
+- **Islotes hermanos** flotando más abajo.
+- **Luz:** rebote del hemisferio por bioma, que es lo que por fin ilumina
+  la panza del cono.
+- **Coste:** 0 bytes, 4 draw calls, 26-29k triángulos, sin GLSL.
+- **Gameplay intacto:** golden 3/3 sin regenerar.
+- **A/B:** el mar y la foto siguen vivos detrás de
+  `BACKDROP_LOOK.mode = 'sea'` hasta la F4.
+
+**Lo que decide si el canto se ve: el pasillo.** La cámara de juego no
+rota nunca, así que se sabe qué parte del cuadro tapa el disco. Todo lo
+claro que se acerque a menos de 2,5° del labio se descarta al colocarlo,
+y detrás del canto solo queda pozo. Se mide EN ÁNGULO contra 256 rayos
+del labio.
+
+**Cifras de aceptación.** Con `arena-shots --metrics`, 35 mediciones:
+5 biomas × (semillas 1/7/42, 1080p, 390×844, t=29, t=50). Son el
+contrato del FONDO, así que la captura va sin scatter ni props.
+- **ΔL mediano del canto: 47,8-76,4** (umbral 45). **p10: 31,1-68,1**
+  (umbral 15). Mínimo local ≥15 en 29 de 35. Los 6 que no llegan (t=50
+  en los cinco, kitsune a 1080p) caen en los escalones del labio donde
+  falta un sector, donde la muestra de 6 px roza la pared del vecino.
+- **El fondo siempre ≥20 por debajo de la arena**, y **≤7,6 % del fondo
+  más claro que su p75** (decisión 1: ≤8 %).
+- **`corridorViolations` 0**, `maxExtent` 384 (límite 403,5) y
+  construcción en 4-7,5 ms. El objetivo era 5 ms y dos biomas se pasan en
+  la primera construcción en frío; la colocación sola son 0,8 ms en node.
+
+**Lo que cazó la revisión adversarial**: 4 lentes, un verificador por
+hallazgo, 18 confirmados y todos arreglados antes de enseñarlo.
+- La pose de juego congelada seguía **temblando** (shake con dt = 0) y
+  falseaba capturas y métricas. `setCameraPose('game')` fija ahora la
+  pose exacta.
+- `setBackdropLook`/`setPackSky` rehacían la arena entera: **resucitaban
+  los sectores caídos** a mitad de partida. Ahora rehacen solo el fondo
+  (`Arena.rebuildBackdrop`), comprobado en headless.
+- `corridorViolations` daba 0 por construcción. El contrato del pozo
+  (`pit`, `abyssCeiling`, `abyssFloor`) pasa a ser datos.
+- El pasillo, medido en el plano de imagen, era más estrecho que δ fuera
+  del eje. Las nubes lejanas entraban en el cuadro en 53 de 400 semillas.
+  Y `coverage` no era la fracción que decía el comentario.
+- Una pose mal formada en `setCameraPose` paraba el bucle del lab.
+
+**Trampas de medida resueltas por el camino**:
+- A t=29 el sector que se desploma está pegado por fuera del labio: es
+  arena, no fondo, y hundía la mediana a 4-18. La métrica excluye esos
+  azimuts.
+- Las palmeras del borde contaban como «fondo claro»: jungle daba 8,2 %
+  solo por ellas.
+
+**Hojas para Rafa** en `.tmp/shots-cielo/`: `_hoja`, `_hoja_colapso`,
+`_hoja_ab_mar`, `_pozo_ab` (decisión 2, pendiente) y `_roster_ab` (rebote
+de luz en los 9 bichos; nota en el buzón de PERSONAJES). Lo que la F0 no
+resuelve y le toca a la F1 está en `docs/carriles/arena.md`.
+
 ## 2026-09-21 — [Arena] Las tres decisiones: techos del código, isla en cono y el fondo se rehace en el cielo
 
 Las tres decisiones que bloqueaban el carril se cerraron mirando capturas.

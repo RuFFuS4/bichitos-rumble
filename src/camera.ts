@@ -23,6 +23,35 @@ import * as THREE from 'three';
 // §1.3 #16.)
 export const GAMEPLAY_CAM_POSITION = new THREE.Vector3(0, 23, 25);
 export const GAMEPLAY_CAM_LOOKAT = new THREE.Vector3(0, -3, 0);
+/** Campo de visión vertical (°). El pasillo del canto del fondo v2 se
+ *  calcula proyectando con esta pose, así que vive junto a ella. */
+export const GAMEPLAY_CAM_FOV = 40;
+
+/** Pose de cámara como datos (capturas, `setCameraPoseOverride`). */
+export interface CameraPose {
+  position: [number, number, number];
+  lookAt: [number, number, number];
+}
+
+/**
+ * Poses con las que se juzga el fondo (docs/DIORAMAS.md §«Fondo v2», §12).
+ * `game` es la de juego exacta: forzarla quita el temblor de cámara.
+ * Las de fin de partida REPLICAN las fórmulas de `src/game.ts`
+ * (poseVictoryCloseUp / poseDefeatWide / poseWideArena) con el bicho en el
+ * centro mirando a +Z; si allí cambian, aquí también. `low` es la cámara
+ * de juego girada 0,52 rad en X: el encuadre de las hojas del cono
+ * (.tmp/shots-cono*), hecho reproducible.
+ */
+export const CAPTURE_POSES: Record<'game' | 'victory' | 'defeat' | 'wide' | 'low', CameraPose> = {
+  game: {
+    position: [GAMEPLAY_CAM_POSITION.x, GAMEPLAY_CAM_POSITION.y, GAMEPLAY_CAM_POSITION.z],
+    lookAt: [GAMEPLAY_CAM_LOOKAT.x, GAMEPLAY_CAM_LOOKAT.y, GAMEPLAY_CAM_LOOKAT.z],
+  },
+  victory: { position: [0, 2.5, 4.5], lookAt: [0, 1.2, 0] },
+  defeat: { position: [0, 5, 7], lookAt: [0, 1, 0] },
+  wide: { position: [8, 7, 12], lookAt: [0, 1, 0] },
+  low: { position: [0, 7.54, 33.12], lookAt: [0, -2.6, -1.49] },
+};
 
 /**
  * Snap the camera to the canonical gameplay pose. Sets position,
@@ -54,7 +83,7 @@ export function createCamera(): THREE.PerspectiveCamera {
   // panorámica justo en la banda que viene a tapar. near 0.1 → 0.5
   // recupera la precisión de profundidad que cuesta ese far: nada se
   // dibuja a menos de 0,5 u (el plano corto del selector está a 4,5).
-  const cam = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.5, 500);
+  const cam = new THREE.PerspectiveCamera(GAMEPLAY_CAM_FOV, window.innerWidth / window.innerHeight, 0.5, 500);
   applyGameplayCameraPose(cam);
   return cam;
 }

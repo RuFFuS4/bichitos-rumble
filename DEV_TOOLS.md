@@ -201,12 +201,25 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     — los cambios de color se ven al frame siguiente y los estructurales
     disparan `rebuildArenaVisuals()`, que rehace las mallas conservando
     semilla y pack sin cortar la partida.
-  - **Fondo del bioma** (no es el skybox): `src/arena-backdrop.ts` con
-    `BACKDROP_LOOK` en `src/arena-look.ts` — el mar sobre el que flota la
-    isla, con la rampa del bioma horneada en los vértices (0 bytes de
-    payload, 1 draw call). **Hueco de doble superficie conocido**:
-    `BACKDROP_LOOK` NO entra en `getArenaLook`/`setArenaLook`, así que hoy
-    solo se toca editando el fichero y recargando.
+  - **Fondo del bioma — fondo v2, la isla en el cielo** (carril ARENA,
+    2026-09-21; plan en `docs/DIORAMAS.md` §«Fondo v2»). Hay cuatro piezas:
+    - **Módulos**: `src/arena-backdrop.ts` hace las mallas y
+      `src/arena-sky-layout.ts` las coloca. Este último es un módulo hoja
+      y determinista: decide nubes, islotes, cúpula y el pasillo del canto.
+    - **Valores**: los globales van en `BACKDROP_LOOK` y los de cada bioma
+      en `PackDef.sky`.
+    - **En vivo**: `__devApi.getBackdropLook()` y
+      `setBackdropLook({ mode: 'sea' })` (`mode: 'sea'` es el A/B con el mar
+      y la foto de antes). También `getPackSky(id)` y `setPackSky(id, patch)`,
+      que devuelven `{applied, rebuilt, rejected}`. `getBackdropStats()`
+      da capas, tris, draws, `corridorViolations` (tiene que ser 0),
+      `maxExtent`, `buildMs` y el hash. `setCameraPose('victory' | 'defeat'
+      | 'wide' | 'low' | 'game')` sirve para mirar las poses de fin de
+      partida sin jugar una.
+    - **CLI**: `arena-shots.mjs` con `--pose`, `--backdrop`, `--scatter 0`,
+      `--no-hud`, `--metrics`, `--critters` y `--sky-patch` (abajo).
+    Esto cierra el hueco de doble superficie que había: antes
+    `BACKDROP_LOOK` solo se tocaba editando el fichero.
   - **Escala del suelo por bioma**: `PackDef.groundTile` en
     `src/arena-decorations.ts` (u de mundo por repetición de la textura).
     No es un capricho: las texturas traen conchas, pétalos y musgo
@@ -238,6 +251,20 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     efecto de un cambio de `ARENA_LOOK` sin abrir el navegador: esperar
     a que el recuento de meshes se estabilice (los GLB de decor tardan)
     y saltar la cuenta atrás ya lo hace el script.
+    - **Opciones del fondo v2**: `--pose game,victory,wide,defeat,low`
+      (varias poses del mismo instante congelado), `--viewport 390x844`,
+      `--backdrop sky|sea`, `--scatter 0`, `--no-hud`, `--critters
+      A,B,C,D` y `--sky-patch '{json}'`.
+    - **`--metrics`**: escribe `metrics*.json`, que se acumula entre
+      ejecuciones (`scripts/lib/arena-metrics.mjs`). Mide el ΔL del canto
+      en 64 azimuts sobre el **labio vivo**, más la luma media de fondo y
+      arena y el % de fondo por encima del p75 de la arena. Solo vale en
+      la pose de juego.
+    - **La captura de la métrica va sin HUD, sin scatter y sin props**:
+      los oculta ella sola y luego los devuelve, porque el fleco y las
+      palmeras asoman por el labio y no son culpa del fondo. Excluye además
+      los azimuts con un sector cayendo, y usa la pose de juego exacta, sin
+      temblor.
   - Registro histórico: `scripts/research/arena-stats.mts` es la
     medición congelada del diagnóstico del 2026-09-05 que respalda
     `docs/ARENA_V2.md §1.2`. Para medir de aquí en adelante, el CLI.

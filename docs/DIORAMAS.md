@@ -190,6 +190,47 @@ Tras este cambio dejan de verse en partida y solo sirven para la pantalla final 
 
 ***Este plan anula las §2-§6 de arriba en todo lo que las contradiga.** Ya no hay mar bajo la isla, y la foto también se va de la pantalla final.*
 
+> **Estado de la F0 (2026-09-21): HECHA** en `claude/feature/arena-fondo-v2-cielo`, con el mar y la foto aún vivos detrás de `BACKDROP_LOOK.mode = 'sea'` para el A/B.
+>
+> **Hojas para Rafa** (en `.tmp/shots-cielo/`):
+> - `_hoja.png`: 5 biomas × 6 poses.
+> - `_hoja_colapso.png`: t = 0 / 29 / 50.
+> - `_hoja_ab_mar.png`: mar frente a cielo.
+> - `_pozo_ab.png`: decisión 2.
+> - `_roster_ab.png`: rebote del hemisferio en los 9 bichos.
+>
+> **Revisión.** Pasó una revisión adversarial con 4 lentes y un verificador por hallazgo: 18 hallazgos confirmados, todos arreglados antes de la primera entrega.
+>
+> **Dónde difiere de lo escrito abajo, y por qué** (manda esto; el plan se queda como el razonamiento):
+> - **Nubes cercanas (C2).**
+>   - Son **110 cúmulos de 3-4 bultos** (~190-330 instancias), no bultos sueltos: sueltos, vistos desde arriba, se leían como discos.
+>   - Llevan la luz de la key **horneada** (`cloudShade`) y no giran.
+>   - `coverage` es la **fracción exacta** de cúmulos que se conservan (los de más ruido), la misma en todas las semillas. Con un umbral sobre el ruido variaba del 63 al 90 %.
+> - **Cuello.** Está en r 3-11, con el bulto entero entre y −15 y −7: con r hasta 19 salían discos oscuros enormes al pie del cuadro. Asoma en juego bajo el labio frontal, como prevé el §5, y nunca sube de y = −5.
+> - **Nubes lejanas (C3).**
+>   - Tienen 12 lados, no 8: con 8 se recortaban como octógonos.
+>   - Van **aplastadas a 0,3** (`farFlatten`): enteras colgaban hasta donde la cúpula ya es pozo y se leían como una pared clara dentada con la cámara baja.
+>   - Ningún semieje pasa de `farSizeMax`, y se **descarta todo bulto que asome en el cuadro de juego**: pasaba en 53 de 400 semillas.
+> - **Cúpula.**
+>   - Tiene 128 columnas, no 48 (con 48 salían facetas en el degradado), y filas cada 2,5° entre 0° y −35°.
+>   - Sigue a la cámara escribiendo su `matrixWorld` y usa `DoubleSide`: con `BackSide`, la esfera hecha a mano no se pintaba.
+>   - El color de horizonte llega hasta **−16°** (el plan pedía al menos −13°), porque C3 se ve hasta ahí con la cámara baja.
+>   - Es **pozo desde −22°**, que es el techo del cuadro de juego. Así el degradado claro no entra en juego (decisión 1).
+> - **Pasillo del canto.** Se prueba **en ángulo** contra 256 rayos del labio, con esferas que sí envuelven cada forma. En el plano de imagen, fuera del eje quedaban bultos a 1,6° del labio con δ = 2,5°.
+> - **Contrato del pozo como datos.** `PackSky.pit` (`'dark' | 'light'`), `abyssCeiling` y `abyssFloor`, de modo que `corridorViolations` puede fallar de verdad. Antes era una comprobación que daba 0 por construcción.
+> - **Islotes.** El color de la tapa va en un campo propio, `PackSky.isletTop`: el suelo del pack es una textura y no hay color que leer. Es más oscuro y desaturado que la arena (riesgo 7).
+> - **Coste real.** 4 draw calls y 29-37k triángulos según la cobertura. El plan decía +25,2k netos, así que es algo más. Construcción de 2-5 ms. En node, la colocación tarda 0,8 ms por semilla y el módulo carga sin navegador (es hoja de verdad). `maxExtent` peor en 200 semillas: 385 (límite 403,5).
+> - **Superficie programática.**
+>   - `setBackdropLook`/`setPackSky` rehacen **solo el fondo** (`Arena.rebuildBackdrop`). Rehacer la arena entera devolvía los sectores caídos y reiniciaba el colapso a mitad de partida.
+>   - `setCameraPose('game')` fuerza la pose **exacta** de juego: con el juego congelado, el temblor de cámara se quedaba vibrando y falseaba las capturas.
+>   - Las poses se validan: una mal formada paraba el bucle del lab.
+> - **Métrica (`--metrics`).**
+>   - Mide sobre el labio vivo con el centro inmune incluido.
+>   - Excluye los azimuts con un sector **cayendo**: a t=29 el trozo que se desploma es arena, no fondo, y hundía la mediana a 4-18.
+>   - Se mide **sin scatter y sin props**, porque el fleco y las palmeras asoman por el labio y no son culpa del fondo.
+>
+> **Cifras de aceptación:** ver `BUILD_LOG.md` [Arena] del 2026-09-21 (fondo v2 F0) y `.tmp/shots-cielo/metrics/`.
+
 ---
 
 ### 1. Qué cambia respecto al plan anterior, y por qué

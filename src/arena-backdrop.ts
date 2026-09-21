@@ -24,7 +24,12 @@
 //   - la niebla por fin sirve: `scene.fog` sí tiñe geometría, mientras que
 //     al skybox NUNCA lo tocaba (three crea su material con `fog:false`).
 //
-// Coste: 0 bytes de payload, 1 draw call, 1.344 triángulos.
+// Coste: 0 bytes de payload, 1 draw call, 6.912 triángulos (96×36×2; el
+// "1.344" que decía aquí era del prototipo de 96×7).
+//
+// 2026-09-21: Rafa rechaza este mar («quiero cielo, no suelo»). Queda
+// solo para el A/B (`BACKDROP_LOOK.mode = 'sea'`) y se borra en la F4 del
+// fondo v2; lo nuevo va al final del fichero.
 //
 // Separación de capas: esto es DECORADO. No colisiona, no entra en
 // `isOnArena`, no toca el layout ni el colapso. Se puede borrar entero y
@@ -32,8 +37,10 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { BACKDROP_LOOK, type SeaRamp } from './arena-look';
+import { BACKDROP_LOOK, SALT_BACKDROP, type CliffRamp, type PackSky, type SeaRamp } from './arena-look';
 import { FRAG } from './arena-fragments';
+import { GAMEPLAY_CAM_FOV, GAMEPLAY_CAM_LOOKAT, GAMEPLAY_CAM_POSITION } from './camera';
+import { layoutSky, type SkyCamera, type SkyInstance, type SkyLayout } from './arena-sky-layout';
 
 /**
  * Anillo del mar. Va de `innerR` (justo bajo el disco) a `outerR`, con
@@ -158,23 +165,205 @@ function paintSeaColors(geo: THREE.RingGeometry, ramp: SeaRamp, fogColor: number
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 }
 
+// ---------------------------------------------------------------------------
+// Fondo v2 — la isla en el cielo (docs/DIORAMAS.md §«Fondo v2»)
+// ---------------------------------------------------------------------------
+//
+// El mar de arriba se queda para el A/B (`BACKDROP_LOOK.mode = 'sea'`) hasta
+// la F4. Esto es lo que lo sustituye: una cúpula pegada a la cámara con
+// color por latitud (cielo, horizonte, pozo), un mar de nubes abierto en
+// cráter alrededor de la isla, un cuello de nubes en sombra bajo la punta
+// del cono, nubes lejanas que se funden con el horizonte e islotes
+// hermanos más abajo. Dónde va cada cosa lo decide `arena-sky-layout.ts`
+// (módulo hoja, determinista); aquí solo se hacen las mallas.
+//
+// Coste: 0 bytes, 4 draw calls (cúpula, cercanas+cuello, lejanas e
+// islotes), ~30-37k triángulos según la cobertura del bioma. Todo es geometría con
+// color de vértice e `InstancedMesh`, sin textura (lección de 9047031:
+// `clouds.png` en un plano 18 u bajo el disco tapó el cuadro de blanco) y
+// sin UV en la cúpula (lección de b054e96: costuras según la GPU).
+
+/** Pose de juego vista como proyector del pasillo del canto. */
+const GAMEPLAY_SKY_CAMERA: SkyCamera = {
+  position: [GAMEPLAY_CAM_POSITION.x, GAMEPLAY_CAM_POSITION.y, GAMEPLAY_CAM_POSITION.z],
+  lookAt: [GAMEPLAY_CAM_LOOKAT.x, GAMEPLAY_CAM_LOOKAT.y, GAMEPLAY_CAM_LOOKAT.z],
+  fovDeg: GAMEPLAY_CAM_FOV,
+  aspect: 16 / 9,
+};
+
+/** Paradas [elevación °, color] ordenadas de +90 a −90 → color. */
+function sampleElevation(stops: Array<[number, number]>, elevDeg: number, out: THREE.Color): THREE.Color {
+  if (elevDeg >= stops[0]![0]) return out.setHex(stops[0]![1]);
+  for (let i = 1; i < stops.length; i++) {
+    const [e1, c1] = stops[i]!;
+    if (elevDeg >= e1) {
+      const [e0, c0] = stops[i - 1]!;
+      const k = e0 === e1 ? 0 : (e0 - elevDeg) / (e0 - e1);
+      return out.setHex(c0).lerp(new THREE.Color(c1), k);
+    }
+  }
+  return out.setHex(stops[stops.length - 1]![1]);
+}
+
+/**
+ * Cúpula latitud-longitud SIN UV. Las filas van en cada parada de color
+ * (para que el pozo empiece exactamente donde toca), cada 2,5° en la
+ * franja del horizonte al pozo y cada 7,5° en el resto. Se ve desde dentro.
+ */
+function buildDomeGeometry(stops: Array<[number, number]>): THREE.BufferGeometry {
+  const lats = new Set<number>();
+  for (let e = 90; e >= -90; e -= 7.5) lats.add(e);
+  // Más filas donde cambia el color de verdad (horizonte → pozo).
+  for (let e = 0; e >= -35; e -= 2.5) lats.add(e);
+  for (const [e] of stops) lats.add(e);
+  const rows = [...lats].sort((a, b) => b - a);
+  const cols = BACKDROP_LOOK.domeColumns;
+  const R = BACKDROP_LOOK.domeRadius;
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const c = new THREE.Color();
+  for (const e of rows) {
+    const phi = (e * Math.PI) / 180;
+    sampleElevation(stops, e, c);
+    for (let j = 0; j <= cols; j++) {
+      const lam = (j / cols) * Math.PI * 2;
+      positions.push(R * Math.cos(phi) * Math.cos(lam), R * Math.sin(phi), R * Math.cos(phi) * Math.sin(lam));
+      colors.push(c.r, c.g, c.b);
+    }
+  }
+  const index: number[] = [];
+  for (let i = 0; i < rows.length - 1; i++) {
+    for (let j = 0; j < cols; j++) {
+      const a = i * (cols + 1) + j, b = a + cols + 1;
+      index.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.setIndex(index);
+  return geo;
+}
+
+/**
+ * Bulto de nube: media esfera de base plana, 0,75 de alto. Con `belly` < 1
+ * la panza sale más oscura que la cima (cercanas); con 1, color plano
+ * (lejanas: `instanceColor` es entonces el color final exacto y se puede
+ * fundir al 100 % con el horizonte — multiplicar solo oscurece).
+ */
+function buildBumpGeometry(width: number, height: number, belly: number, shade: number): THREE.BufferGeometry {
+  const geo = new THREE.SphereGeometry(1, width, height, 0, Math.PI * 2, 0, Math.PI / 2);
+  geo.scale(1, 0.75, 1);
+  geo.deleteAttribute('uv');
+  const pos = geo.getAttribute('position');
+  const nrm = geo.getAttribute('normal');
+  // Luz key horneada: lado claro y lado en sombra. Las instancias no giran
+  // (`rotY` 0 en el layout), así que la dirección vale en el espacio del
+  // bulto. Es la misma key de scene-atmosphere (BACKDROP_LOOK.keyDir*).
+  const L = new THREE.Vector3(BACKDROP_LOOK.keyDirX, BACKDROP_LOOK.keyDirY, BACKDROP_LOOK.keyDirZ).normalize();
+  const n = new THREE.Vector3();
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const lit = Math.max(0, n.fromBufferAttribute(nrm, i).dot(L));
+    const k = (belly + (1 - belly) * (pos.getY(i) / 0.75)) * (1 - shade * 0.45 * (1 - lit));
+    colors[i * 3] = k; colors[i * 3 + 1] = k; colors[i * 3 + 2] = k;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return geo;
+}
+
+/**
+ * Islote: minicono de 16 lados con tapa. Unidad: tapa en y=0 con radio 1,
+ * punta en y=−1. La tapa lleva el color de islote del pack y la panza la
+ * rampa de estratos del bioma, para que se lean como hermanos de la isla.
+ */
+function buildIsletGeometry(top: number, cliff: CliffRamp): THREE.BufferGeometry {
+  const SIDES = 16, ROWS = 3, TIP = 0.06;
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const cTop = new THREE.Color(top);
+  const c0 = new THREE.Color(), c1 = new THREE.Color();
+  const ring = (t: number, j: number): [number, number, number] => {
+    const rr = 1 - (1 - TIP) * t;
+    const a = (j / SIDES) * Math.PI * 2;
+    return [Math.cos(a) * rr, -t, Math.sin(a) * rr];
+  };
+  const push = (p: [number, number, number], c: THREE.Color) => {
+    positions.push(p[0], p[1], p[2]);
+    colors.push(c.r, c.g, c.b);
+  };
+  for (let j = 0; j < SIDES; j++) {
+    push([0, 0, 0], cTop); push(ring(0, j + 1), cTop); push(ring(0, j), cTop);
+    for (let k = 0; k < ROWS; k++) {
+      const t0 = k / ROWS, t1 = (k + 1) / ROWS;
+      sampleRamp(cliff, t0, c0);
+      sampleRamp(cliff, t1, c1);
+      push(ring(t0, j), c0); push(ring(t0, j + 1), c0); push(ring(t1, j + 1), c1);
+      push(ring(t0, j), c0); push(ring(t1, j + 1), c1); push(ring(t1, j), c1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, list: SkyInstance[]): THREE.InstancedMesh {
+  const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0);
+  const c = new THREE.Color();
+  list.forEach((it, i) => {
+    m.compose(p.set(it.x, it.y, it.z), q.setFromAxisAngle(up, it.rotY), s.set(it.sx, it.sy, it.sz));
+    mesh.setMatrixAt(i, m);
+    mesh.setColorAt(i, c.setRGB(it.r, it.g, it.b));
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  // El fondo cubre el cuadro entero desde cualquier pose: sin culling.
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+function triCount(geo: THREE.BufferGeometry): number {
+  return (geo.index ? geo.index.count : geo.getAttribute('position').count) / 3;
+}
+
+/** Coste y control del cielo, para el lab, el CLI y los criterios del slice. */
+export interface BackdropStats {
+  mode: 'sky' | 'sea';
+  draws: number;
+  tris: number;
+  layers: Record<string, { instances: number; tris: number }>;
+  rejected: SkyLayout['rejected'] | null;
+  isletsInFrame: number;
+  corridorViolations: number;
+  corridorDeg: [number, number] | null;
+  maxExtent: number;
+  buildMs: number;
+  hash: string | null;
+}
+
 /**
  * Decorado de fondo de un bioma. Una instancia viva por partida; se
  * reconstruye al cambiar de pack y se libera en `dispose()`.
  */
 export class ArenaBackdrop {
   readonly group = new THREE.Group();
-  private sea: THREE.Mesh | null = null;
+  private meshes: THREE.Mesh[] = [];
+  private lastStats: BackdropStats | null = null;
 
   constructor() {
     this.group.name = 'arena-backdrop';
-    // Se pinta antes que nada: siempre está detrás de todo.
-    this.group.renderOrder = -10;
   }
 
   /** Construye (o reconstruye) el mar con la rampa del bioma dado. */
   setRamp(ramp: SeaRamp, fogColor: number): void {
     this.dispose();
+    const t0 = performance.now();
+    // Modo mar: se pinta antes que nada, siempre detrás de todo.
+    this.group.renderOrder = -10;
     const geo = buildSeaGeometry();
     paintSeaColors(geo, ramp, fogColor);
     const mat = new THREE.MeshBasicMaterial({
@@ -189,23 +378,115 @@ export class ArenaBackdrop {
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.y = BACKDROP_LOOK.seaY;
     mesh.frustumCulled = false;   // r=300: su bounding sphere confunde al culling
-    this.sea = mesh;
+    this.add(mesh);
+    this.lastStats = {
+      mode: 'sea', draws: 1, tris: triCount(geo),
+      layers: { sea: { instances: 1, tris: triCount(geo) } },
+      rejected: null, isletsInFrame: 0, corridorViolations: 0, corridorDeg: null,
+      maxExtent: BACKDROP_LOOK.seaOuterR, buildMs: performance.now() - t0, hash: null,
+    };
+  }
+
+  /** Construye el cielo del bioma (fondo v2). Determinista por semilla. */
+  buildSky(sky: PackSky, horizon: number, cliff: CliffRamp, seed: number, lipRadius: number): void {
+    this.dispose();
+    const t0 = performance.now();
+    // Modo cielo: se pinta DESPUÉS de lo opaco del juego, con la cúpula la
+    // última, para que la GPU descarte por profundidad todo lo que tapan
+    // el disco, las nubes y los islotes (el mar se pintaba entero debajo).
+    this.group.renderOrder = 5;
+    const layout = layoutSky({
+      look: BACKDROP_LOOK, sky, horizon, seed, salt: SALT_BACKDROP, lipRadius,
+      camera: GAMEPLAY_SKY_CAMERA,
+    });
+
+    const cloudMat = () => new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
+    const layers: BackdropStats['layers'] = {};
+    const addLayer = (name: string, geo: THREE.BufferGeometry, mat: THREE.Material, list: SkyInstance[]) => {
+      if (list.length === 0) { geo.dispose(); mat.dispose(); return; }
+      this.add(instanced(geo, mat, list));
+      layers[name] = { instances: list.length, tris: triCount(geo) * list.length };
+    };
+    // Cercanas y cuello comparten bulto con panza, material y MALLA: una
+    // sola draw call (las cifras se reparten por capa para el lab).
+    const bump = buildBumpGeometry(14, 3, BACKDROP_LOOK.cloudBelly, BACKDROP_LOOK.cloudShade);
+    addLayer('near+neck', bump, cloudMat(), [...layout.near, ...layout.neck]);
+    if (layers['near+neck']) {
+      const per = triCount(bump);
+      delete layers['near+neck'];
+      layers.near = { instances: layout.near.length, tris: per * layout.near.length };
+      layers.neck = { instances: layout.neck.length, tris: per * layout.neck.length };
+    }
+    // 12 lados y no 8: con 8, las lejanas (enormes y de color plano) se
+    // recortaban como octógonos.
+    addLayer('far', buildBumpGeometry(12, 2, 1, 0), cloudMat(), layout.far);
+    // Islotes iluminados: son hermanos de la isla y reciben su misma luz.
+    // Sin niebla: a 60-150 u la FogExp2 los lavaría hacia el horizonte
+    // claro y competirían con la arena.
+    addLayer('islets', buildIsletGeometry(sky.isletTop, cliff),
+      new THREE.MeshLambertMaterial({ vertexColors: true, fog: false }), layout.islets);
+
+    const domeGeo = buildDomeGeometry(layout.domeStops);
+    // DoubleSide y no BackSide: el sentido de los triángulos de una esfera
+    // hecha a mano depende del orden de filas y columnas, y con la cara
+    // equivocada la cúpula no se pinta y lo que se ve es el color de
+    // limpiado (pasó en la primera captura: pozo también encima del
+    // horizonte). Desde dentro solo se ve una cara de todos modos.
+    const dome = new THREE.Mesh(domeGeo, new THREE.MeshBasicMaterial({
+      vertexColors: true, side: THREE.DoubleSide, fog: false, depthWrite: false, dithering: true,
+    }));
+    dome.name = 'sky-dome';
+    dome.frustumCulled = false;
+    dome.renderOrder = 10;
+    // Pegada a la cámara. Hay que escribir la matrixWorld: la
+    // modelViewMatrix se calcula justo después de este hook con ella, y
+    // la matrixWorld ya se actualizó antes (mover `position` aquí no
+    // llegaría a este frame). Es lo que hace el propio WebGLBackground.
+    dome.onBeforeRender = (_r, _s, camera) => {
+      dome.matrixWorld.copyPosition(camera.matrixWorld);
+    };
+    this.add(dome);
+    layers.dome = { instances: 1, tris: triCount(domeGeo) };
+
+    this.lastStats = {
+      mode: 'sky',
+      draws: this.meshes.length,
+      tris: Object.values(layers).reduce((a, l) => a + l.tris, 0),
+      layers,
+      rejected: layout.rejected,
+      isletsInFrame: layout.isletsInFrame,
+      corridorViolations: layout.corridorViolations,
+      corridorDeg: [layout.corridorTopDeg, layout.corridorBottomDeg],
+      maxExtent: layout.maxExtent,
+      buildMs: performance.now() - t0,
+      hash: layout.hash,
+    };
+  }
+
+  private add(mesh: THREE.Mesh): void {
+    this.meshes.push(mesh);
     this.group.add(mesh);
   }
 
   /** Libera geometría y materiales. Seguro llamarlo varias veces. */
   dispose(): void {
-    if (!this.sea) return;
-    this.group.remove(this.sea);
-    this.sea.geometry.dispose();
-    const mat = this.sea.material;
-    if (Array.isArray(mat)) for (const m of mat) m.dispose();
-    else mat.dispose();
-    this.sea = null;
+    for (const mesh of this.meshes) {
+      this.group.remove(mesh);
+      mesh.geometry.dispose();
+      const mat = mesh.material;
+      if (Array.isArray(mat)) for (const m of mat) m.dispose();
+      else mat.dispose();
+      if (mesh instanceof THREE.InstancedMesh) mesh.dispose();
+    }
+    this.meshes = [];
+    this.lastStats = null;
   }
 
-  /** true si hay mar construido (para el lab y los tests visuales). */
-  get isBuilt(): boolean { return this.sea !== null; }
+  /** true si hay fondo construido (para el lab y los tests visuales). */
+  get isBuilt(): boolean { return this.meshes.length > 0; }
+
+  /** Coste, rechazos, violaciones del pasillo y hash de lo construido. */
+  stats(): BackdropStats | null { return this.lastStats; }
 }
 
 /** Radio del disco jugable, por si algún consumidor quiere derivar de él

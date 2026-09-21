@@ -28,7 +28,11 @@ import {
   getHeldKeyCodes,
   getMoveVector,
 } from '../input';
-import { ARENA_LOOK } from '../arena-look';
+import { ARENA_LOOK, BACKDROP_LOOK } from '../arena-look';
+import { getPackSky, patchPackSky, type ArenaPackId } from '../arena-decorations';
+import type { BackdropStats } from '../arena-backdrop';
+import { CAPTURE_POSES, type CameraPose } from '../camera';
+import { setCameraPoseOverride } from '../scene-atmosphere';
 import { BADGE_CATALOG, type BadgeDef } from '../badges';
 import { getStats, addUnlockedBadges, clearRecentlyUnlocked } from '../stats';
 import { maybeShowBadgeToast } from '../badge-toast';
@@ -1140,6 +1144,83 @@ export class DevApi {
   resetCritterBones(critterName: string): void {
     const c = this.game.critters.find((x) => x.config.name === critterName);
     c?.parts?.resetAllBones();
+  }
+
+  // --- Fondo v2, carril ARENA (docs/DIORAMAS.md §«Fondo v2», §9) -----------
+  // Añadido al final (tierra de nadie, docs/SESIONES.md). A diferencia de
+  // setArenaLook, estos devuelven también `rejected`: un agente que se
+  // equivoca de clave lo ve en la respuesta en vez de creer que aplicó.
+
+  getBackdropLook(): Record<string, unknown> {
+    return JSON.parse(JSON.stringify(BACKDROP_LOOK));
+  }
+
+  /** Parche sobre BACKDROP_LOOK. Todo es estructural (se hornea al
+   *  construir), así que cualquier clave aplicada reconstruye la arena
+   *  conservando semilla y pack. `{ mode: 'sea' }` es el A/B con el mar. */
+  setBackdropLook(patch: Record<string, unknown>): { applied: string[]; rebuilt: boolean; rejected: string[] } {
+    const look = BACKDROP_LOOK as unknown as Record<string, unknown>;
+    const applied: string[] = [];
+    const rejected: string[] = [];
+    for (const [k, v] of Object.entries(patch)) {
+      const badMode = k === 'mode' && v !== 'sky' && v !== 'sea';
+      const known = Object.prototype.hasOwnProperty.call(look, k);
+      if (!known || typeof v !== typeof look[k] || badMode) { rejected.push(k); continue; }
+      look[k] = v;
+      applied.push(k);
+    }
+    // Solo el fondo: sin tocar suelo, colapso ni props (la partida sigue).
+    const rebuilt = applied.length > 0 && this.game.arena.getCurrentPackId() !== null;
+    if (rebuilt) this.game.arena.rebuildBackdrop();
+    return { applied, rebuilt, rejected };
+  }
+
+  getPackSky(packId: ArenaPackId): Record<string, unknown> {
+    return JSON.parse(JSON.stringify(getPackSky(packId)));
+  }
+
+  /** Parche sobre el cielo de un bioma. Reconstruye si es el pack en uso. */
+  setPackSky(packId: ArenaPackId, patch: Record<string, unknown>): { applied: string[]; rebuilt: boolean; rejected: string[] } {
+    const { applied, rejected } = patchPackSky(packId, patch);
+    const rebuilt = applied.length > 0 && this.game.arena.getCurrentPackId() === packId;
+    if (rebuilt) this.game.arena.rebuildBackdrop();
+    return { applied, rebuilt, rejected };
+  }
+
+  /** Capas, triángulos, draws, rechazos del pasillo, `corridorViolations`
+   *  (tiene que ser 0), `maxExtent`, `buildMs` y el hash determinista. */
+  getBackdropStats(): BackdropStats | null {
+    return this.game.arena.backdropStats();
+  }
+
+  /** Fuerza una pose de cámara en todos los frames: 'game' (la de juego
+   *  EXACTA, sin temblor: con el juego congelado el shake se quedaba
+   *  vibrando y falseaba las capturas y `--metrics`), 'victory' | 'defeat'
+   *  | 'wide' | 'low', o una pose explícita con dos arrays de 3 números.
+   *  `null` suelta el override y la cámara vuelve a la de juego normal.
+   *  Valida antes de guardar: una pose mal formada lanzaría dentro del
+   *  render y pararía el bucle del lab. */
+  setCameraPose(pose: keyof typeof CAPTURE_POSES | CameraPose | null): CameraPose | null {
+    if (pose === null) { setCameraPoseOverride(null); return null; }
+    let src: unknown = pose;
+    if (typeof pose === 'string') {
+      if (!Object.prototype.hasOwnProperty.call(CAPTURE_POSES, pose)) {
+        throw new Error(`pose desconocida: ${pose} (hay: ${Object.keys(CAPTURE_POSES).join(', ')})`);
+      }
+      src = CAPTURE_POSES[pose];
+    }
+    const vec3 = (v: unknown): v is [number, number, number] =>
+      Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
+    const p = src as { position?: unknown; lookAt?: unknown };
+    if (!vec3(p.position) || !vec3(p.lookAt)) {
+      throw new Error('pose inválida: se espera { position: [x,y,z], lookAt: [x,y,z] }');
+    }
+    const clean: CameraPose = {
+      position: [p.position[0], p.position[1], p.position[2]],
+      lookAt: [p.lookAt[0], p.lookAt[1], p.lookAt[2]],
+    };
+    setCameraPoseOverride(clean);
+    return clean;
   }
 }
 

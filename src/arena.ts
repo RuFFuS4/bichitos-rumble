@@ -14,8 +14,8 @@ import {
   type ArenaLayout, type FragmentDef,
 } from './arena-fragments';
 import { playArenaWarning } from './audio';
-import { ARENA_LOOK, SALT_VISUAL, CLIFF_RAMP_DEFAULT, type CliffRamp } from './arena-look';
-import { ArenaBackdrop } from './arena-backdrop';
+import { ARENA_LOOK, BACKDROP_LOOK, SALT_VISUAL, CLIFF_RAMP_DEFAULT, type CliffRamp } from './arena-look';
+import { ArenaBackdrop, type BackdropStats } from './arena-backdrop';
 import { ArenaScatter, type ScatterStats } from './arena-scatter';
 import { getScatterRecipe } from './arena-scatter-recipes';
 import { SCATTER_DENSITY } from './arena-scatter-types';
@@ -27,13 +27,14 @@ import {
   loadPackPropMeshes,
   getPackFogColor,
   getPackBackdrop,
+  getPackSky,
   getPackCliff,
   getPackGroundTile,
   getPackDecorScale,
   loadInArenaDecorations,
 } from './arena-decorations';
 import { getDecorLayout } from './arena-decor-layouts';
-import { setSceneSkyboxTexture, setSceneFogColor } from './scene-atmosphere';
+import { setSceneSkyboxTexture, setSceneFogColor, setSceneClearColor, setSceneHemiGround } from './scene-atmosphere';
 
 // Visual parameters for the pre-collapse shake effect. Applied to
 // `fragmentGroup.position.x/z` ONLY — collisions and `isOnArena` use the
@@ -647,20 +648,12 @@ export class Arena {
     this.clearDecorations();
     this.appliedPackId = packId;
 
-    // Decorado de fondo: síncrono y sin assets, así que está listo en el
-    // mismo frame (el skybox y los props llegan después, por red).
-    if (!this.backdrop) {
-      this.backdrop = new ArenaBackdrop();
-      this.sceneRef.add(this.backdrop.group);
-    }
-    this.backdrop.setRamp(getPackBackdrop(packId), getPackFogColor(packId));
+    // Fondo + niebla + luz: síncronos y sin assets, listos en el mismo frame
+    // (el suelo y los props llegan después, por red).
+    const skyboxLoad = this.applyBackdrop(packId, seed, myToken);
 
     // Capa densa: síncrona y sin assets, lista en el mismo frame que el suelo.
     this.rebuildScatter();
-
-    // Fog + clear colour update immediately (synchronous) so the player
-    // doesn't see a "wrong horizon" frame while textures load.
-    setSceneFogColor(getPackFogColor(packId));
 
     // Each load runs in parallel; we await them all together so the
     // returned promise only resolves when every visible decor element
@@ -673,15 +666,6 @@ export class Arena {
       })
       .catch((err) => {
         console.warn('[Arena] ground texture load failed:', packId, err);
-      });
-
-    const skyboxLoad = loadPackSkyboxTexture(packId)
-      .then((tex) => {
-        if (myToken !== this.packApplyToken) return;
-        setSceneSkyboxTexture(tex);
-      })
-      .catch((err) => {
-        console.warn('[Arena] skybox load failed:', packId, err);
       });
 
     // Outer ring props — historically a ring of large GLBs at radius
@@ -844,6 +828,63 @@ export class Arena {
     });
   }
 
+  /**
+   * El tramo de FONDO de applyPack: decorado de fondo, niebla, color de
+   * limpiado, hemisferio y (en modo mar) la foto. No toca el suelo, el
+   * colapso ni los props, así que se puede repetir a mitad de partida.
+   * Devuelve la carga de la foto (resuelta al instante en modo cielo).
+   *
+   * Fondo v2 (docs/DIORAMAS.md §«Fondo v2»): la isla en el cielo. El mar
+   * y la foto solo sobreviven como A/B (`BACKDROP_LOOK.mode = 'sea'`).
+   */
+  private applyBackdrop(packId: ArenaPackId, seed: number, token: number): Promise<void> {
+    const skyMode = BACKDROP_LOOK.mode === 'sky';
+    const sky = getPackSky(packId);
+    if (!this.backdrop) {
+      this.backdrop = new ArenaBackdrop();
+      this.sceneRef.add(this.backdrop.group);
+    }
+    if (skyMode) {
+      this.backdrop.buildSky(sky, getPackFogColor(packId), getPackCliff(packId), seed, FRAG.maxRadius);
+    } else {
+      this.backdrop.setRamp(getPackBackdrop(packId), getPackFogColor(packId));
+    }
+    // Fog + clear colour update immediately (synchronous) so the player
+    // doesn't see a "wrong horizon" frame while textures load.
+    setSceneFogColor(getPackFogColor(packId));
+    // En modo cielo, el color de limpiado es el del pozo (un frame sin
+    // fondo nunca sale claro) y va DESPUÉS: setSceneFogColor lo reescribe.
+    // Sin foto: el cielo es la cúpula. El rebote del hemisferio es el del
+    // cielo de abajo, e ilumina la panza del cono.
+    if (skyMode) {
+      setSceneClearColor(sky.abyss);
+      setSceneSkyboxTexture(null);
+      setSceneHemiGround(sky.hemiGround, sky.hemiIntensity);
+      return Promise.resolve();
+    }
+    setSceneHemiGround(null);
+    return loadPackSkyboxTexture(packId)
+      .then((tex) => {
+        // Superada por otro pack, o por un cambio a modo cielo en vivo.
+        if (token !== this.packApplyToken || BACKDROP_LOOK.mode !== 'sea') return;
+        setSceneSkyboxTexture(tex);
+      })
+      .catch((err) => {
+        console.warn('[Arena] skybox load failed:', packId, err);
+      });
+  }
+
+  /**
+   * Rehace SOLO el fondo del pack en uso, con su semilla. Es lo que usan
+   * `__devApi.setBackdropLook` / `setPackSky`: rehacer la arena entera
+   * (`buildFromSeed`) devolvía a su sitio los fragmentos caídos y
+   * reiniciaba el colapso a mitad de partida por tocar un color del cielo.
+   */
+  rebuildBackdrop(): void {
+    if (!this.appliedPackId || !this.layout) return;
+    void this.applyBackdrop(this.appliedPackId, this.layout.seed, this.packApplyToken);
+  }
+
   /** Undo whatever the last `applyPack` did: skybox + fog back to menu
    *  defaults, decorations disposed. Called from reset() and when the
    *  arena rebuilds without a packId. */
@@ -852,6 +893,7 @@ export class Arena {
     this.appliedPackId = null;
     setSceneSkyboxTexture(null);
     setSceneFogColor(null);
+    setSceneHemiGround(null);
     if (this.backdrop) {
       this.sceneRef.remove(this.backdrop.group);
       this.backdrop.dispose();
@@ -1049,6 +1091,12 @@ export class Arena {
    *  la partida en curso. */
   get currentSeed(): number | null {
     return this.layout ? this.layout.seed : null;
+  }
+
+  /** Coste y control del fondo (capas, rechazos del pasillo, hash) para el
+   *  lab y el CLI; null si no hay pack aplicado. */
+  backdropStats(): BackdropStats | null {
+    return this.backdrop?.stats() ?? null;
   }
 
   /** Coste de la capa densa (instancias, draw calls, triángulos) para el

@@ -106,6 +106,10 @@ export const ARENA_LOOK: ArenaLookConfig = {
  *  la salida del generador de terreno, que es gameplay y está en golden. */
 export const SALT_VISUAL = 0x9e37_79b9;
 
+/** Sal del stream del cielo (fondo v2). Cada capa la mezcla además con su
+ *  propio id, así que tocar el número de una no reordena las otras. */
+export const SALT_BACKDROP = 0x3c6e_f372;
+
 // ---------------------------------------------------------------------------
 // CliffRamp — los estratos del canto de la isla (docs/DIORAMAS.md parte 2)
 // ---------------------------------------------------------------------------
@@ -137,7 +141,119 @@ export interface SeaRamp {
   stops: Array<[number, number]>;
 }
 
+/** Cielo de un bioma (fondo v2, docs/DIORAMAS.md §«Fondo v2»). Lo global y
+ *  estructural vive en BACKDROP_LOOK; esto es lo que cambia de un pack a
+ *  otro. El horizonte no está aquí: es el `fogColor` del pack. */
+export interface PackSky {
+  /** Cénit de la cúpula. Solo se ve en las poses bajas (victoria). */
+  zenith: number;
+  /** Color del pozo justo detrás del canto. */
+  abyss: number;
+  /** Pozo OSCURO (el fondo más oscuro que el canto) o CLARO (más claro,
+   *  la arena se recorta a contraluz) — decisión 2 del plan. El contraste
+   *  del canto pide |ΔL| ≥ 45 contra la banda exterior (plan §4), así que
+   *  el `abyss` tiene un TECHO de luma si es oscuro y un SUELO si es claro.
+   *  Son datos y no comentario para que `corridorViolations` pueda fallar:
+   *  techo = L_arena·0,906 − 45 · suelo = L_arena·0,906 + 45 (luma sRGB
+   *  0-255; el 0,906 es `bandTint` 0,82 medido en sRGB). */
+  pit: 'dark' | 'light';
+  abyssCeiling: number;
+  abyssFloor: number;
+  /** Fondo del abismo (−90°), más oscuro que `abyss`. */
+  abyssDeep: number;
+  /** Tinte de las nubes cercanas (C2); la panza sale de `cloudBelly`. */
+  cloudTop: number;
+  /** Tinte de las nubes lejanas (C3) antes de fundirse con el horizonte. */
+  cloudFar: number;
+  /** Fracción del mar de nubes cubierta (0..0,7). Por encima de 0,7 se
+   *  lee como moqueta (riesgo 1 del plan). */
+  coverage: number;
+  /** Tapa de los islotes. Más oscura y desaturada que la arena para que
+   *  no parezcan una plataforma a la que saltar (riesgo 7). */
+  isletTop: number;
+  /** Rebote de luz desde el cielo de abajo: `groundColor` e intensidad del
+   *  hemisferio. Es lo que ilumina la panza del cono (plan §6). */
+  hemiGround: number;
+  hemiIntensity: number;
+}
+
 export interface BackdropLookConfig {
+  /** 'sky' = fondo v2 (la isla en el cielo). 'sea' = el mar a y=−32 con
+   *  la foto de fondo, que se conserva solo para el A/B hasta la F4. */
+  mode: 'sky' | 'sea';
+  /** Cúpula pegada a la cámara: radio (dentro del `far` 500) y columnas.
+   *  Sin UV, color por latitud: sin costuras (lección de b054e96). */
+  domeRadius: number;
+  domeColumns: number;
+  /** Elevación (°) hasta la que la cúpula sigue siendo EXACTAMENTE el
+   *  color del horizonte. El plan pide al menos −13° (por debajo, C3 deja
+   *  de fundirse con lo que tiene detrás desde la victoria, plan §5); con
+   *  la cámara baja C3 se ve hasta −16°, así que se estira hasta ahí. */
+  horizonHoldDeg: number;
+  /** Elevación (°) desde la que la cúpula ya es color de pozo. −22° es el
+   *  techo del cuadro de juego en 16:9 (esquinas; −25,8° en móvil): así el
+   *  degradado hacia el horizonte solo se ve con cámara baja, y en juego no
+   *  suma fondo claro (decisión 1: ≤8 % del fondo sobre el p75 de la arena). */
+  abyssStartDeg: number;
+  /** Margen del pasillo del canto (°): 1,0 visual + 1,5 de temblor de
+   *  cámara en el peor caso (Trunk Slam, 0,63 u sobre el labio frontal). */
+  corridorMarginDeg: number;
+  /** Bruma hacia el horizonte por radio: 0 en `hazeStartR`, 1 en
+   *  `hazeEndR`. En juego se ve hasta r≈154-193, así que ahí se queda en
+   *  0,1-0,4; desde la victoria, a r 280 las nubes son horizonte puro. */
+  hazeStartR: number;
+  hazeEndR: number;
+  /** Brillo de la panza de un bulto de nube respecto a su cima. */
+  cloudBelly: number;
+  /** Cuánto se nota la luz key horneada en las nubes cercanas: 0 = plano,
+   *  1 = el lado de sombra baja al 55 %. Sin esto, vistas desde arriba son
+   *  discos planos. La dirección es la de la key (`keyDirX/Y/Z`). */
+  cloudShade: number;
+  /** Nubes cercanas (C2): cúmulos candidatos (cada uno 3-4 bultos),
+   *  anillo, altura de las cimas (más hondas junto al pozo, subiendo hacia
+   *  fuera) y tamaño del bulto principal. */
+  nearCount: number;
+  nearRMin: number;
+  nearRMax: number;
+  nearTopYIn: number;
+  nearTopYOut: number;
+  nearRiseR: number;
+  nearSizeMin: number;
+  nearSizeMax: number;
+  /** Escala del ruido que agrupa las nubes en bancos y deja huecos (u). */
+  nearClusterScale: number;
+  /** Cuello de nubes en sombra alrededor de la punta del cono. */
+  neckCount: number;
+  neckRMin: number;
+  neckRMax: number;
+  neckYMin: number;
+  neckYMax: number;
+  neckSizeMin: number;
+  neckSizeMax: number;
+  /** Nubes lejanas (C3), en malla plana: centros en [farRMin, farRMax]. */
+  farCount: number;
+  farRMin: number;
+  farRMax: number;
+  farTopYMin: number;
+  farTopYMax: number;
+  farSizeMin: number;
+  farSizeMax: number;
+  /** Alto de un bulto lejano respecto a su ancho: planas, para que no
+   *  cuelguen por debajo de la franja del horizonte de la cúpula. */
+  farFlatten: number;
+  /** Islotes hermanos: cuántos, cuántos como mínimo dentro del cuadro de
+   *  juego 16:9, dónde y de qué tamaño. Alto de la panza = radio × ratio. */
+  isletCount: number;
+  isletMinInFrame: number;
+  isletRMin: number;
+  isletRMax: number;
+  isletTopYMin: number;
+  isletTopYMax: number;
+  isletRadiusMin: number;
+  isletRadiusMax: number;
+  isletDepthRatio: number;
+  /** Cuánto se oscurece un islote hacia el abismo en la cota más honda. */
+  isletDepthDarken: number;
   /** Altura del mar. 32 u por debajo del disco, y por debajo de
    *  VOID_FLOOR (-30) y de FRAGMENT_KILL_Y (-25): nada del juego lo
    *  atraviesa nunca, y a esa distancia no se puede confundir con suelo
@@ -178,10 +294,65 @@ export interface BackdropLookConfig {
   /** Dirección de la luz key en el plano (debe seguir a la de
    *  scene-atmosphere) para que la sombra caiga del lado correcto. */
   keyDirX: number;
+  keyDirY: number;
   keyDirZ: number;
 }
 
 export const BACKDROP_LOOK: BackdropLookConfig = {
+  mode: 'sky',
+  domeRadius: 420,
+  // 128 columnas: con 48 el degradado del horizonte salía en facetas
+  // rectas con la cámara baja.
+  domeColumns: 128,
+  horizonHoldDeg: -16,
+  abyssStartDeg: -22,
+  corridorMarginDeg: 2.5,
+  hazeStartR: 120,
+  hazeEndR: 280,
+  cloudBelly: 0.8,
+  cloudShade: 0.6,
+  // 110 cúmulos × 3-4 bultos ≈ las 330 instancias del plan. El tamaño lo
+  // limita la decisión 1 de Rafa: como mucho el 8 % del fondo más claro
+  // que el p75 de la arena (medido con `arena-shots --metrics`).
+  nearCount: 110,
+  nearRMin: 45,
+  nearRMax: 220,
+  nearTopYIn: -64,
+  nearTopYOut: -48,
+  nearRiseR: 190,
+  nearSizeMin: 4.5,
+  nearSizeMax: 10,
+  nearClusterScale: 55,
+  // Bajo el disco (r ≤ 11), abrazando la punta del cono. En juego asoma
+  // bajo el labio frontal y por los lados, al pie del cuadro, más oscuro
+  // que el pozo (lo prevé el plan §5); con r hasta 19 salían discos
+  // oscuros enormes. neckYMin/Max acotan el bulto ENTERO (cima incluida):
+  // nada del fondo sube de y=−5 dentro de r<25 (plan §8).
+  neckCount: 16,
+  neckRMin: 3,
+  neckRMax: 11,
+  neckYMin: -15,
+  neckYMax: -7,
+  neckSizeMin: 1.8,
+  neckSizeMax: 3.2,
+  farCount: 160,
+  farRMin: 225,
+  farRMax: 340,
+  farTopYMin: -56,
+  farTopYMax: -48,
+  farSizeMin: 25,
+  farSizeMax: 45,
+  farFlatten: 0.3,
+  isletCount: 7,
+  isletMinInFrame: 3,
+  isletRMin: 45,
+  isletRMax: 110,
+  isletTopYMin: -60,
+  isletTopYMax: -28,
+  isletRadiusMin: 1.5,
+  isletRadiusMax: 6,
+  isletDepthRatio: 1.6,
+  isletDepthDarken: 0.45,
   seaY: -32,
   seaInnerR: 0.6,
   seaOuterR: 300,
@@ -196,5 +367,6 @@ export const BACKDROP_LOOK: BackdropLookConfig = {
   islandShadow: 0.55,
   islandShadowReach: 34,
   keyDirX: -11,
+  keyDirY: 17,
   keyDirZ: 13,
 };

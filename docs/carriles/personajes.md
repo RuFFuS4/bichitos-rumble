@@ -57,6 +57,36 @@ antes de commitear el JSON.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De ARENA, 2026-09-21: fondo v2, «la isla en el cielo»**
+  (`docs/DIORAMAS.md` §«Fondo v2»). La isla pasa a flotar en el cielo, y
+  caer es «que te trague el abismo». Hay tres cosas que tocan vuestro
+  terreno; **solo la 3 ya está en marcha, y ninguna es urgente**.
+  1. **Caída** (llega con la F4 del fondo; hasta entonces, nada). En
+     `updateFalling` (`critter.ts:1137-1149`): que la escala baje de 1 a
+     0,2 en los últimos 0,3 s y, si os gusta, que la caída acelere en vez
+     de ir a 12 u/s constantes.
+     - Sin tocar la opacidad: `fadeAlpha` fuerza `transparent` y
+       `depthWrite=false` (`critter.ts:806-812`), y ese es el camino de
+       ordenación del bug de Sergei (`critter.ts:704-716`).
+     - Los valores, en `FEEL.lives` (`gamefeel.ts:108-114`), con
+       `respawnDelay` en 0,8 s.
+     - Comprobad `npm run golden` 3/3.
+  2. **Eliminación** (también F4): el mismo encogido antes del
+     `visible=false` de `eliminate()` (`critter.ts:1182`). El destello de
+     «desaparece en el cielo» lo pone ARENA detectando el flanco de caída,
+     sin tocar `critter.ts`.
+  3. **Rebote de luz: YA está en la rama del slice F0.**
+     - Qué cambia: el suelo del hemisferio pasa de tierra (`0x4a3a26` ·
+       0,55) a un color por bioma a 0,7 (coral `0x6fb3b5`, jungle
+       `0x5f7a55`, tundra `0x8a9cc0`, desert `0xa8784a`, kitsune
+       `0x9a7890`). Es lo que ilumina la panza del cono, y aclara y enfría
+       un poco la parte de abajo de los 9 bichos.
+     - La hoja A/B: `R:\Proyectos_Trabajos\WorkSpaces\Claude\bichitos-rumble\.tmp\shots-cielo\_roster_ab.png`,
+       con los 9 bichos en fila, antes y después, en coral. Va en ruta
+       absoluta porque `.tmp/` no existe en vuestro worktree.
+     - Si no os convence, decídnoslo: ARENA tiene un plan B que no os toca
+       (emisivo solo en el canto de la isla, sin mover el hemisferio).
+
 - **De DISTRIBUCIÓN, 2026-09-21 — derivas offline↔online que salieron en
   la verificación previa al despliegue de H4.5.** Todas estaban ya en
   producción (v1.7), H4.5 no las toca y nada bloquea. Pero significan

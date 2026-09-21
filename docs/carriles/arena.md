@@ -12,16 +12,24 @@ el orden de trabajo.
    delante de los dioramas. Plan completo en
    [`docs/DIORAMAS.md` §«Fondo v2»](../DIORAMAS.md): §12 es el slice,
    §11 las fases.
-   - **F0, el slice (1 día)**: cúpula generada, nubes C2 con cuello, C3,
-     islotes genéricos, pasillo del canto, rebote del hemisferio por pack,
-     `mode: 'sky' | 'sea'` para el A/B, métodos de dev-api, y
-     `arena-shots --pose/--scatter/--metrics`. Entregables:
-     `.tmp/shots-cielo/_hoja.png`, `_roster_ab.png` y `_pozo_ab.png`.
-   - **Pendiente de Rafa sobre esas hojas**: la decisión 2 (pozo oscuro o
-     claro, sobre todo en jungle) y el visto bueno al rebote de luz en los
-     bichos.
-   - **Buzón de PERSONAJES**: la nota del §7 del plan se deja **cuando
-     exista `_roster_ab.png`**, no antes (la cita).
+   - **F0, el slice: HECHA (2026-09-21)**. Qué se hizo y en qué se
+     aparta del plan: bloque «Estado de la F0» en DIORAMAS. Las hojas
+     están en `.tmp/shots-cielo/` (`_hoja`, `_hoja_colapso`,
+     `_hoja_ab_mar`, `_pozo_ab` y `_roster_ab`).
+   - **Pendiente de Rafa sobre esas hojas**:
+     - la decisión 2, pozo oscuro o claro (sobre todo jungle). Se aplica
+       con `setPackSky(id, { pit: 'light', abyss, abyssDeep })` y
+       pasándolo a `PACKS`;
+     - el visto bueno al rebote de luz en los bichos.
+   - **Buzón de PERSONAJES**: nota dejada el 2026-09-21, con la hoja del
+     roster en ruta absoluta.
+   - **Deuda de la F0 para la F1**:
+     - En juego, el pozo es casi un color liso con nubes arriba y a los
+       lados: es el riesgo 2 del plan. Lo atacan las firmas y C1 (F1) y
+       el fondo del pozo (F2).
+     - El cielo de la victoria es plano: las torres llegan en la F2.
+     - Mejor medir la decisión 1 con varias semillas. Con la semilla 1 va
+       justa (jungle 7,6 %), con otras baja mucho (0,3-5 %).
    - F1 firmas por bioma · F2 torres, fondo del pozo, deriva y vida · F3
      luz por bioma (absorbe la antigua «fase 3, rig de luz») · F4 caída,
      CLI `arena-sky.mjs`, `look-patch`, test de determinismo y borrado del
@@ -39,6 +47,11 @@ el orden de trabajo.
 4. **Fase 2 — el colapso que se lee y se siente**: grietas, hundimiento,
    escombros, polvo, shake. Es literalmente *"las físicas de las cosas"*
    que pidió Rafa: lo que le pasa al decorado cuando su sector cae.
+   **Antes de empezarla, lee el buzón**:
+   - PERSONAJES: los bots caen por los agujeros del colapso porque no
+     leen los avisos de lote.
+   - DISTRIBUCIÓN: los gates de paridad solo miran `arena-fragments`, y
+     el corte de proyectiles solo existe online.
 5. **Fase 1b**: bisel de junta, applier `look-patch` (lo comparte con el
    F4 del fondo), panel del studio y dieta de props (palmas, bambú y
    sakura: 112-131k → ≤20k tris).
@@ -55,6 +68,13 @@ el orden de trabajo.
     10 estratos. En la cámara de juego no se nota.
   - El fondo del mar **no vale**, y se aprueba el fondo v2.
   - Capturas A/B en `.tmp/shots-cono*/`.
+- **2026-09-21 — fondo v2, F0: la isla en el cielo.**
+  - Cúpula generada sin foto, cúmulos, cuello, nubes lejanas e islotes.
+  - Pasillo del canto medido en ángulo y rebote del hemisferio por bioma.
+  - Superficie completa: `setBackdropLook`, `setPackSky`,
+    `getBackdropStats`, `setCameraPose` y `arena-shots --pose / --metrics /
+    --backdrop / --sky-patch / --critters`.
+  - Revisado en adversarial: 18 hallazgos, todos arreglados.
 
 ## Lo que no puedes romper
 
@@ -79,9 +99,16 @@ el orden de trabajo.
   encuadre equivale a la cámara en (0; 7,54; 33,12) mirando a
   (0; −2,60; −1,49).
 - **El headless se cae** tras varias reconstrucciones de arena en la misma
-  página: «Unable to capture screenshot», visto el 2026-09-21. Lo más
-  probable es la fuga de VRAM de las fotos (`textureCache` no expulsa
-  nunca). Usa un navegador por bioma hasta que F4 borre las fotos.
+  página: «Unable to capture screenshot» y alguna vez
+  `ERR_INSUFFICIENT_RESOURCES`, vistos el 2026-09-21. Lo más probable es
+  la fuga de VRAM de las fotos (`textureCache` no expulsa nunca). Usa un
+  navegador por bioma hasta que F4 borre las fotos.
+- **El headless renderiza por SOFTWARE por defecto** (lo midió PERSONAJES:
+  18 s por fotograma a 1400×900). Con `channel: 'chromium'` y
+  `--use-angle=d3d11 --enable-gpu` usa la GPU y sigue mudo. `arena-shots`
+  aún no lo pide: es candidato a acelerar las tandas (70 capturas ≈ 30 min
+  hoy) y quizá a quitar las caídas. Antes de cambiarlo, un A/B de que la
+  imagen sale igual.
 
 ## Buzón
 
@@ -130,8 +157,15 @@ el orden de trabajo.
 
 ## Cómo retomar
 
-**2026-09-21**. Las tres decisiones que bloqueaban el carril están
-tomadas. El cono ya está en `dev`. Lo siguiente es el **slice F0 del fondo
-v2** (§12 del plan en DIORAMAS), en la rama
-`claude/feature/arena-fondo-v2-cielo`. Si esa rama existe al abrir la
-sesión, es que se quedó a medias: mira su último commit antes de nada.
+**2026-09-21**. El cono y la F0 del fondo v2 están en `dev`, con el mar
+todavía vivo como A/B. Antes de la F1 hacen falta dos respuestas de Rafa
+sobre las hojas de `.tmp/shots-cielo/`: pozo oscuro o claro, y el rebote
+de luz en los bichos.
+
+- **Para mirar**: `node scripts/arena-shots.mjs --out .tmp/shots-x
+  --pose game,victory,low --no-hud`.
+- **Para medir el contrato del fondo**: lo mismo con `--metrics --scatter 0`.
+- **Para cambiar el cielo en vivo**: `__devApi.setPackSky(id, patch)` y
+  `__devApi.getBackdropStats()`. Tiene que dar `corridorViolations` 0.
+
+Nada se juzga sin mirar antes el reloj y la pose de la captura.
