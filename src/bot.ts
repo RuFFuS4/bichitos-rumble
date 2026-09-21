@@ -144,7 +144,7 @@ export function updateBot(
     // 2026-04-30 final-L — Toxic Touch confused inversion (offline bot).
     if (bot.confusedTimer > 0) { nx = -nx; nz = -nz; }
 
-    const accel = bot.effectiveSpeed * FEEL.movement.accelerationScale * 0.55;
+    const accel = bot.effectiveSpeed * FEEL.movement.accelerationScale * FEEL.bots.moveAccelFactor;
     bot.vx += nx * accel * dt;
     bot.vz += nz * accel * dt;
   }

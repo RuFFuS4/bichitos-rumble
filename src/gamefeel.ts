@@ -45,6 +45,10 @@ export const FEEL = {
   // Conciencia del borde: sin esto los bots persiguen recto hacia el
   // vacío (el audit midió 2.4-3.0 caídas/partida en todo el roster).
   bots: {
+    // Fracción de la aceleración del jugador con la que corre un bot.
+    // Estaba escrita a mano en bot.ts (0.55); el espejo online es
+    // SIM.bots.moveAccelFactor (server/src/sim/config.ts).
+    moveAccelFactor: 0.55,
     edgeMargin: 1.4,      // distancia al borde donde arranca la autoconservación
     edgeSteer: 1.6,       // peso del tirón hacia el centro en pleno borde
     lookAhead: 1.1,       // sonda de vacío por delante (aware de patrones de colapso)
