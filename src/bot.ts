@@ -145,6 +145,7 @@ export function updateBot(
     if (bot.confusedTimer > 0) { nx = -nx; nz = -nz; }
 
     const accel = bot.effectiveSpeed * FEEL.movement.accelerationScale * FEEL.bots.moveAccelFactor;
+    bot.moveAccel = Math.hypot(nx, nz) * accel;
     bot.vx += nx * accel * dt;
     bot.vz += nz * accel * dt;
   }

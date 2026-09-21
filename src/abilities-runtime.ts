@@ -635,7 +635,7 @@ export function forEachSinkhole(cb: (zone: { x: number; z: number; radius: numbe
   for (const zone of activeZones) {
     if (!zone.sinkhole) continue;
     if (ownerKey !== undefined && zone.ownerKey === ownerKey) continue;
-    cb({ x: zone.x, z: zone.z, radius: zone.radius, pullForce: zone.pullForce ?? 14 });
+    cb({ x: zone.x, z: zone.z, radius: zone.radius, pullForce: zone.pullForce ?? 19.25 }); // default = Sihans' holeForce since the 2026-09-21 speed-up
   }
 }
 
@@ -900,7 +900,7 @@ function fireFrenzy(def: AbilityDef, critter: Critter, _all: Critter[], scene: T
       vfxKind: 'sand',
       ownerKey: critter.config.name,
       sinkhole: true,
-      pullForce: def.holeForce ?? 14,
+      pullForce: def.holeForce ?? 19.25, // default = Sihans' holeForce since the 2026-09-21 speed-up
     });
     spawnZoneRing(scene, cx, cz,
       holeR, def.holeDuration ?? 5.0,

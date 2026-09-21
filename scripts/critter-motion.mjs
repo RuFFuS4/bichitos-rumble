@@ -85,8 +85,11 @@ for (const name of opt.critters.split(',')) {
   const bot = name === 'Sergei' ? 'Trunk' : 'Sergei';
   await page.evaluate(() => { window.__devApi.setFixedStep(null); window.__devApi.setSpeed(1); });
   if (Object.keys(FEEL_OVERRIDES).length > 0) {
-    await page.evaluate(async (over) => {
-      const { FEEL } = await import('/src/gamefeel.ts');
+    await page.evaluate((over) => {
+      // The instance the game reads (see run-match-batch.mjs for why a
+      // page-side import of gamefeel.ts is not good enough).
+      const FEEL = window.__feel;
+      if (!FEEL) throw new Error('--feel: la pagina no expone window.__feel (¿tools.html antiguo?)');
       for (const [p, v] of Object.entries(over)) {
         const [sec, key] = p.split('.');
         if (typeof FEEL[sec]?.[key] !== 'number') throw new Error(`--feel: FEEL.${p} no existe o no es numerico`);

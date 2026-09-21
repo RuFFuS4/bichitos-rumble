@@ -105,7 +105,7 @@ export function resolveCollisions(
         // src/physics.ts): headbuttear al anclado devuelve tu propia
         // fuerza × SHELL_REFLECT. Mantener en sync con
         // FEEL.collision.shellReflectFactor.
-        const SHELL_REFLECT = 0.85;
+        const SHELL_REFLECT = SIM.collision.shellReflectFactor;
         const reflectForce = (cfg: { headbuttForce: number; headbuttBoost?: number }) =>
           cfg.headbuttForce * SIM.collision.headbuttMultiplier *
           (cfg.headbuttBoost ?? 1.0) * SHELL_REFLECT;
@@ -160,8 +160,8 @@ export function resolveCollisions(
         // stunned side (was ×2). Mirrors client physics. Currently
         // only Trunk's K+L write `stunTimer > 0`; safe to bump
         // globally without disturbing other critters.
-        const aVulnMul = a.stunTimer > 0 ? 4 : 1;
-        const bVulnMul = b.stunTimer > 0 ? 4 : 1;
+        const aVulnMul = a.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1;
+        const bVulnMul = b.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1;
         if (a.isHeadbutting) {
           b.vx += nx * force * ratioB * bVulnMul;
           b.vz += nz * force * ratioB * bVulnMul;

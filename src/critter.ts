@@ -180,6 +180,10 @@ export class Critter {
   vz = 0;
   alive = true;
   hasInput = false;
+  /** Acceleration (u/s²) the controller pushed this frame — written by
+   *  player.ts / bot.ts. The dead zone uses it to tell a real push from
+   *  stick drift or a rooted critter (see update()). */
+  moveAccel = 0;
   lives = FEEL.lives.default;
   immunityTimer = 0;
   /** v0.11 — Kurama Mirror Trick: while > 0 the GLB mesh is
@@ -593,9 +597,14 @@ export class Critter {
     // the critter was building: at high refresh rates one frame's
     // acceleration stays under the threshold, so Shelly could not start
     // moving at ≥120 Hz, Sergei at ≥144 Hz, and the Shelly bot not even
-    // at 60 Hz (docs/FEELING.md §7.4).
+    // at 60 Hz (docs/FEELING.md §7.4). "Coasting" also covers a push too
+    // weak to ever clear the dead zone even at terminal velocity (a
+    // gamepad stick drifting just past its own dead zone, a rooted or
+    // stunned critter) — frame-rate independent, unlike the old test.
     const speed = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
-    if (!this.hasInput && speed < FEEL.movement.velocityDeadZone) {
+    const pushTerminal = (this.moveAccel * halfLife) / Math.LN2;
+    const coasting = !this.hasInput || pushTerminal < FEEL.movement.velocityDeadZone;
+    if (coasting && speed < FEEL.movement.velocityDeadZone) {
       this.vx = 0;
       this.vz = 0;
     } else if (speed > FEEL.movement.maxSpeed) {

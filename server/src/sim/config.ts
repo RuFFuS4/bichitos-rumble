@@ -39,6 +39,9 @@ export const SIM = {
     // Shell). Was a hardcoded 1.4 in sim/physics.ts; 1.4 × 1.375 with the
     // 2026-09-21 speed-up. Mirror of FEEL.collision.anchoredBounceFactor.
     anchoredBounceFactor: 1.925,
+    // Were hardcoded in sim/physics.ts; mirrors of FEEL.collision.
+    shellReflectFactor: 0.85,
+    stunnedVulnerability: 4,
   },
 
   bots: {
@@ -46,6 +49,13 @@ export const SIM = {
     // used to push at the full 1.0 while offline ones ran at 0.55; both
     // are 0.7 since 2026-09-21. Mirror of FEEL.bots.moveAccelFactor.
     moveAccelFactor: 0.7,
+    // Edge awareness + decision rates — were inline constants in
+    // sim/bot.ts. Mirrors of FEEL.bots (tests/sim/feel-sim-parity.test.ts).
+    edgeMargin: 1.4,
+    edgeSteer: 1.6,
+    lookAhead: 1.1,
+    defendRange: 2.8,
+    fireRatesPerSec: { mobility: 0.702, radial: 0.596, cone: 0.839, ranged: 0.737 },
   },
 
   chargeRush: {

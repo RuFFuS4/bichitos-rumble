@@ -21,7 +21,7 @@ import { createCamera, handleResize, syncSize } from '../camera';
 import { initSceneAtmosphere } from '../scene-atmosphere';
 import { tickSharedGameplay } from '../frame-ticks';
 import { Game } from '../game';
-import { updateCameraShake } from '../gamefeel';
+import { updateCameraShake, FEEL } from '../gamefeel';
 import { initPreview, tickPreview } from '../preview';
 import { isLikelyMobile } from '../input';
 import { initTouchInput } from '../input-touch';
@@ -188,3 +188,9 @@ requestAnimationFrame(loop);
 // engine internals.
 (window as unknown as { __game: Game; __devApi: DevApi }).__game = game;
 (window as unknown as { __game: Game; __devApi: DevApi }).__devApi = devApi;
+// The FEEL object the game actually reads — for `--feel` what-ifs in
+// scripts/run-match-batch.mjs and scripts/critter-motion.mjs. A page-side
+// `import('/src/gamefeel.ts')` is NOT the same module once Vite has
+// hot-reloaded gamefeel.ts (the game imports it as `?t=<stamp>`), so an
+// override made that way silently missed the game (2026-09-22).
+(window as unknown as { __feel: typeof FEEL }).__feel = FEEL;

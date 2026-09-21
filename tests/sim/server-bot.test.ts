@@ -104,6 +104,18 @@ describe('server bot — computeBotInput', () => {
     expect(Math.abs(input.moveZ)).toBeLessThan(1e-10);
   });
 
+  it('the pace is applied AFTER the void probe (a pre-scaled vector would shorten the probe)', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9999);
+    const bot = makePlayer({ sessionId: 'bot', x: 11.0, z: 0 });
+    const target = makePlayer({ sessionId: 't', x: 14, z: 0 });
+    const input = computeBotInput(bot, [bot, target], arenaDisc(12));
+    // full probe: 11 + 1.1 = 12.1 > 12 → void → full turn inward at PACE.
+    // (Scaled first it would probe 11 + 0.77 = 11.77, see solid ground and
+    // only blend — the bot would walk further out.)
+    expect(input.moveX).toBeCloseTo(-PACE, 10);
+    expect(Math.abs(input.moveZ)).toBeLessThan(1e-10);
+  });
+
   it('edge awareness: inside the danger band the steering blends inward but keeps chasing', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.9999);
     const bot = makePlayer({ sessionId: 'bot', x: 11, z: 0 }); // rd 11 > 12 - 1.4

@@ -695,7 +695,7 @@ function fireEffect(
                 slowMultiplier: 0.55,
                 ownerSid: player.sessionId,
                 sinkhole: true,
-                pullForce: copyFlags.holeForce ?? 14,
+                pullForce: copyFlags.holeForce ?? 19.25, // default = Sihans' holeForce since the 2026-09-21 speed-up
               },
             };
           }
@@ -740,7 +740,7 @@ function fireEffect(
             slowMultiplier: 0.55,
             ownerSid: player.sessionId,
             sinkhole: true,
-            pullForce: def.holeForce ?? 14,
+            pullForce: def.holeForce ?? 19.25, // default = Sihans' holeForce since the 2026-09-21 speed-up
           },
         };
       }

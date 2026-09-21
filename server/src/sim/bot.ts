@@ -53,18 +53,18 @@ const ZERO: BotInput = {
  * same drop-target behaviour anyway. If the only enemy alive is Kurama
  * during their immunity window, the bot falls back to standing still.
  */
-// Edge awareness (balance v2, 2026-08-21) — keep in sync with the
-// client's FEEL.bots (src/gamefeel.ts). Mirrored inline: the server sim
-// carries no gamefeel module and these three are the only knobs.
-const EDGE_MARGIN = 1.4;
-const EDGE_STEER = 1.6;
-const LOOK_AHEAD = 1.1;
+// Edge awareness (balance v2, 2026-08-21) — SIM.bots, mirror of the
+// client's FEEL.bots (src/gamefeel.ts). Were inline literals here until
+// 2026-09-21; tests/sim/feel-sim-parity.test.ts now pins the pairs.
+const EDGE_MARGIN = SIM.bots.edgeMargin;
+const EDGE_STEER = SIM.bots.edgeSteer;
+const LOOK_AHEAD = SIM.bots.lookAhead;
 
 // Tasas de decisión POR SEGUNDO (review 2026-08-24) — espejo de
 // FEEL.bots.fireRatesPerSec del cliente. Antes las probabilidades
 // por-frame de 60 Hz estaban copiadas literales aquí (30 Hz): los bots
 // online casteaban la MITAD que offline. rollAt convierte por tick.
-const FIRE_RATES = { mobility: 0.702, radial: 0.596, cone: 0.839, ranged: 0.737 };
+const FIRE_RATES = SIM.bots.fireRatesPerSec;
 const TICK_DT = 1 / 30;
 const rollAt = (ratePerSec: number): boolean =>
   Math.random() < 1 - Math.pow(1 - ratePerSec, TICK_DT);
@@ -175,11 +175,11 @@ export function computeBotInput(
       }
     }
     const chargeIncoming =
-      (!!nearest.isHeadbutting || mobilityActive) && nearestDist < 2.8 * 1.6;
+      (!!nearest.isHeadbutting || mobilityActive) && nearestDist < SIM.bots.defendRange * 1.6;
     let edgePressure = false;
     if (arena) {
       const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
-      edgePressure = rd > arena.radiusAt(Math.atan2(bot.z, bot.x)) - EDGE_MARGIN && nearestDist < 2.8;
+      edgePressure = rd > arena.radiusAt(Math.atan2(bot.z, bot.x)) - EDGE_MARGIN && nearestDist < SIM.bots.defendRange;
     }
     ability2 = chargeIncoming || edgePressure;
   } else if (def2?.type === 'projectile') {
