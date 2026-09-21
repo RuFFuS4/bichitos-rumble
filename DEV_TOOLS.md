@@ -125,7 +125,8 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   [--video --label=antes] [--json]` recorre una ruta fija a paso 1/60 y
   saca velocidad real, ritmo de patas, patinaje del pie, inclinación,
   balanceo, fotogramas de la media vuelta y altura en partida; `--video`
-  graba el MP4 (GPU por defecto, mudo como siempre).
+  graba el MP4 (GPU por defecto, mudo como siempre). `--feel=S.K=N`
+  prueba otros valores de FEEL sin tocar código.
 - **Batch runner headless** (afilado slice G — LA herramienta
   Claude-first): con el dev server vivo,
   `npm run batch -- --matches=20 --seed=1 --player=Shelly --bots=Trunk,Sergei,Kurama --speed=8`
@@ -135,7 +136,11 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   seed dos veces (con reload entre medias) y compara la secuencia de
   eventos completa → `REPRODUCIBLE: yes/no`. `--dump-recordings=dir`
   vuelca la RecordingSession completa de cada partida (cierra el hueco
-  del volcado headless).
+  del volcado headless). **Qué-pasaría-si** (2026-09-21):
+  `--feel=movement.accelerationScale=2.4[,S.K=N]` cambia valores de FEEL
+  en la página antes de cada partida sin tocar el código (prohibido con
+  el golden); `--gpu` renderiza con la GPU (ANGLE/D3D11): ~14 s de reloj
+  por partida a `--speed=8` frente a minutos con SwiftShader.
 
 - **Golden sim guardian** (2026-08-24): `npm run golden` corre una
   matriz FIJA de 3 partidas doradas (cubre los 9 critters, seeds

@@ -15,13 +15,13 @@ antes de commitear el JSON.
    **Diagnóstico medido y corte 1 hechos el 2026-09-21** → todo en
    [`docs/FEELING.md`](../FEELING.md) (causas con cifras, qué cambió,
    vídeos antes/después en `.tmp/feeling/v2/`). Lo que queda:
-   - [ ] **Esperando a Rafa — tamaños** (`FEELING.md §6-A`): la capa
-         procedural borra el ajuste a 1,7 y cada bicho cambia de tamaño
-         en el «¡YA!» (+64 % Trunk, −21 % Sebastian). Recomendación:
-         que funcione el 1,7. Afecta a cómo se lee todo lo demás, así que
-         va antes de afinar el ritmo.
-   - [ ] **Esperando a Rafa — ritmo por bicho** (`§6-C`): mirar
-         `feeling-corte1-antes-despues.mp4` y tocar `FEEL.runCadence`.
+   - [x] **Tamaños** — Rafa eligió el 1,7 para todos (2026-09-21). Hecho:
+         los nueve miden 1,66-1,71 en partida y no hay salto en el «¡YA!»
+         (`FEELING.md §3.1`).
+   - [x] **Ritmo por bicho** — Rafa: *"bastante mejor que antes"*.
+   - [ ] **Velocidad de suelo** — Rafa pide recomendación (`FEELING.md
+         §7`). Es gameplay: zona hard-stop, golden:write, espejo del
+         servidor y despliegue cliente+servidor a la vez.
    - [ ] **Corte 2** (`§5`): giro con peso en el hijo visual, acentos de
          arranque y frenada, reacciones al golpe/cabezazo que hoy se
          pintan en mallas ocultas, y personalidad con el rango real del

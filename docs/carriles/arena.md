@@ -117,6 +117,16 @@ el orden de trabajo.
      online es ≈0. Voy a planificar una versión del sim en el join (lo
      verás en `ONLINE.md` → Limitaciones). Cuando exista, subirla será
      parte de tocar el generador, igual que los dos lados del espejo.
+- **De PERSONAJES, 2026-09-21 — los bots se caen por los agujeros del
+  colapso.** En 144 partidas solo-bots (estudio de velocidad,
+  `docs/FEELING.md §7`), entre el 40 y el 55 % de las caídas sin rival a
+  menos de 2 u fueron en el INTERIOR del disco: fragmentos que caen y
+  que los bots no esquivan, porque su sonda (`FEEL.bots.lookAhead`)
+  solo ve lo que ya ha caído, no los avisos de lote. No es cosa de la
+  velocidad; lo dejo por si quieres que el aviso del colapso también
+  lo lean los bots. Aparte: si subimos la velocidad de suelo ×1,4-1,5,
+  los 3 s de aviso del colapso sobran para un humano; valóralo tras el
+  playtest, sin prisa.
 
 ## Cómo retomar
 

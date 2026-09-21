@@ -23,7 +23,8 @@
 // Options: --url (def http://localhost:5173) · --critters=A,B · --pack
 // (def kitsune_shrine, so before/after videos share a floor) · --out (def
 // .tmp/critter-motion) · --label (file prefix, def "motion") · --video ·
-// --json · --no-gpu (software render: ~18 s per frame at video size).
+// --json · --no-gpu (software render: ~18 s per frame at video size) ·
+// --feel=movement.accelerationScale=2.4 (what-if on the live FEEL).
 //
 // The browser is muted (scripts/lib/headless-browser.mjs), as every test
 // instance must be. GPU mode only adds ANGLE/D3D11 flags on top.
@@ -55,8 +56,17 @@ const { values: opt } = parseArgs({
     video: { type: 'boolean', default: false },
     json: { type: 'boolean', default: false },
     'no-gpu': { type: 'boolean', default: false },
+    feel: { type: 'string' },
   },
 });
+// --feel=movement.accelerationScale=2.4[,S.K=N]: what-if on the page's live
+// FEEL (same format as feel-patch / run-match-batch). Never touches source.
+const FEEL_OVERRIDES = {};
+for (const part of (opt.feel ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+  const m = /^([A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*)=(-?\d+(?:\.\d+)?)$/.exec(part);
+  if (!m) { console.error(`--feel: "${part}" no es seccion.clave=numero`); process.exit(1); }
+  FEEL_OVERRIDES[m[1]] = Number(m[2]);
+}
 const OUT = resolve(ROOT, opt.out);
 mkdirSync(OUT, { recursive: true });
 
@@ -74,6 +84,16 @@ const rows = [];
 for (const name of opt.critters.split(',')) {
   const bot = name === 'Sergei' ? 'Trunk' : 'Sergei';
   await page.evaluate(() => { window.__devApi.setFixedStep(null); window.__devApi.setSpeed(1); });
+  if (Object.keys(FEEL_OVERRIDES).length > 0) {
+    await page.evaluate(async (over) => {
+      const { FEEL } = await import('/src/gamefeel.ts');
+      for (const [p, v] of Object.entries(over)) {
+        const [sec, key] = p.split('.');
+        if (typeof FEEL[sec]?.[key] !== 'number') throw new Error(`--feel: FEEL.${p} no existe o no es numerico`);
+        FEEL[sec][key] = v;
+      }
+    }, FEEL_OVERRIDES);
+  }
   await page.evaluate(({ name, bot, pack }) => window.__devApi.startMatch(name, [bot], { seed: 501, packId: pack }), { name, bot, pack: opt.pack });
   await page.waitForFunction(() => window.__game.phase === 'playing' && window.__game.critters.every((c) => c.glbMesh), null, { timeout: 120000 });
   await page.waitForTimeout(300);

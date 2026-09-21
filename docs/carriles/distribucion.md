@@ -198,6 +198,33 @@ hay migraciones.
   H4.5.
   → *Leído el 2026-09-21. El commit (2317564) está verificado y entra en
   v1.8. La build de Steam con el flag sigue en el punto 6.*
+- **De PERSONAJES, 2026-09-21 — tres cosas de `BrawlRoom.ts` que salen
+  del estudio de velocidad** (`docs/FEELING.md §7`; nada es urgente
+  hasta que Rafa apruebe el plan):
+  1. **El bicho local da tirones en online.** `src/game.ts:1302-1305`
+     lo coloca directamente en la posición del servidor, sin suavizar,
+     con parches cada 50 ms: hoy son saltos de ~6-8 px a 1080p, y con
+     la velocidad ×1,5 que se estudia serían ~9-12 px. Es el defecto
+     más «de aficionado» que se ve en online. Propuesta: extrapolar con
+     `vx/vz` entre parches (o parches cada 33 ms). Si sube la velocidad,
+     esto debería ir ANTES del despliegue.
+  2. **Zona muerta**: `BrawlRoom.ts:1476` pone la velocidad a 0 si
+     `|v| < 0.15` aunque haya input (espejo del bug de
+     `src/critter.ts:593`, que en el cliente impide arrancar a varios
+     bichos a ≥120 Hz). En el servidor, a 30 Hz, solo afecta a Shelly
+     en el hielo o ralentizada. Cuando PERSONAJES arregle el cliente,
+     el espejo es `if (!data.hasInput && speed < deadZone)`.
+  3. **Bots online**: empujan con un vector de módulo 1 (factor
+     efectivo 1,0) y los offline con 0,55 → hoy un bot online corre
+     ~1,7-1,95× lo que uno offline (tu ×1,69 y nuestro 1,95 difieren
+     por el efecto de los 30 Hz del servidor en la velocidad real; lo
+     medimos igual cuando toque). Si Rafa aprueba igualarlos, el punto
+     seguro para aplicar `SIM.bots.moveAccelFactor` es
+     `BrawlRoom.ts:893-894` (`data.inputMoveX = input.moveX × factor`),
+     NO dentro de `computeBotInput` (encoge la sonda `LOOK_AHEAD` y
+     rompe `tests/sim/server-bot.test.ts:60-109`).
+  Y el despliegue: cualquier cambio de velocidad tiene que salir con
+  cliente y servidor a la vez.
 
 ## Cómo retomar
 

@@ -51,6 +51,44 @@ varios packs y `--at-seconds` sacaba del segundo pack en adelante la
 el reloj hasta `playing` y seguía enseñando el de la partida anterior.
 Ahora se espera por `__game.phase`. Es la misma familia de fallo que el
 del 2026-09-07: capturas que mienten sobre el instante.
+## 2026-09-21 (tarde) — [PERSONAJES] Los nueve miden 1,7 y un estudio de velocidad destapa un bug de producción
+
+**Tamaño — decisión de Rafa: «1», el 1,7 para todos.** La capa procedural
+pisaba cada frame el ajuste de altura con la escala del roster; ahora lo
+multiplica (`Critter.glbFitFactor`). Y el ajuste medía mal: la caja de
+una malla *skinned* que da `Box3.setFromObject` es la del *bind pose*
+(three.js la cachea), así que Kurama «ajustado» medía 2,08. Ahora se
+mide la pose real vértice a vértice. En partida: **1,66-1,71 los nueve**
+(antes 1,45-2,69), sin salto en el «¡YA!». Golden 3/3. En `/calibrate`
+el deslizador de escala queda de solo lectura (el ajuste anula el
+`scale` del roster) y «Re-fit» solo previsualiza otra altura.
+
+**Velocidad de suelo — estudio para la pregunta de Rafa** (*"¿qué
+velocidad me recomiendas para un resultado más profesional?"*). Workflow
+de 9 agentes con refutación (detalle en `docs/FEELING.md §7`):
+- Referencias en alturas del personaje por segundo: brawlers cenitales
+  2,0-3,2 (Brawl Stars ≈2,1, Bomberman 2,8, plantillas UE5/Unity
+  2,8-3,0). Aquí la mediana real es 1,8.
+- 144 partidas solo-bots de ×1 a ×2,5: de ×1 a ×2 no se rompe nada; a
+  ×2,5 los bots se tiran solos por el borde. La simulación no elige la
+  cifra: la eligen las referencias, la animación y el mando de Rafa.
+- **Recomendación: `accelerationScale` 1,6 → 2,2 (×1,375), alternativa
+  2,4**, sin tocar fricción ni `maxSpeed` (distancia de los golpes), con
+  los bots en un factor configurable igual offline y online, y los
+  retoques acoplados que lista §7.5. Pendiente de aprobación: es física.
+- **Bug de producción encontrado**: la zona muerta de velocidad
+  (`src/critter.ts:593`) actúa aunque haya input, y con monitores de
+  120-240 Hz hay bichos que **no pueden arrancar** (Shelly desde 120 Hz,
+  Sergei desde 144). El bot Shelly ya no arranca a 60 Hz. Arreglo de una
+  línea, pendiente de aprobación porque cambia el golden.
+- Correcciones de medida: la velocidad real es ×1,155 la que leíamos
+  (la posición avanza antes de la fricción).
+
+Herramientas nuevas (doble superficie): `run-match-batch --feel=S.K=N`
+y `--gpu` (una partida ~14 s de reloj en vez de minutos), y `--feel` en
+`critter-motion`. Notas en los buzones de ARENA (bots que caen por los
+agujeros del colapso) y DISTRIBUCIÓN (tirones del bicho local en online,
+espejo de la zona muerta y factor de los bots online).
 
 ## 2026-09-21 — [PERSONAJES] El feeling, medido: las patas siguen al suelo y el cuerpo por fin se inclina
 

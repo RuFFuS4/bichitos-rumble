@@ -288,11 +288,12 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
   }
 
   // --- Scale (x, y, z) ---
-  // Same override pattern as pivotY — calibrate can mutate baseScale
-  // hot. Fallback chain keeps the production path unchanged.
+  // Roster (or /calibrate override) scale × the height fit measured at
+  // attach, so every critter stands IN_GAME_TARGET_HEIGHT tall. Writing
+  // the bare roster scale here is what used to undo the fit at "GO!".
   const baseScale =
-    critter.rosterOverride?.scale ??
-    critter.rosterEntry!.scale;
+    (critter.rosterOverride?.scale ?? critter.rosterEntry!.scale) *
+    critter.glbFitFactor;
 
   // Z stretch: charge_rush active envelope
   const stretchZ = 1 + chargeActive * 0.22 * p.chargeStretchMult;

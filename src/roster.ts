@@ -27,7 +27,12 @@ export interface RosterEntry {
   displayName: string;                   // shown in UI
   glbPath: string | null;                // null = procedural mesh only
   baseColor: number;                     // fallback mesh + UI dot color
-  scale: number;                         // uniform scale on GLB root
+  /** Import scale on the GLB root. In game the height fit
+   *  (IN_GAME_TARGET_HEIGHT, critter.ts) cancels it out — the nine stand
+   *  the same height since 2026-09-21 — so it only matters before the
+   *  fit (and for slot thumbnails). The per-entry size notes below
+   *  ("smallest", "~1.6u chibi"…) predate that fit. */
+  scale: number;
   rotation: number;                      // Y-axis rotation in radians
   offset: [number, number, number];      // position offset within the Group
   physicsRadius: number;                 // collision radius

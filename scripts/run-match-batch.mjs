@@ -88,6 +88,12 @@ Flags:
                          INTENCIONALES; el diff del JSON documenta el cambio).
                          Alias: npm run golden:write.
   --url=URL              Base del dev server (def: http://localhost:5173).
+  --feel=S.K=N[,S.K=N]   Que-pasaria-si: cambia valores de FEEL en la pagina
+                         antes de cada partida (p. ej.
+                         movement.accelerationScale=2.4). Nunca toca el
+                         codigo. Incompatible con el golden.
+  --gpu                  Renderiza con la GPU (ANGLE/D3D11) en vez de
+                         SwiftShader: la misma simulacion, mucho mas rapida.
   --help                 Esta ayuda.
 
 Salida: tabla por consola (winrate por critter, duracion media, distribucion
@@ -110,11 +116,17 @@ function parseCli(argv) {
       'golden-write': { type: 'boolean', default: false },
       'golden-check': { type: 'boolean', default: false },
       url: { type: 'string', default: 'http://localhost:5173' },
+      feel: { type: 'string' },
+      gpu: { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
     },
   });
 
   if (values.help) return { help: true };
+  const feel = parseFeelOverrides(values.feel);
+  if (Object.keys(feel).length > 0 && (values['golden-write'] || values['golden-check'])) {
+    throw new Error('--feel no se combina con el golden: el golden mide SIEMPRE los valores del codigo.');
+  }
 
   const asInt = (name, raw, { min = 1 } = {}) => {
     const n = Number(raw);
@@ -140,7 +152,26 @@ function parseCli(argv) {
     goldenWrite: values['golden-write'],
     goldenCheck: values['golden-check'],
     url: values.url,
+    feel,
+    gpu: values.gpu,
   };
+}
+
+/**
+ * `--feel=movement.accelerationScale=2.4,bots.edgeMargin=1.8` → { path: n }.
+ * Two-segment dot-paths into FEEL (same format as feel-patch), numbers
+ * only. Applied in the page before every match — a what-if, never written
+ * to source.
+ */
+function parseFeelOverrides(raw) {
+  const out = {};
+  if (!raw) return out;
+  for (const part of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
+    const m = /^([A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*)=(-?\d+(?:\.\d+)?)$/.exec(part);
+    if (!m) throw new Error(`--feel: "${part}" no es seccion.clave=numero`);
+    out[m[1]] = Number(m[2]);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +248,20 @@ async function openLabPage(browser, labUrl) {
 // One match
 // ---------------------------------------------------------------------------
 
-async function runOneMatch(page, { player, bots, seed, packId, speed, timeoutMs }) {
+async function runOneMatch(page, { player, bots, seed, packId, speed, timeoutMs, feel = {} }) {
+  // --feel what-ifs: mutate the page's live FEEL (same module instance the
+  // game reads every frame) before the match. Every call re-applies them,
+  // so a page recreated after a crash gets them too.
+  if (Object.keys(feel).length > 0) {
+    await page.evaluate(async (feel) => {
+      const { FEEL } = await import('/src/gamefeel.ts');
+      for (const [p, v] of Object.entries(feel)) {
+        const [sec, key] = p.split('.');
+        if (typeof FEEL[sec]?.[key] !== 'number') throw new Error(`--feel: FEEL.${p} no existe o no es numerico`);
+        FEEL[sec][key] = v;
+      }
+    }, feel);
+  }
   // Arm the deterministic surface BEFORE startMatch so the lab actions land
   // outside the new recording (the recording stays a pure gameplay trace;
   // the runner config is captured in the results JSON instead).
@@ -464,6 +508,7 @@ async function runVerify(browser, labUrl, cfg, participants) {
     packId: cfg.pack,
     speed: cfg.speed,
     timeoutMs: Math.ceil((MATCH_SIM_SEC / cfg.speed) * 1000) + TIMEOUT_MARGIN_MS,
+    feel: cfg.feel,
   };
 
   console.log(`Verify: seed ${cfg.baseSeed}, dos runs con reload entre medias...`);
@@ -647,6 +692,7 @@ async function runBatch(browser, labUrl, cfg, participants) {
         packId: cfg.pack,
         speed: cfg.speed,
         timeoutMs,
+        feel: cfg.feel,
       });
       const summary = summarizeMatch({ index: i, seed, ...raw, participants });
       if (cfg.dumpDir && raw.recording) {
@@ -711,6 +757,7 @@ function publicConfig(cfg) {
     pack: cfg.pack,
     speed: cfg.speed,
     dumpRecordings: cfg.dumpDir,
+    feel: cfg.feel,
   };
 }
 
@@ -743,7 +790,12 @@ async function main() {
   const chromium = await loadChromium();
   // Mudo siempre: una tanda abre decenas de partidas seguidas (directiva
   // de Rafa 2026-09-07). Ver scripts/lib/headless-browser.mjs.
-  const browser = await chromium.launch({ headless: true, args: MUTE_ARGS });
+  // --gpu: real GPU through ANGLE/D3D11 instead of SwiftShader — same
+  // fixed-step sim, many times faster frames. Still muted.
+  const gpuOpts = cfg.gpu
+    ? { channel: 'chromium', args: [...MUTE_ARGS, '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] }
+    : { args: MUTE_ARGS };
+  const browser = await chromium.launch({ headless: true, ...gpuOpts });
   let exitCode = 0;
   try {
     // Roster comes from the live page (single source of truth) so the

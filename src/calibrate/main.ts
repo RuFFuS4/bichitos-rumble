@@ -414,7 +414,7 @@ function spawnCritterForSlot(p: PendingSlot): void {
   // apply the transforms directly; the procedural tick will keep them
   // consistent on subsequent frames via rosterOverride.
   if (critter.glbMesh) {
-    critter.glbMesh.scale.setScalar(initial.scale);
+    critter.glbMesh.scale.setScalar(initial.scale * critter.glbFitFactor);
     critter.glbMesh.position.y = p.entry.offset[1] + initial.pivotY;
     critter.glbMesh.rotation.y = initial.rotation;
   }
@@ -512,7 +512,10 @@ function selectSlot(idx: number): void {
   // land the user back on the critter they were tuning.
   saveToStorage(UI_STORAGE_KEY, { selectedId: slot.entry.id });
   // Sliders + numeric inputs enabled + synced with current values.
-  [ctlScale, ctlPivot, ctlRot, ctlHitbox, valScale, valPivot, valRot, valHitbox].forEach((el) => (el.disabled = false));
+  // Scale stays disabled on purpose: in game every critter is fitted to
+  // IN_GAME_TARGET_HEIGHT (Rafa, 2026-09-21), which cancels the roster
+  // scale out — a tuned value would look right here and vanish in game.
+  [ctlPivot, ctlRot, ctlHitbox, valPivot, valRot, valHitbox].forEach((el) => (el.disabled = false));
   ctlHitbox.value = String(slot.rosterTransform.physicsRadius);
   valHitbox.value = slot.rosterTransform.physicsRadius.toFixed(3);
   ctlScale.value = String(slot.rosterTransform.scale);
@@ -606,7 +609,7 @@ if (btnResetLocal) {
       rotation: code.rotation,
     };
     if (slot.critter.glbMesh) {
-      slot.critter.glbMesh.scale.setScalar(code.scale);
+      slot.critter.glbMesh.scale.setScalar(code.scale * slot.critter.glbFitFactor);
       slot.critter.glbMesh.position.y = slot.entry.offset[1] + code.pivotY;
       slot.critter.glbMesh.rotation.y = code.rotation;
     }
@@ -672,17 +675,6 @@ function persistSlot(slot: typeof slots[number]): void {
  *  parse their value and call this with the parsed number plus a hint
  *  about which control originated the change so we only sync the other
  *  one (avoids fighting the user mid-edit). */
-function applyScale(v: number, source: 'slider' | 'num'): void {
-  if (selectedSlotIdx === null) return;
-  const slot = slots[selectedSlotIdx]!;
-  if (!Number.isFinite(v)) return;
-  slot.rosterTransform.scale = v;
-  slot.critter.rosterOverride = { ...slot.critter.rosterOverride, scale: v };
-  if (slot.critter.glbMesh) slot.critter.glbMesh.scale.setScalar(v);
-  if (source !== 'slider') ctlScale.value = String(v);
-  if (source !== 'num')    valScale.value = v.toFixed(3);
-  persistSlot(slot);
-}
 function applyPivot(v: number, source: 'slider' | 'num'): void {
   if (selectedSlotIdx === null) return;
   const slot = slots[selectedSlotIdx]!;
@@ -721,7 +713,6 @@ function applyHitbox(v: number, source: 'slider' | 'num'): void {
   persistSlot(slot);
 }
 
-ctlScale.addEventListener('input', () => applyScale(+ctlScale.value, 'slider'));
 ctlHitbox.addEventListener('input', () => applyHitbox(+ctlHitbox.value, 'slider'));
 valHitbox.addEventListener('change', () => applyHitbox(+valHitbox.value, 'num'));
 ctlPivot.addEventListener('input', () => applyPivot(+ctlPivot.value, 'slider'));
@@ -732,10 +723,6 @@ ctlRot.addEventListener('input',   () => applyRot(+ctlRot.value,   'slider'));
 // rounded value back to the field if the user typed an out-of-range
 // number. Browser already clamps via min/max attributes; we only
 // re-format on change so half-typed values aren't normalised mid-edit.
-valScale.addEventListener('input',  () => applyScale(+valScale.value, 'num'));
-valScale.addEventListener('change', () => {
-  if (selectedSlotIdx !== null) valScale.value = slots[selectedSlotIdx]!.rosterTransform.scale.toFixed(3);
-});
 valPivot.addEventListener('input',  () => applyPivot(+valPivot.value, 'num'));
 valPivot.addEventListener('change', () => {
   if (selectedSlotIdx !== null) valPivot.value = slots[selectedSlotIdx]!.rosterTransform.pivotY.toFixed(3);
@@ -765,24 +752,14 @@ btnRefit.addEventListener('click', () => {
   const target = +ctlTarget.value;
   for (const slot of slots) {
     if (!slot.critter.glbMesh || !slot.bindPoseHeight) continue;
-    // Our in-game auto-fit already ran once at GLB load — here we
-    // re-apply a fresh one to the new target. Scale from current
-    // bindPoseHeight (which reflects the post-fit value = previous
-    // target) to the new target. Height scales linearly with the
-    // uniform factor, so tracking bindPoseHeight = target stays exact
-    // across repeated refits.
-    const k = target / slot.bindPoseHeight;
-    slot.critter.glbMesh.scale.multiplyScalar(k);
-    slot.rosterTransform.scale *= k;
-    // Without this push, the procedural tick re-reads rosterOverride.scale
-    // next frame and reverts the visible mesh — while rosterTransform (and
-    // the persisted working copy below) keep the refit value, so the user
-    // would export numbers they never saw on screen.
-    slot.critter.rosterOverride = { ...slot.critter.rosterOverride, scale: slot.rosterTransform.scale };
+    // PREVIEW of a different IN_GAME_TARGET_HEIGHT, session only. The
+    // in-game fit already ran at GLB load (bindPoseHeight = its target);
+    // rescaling the fit factor is what the procedural tick multiplies
+    // every frame, so the change sticks on screen. Nothing is persisted
+    // or exported: the roster scale is cancelled by the fit, and the real
+    // knob is the constant in critter.ts.
+    slot.critter.glbFitFactor *= target / slot.bindPoseHeight;
     slot.bindPoseHeight = target;
-    // Refit changes every slot's working values — persist them all, or
-    // a reload silently reverts the refit for every unselected slot.
-    persistSlot(slot);
   }
   // Refresh the sidebar if a slot is selected.
   if (selectedSlotIdx !== null) selectSlot(selectedSlotIdx);

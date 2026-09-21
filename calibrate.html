@@ -153,7 +153,13 @@
       <label><span>In-game target</span><input class="slider-num" id="val-target" type="number" step="0.01" min="1.0" max="2.4" value="1.70" /></label>
       <input id="ctl-target" type="range" min="1.0" max="2.4" step="0.01" value="1.7" />
     </div>
-    <button id="btn-refit">Re-fit all to target</button>
+    <button id="btn-refit">Preview all at this height</button>
+    <div style="font-size: 10.5px; line-height: 1.4; opacity: 0.6; margin-bottom: 8px;">
+      In game the nine are fitted to <code>IN_GAME_TARGET_HEIGHT</code>
+      (critter.ts) — same height for all (decision 2026-09-21). That fit
+      cancels the roster scale, so Scale is read-only here. This button
+      only previews another target; it exports nothing.
+    </div>
 
     <h2>Stage</h2>
     <label class="toggle-row">
@@ -198,9 +204,9 @@
 
     <h2>Notes</h2>
     <div style="font-size: 10.5px; line-height: 1.5; opacity: 0.7">
-      9 critters rendered at their current roster scale + in-game auto-fit.
-      Drag sliders to tune the selected critter. "Re-fit all to target"
-      recomputes every critter's visual fit against the slider value.
+      9 critters rendered exactly as in game: roster scale × the height
+      fit to IN_GAME_TARGET_HEIGHT. Drag sliders to tune pivot, rotation
+      and hitbox of the selected critter.
     </div>
   </div>
 

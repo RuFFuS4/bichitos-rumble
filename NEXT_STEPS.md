@@ -195,10 +195,10 @@ entregable):
       medido y corte 1 hechos (2026-09-21, carril PERSONAJES)**: las
       patas siguen al suelo, la inclinación y el balanceo pasan de 2° a
       12° y de 0,5° a 4°, golden intacto. Todo en
-      [`docs/FEELING.md`](docs/FEELING.md). **← DECIDE (§6-A)**: los
-      tamaños en partida están rotos (la capa procedural borra el ajuste
-      a 1,7; cada bicho cambia de tamaño en el «¡YA!»). Vídeo:
-      `.tmp/feeling/v2/feeling-corte1-antes-despues.mp4`.
+      [`docs/FEELING.md`](docs/FEELING.md). Tamaños arreglados (Rafa:
+      1,7 para todos). **← DECIDE (§7.6)**: arreglar el bug de la zona
+      muerta (hay bichos que no arrancan con monitores ≥120 Hz) y la
+      velocidad de suelo recomendada (`accelerationScale` 2,2 o 2,4).
 - [ ] **Shaders cartoon para los personajes** (Rafa: "más adelante").
       Ojo al precedente de la fase 1a: activar tone mapping o PMREM toca
       TODA la escena; un toon shader es lo mismo pero peor. Va tras flag

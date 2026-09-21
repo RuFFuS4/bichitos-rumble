@@ -350,6 +350,17 @@ export class Critter {
    *  critters that have no GLB. */
   bindPoseHeight: number | null = null;
 
+  /**
+   * Uniform factor that makes the GLB's idle silhouette exactly
+   * `IN_GAME_TARGET_HEIGHT` tall — the same height for the nine (Rafa,
+   * 2026-09-21). Measured once at attach; `tickProceduralAnimation`
+   * multiplies the roster (or lab-override) scale by it every frame.
+   * Until then the procedural layer wrote the bare roster scale and
+   * undid the fit at "GO!" (Trunk +64 %, Sebastian −21 %). 1 until the
+   * GLB attaches.
+   */
+  glbFitFactor = 1;
+
   constructor(config: CritterConfig, scene: THREE.Scene) {
     this.config = config;
     this.mesh = new THREE.Group();
@@ -916,12 +927,7 @@ export class Critter {
     // skeleton. Used as the baseline for the sync auto-fit in the
     // preview (so swaps are pop-free — we don't wait for the idle clip
     // to tick before we know how big the critter is).
-    let measuredHeight = 0;
-    {
-      group.updateMatrixWorld(true);
-      const bbox = new THREE.Box3().setFromObject(group);
-      if (!bbox.isEmpty()) measuredHeight = bbox.max.y - bbox.min.y;
-    }
+    let measuredHeight = measurePosedHeight(group);
     this.bindPoseHeight = measuredHeight > 0.1 ? measuredHeight : null;
 
     // Skeletal animation setup — only if the GLB shipped clips. The mixer
@@ -944,12 +950,8 @@ export class Critter {
       // same APPARENT height in both the selector and the arena, not the
       // same "bind" height (which can be wildly off).
       this.skeletal.update(0.033); // ~1 frame at 30fps
-      group.updateMatrixWorld(true);
-      const idleBbox = new THREE.Box3().setFromObject(group);
-      if (!idleBbox.isEmpty()) {
-        const idleHeight = idleBbox.max.y - idleBbox.min.y;
-        if (idleHeight > 0.1) measuredHeight = idleHeight;
-      }
+      const idleHeight = measurePosedHeight(group);
+      if (idleHeight > 0.1) measuredHeight = idleHeight;
       this.bindPoseHeight = measuredHeight > 0.1 ? measuredHeight : null;
     }
 
@@ -966,6 +968,7 @@ export class Critter {
     if (measuredHeight > 0.1) {
       const k = IN_GAME_TARGET_HEIGHT / measuredHeight;
       group.scale.multiplyScalar(k);
+      this.glbFitFactor = k;
       this.bindPoseHeight = IN_GAME_TARGET_HEIGHT;
     }
 
@@ -1256,4 +1259,34 @@ export class Critter {
     this.lastStatsFalling = false;
     this.lastStatsAbilityActive = [false, false, false];
   }
+}
+
+/** Vertices sampled per mesh by `measurePosedHeight` — plenty for a
+ *  silhouette height, and cheap on the 100k-vertex Meshy rigs. */
+const POSED_HEIGHT_SAMPLES = 4000;
+
+/**
+ * Height of `root`'s visible meshes in their CURRENT pose. Skinned
+ * vertices go through the live bones (`getVertexPosition`) —
+ * `Box3.setFromObject` reuses a skinned mesh's cached bind-pose box, which
+ * misjudged the idle silhouette by up to ~20 % (Kurama "fitted" to 1.7
+ * stood 2.08 tall).
+ */
+function measurePosedHeight(root: THREE.Object3D): number {
+  root.updateMatrixWorld(true);
+  let lo = Infinity;
+  let hi = -Infinity;
+  const v = new THREE.Vector3();
+  root.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.visible) return;
+    const count = mesh.geometry.attributes.position?.count ?? 0;
+    const step = Math.max(1, Math.floor(count / POSED_HEIGHT_SAMPLES));
+    for (let i = 0; i < count; i += step) {
+      mesh.getVertexPosition(i, v).applyMatrix4(mesh.matrixWorld);
+      if (v.y < lo) lo = v.y;
+      if (v.y > hi) hi = v.y;
+    }
+  });
+  return hi > lo ? hi - lo : 0;
 }
