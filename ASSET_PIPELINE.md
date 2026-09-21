@@ -155,7 +155,17 @@ npm run inspect:parts public/models/critters/<id>.glb
 
 # Local bounds + suggested scale/pivotY for the roster entry:
 node scripts/inspect-bounds.mjs public/models/critters/<id>.glb
+
+# Run clip stride + left-foot phase (drives the leg rhythm in game).
+# Re-run with --write after re-exporting ANY critter's Run clip — the
+# table in src/critter-locomotion.ts is measured, never hand-tuned:
+node scripts/inspect-stride.mjs <id>
+node scripts/inspect-stride.mjs --write
 ```
+
+A critter with a new or re-exported Run clip and a stale `RUN_GAIT` row
+runs with the wrong leg rhythm (feet gliding or treadmilling). See
+[`docs/FEELING.md`](docs/FEELING.md) §3.3.
 
 ---
 

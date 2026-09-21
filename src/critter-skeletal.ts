@@ -401,6 +401,35 @@ export class SkeletalAnimator {
   }
 
   /**
+   * Live playback rate for the CURRENT state, without resetting its time
+   * head — the locomotion layer calls this every frame so the Run clip
+   * follows the critter's real speed. No-op when `state` isn't the one
+   * playing (a heavy clip cut in, or the critter has no such clip).
+   */
+  setCurrentTimeScale(state: SkeletalState, rate: number): void {
+    if (this.currentState !== state) return;
+    this.actions[state]?.setEffectiveTimeScale(rate);
+  }
+
+  /** Duration (s) of the clip resolved for `state`, or null if none. */
+  getClipDuration(state: SkeletalState): number | null {
+    return this.actions[state]?.getClip().duration ?? null;
+  }
+
+  /**
+   * Loop phase 0..1 of `state` while it is the current state, else null.
+   * Lets procedural motion (body sway) ride the legs' rhythm instead of
+   * a free-running clock.
+   */
+  getCurrentPhase(state: SkeletalState): number | null {
+    if (this.currentState !== state) return null;
+    const action = this.actions[state];
+    if (!action) return null;
+    const d = action.getClip().duration;
+    return d > 0 ? (action.time % d) / d : null;
+  }
+
+  /**
    * List every clip that came with the GLB, along with which logical
    * state (if any) our fuzzy resolver maps it to, plus the tier that
    * won the mapping (`override | exact | prefix | contains`). Used by

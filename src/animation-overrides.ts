@@ -66,6 +66,12 @@ import type { SkeletalState } from './critter-skeletal';
  *     `clipPlaybackRate` still wins over a global override speed).
  * Tools still use `playClipByName(name, loop, speed)` directly for
  * preview — same numbers reach the runtime path now.
+ *
+ * Exception (2026-09-21, feeling): in a match the `run` state's rate is
+ * re-set every frame from the critter's real ground speed
+ * (`runPlaybackRate`, critter-animation.ts), so a `run.speed` here only
+ * shapes the /anim-lab preview and the first frame of the loop. Per-
+ * critter run rhythm is tuned in `FEEL.runCadence` instead.
  */
 export interface ClipOverrideEntry {
   clip: string;

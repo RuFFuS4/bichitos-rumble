@@ -15,6 +15,32 @@ export const FEEL = {
     velocityDeadZone: 0.15,   // below this speed → snap to 0 (kills micro-drift)
   },
 
+  // --- Locomoción visual (feeling, 2026-09-21) ---
+  // PRESENTACIÓN, nunca física: el ritmo de las patas y la intensidad del
+  // cuerpo en carrera salen de la velocidad REAL del bicho (medida:
+  // 1,4-3,1 u/s, no los 8-18 de `config.speed`, que es una aceleración).
+  // La zancada de cada clip vive en critter-locomotion.ts (medida del GLB).
+  locomotion: {
+    runRateMin: 0.45,         // timeScale mínimo del clip Run: arrancar y frenar no van a cámara lenta
+    runCadenceMaxHz: 6,       // techo de ciclos/s: por encima el pie patina antes que girar como un ventilador
+    topSpeedReach: 0.9,       // fracción de la velocidad terminal a la que el cuerpo ya va inclinado del todo
+  },
+
+  // Cadencia de carrera por bicho (claves = RosterEntry.id), relativa a la
+  // del "pie apoyado": 1 = el pie no patina; >1 = las patas van más rápido
+  // que el suelo (correteo con esfuerzo); <1 = planea. Gusto, no medida.
+  runCadence: {
+    sergei: 1.0,
+    trunk: 1.0,
+    kurama: 1.0,
+    shelly: 1.3,
+    kermit: 1.6,
+    sihans: 1.0,
+    kowalski: 1.0,
+    cheeto: 1.5,
+    sebastian: 1.0,
+  },
+
   // --- Bot brain (balance v2, 2026-08-21) ---
   // Conciencia del borde: sin esto los bots persiguen recto hacia el
   // vacío (el audit midió 2.4-3.0 caídas/partida en todo el roster).

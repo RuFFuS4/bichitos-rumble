@@ -113,6 +113,19 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   setSpeed/requestStep, forzar habilidades, bots, recording.
 - **Inspección de assets**: `npm run inspect:clips|parts|bounds`,
   `verify:glbs`, `check-pws-parity`.
+- **Zancada del clip Run** (feeling, 2026-09-21):
+  `node scripts/inspect-stride.mjs [id] [--json] [--write]` mide en node,
+  sin navegador, a qué velocidad barre cada Run el pie apoyado y en qué
+  fase apoya el izquierdo; `--write` regenera `src/critter-locomotion.ts`.
+  El gusto (ritmo por bicho, techos) vive en `FEEL.locomotion` y
+  `FEEL.runCadence`: sliders solos en «Game feel» del match lab y
+  `feel-patch` (`"runCadence.kermit": 1.8`).
+- **Cómo se mueve un bicho, medido** (feeling, 2026-09-21): con el dev
+  server vivo, `node scripts/critter-motion.mjs [--critters=A,B]
+  [--video --label=antes] [--json]` recorre una ruta fija a paso 1/60 y
+  saca velocidad real, ritmo de patas, patinaje del pie, inclinación,
+  balanceo, fotogramas de la media vuelta y altura en partida; `--video`
+  graba el MP4 (GPU por defecto, mudo como siempre).
 - **Batch runner headless** (afilado slice G — LA herramienta
   Claude-first): con el dev server vivo,
   `npm run batch -- --matches=20 --seed=1 --player=Shelly --bots=Trunk,Sergei,Kurama --speed=8`

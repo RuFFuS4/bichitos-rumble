@@ -11,7 +11,8 @@
 // This layer is PRESENTATION ONLY. It never writes to fields that drive
 // gameplay or networking:
 //   - reads: vx, vz, abilityStates, isHeadbutting, headbuttAnticipating,
-//            skipPhysics
+//            skipPhysics, the Run clip's phase, RUN_GAIT (measured stride)
+//            and FEEL.locomotion / FEEL.runCadence (taste)
 //   - writes: body.position.y, glbMesh.position.y, glbMesh.rotation.x,
 //             glbMesh.rotation.z, glbMesh.scale.{x,y,z}
 //
@@ -31,6 +32,7 @@
 import type { Critter } from './critter';
 import { FEEL } from './gamefeel';
 import { PERSONALITY_OVERRIDES } from './animation-personality-overrides';
+import { RUN_GAIT } from './critter-locomotion';
 
 export interface AnimationPersonality {
   /** Idle breathing rate (Hz). Heavier critters breathe slower. */
@@ -99,8 +101,40 @@ export function deriveAnimationPersonality(
 }
 
 const BODY_BASE_Y = 0.5;
-const SPEED_NORM = 15;       // velocity magnitude that maps to run intensity = 1
 const SPEED_DEADZONE = 0.3;  // below this we still apply idle-only bob
+
+/**
+ * The critter's real top speed with the stick held (u/s): the terminal
+ * velocity of accelerating at `speed × accelerationScale` against a
+ * friction of half-life `frictionHalfLife`. Measured in game: 1.4-3.1 u/s
+ * across the roster. Run intensity used to be normalised by a fixed 15,
+ * so the lean/sway designed for "full run" peaked at 9-21 % of their
+ * value. Base `config.speed` on purpose: a slowing zone reads as a
+ * smaller lean, a frenzy buff just saturates at 1.
+ */
+function runTopSpeed(critter: Critter): number {
+  const m = FEEL.movement;
+  return (critter.config.speed * m.accelerationScale * m.frictionHalfLife) / Math.LN2;
+}
+
+/**
+ * Playback rate for the Run clip at the critter's current ground speed,
+ * or null when there is no measured gait (the caller then keeps the
+ * authored rate). `plant` is the rate at which the clip sweeps the feet
+ * back exactly as fast as the ground passes under them; the per-critter
+ * `FEEL.runCadence` bias and the clamps are taste. Presentation only.
+ */
+export function runPlaybackRate(critter: Critter, speed: number): number | null {
+  const id = critter.rosterEntry?.id;
+  const gait = id ? RUN_GAIT[id] : undefined;
+  const duration = critter.skeletal?.getClipDuration('run');
+  const scale = critter.glbMesh?.scale.x;
+  if (!id || !gait || !duration || !scale) return null;
+  const plant = speed / (gait.stride * scale);
+  const bias = (FEEL.runCadence as Record<string, number>)[id] ?? 1;
+  const loco = FEEL.locomotion;
+  return Math.min(Math.max(plant * bias, loco.runRateMin), loco.runCadenceMaxHz * duration);
+}
 
 // Headbutt motion targets — applied to glbMesh.rotation.x / scale.y / position.y
 // Calibrated against FEEL.headbutt anticipation/lunge durations (0.12s + 0.15s)
@@ -114,6 +148,9 @@ const HEADBUTT_LUNGE_FORWARD  = 0.14;  // small forward Y drop + Z offset on lun
 // Lerp speeds (per second). Higher = snappier transitions.
 const LEAN_LERP_RUN = 10;
 const LEAN_LERP_HEADBUTT = 30;
+// Sway follows a wave that can run at 4-6 Hz on the small-stride rigs; at
+// the old 10/s the lag ate half the amplitude and shifted it off the feet.
+const SWAY_LERP = 25;
 
 /**
  * Main tick. Call every frame from Critter.update() BEFORE updateVisuals
@@ -142,7 +179,8 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
 
   const vMag = Math.sqrt(critter.vx * critter.vx + critter.vz * critter.vz);
   const moving = vMag > SPEED_DEADZONE;
-  const runIntensity = moving ? Math.min(vMag / SPEED_NORM, 1) : 0;
+  const fullRunSpeed = runTopSpeed(critter) * FEEL.locomotion.topSpeedReach;
+  const runIntensity = moving ? Math.min(vMag / fullRunSpeed, 1) : 0;
 
   // --- Ability envelopes ---
   let chargeActive = 0;       // 0..1 triangular envelope during charge_rush active
@@ -227,14 +265,24 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
       (pitchTarget - critter.glbMesh.rotation.x) * pitchLerp;
 
     // --- Side-to-side sway while running (rotation.z) ---
-    // Subtle body roll at the run bounce cadence. Zero during headbutt so
-    // the pose stays crisp.
+    // Body roll over the foot that is on the ground: rides the Run clip's
+    // own phase when the gait is measured (so it follows the legs at any
+    // speed), else the free-running bounce clock. At the middle of the
+    // left foot's contact the top leans left (+X in mesh space → negative
+    // roll; the GLB's Euler order is XZY so this is a true roll even on
+    // the Tripo rigs turned -90°). Zero during headbutt so the pose stays
+    // crisp.
+    const gait = critter.rosterEntry ? RUN_GAIT[critter.rosterEntry.id] : undefined;
+    const runPhase = gait ? (critter.skeletal?.getCurrentPhase('run') ?? null) : null;
+    const swayWave = gait && runPhase !== null
+      ? -Math.cos((runPhase - gait.leftPhase) * Math.PI * 2)
+      : Math.sin(t * p.runBounceHz * Math.PI * 2);
     const swayTarget =
-      Math.sin(t * p.runBounceHz * Math.PI * 2) *
+      swayWave *
       p.runSwayRadians *
       runIntensity *
       (1 - Math.min(1, antBlend + lungeBlend));
-    const swayLerp = Math.min(1, dt * LEAN_LERP_RUN);
+    const swayLerp = Math.min(1, dt * SWAY_LERP);
     critter.glbMesh.rotation.z +=
       (swayTarget - critter.glbMesh.rotation.z) * swayLerp;
   }

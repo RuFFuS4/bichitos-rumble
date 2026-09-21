@@ -50,9 +50,9 @@ desplegar** (`git log --oneline main..dev` los lista).
    fondo ya vale. Sin ellas, afinar recetas es afinar contra el techo
    equivocado. Para rehacerla: dev server vivo +
    `node scripts/arena-shots.mjs --out .tmp/shots-<lo-que-sea>`.
-2. **Relanzar el diagnóstico del feeling desde cero.** El de hoy se cortó
-   sin entregar y su caché solo vive dentro de la sesión que lo lanzó. Lo
-   ya medido está en el punto "Feeling de los personajes" de la cola.
+2. ~~Relanzar el diagnóstico del feeling~~ — hecho el 2026-09-21 con su
+   primer arreglo; espera la decisión de tamaños de Rafa
+   ([`docs/FEELING.md`](docs/FEELING.md) §6).
 3. **Decidir el despliegue**: merge `dev` → `main` con tag cuando las
    capturas convenzan. Railway autodeploya el servidor desde `main`, así
    que cliente y servidor salen a la vez.
@@ -186,16 +186,15 @@ entregable):
 - [ ] Fase 5 — todo lo visual en función del radio.
 
 **Cola de Rafa (2026-09-07, por orden de lo que dijo)**:
-- [ ] **Feeling de los personajes** (PENDIENTE; el diagnóstico del
-      2026-09-07 se cortó sin entregar — relanzar de cero): *"se
-      sienten pesados en vez de animalillos graciosos andando, corriendo
-      y demás"*. Dato de partida: los 9 GLB SÍ traen 6-10 clips (Idle,
-      Run, Fall, Victory, Defeat, habilidades), pero el clip de Run se
-      reproduce a velocidad FIJA (`meta.speed ?? 1`), así que un critter
-      a 8 u/s y otro a 18 u/s mueven las patas igual y los pies patinan.
-      Falta además el vocabulario cartoon: inclinación al acelerar y al
-      girar, squash al frenar, stretch al salir despedido, anticipación,
-      e inercia en orejas y cola.
+- [ ] **Feeling de los personajes** — *"se sienten pesados en vez de
+      animalillos graciosos andando, corriendo y demás"*. **Diagnóstico
+      medido y corte 1 hechos (2026-09-21, carril PERSONAJES)**: las
+      patas siguen al suelo, la inclinación y el balanceo pasan de 2° a
+      12° y de 0,5° a 4°, golden intacto. Todo en
+      [`docs/FEELING.md`](docs/FEELING.md). **← DECIDE (§6-A)**: los
+      tamaños en partida están rotos (la capa procedural borra el ajuste
+      a 1,7; cada bicho cambia de tamaño en el «¡YA!»). Vídeo:
+      `.tmp/feeling/v2/feeling-corte1-antes-despues.mp4`.
 - [ ] **Shaders cartoon para los personajes** (Rafa: "más adelante").
       Ojo al precedente de la fase 1a: activar tone mapping o PMREM toca
       TODA la escena; un toon shader es lo mismo pero peor. Va tras flag

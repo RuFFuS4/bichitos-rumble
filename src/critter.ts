@@ -7,7 +7,7 @@ import { getRosterEntry, type RosterEntry } from './roster';
 import { loadModelWithAnimations } from './model-loader';
 import { SkeletalAnimator, type SkeletalState } from './critter-skeletal';
 import { createCritterParts } from './critter-parts';
-import { deriveAnimationPersonality, tickProceduralAnimation, type AnimationPersonality } from './critter-animation';
+import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, type AnimationPersonality } from './critter-animation';
 import { deriveCritterStats } from './pws-stats';
 
 /**
@@ -839,6 +839,12 @@ export class Critter {
     }
     // Apply roster visual config
     group.scale.setScalar(entry.scale);
+    // XZY: the roster yaw is applied FIRST (innermost), then roll (z) and
+    // pitch (x) about the critter's own axes. With the default XYZ, the
+    // procedural sway on a rig turned -90° (the Tripo ones) rolled about
+    // the model's z — which after the yaw is the lateral axis, so the
+    // "side sway" was really a forward nod.
+    group.rotation.order = 'XZY';
     group.rotation.y = entry.rotation;
     this.baseGlbRotationY = entry.rotation;
     group.position.set(...entry.offset);
@@ -1094,6 +1100,10 @@ export class Critter {
       const vMag = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
       const moving = vMag > FEEL.movement.velocityDeadZone * 2;
       this.skeletal.play(moving ? 'run' : 'idle');
+      // The legs follow the real ground speed (visual only — see
+      // runPlaybackRate). Without a measured gait the authored rate stays.
+      const rate = moving ? runPlaybackRate(this, vMag) : null;
+      if (rate !== null) this.skeletal.setCurrentTimeScale('run', rate);
     }
 
     this.skeletal.update(dt);

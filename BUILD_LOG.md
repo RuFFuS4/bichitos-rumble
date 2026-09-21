@@ -1,5 +1,58 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-21 — [PERSONAJES] El feeling, medido: las patas siguen al suelo y el cuerpo por fin se inclina
+
+Petición de Rafa del 2026-09-07: *"se sienten pesados en vez de
+animalillos graciosos"*. El diagnóstico de aquel día murió con su sesión;
+este se ha hecho **midiendo**, no mirando: una ruta de teclas fija a paso
+de 1/60 s en el lab (`scripts/critter-motion.mjs`) y la zancada de cada
+clip Run leída del GLB en node (`scripts/inspect-stride.mjs`). Informe
+completo, con cifras por bicho: [`docs/FEELING.md`](docs/FEELING.md).
+
+Lo que apareció, en orden de peso:
+- **Los tamaños en partida están rotos.** El ajuste a 1,7 se aplica al
+  cargar el GLB y la capa procedural lo pisa cada frame con la escala del
+  roster: en el «¡YA!» cada bicho cambia de tamaño (Trunk +64 %, Sebastian
+  −21 %) y en partida miden de 1,45 a 2,69. Grandes y lentos (casi todos
+  avanzan menos de su altura por segundo) se leen pesados. **Decisión de
+  Rafa**, no lo toco sin él.
+- **La capa cartoon estaba apagada**: la intensidad de carrera se
+  normalizaba por 15 u/s y la velocidad real es 1,4-3,1 u/s. Inclinación
+  de 1,8-2,5° donde el diseño decía 12°.
+- **Patas a ritmo fijo**: unos planeaban (Sebastian ×4,7, Kowalski ×4,3)
+  y otros iban en cinta.
+- **En los 5 rigs de Tripo el balanceo era un cabeceo**, por el orden de
+  Euler XYZ con el modelo girado −90°.
+- Pendiente para el corte 2: la media vuelta ocurre en **un fotograma**,
+  arrancar y frenar no tienen acento, y el tilt del golpe y la
+  recuperación del cabezazo se pintan en las esferas procedurales, que
+  están ocultas.
+
+**Corte 1 (rama `claude/feature/personajes-feeling`)** — todo en la capa
+visual, golden **3/3 sin regenerar**:
+- El Run se reproduce a la velocidad real ÷ zancada medida × escala del
+  GLB × `FEEL.runCadence[id]` (gusto por bicho), con suelo y techo en
+  `FEEL.locomotion`. Tabla medida en `src/critter-locomotion.ts`,
+  regenerable con `inspect-stride.mjs --write`.
+- Inclinación y balanceo sobre la velocidad terminal real de cada bicho:
+  12° a tope (Shelly 6,9°), balanceo 3-5° y **al compás de las patas**
+  (se engancha a la fase del clip y se inclina sobre el pie que apoya).
+- `glbMesh.rotation.order = 'XZY'`: el balanceo es de lado en los 9.
+- Los mandos nuevos son secciones planas de `FEEL`: salen solos en el
+  sintonizador del match lab y se escriben con `feel-patch` (probado en
+  seco). Sin tocar `tool-patch-core.mjs` (tierra de nadie).
+- Vídeo antes/después, mismo suelo, seis bichos:
+  `.tmp/feeling/v2/feeling-corte1-antes-despues.mp4`.
+
+**Cómo se trabajó, y por qué importa**: al abrir, las **cuatro sesiones de
+carril estaban vivas a la vez en la carpeta compartida** — justo lo que
+`docs/SESIONES.md` prohíbe. Mientras este carril creaba su worktree, la
+carpeta principal ya había saltado a la rama de Interfaz. Este carril
+trabajó entero en `.claude/worktrees/personajes` (el `npm install` tarda
+5 s desde caché) con su dev server en el 5181 y el golden con
+`--url=http://localhost:5181`. Si las cuatro van a convivir, lo sano es
+un worktree por carril, no turnos de palabra.
+
 ## 2026-09-21 — [Interfaz] El portal del Vibe Jam se apaga en itch y Steam
 
 Rafa decide el alcance que faltaba: **fuera de la web propia, en itch y
