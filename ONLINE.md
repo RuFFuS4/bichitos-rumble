@@ -5,25 +5,37 @@ sincronización cliente↔servidor.
 
 ---
 
-## Estado del deploy (2026-08-16)
+## Estado del deploy (comprobado el 2026-09-21)
 
-> **El modo online está CAÍDO en producción.** La app del servidor en
-> Railway ya no existe — `wss://bichitos-rumble-production.up.railway.app`
-> responde "Application not found". Pendiente de redeploy desde el
-> dashboard de Railway (requiere a Rafa). La base de datos SQLite
-> (players / belts online) vivía en el volumen de esa app y **puede
-> haberse perdido** con él; hasta el redeploy no se puede confirmar.
+> **El online está VIVO en producción** con `v1.7-h4-social` (main
+> `f41fb7e`, desplegado el 2026-09-05). Comprobado hoy con GETs de solo
+> lectura: `https://bichitos-rumble-production.up.railway.app/health`
+> responde `ok` con ~16 días de uptime, `/api/leaderboard` devuelve los
+> 5 cinturones (el volumen de la DB está montado) y el bundle de
+> `www.bichitosrumble.com` apunta a ese `wss://`.
 >
-> Para cuando vuelva: los scripts de admin del servidor siguen en el
-> repo (`server/scripts/admin-players.mjs`, vía `npm run admin:*`
-> desde `server/`): `admin:list-players`, `admin:player-stats`,
-> `admin:delete-player` / `admin:delete-pattern` /
-> `admin:delete-before` / `admin:delete-test`, `admin:reset-players`
-> y el nuevo `admin:backup` (snapshot consistente vía la API
-> `.backup()` de better-sqlite3, destino por defecto
-> `$DATA_DIR/backups/br-online-<UTC>.sqlite`). Prioridad tras el
-> redeploy: programar backups periódicos para no volver a depender de
-> un único volumen.
+> - **Cómo se despliega**: Railway construye `server/Dockerfile`
+>   (multi-stage `node:22-alpine`) y Vercel `npm run build`, **los dos
+>   solos desde `main`**. Cliente y servidor salen a la vez, pero no en
+>   el mismo instante — ver "Versiones cliente↔servidor" en
+>   Limitaciones. El runbook del despliegue vive en
+>   [`docs/carriles/distribucion.md`](docs/carriles/distribucion.md).
+> - **Admin de la DB** (`server/scripts/admin-players.mjs`, vía
+>   `npm run admin:*` desde `server/` en local, o
+>   `node scripts/admin-players.mjs <cmd>` dentro del contenedor, donde
+>   el WORKDIR es `/app`): `admin:list-players`, `admin:player-stats`,
+>   `admin:delete-player` / `admin:delete-pattern` /
+>   `admin:delete-before` / `admin:delete-test`, `admin:reset-players`
+>   y `admin:backup` (snapshot consistente vía `.backup()` de
+>   better-sqlite3, destino por defecto
+>   `$DATA_DIR/backups/br-online-<UTC>.sqlite`).
+> - **Pendiente**: la DB vive en un único volumen **sin backups
+>   programados** (`admin:backup` hay que invocarlo a mano), y quedan 2
+>   nicks `SMOKE*` de las campañas de humo por borrar.
+>
+> *(Hasta el 2026-09-21 aquí decía que el online estaba caído — era la
+> foto del 2026-08-16, antes del redeploy de H0. Llevaba un mes siendo
+> falso.)*
 
 ---
 
@@ -52,6 +64,10 @@ sincronización cliente↔servidor.
   hay salas con nombre ni filtros por región. La primera sala abierta
   con sitio libre recoge al jugador. Ninguna nueva sala se crea si hay
   una en `waiting` con hueco.
+- **Salas privadas** (H4, "Play with Friends"): la sala se crea con
+  `{ private: true }` y queda fuera del matchmaking público
+  (`BrawlRoom.isPrivateRoom`); se entra por el enlace `?room=<id>` que
+  enseña la sala de espera (`src/hud/waiting.ts`).
 - **Identidad online (nickname)**: antes de entrar a matchmaking el
   cliente registra/reclama un nickname vía `POST /api/player` y lo
   pasa en el `joinOrCreate`. Ver "Identidad online (v2)" más abajo.
@@ -213,7 +229,8 @@ Implementada en `src/online-identity.ts` + `src/hud/nickname-modal.ts`
 
 Desde 2026-04-23 el servidor tiene base de datos: **SQLite**
 (better-sqlite3) en el volumen de Railway — `server/src/db.ts`.
-(Estado actual del deploy: ver la nota fechada al principio del doc.)
+(Estado del deploy y admin de la DB: ver la nota fechada al principio
+del doc.)
 
 - **Tablas**: `players` (id, nickname_norm / nickname_display,
   token_hash, identity_id, timestamps) y `player_stats` (wins online,
@@ -245,10 +262,30 @@ Desde 2026-04-23 el servidor tiene base de datos: **SQLite**
 
 ## Limitaciones actuales / deuda aceptada
 
-- **No hay reconnect (`allowReconnection`)**. Si un humano pierde
-  conexión durante la partida, su slot pasa a bot-takeover pero el
-  cliente original no puede volver a entrar en esa sala. Post-jam si se
-  hace necesario.
+- **Reconnect con gracia de 30 s** (H4, 2026-08-24):
+  `allowReconnection(client, RECONNECT_GRACE_SEC)` en
+  `BrawlRoom.onLeave` y `room.reconnection.maxRetries = 8` en
+  `src/network.ts`. Pasada la gracia, el slot queda en bot-takeover.
+  **Lo que no sobrevive es un reinicio del servidor** (cada despliegue
+  de Railway): la sala vive en memoria, Colyseus la cierra y las
+  reconexiones se rechazan. Si era una partida pública con humanos
+  verificados, hoy se les apunta derrota (deducido del código,
+  `BrawlRoom.ts` `recordOnlineBeltStats`): **desplegar sin partidas
+  vivas**. Arreglo futuro, zona hard-stop: `onBeforeShutdown` que cierre
+  con un `endReason` propio sin tocar cinturones.
+- **Versiones cliente↔servidor sin handshake**. El join no lleva
+  ninguna versión, y el servidor solo manda `arenaSeed`, `arenaPackId`,
+  nivel y lote del colapso: **cada cliente deriva en local qué
+  fragmentos caen**. Si un despliegue cambia el generador de la arena
+  (H4.5 lo cambia: el 54 % de las semillas reparten distinto los lotes),
+  un cliente de una versión contra un servidor de otra pinta suelo
+  donde la física ya lo ha tirado. Pasa en la ventana del despliegue
+  (Vercel termina antes que Railway) y en cualquier pestaña vieja
+  abierta, que no se recarga sola (no hay service worker ni aviso de
+  versión). Arreglo planificado para antes de H5 (zona hard-stop): una
+  versión del sim en las opciones de join y rechazo con "recarga la
+  página" si no coincide. **Nunca** mandar geometría por la red para
+  taparlo.
 - **Sin matchmaking por región/latencia**. Un único pool global. El
   servidor está en Railway (región fija); la latencia depende de dónde
   estén los jugadores.
@@ -257,8 +294,7 @@ Desde 2026-04-23 el servidor tiene base de datos: **SQLite**
   historial de partidas ni ranking global tipo ELO: sólo stats
   agregadas por jugador y los 5 cinturones. La DB vive en un único
   volumen de Railway sin backups automáticos programados (existe
-  `npm run admin:backup`, pero hay que invocarlo — ver "Estado del
-  deploy").
+  `admin:backup`, pero hay que invocarlo — ver "Estado del deploy").
 - **Bot AI server-side simple**. Chase + HB + abilities ocasionales.
   Suficiente para relleno, no para "jugar contra bots como experiencia
   principal". El modo local (`/ vs Bots`) sigue usando

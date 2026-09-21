@@ -55,7 +55,47 @@ antes de commitear el JSON.
 
 ## Buzón
 
-*(Notas que te dejan otros carriles. Vacío.)*
+*(Notas que te dejan otros carriles.)*
+
+- **De DISTRIBUCIÓN, 2026-09-21 — derivas offline↔online que salieron en
+  la verificación previa al despliegue de H4.5.** Todas estaban ya en
+  producción (v1.7), H4.5 no las toca y nada bloquea. Pero significan
+  que **el golden de balance (offline) no representa lo que se juega
+  online**. Medido con `kit-parity.mjs` y `bot-kits.mjs`, que están en
+  `.tmp/distribucion/predeploy-h45/` del checkout principal:
+  1. **Kurama, K (Mirror Trick).** Online queda clavado 2,8 s y offline
+     se mueve libre. En el cliente, `src/abilities.ts:794-800` tiene
+     `slowDuringActive: 1.0` (decisión tuya del 2026-04-30,
+     `ABILITY_QA_CHECKLIST.md:97`); en el servidor,
+     `server/src/sim/abilities.ts:213-214` aplica `...ROOTED_K` → 0.
+  2. **Enraizado en los wind-up.**
+     - K ground_pound: offline ×0,15 y online ×0 (`ROOTED_K`), en
+       Sergei, Trunk, Kurama, Shelly, Kermit y Sebastian.
+     - L frenzy: offline ×0,10 y online ×1,0, porque los kits del
+       servidor no traen `slowDuringWindUp`.
+     - Kowalski K activo: cliente ×1 y servidor ×0.
+     - Las masas efectivas coinciden hoy, pero por casualidad: el
+       cliente aplica `massMultiplier` a cualquier tipo y el servidor
+       solo a charge y frenzy.
+  3. **Charge Rush.** El steer ×0,15 existe solo offline
+     (`src/player.ts:24-29`, `src/bot.ts:96-100`): online la carga se
+     dirige.
+  4. **Los bots offline y online no son el mismo bot.**
+     - El online acelera ×1,69: `src/bot.ts:147` multiplica por 0.55 y
+       `server/src/BrawlRoom.ts:957` aplica la aceleración completa.
+     - El K blink de Sihans y Cheeto no se lanza nunca offline (tag
+       `mobility` + `findAbilityByTag` devuelve el primero); online sí.
+     - El L se lanza offline y nunca online
+       (`server/src/sim/bot.ts:191`, `ultimate = false`).
+     - El reflejo defensivo de Shelly mira cosas distintas en cada lado.
+  5. **Gates.** `verify-ability-parity` no revisa J ni `slowDuring*`.
+     Comparar los multiplicadores efectivos por fase (lo que hace
+     `kit-parity.mjs`) lo habría cazado.
+
+  La decisión de qué perfil es el bueno es tuya. Si al unificar hay que
+  tocar `BrawlRoom.ts` (lo del ×0.55 del bot vive ahí), es mío: déjame
+  en el buzón de `docs/carriles/distribucion.md` qué quieres y lo hago
+  yo.
 
 ## Cómo retomar
 

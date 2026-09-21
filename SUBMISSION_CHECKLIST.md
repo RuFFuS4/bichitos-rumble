@@ -70,13 +70,17 @@
 - [x] **Belt orientation final fix** — shared constants `BELT_FRONT_ROTATION_Y = -π/2` + `BELT_PREVIEW_ROTATION_X = 0.06` in `belt-thumbnail.ts` imported by `belt-viewer.ts`. Compensates for the GLB's native +X-facing export so belts read frontal across grid, modal, and toasts.
 - [x] **Server admin scripts** for player table cleanup — `npm run admin:list-players`, `admin:player-stats`, `admin:delete-test`, `admin:delete-pattern`, `admin:reset-players` (in `server/scripts/admin-players.mjs`).
 - [x] **Local dev DB cleaned** (`server/data/br-online.sqlite` reset 1 → 0 players via `npm run admin:reset-players -- --confirm --i-know-what-im-doing`).
-- [ ] **Production / Railway DB cleaned** — Rafa to run on Railway shell:
+- [ ] **Production / Railway DB cleaned** — Rafa to run on Railway shell
+  (the image is built from `./server` with `WORKDIR /app`, so the script
+  lives at `/app/scripts/admin-players.mjs` — there is no `/app/server`):
   ```sh
-  cd /app/server
+  cd /app
   npm run admin:list-players                                              # before
   npm run admin:reset-players -- --confirm --i-know-what-im-doing
   npm run admin:list-players                                              # confirm 0
   ```
+  Post-jam the goal is narrower: only the campaign nicks (`SMOKE*` /
+  `Test*`) via `admin:delete-test` — real players stay.
   Default DB path is `$DATA_DIR/br-online.sqlite` (Railway persistent volume). The script DRY-RUNs without `--confirm` and requires both `--confirm` AND `--i-know-what-im-doing` for the wipe.
 - [x] Signature per-critter abilities — 9/9 L abilities authored and parity-verified (was 3/9 placeholders in the early build).
 - [ ] Particle effects (beyond shockwave rings) — POST-JAM
@@ -110,19 +114,24 @@
 
 ## Deployment
 - [x] `vercel.json` with SPA rewrites config
-- [x] `vite.config.ts` with `base: './'` (relative asset paths) + multi-entry (`index.html` + `tools.html`)
-- [x] Client build verified locally (`npm run build`)
-  - index.html: ~96 kB / 22 kB gzip
-  - main bundle: ~108 kB / 34 kB gzip (game logic + HUD + critter pipeline)
-  - three.js chunk: ~628 kB / 158 kB gzip (cached across deploys)
-  - colyseus chunk (@colyseus/sdk desde H1): ~115 kB / 35 kB gzip
-  - model-loader + critter chunks: ~170 kB combined
-  - critter GLBs: ~58 MB total (loaded on demand, browser-cached
-    via `Cache-Control: max-age=31536000, immutable` per pack)
-  - arena pack GLBs: ~88 MB total (5 packs, decor + skyboxes)
-  - music: ~2.9 MB (intro / ingame / special MP3, lazy-loaded)
-  - **dist post-build: ~240 MB total** (down from 2.7 GB before
-    `clean-dist-raw.mjs` postbuild — see commit `df1cb5c`)
+- [x] `vite.config.ts` with `base: './'` (relative asset paths). Only
+  `index.html` ships; the labs (`tools.html` & co.) build only with
+  `VITE_BUILD_TOOLS=1`.
+- [x] Client build verified locally (`npm run build`) — measured
+  2026-09-21 on `dev` 2317564:
+  - index.html: ~114 kB / 28 kB gzip
+  - main bundle: ~278 kB / 85 kB gzip (game logic + HUD + critter pipeline)
+  - three.js chunk: ~648 kB / 162 kB gzip (own hash; re-downloaded only
+    when three or the chunking changes)
+  - colyseus chunk (@colyseus/sdk 0.17): ~112 kB / 34 kB gzip
+  - critter GLBs: ~46 MB total (loaded on demand; `/models/*` is
+    `max-age=86400, stale-while-revalidate=604800`, only `/assets/*`
+    is `immutable`)
+  - arena packs: ~14 MB total (5 packs)
+  - audio: ~2 MB · images: ~2 MB
+  - **dist post-build: 69.7 MB total**, gated by
+    `scripts/check-payload-budget.mjs` (ratchet 75 MB, 17 MB per file).
+    `clean-dist-raw.mjs` drops ~77 MB of `_raw/` masters on every build.
 - [x] Vercel project connected (auto-deploy from GitHub: main → prod, dev → preview)
 - [x] Custom domain `www.bichitosrumble.com` aliased to production
 - [x] Server autodeploy to Railway
@@ -140,7 +149,7 @@
 - [x] Character resolved data-driven from roster (matches URL `username` if playable; else random)
 
 ## Internal tooling (not shipped as player-facing)
-- [x] `/tools.html` — internal dev lab with `<meta robots="noindex,nofollow">`, banner "INTERNAL DEV TOOL"
+- [x] `/tools.html` — internal dev lab with `<meta robots="noindex,nofollow">`, banner "INTERNAL DEV TOOL" (dev server only since H3; not in the production build)
 - [x] Grouped collapsible panels: Setup / Live Control / Observe / Tuning
 - [x] Bot behaviour overrides (idle / passive / aggressive / chase / ability_only) per-bot and bulk
 - [x] Gameplay helpers (reset CDs, force ability, teleport player/bots)
@@ -151,7 +160,7 @@
 
 ## Known deferrals (post-jam or explicit scope cut)
 - Full per-character signature abilities (gap vs placeholders in CHARACTER_DESIGN.md)
-- `allowReconnection` for online
+- ~~`allowReconnection` for online~~ — done in H4 (30 s grace, see `ONLINE.md`)
 - Region-based matchmaking / ranking / login / persistence
 - Additional music tracks (defeat stinger, character select theme)
 - Pattern C collapse (non-radial cuts)

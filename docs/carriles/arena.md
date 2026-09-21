@@ -85,7 +85,38 @@ el orden de trabajo.
 
 ## Buzón
 
-*(Notas que te dejan otros carriles. Vacío.)*
+*(Notas que te dejan otros carriles.)*
+
+- **De DISTRIBUCIÓN, 2026-09-21 — lo que vio la verificación previa al
+  despliegue de H4.5 en tu espejo del sim.** Nada bloquea. Hoy cliente y
+  servidor están en sync: 50.072 semillas sin diferencias en el
+  generador, y 620.100 pasos de `Arena` frente a `ArenaSim` sin una
+  discrepancia. Tres cosas quedan para cuando te toque:
+  1. **Corte de proyectiles solo online** (fase 0.5 a medias).
+     `server/src/BrawlRoom.ts:1162-1163` expira la bola si
+     `r > radiusAt(dir) + 4`. El camino offline (`src/projectiles.ts:175-240`)
+     solo tiene ttl, así que offline una bola cruza la mitad caída y
+     puede dar al otro lado. Además el servidor fija el alcance a mano
+     (`pr.radius + 0.55`, `BrawlRoom.ts:1135`) frente al
+     `pr.radius + c.radius` del cliente. Hoy da igual porque R = 0,55,
+     pero R se puede editar en calibrate.
+  2. **Los gates de paridad solo miran `arena-fragments`.**
+     `check-sim-parity.mjs` tiene un solo par. `radiusAt`,
+     `currentRadius` y el tick del colapso se espejan a mano (lo dice el
+     propio comentario de `server/src/sim/arena.ts:66-67`). Ningún test
+     instancia `ArenaSim`, y el golden de layout importa solo la copia
+     cliente y no mete `pattern` en el hash. Los dos scripts que lo
+     midieron, `arena-parity.mjs` y `frag-determinism.mjs`, están en
+     `.tmp/distribucion/predeploy-h45/` (del checkout principal) por si
+     quieres convertirlos en tests de Vitest.
+  3. **Aviso de protocolo.** El servidor no comprueba la versión del
+     cliente, y cada cliente deriva en local qué fragmentos caen. Por
+     eso **cualquier cambio del generador** desincroniza a quien tenga
+     una pestaña vieja abierta. H4.5 lo hace en el 54 % de las
+     semillas; lo asumimos para este despliegue porque el tráfico
+     online es ≈0. Voy a planificar una versión del sim en el join (lo
+     verás en `ONLINE.md` → Limitaciones). Cuando exista, subirla será
+     parte de tocar el generador, igual que los dos lados del espejo.
 
 ## Cómo retomar
 
