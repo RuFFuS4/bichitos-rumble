@@ -62,8 +62,8 @@ desplegar** (`git log --oneline main..dev` los lista).
 - ~~Techos del scatter, isla como cono, ¿vale el fondo?~~ **Decididas el
   2026-09-21** (BUILD_LOG [Arena]): manda el código, la isla ya es un
   cono en punta y el fondo se rehace como «isla en el cielo»
-  (`docs/carriles/arena.md`). Queda solo la decisión 2 del fondo v2, que
-  se toma sobre las capturas de su slice.
+  (`docs/carriles/arena.md`). La decisión 2 del fondo v2 también está
+  tomada: jungle con pozo claro, el resto oscuro.
 
 **Estado de la máquina** (comprobado el 2026-09-16): no queda vivo ningún
 navegador de automatización —los ~70 Chrome huérfanos del cierre anterior

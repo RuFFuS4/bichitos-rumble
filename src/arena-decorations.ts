@@ -143,12 +143,14 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     // sombra. El verde del labio es lo que hace que la hierba parezca
     // colgar sobre el canto y no acabar en un corte.
     cliff: { stops: [[0, 0x5a6a2c], [0.14, 0x4e3620], [0.3, 0x6b4a2a], [0.5, 0x9a7a48], [0.8, 0x7e6238], [1, 0x4a3820]] },
-    // Sima verde con bruma. Pozo a luma ~21 (techo 25): el más cerrado
-    // porque la hierba del disco es la arena más oscura del juego. Si en
-    // el A/B se lee como agujero, jungle pasa a pozo claro (decisión 2).
+    // Sima verde con BRUMA CLARA: pozo claro (decisión 2 de Rafa,
+    // 2026-09-21). La hierba es la arena más oscura del juego; con pozo
+    // oscuro el techo era luma 25 y se leía como un agujero negro. Claro
+    // (luma ~146, suelo 115) la arena se recorta a contraluz y el canto
+    // sube de ΔL 51 a 69 (.tmp/shots-cielo/_pozo_ab.png).
     sky: {
-      zenith: 0x8fc0b8, abyss: 0x0c1a0f, abyssDeep: 0x07100a,
-      pit: 'dark', abyssCeiling: 25.3, abyssFloor: 115.3,
+      zenith: 0x8fc0b8, abyss: 0x7da07d, abyssDeep: 0x9fbf9f,
+      pit: 'light', abyssCeiling: 25.3, abyssFloor: 115.3,
       cloudTop: 0xc4d4b0, cloudFar: 0xb4c8a0, coverage: 0.4,
       isletTop: 0x46642e, hemiGround: 0x5f7a55, hemiIntensity: 0.7,
     },

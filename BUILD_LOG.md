@@ -1,5 +1,20 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-22 — [Arena] Jungle con pozo claro, y el rebote de luz aprobado
+
+Rafa decide sobre las hojas de la F0 del fondo v2:
+
+- **Jungle pasa a pozo claro**, una bruma verde (luma ~146, suelo 115).
+  Los otros cuatro siguen con pozo oscuro.
+  - Por qué: con pozo oscuro, jungle se leía como un agujero negro. Su
+    hierba es la arena más oscura del juego y el techo del pozo oscuro
+    era luma 25.
+  - Con el claro, la arena se recorta a contraluz. El ΔL mediano del
+    canto sube de 49,5 a 73,9 (p10 de 35 a 58) y hay 0 violaciones del
+    contrato del pozo.
+- **El rebote del hemisferio se queda**: la parte de abajo de los bichos
+  sale un poco más clara y fría. PERSONAJES tiene la nota en su buzón.
+
 ## 2026-09-21 — [Arena] Fondo v2, F0: la isla ya flota en el cielo
 
 El slice F0 del plan aprobado hoy (`docs/DIORAMAS.md` §«Fondo v2»):

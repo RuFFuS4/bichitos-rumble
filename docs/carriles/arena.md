@@ -16,11 +16,11 @@ el orden de trabajo.
      aparta del plan: bloque «Estado de la F0» en DIORAMAS. Las hojas
      están en `.tmp/shots-cielo/` (`_hoja`, `_hoja_colapso`,
      `_hoja_ab_mar`, `_pozo_ab` y `_roster_ab`).
-   - **Pendiente de Rafa sobre esas hojas**:
-     - la decisión 2, pozo oscuro o claro (sobre todo jungle). Se aplica
-       con `setPackSky(id, { pit: 'light', abyss, abyssDeep })` y
-       pasándolo a `PACKS`;
-     - el visto bueno al rebote de luz en los bichos.
+   - **Decidido por Rafa sobre esas hojas** (2026-09-21):
+     - jungle va con pozo CLARO y los otros cuatro con oscuro (en `PACKS`);
+     - el rebote de luz en los bichos, aprobado.
+     Para probar otro pozo en vivo: `setPackSky(id, { pit, abyss,
+     abyssDeep })`.
    - **Buzón de PERSONAJES**: nota dejada el 2026-09-21, con la hoja del
      roster en ruta absoluta.
    - **Deuda de la F0 para la F1**:
@@ -169,10 +169,12 @@ el orden de trabajo.
 
 ## Cómo retomar
 
-**2026-09-21**. El cono y la F0 del fondo v2 están en `dev`, con el mar
-todavía vivo como A/B. Antes de la F1 hacen falta dos respuestas de Rafa
-sobre las hojas de `.tmp/shots-cielo/`: pozo oscuro o claro, y el rebote
-de luz en los bichos.
+**2026-09-22**. El cono y la F0 del fondo v2 están en `dev`, con el mar
+todavía vivo como A/B. Las decisiones de la F0 están tomadas (jungle con
+pozo claro y el rebote aprobado). Lo siguiente es la **F1**: las firmas de
+cada bioma y los jirones C1, que es lo que resuelve de verdad «no se lee
+qué hay abajo»; el criterio es que Rafa, tapando el disco, diga el
+bioma.
 
 - **Para mirar**: `node scripts/arena-shots.mjs --out .tmp/shots-x
   --pose game,victory,low --no-hud`.

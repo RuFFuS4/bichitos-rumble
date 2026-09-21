@@ -685,7 +685,9 @@ Los `.webp` siguen en disco hasta F4. Fuera del carril solo hay que deshacer los
 
 ### 14. Decisiones para Rafa
 
-> **Rafa aprobó el plan el 2026-09-21, con el fondo v2 antes que el slice 2 de dioramas.** La decisión 1 queda en **sí, con las tres condiciones**. La 3 queda en **`clouds.png` solo si hace falta, en F2, y nunca en juego**. La 2 se decide sobre `_pozo_ab.png` del slice.
+> **Rafa aprobó el plan el 2026-09-21, con el fondo v2 antes que el slice 2 de dioramas.** La decisión 1 queda en **sí, con las tres condiciones**. La 3 queda en **`clouds.png` solo si hace falta, en F2, y nunca en juego**.
+>
+> **La decisión 2 se tomó sobre `_pozo_ab.png` de la F0: jungle, pozo CLARO; los otros cuatro, oscuro.** Jungle pasó de ΔL 49,5 a 73,9 en el canto y dejó de leerse como un agujero. Kitsune daba lo mismo con los dos (~67) y se queda con el crepúsculo ciruela. **El rebote del hemisferio también quedó aprobado** (`_roster_ab.png`).
 
 1. **¿Pueden las nubes de la franja alta ser más claras que la arena?**
    - Por qué importa: en juego, el «cielo» son nubes vistas desde arriba con el sol encima, y lo que se lee como nube es una nube clara.
