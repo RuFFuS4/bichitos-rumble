@@ -120,11 +120,11 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   `src/critter-locomotion.ts` y `--check` sale con 1 si la tabla ya no
   cuadra con los GLB.
 - **Editar clips de un bicho sin abrir Blender** (2026-09-23):
-  `node scripts/critter-recipe.mjs <id> [--out=x.glb] [--set=Run.ik.L=0.12]`
+  `node scripts/critter-recipe.mjs <id> [--out=x.glb [--set=Run.ik.L=0.12]]`
   rehace las ediciones de `scripts/critter-recipes/<id>.json` (Blender
   headless: pelvis fija, IK de pies, tronco enderezado) sobre el GLB
-  fijado en la receta; sin `--out` escribe el GLB del juego, `RUN_GAIT` y
-  la versión de la URL. `node scripts/stamp-critter-glbs.mjs [--check]`
+  fijado en la receta. Sin `--out` escribe el GLB del juego, `RUN_GAIT` y
+  la versión de la URL; `--set` solo va con `--out`. `node scripts/stamp-critter-glbs.mjs [--check]`
   pone `?v=<hash>` a cada GLB en `roster.ts` para que la caché nunca
   empareje JS nuevo con GLB viejo. Detalle: `ASSET_PIPELINE.md` §«Recetas
   post-import».

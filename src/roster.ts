@@ -186,7 +186,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'kowalski',
     displayName: 'Kowalski',
-    glbPath: './models/critters/kowalski.glb?v=ce69e17e',
+    glbPath: './models/critters/kowalski.glb?v=4b7ee108',
     baseColor: 0x1a1a3e,
     // Mage penguin (mass 0.9) — compact. Tripo mesh origin at feet.
     scale: 2.5, rotation: -Math.PI / 2, offset: [0, 0, 0],

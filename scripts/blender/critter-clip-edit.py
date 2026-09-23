@@ -27,7 +27,18 @@
 #       "A": 0.008,                   rebote de la raíz (dos por ciclo)
 #       "phaseL": 0.14,               fase de mitad de apoyo del pie izquierdo
 #       "x0": 0.02,                   centro del apoyo (si falta: el del clip)
-#       "footFlat": true              pie plano mientras apoya
+#       "footFlat": true,             pie plano mientras apoya
+#       "swingFlat": 0.7,             y cuánto plano en el vuelo (0 = el giro
+#                                     del clip, que en Kowalski baja la punta
+#                                     48° y la mete bajo el suelo; 1 = plano)
+#       "groundFrom": { "clip": "Idle", "frame": 0 },
+#                                     de dónde salen el suelo, la anchura de
+#                                     la pisada y el pie plano (sin él: el
+#                                     fotograma más bajo del propio clip,
+#                                     que en un clip hundido hunde el pie)
+#       "pole": [1, 0, 0],            hacia dónde apunta la rodilla
+#       "soft": 0.08                  fracción de la pierna con IK suave en
+#                                     los dos topes (estirada y plegada)
 #     },
 #     "torso": {                      endereza (o inclina) el tronco
 #       "bone": "Waist",              hueso que se gira (arrastra lo de encima)
@@ -74,7 +85,11 @@ ad.action_slot = slot
 print(f'[edit] {CLIP}: fotogramas {F0}-{F1}')
 
 
+WRITTEN = set()   # huesos con claves nuevas en el clip
+
+
 def write_quat_keys(bone, quats):
+    WRITTEN.add(bone)
     path = f'pose.bones["{bone}"].rotation_quaternion'
     fcs = [cb.fcurves.find(path, index=i) for i in range(4)]
     if any(fc is None for fc in fcs):
@@ -125,9 +140,9 @@ def edit_hold(holds):
 def report_jumps(bones, warn_deg=25.0, limit_deg=90.0):
     """Mayor giro entre fotogramas seguidos de cada hueso horneado. Más de
     90° es una rodilla que se da la vuelta (tirón del pie): para la receta.
-    Entre 25 y 90 solo avisa: con la pierna muy plegada en el vuelo, una
-    pantorrilla corta gira rápido sin mover el pie (compruébalo en el juego
-    con stride-probe/critter-motion)."""
+    Entre 25 y 90 solo avisa: suele ser una pierna que llega a un tope (mira
+    el aviso de IK suave de arriba) y se ve como un latigazo de la pata;
+    compruébalo en el juego con critter-motion o el visor."""
     worst = []
     for b in bones:
         prev = None
@@ -155,7 +170,7 @@ def smoothstep(e0, e1, x):
 
 def sample_legs():
     """Tobillo (cola de la pantorrilla) y giro del pie del clip SIN editar:
-    el suelo y la huella salen de aquí aunque `hold` mueva la pelvis."""
+    la huella sale de aquí aunque `hold` mueva la pelvis."""
     orig = {s: [] for s in ('L', 'R')}
     for f in FRAMES:
         scene.frame_set(f)
@@ -164,19 +179,36 @@ def sample_legs():
     return orig
 
 
-def edit_ik(p, orig):
+def sample_ground(ref):
+    """Tobillo y giro de cada pie en `ref` ({clip, frame}): el bicho de pie
+    y quieto, con los pies justo sobre el suelo."""
+    src = bpy.data.actions[ref['clip']]
+    ad.action, ad.action_slot = src, src.slots[0]
+    scene.frame_set(int(ref.get('frame', 0)))
+    out = {s: {'ankle': pb[f'{s}_Calf'].tail.copy(), 'footRot': pb[f'{s}_Foot'].matrix.to_quaternion()} for s in ('L', 'R')}
+    ad.action, ad.action_slot = act, slot
+    return out
+
+
+def edit_ik(p, orig, ground):
     d, L, H = float(p.get('d', 0.3)), float(p.get('L', 0.12)), float(p.get('H', 0.05))
     D, A = float(p.get('D', 0.03)), float(p.get('A', 0.012))
     phaseL = float(p.get('phaseL', 0.66))
     foot_flat = bool(p.get('footFlat', True))
+    swing_flat = float(p.get('swingFlat', 0.0))
     sides = {'L': phaseL % 1.0, 'R': (phaseL + 0.5) % 1.0}
-    # 1) Suelo, centro del apoyo y pie plano, medidos en el clip original.
+    # 1) Suelo, anchura de la pisada y pie plano: los del bicho quieto
+    #    (`groundFrom`) o, sin él, el fotograma más bajo del propio clip.
     info = {}
     for s in sides:
         zs = [o['ankle'].z for o in orig[s]]
-        imin = min(range(len(zs)), key=lambda i: zs[i])
         x0 = float(p['x0']) if 'x0' in p else sum(o['ankle'].x for o in orig[s]) / len(zs)
-        info[s] = {'zg': min(zs), 'x0': x0, 'y': sum(o['ankle'].y for o in orig[s]) / len(zs), 'flat': orig[s][imin]['footRot']}
+        if ground:
+            g = ground[s]
+            info[s] = {'zg': g['ankle'].z, 'x0': x0, 'y': g['ankle'].y, 'flat': g['footRot']}
+        else:
+            imin = min(range(len(zs)), key=lambda i: zs[i])
+            info[s] = {'zg': zs[imin], 'x0': x0, 'y': sum(o['ankle'].y for o in orig[s]) / len(zs), 'flat': orig[s][imin]['footRot']}
     # 2) Raíz: agachado + rebote, con el mínimo en mitad de cada apoyo.
     root = pb['Root']
     to_local = root.bone.matrix_local.to_3x3().inverted()
@@ -185,6 +217,7 @@ def edit_ik(p, orig):
         dz = -D - A * math.cos(4 * math.pi * (i / N - sides['L']))
         root.location = loc0 + to_local @ Vector((0, 0, dz))
         root.keyframe_insert('location', frame=f)
+    WRITTEN.add('Root')
 
     # 3) Objetivo del tobillo: recto hacia atrás al apoyar, en arco al volar.
     def ankle_target(s, ph):
@@ -202,19 +235,25 @@ def edit_ik(p, orig):
     #    el solver de Blender sin polo. Cada hueso gira lo mínimo desde su pose
     #    original, que conserva su giro sobre sí mismo (twist).
     pole = Vector(p.get('pole', [1, 0, 0])).normalized()
-    # Soft IK: cerca de la pierna estirada el ángulo de rodilla cambia a
-    # saltos (46° en un fotograma con la pantorrilla corta de Kowalski). En
-    # el último `soft` de la longitud de la pierna el tobillo se queda
-    # corto de forma suave: el pie cede unos milímetros en vez del tirón.
+    # Soft IK en los dos topes: con la pierna casi estirada o casi plegada
+    # del todo, el ángulo de rodilla cambia a saltos (la pantorrilla de
+    # Kowalski daba latigazos de 48-64° en un fotograma al tocar el tope de
+    # plegado). En el último `soft` de cada tope la distancia cadera→tobillo
+    # se acerca al límite de forma asintótica: el pie cede unos milímetros
+    # en vez del tirón.
     soft_frac = float(p.get('soft', 0.08))
     view_layer = bpy.context.view_layer
 
-    def soften(dist, reach):
-        soft = soft_frac * reach
-        knee_lock = reach - soft
-        if soft <= 0 or dist <= knee_lock:
+    def soften(dist, a, b):
+        soft = soft_frac * (a + b)
+        if soft <= 0:
             return dist
-        return knee_lock + soft * (1 - math.exp(-(dist - knee_lock) / soft))
+        straight, folded = a + b - soft, abs(a - b) + soft
+        if dist > straight:
+            return straight + soft * (1 - math.exp(-(dist - straight) / soft))
+        if dist < folded:
+            return folded - soft * (1 - math.exp(-(folded - dist) / soft))
+        return dist
 
     def aim(bone, old_dir, new_dir):
         R = old_dir.rotation_difference(new_dir).to_matrix()
@@ -226,6 +265,7 @@ def edit_ik(p, orig):
     baked = {f'{s}_{b}': [] for s in sides for b in ('Thigh', 'Calf', 'Foot')}
     worst = 0.0
     reach = {s: [] for s in sides}      # distancia cadera→tobillo / (muslo + pantorrilla)
+    fold = {}                           # por pierna: plegada del todo, en la misma escala
     for i, f in enumerate(FRAMES):
         scene.frame_set(f)
         for s in sides:
@@ -233,9 +273,10 @@ def edit_ik(p, orig):
             hip = th.head.copy()
             a = (ca.head - hip).length
             b = (fo.head - ca.head).length
+            fold[s] = abs(a - b) / (a + b)
             tgt, w = ankle_target(s, i / N)
             u = (tgt - hip).normalized()
-            dist = min(max(soften((tgt - hip).length, a + b), abs(a - b) + 1e-6), a + b - 1e-6)
+            dist = min(max(soften((tgt - hip).length, a, b), abs(a - b) + 1e-6), a + b - 1e-6)
             v = (pole - u * pole.dot(u)).normalized()
             cos_h = (a * a + dist * dist - b * b) / (2 * a * dist)
             knee = hip + a * (cos_h * u + math.sqrt(max(0.0, 1 - cos_h * cos_h)) * v)
@@ -246,7 +287,7 @@ def edit_ik(p, orig):
             aim(ca, fo.head - ca.head, ankle - ca.head)
             if foot_flat:
                 q0, qf = orig[s][i]['footRot'], info[s]['flat']
-                q = (q0 if q0.dot(qf) >= 0 else -q0).slerp(qf, w)
+                q = (q0 if q0.dot(qf) >= 0 else -q0).slerp(qf, max(w, swing_flat))
                 M = q.to_matrix().to_4x4()
                 M.translation = fo.head
                 fo.matrix = M
@@ -257,7 +298,11 @@ def edit_ik(p, orig):
     for s in sides:
         lo, hi = min(reach[s]), max(reach[s])
         print(f'[ik] pierna {s}: extensión {lo[0]:.2f} (f{lo[1]}) .. {hi[0]:.2f} (f{hi[1]}) — 1 = estirada, '
-              f'{abs(a - b) / (a + b):.2f} = plegada del todo')
+              f'{fold[s]:.2f} = plegada del todo')
+        if lo[0] < fold[s] + soft_frac or hi[0] > 1 - soft_frac:
+            print(f'[ik] AVISO: la pierna {s} entra en el IK suave (tope de '
+                  f'{"plegado" if lo[0] < fold[s] + soft_frac else "estirado"}): el pie se queda corto ahí; '
+                  'baja H o D si se nota')
     if worst > 0.004:
         print('[ik] AVISO: la pierna no llega al objetivo en algún fotograma (baja L o H, o sube D)')
     for bn, qs in baked.items():
@@ -294,12 +339,16 @@ def edit_torso(p):
 
 
 legs = sample_legs() if 'ik' in P else None
+ground = sample_ground(P['ik']['groundFrom']) if 'ik' in P and 'groundFrom' in P['ik'] else None
 if 'hold' in P:
     edit_hold(P['hold'])
 if 'ik' in P:
-    edit_ik(P['ik'], legs)
+    edit_ik(P['ik'], legs, ground)
 if 'torso' in P:
     edit_torso(P['torso'])
+# La receta solo copia al juego los huesos de su lista `nodes`: comprueba
+# con esta línea que no se queda fuera ninguno de los que se han editado.
+print('[escritos] ' + ','.join(sorted(WRITTEN)))
 
 ad.action = orig_active
 ad.action_slot = orig_active.slots[0]

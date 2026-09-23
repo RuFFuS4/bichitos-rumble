@@ -377,20 +377,42 @@ Receta reproducible (`scripts/critter-recipes/kowalski.json`,
 - pelvis fija como en el Idle, sin mover los muslos;
 - IK analítico de los pies con la rodilla siempre hacia delante, porque
   el solver de Blender sin polo invertía una rodilla en un fotograma;
-- pisada centrada bajo la cadera, para que la pierna no llegue a
-  estirarse del todo (1,01 → 0,95);
+- suelo, anchura de la pisada y pie plano tomados del Idle, y el pie casi
+  plano también en el vuelo;
+- pisada centrada bajo la cadera, y agachado y altura de paso elegidos
+  para que ninguna pierna llegue a sus topes (extensión 0,57-0,97; la
+  izquierda se pliega del todo a 0,47);
 - tronco de 17° a 0°.
 
-En la capa visual, `PERSONALITY_OVERRIDES.Kowalski` baja la inclinación
-al correr de 12° a ~5° y sube el balanceo sobre el pie apoyado de ~3° a
-~7-9°: el bamboleo.
+En la capa visual:
+- `PERSONALITY_OVERRIDES.Kowalski` baja la inclinación al correr de 12° a
+  ~5° y sube el balanceo sobre el pie apoyado de ~3° a ~7°: el bamboleo.
+- El balanceo rueda ahora sobre el pie apoyado. Antes lo hacía sobre el
+  centro del modelo y metía ese pie ~3 cm en el suelo. El cuerpo sube
+  `halfWidth × sen(balanceo)`, con `halfWidth` medido por `inspect-stride`
+  en los nueve.
 
 | Kowalski en partida (`critter-motion`) | Antes | Después |
 |---|---|---|
-| Ciclos de zancada/s | 6 (techo) | 4,04 |
+| Ciclos de zancada/s | 6 (techo) | 4,05 |
 | Pie (1 = apoyado) | 2,17 | **1,00** |
-| Inclinación / balanceo | 12° / 3,1° | 5,2° / 7,3° |
+| Inclinación / balanceo | 12° / 3,1° | 5,2° / 7,2° |
+| Pie apoyado, lo más bajo (y, en u) | — | −0,08 (en Idle, −0,05) |
 | Velocidad, altura | 3,07 u/s, 1,69 | iguales |
 
-Los otros 7 clips no se tocan; `RUN_GAIT.kowalski` pasa a 0,457 / 0,14.
+**Lo que cazó la revisión adversarial** antes de integrar:
+- La primera versión tomaba el suelo del fotograma más hundido del Run de
+  Tripo: el pie apoyado quedaba 20-27 cm bajo el suelo todo el apoyo.
+- La pantorrilla izquierda daba un latigazo de 64° al tocar su tope de
+  plegado.
+- En el vuelo, la punta del pie atravesaba el suelo.
+
+Los tres están arreglados en la receta, que además avisa de cada caso.
+
+Queda, y es de antes: al frenar, el pie apoyado resbala ~8 cm en 0,1 s.
+Lo causa el suavizado de 60 ms de la velocidad de suelo, que absorbe los
+saltos de posición de online. «Pie 1,00» es en carrera sostenida; si se
+quiere afinar, entra en el corte 2 (acentos de arranque y frenada).
+
+Los otros 7 clips no se tocan; `RUN_GAIT.kowalski` pasa a 0,456 / 0,14.
 Vídeo: `.tmp/graficos/_informe/entrega/kowalski-partida-antes-despues-camara-lenta.mp4`.

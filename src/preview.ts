@@ -47,13 +47,13 @@ const FIT_TRACK_SAMPLES = 1000;
 // stay in frame at any drag yaw is a CYLINDER: its height and its turn
 // radius (the farthest posed vertex from that axis). Every critter is
 // framed as if it were FIT_REFERENCE_RADIUS wide — the widest of the
-// roster, Sihans, measured 1.25 u at TARGET_HEIGHT (2026-09-23, every
-// vertex across the idle; the slimmest, Kermit, is 0.54) — so all nine
-// stand the same height on screen, as they do in the arena. Only a
+// roster, Sihans, measured 1.26 u at TARGET_HEIGHT (2026-09-23, every
+// vertex across his whole idle; the slimmest, Kermit, 0.5–0.7) — so all
+// nine stand the same height on screen, as they do in the arena. Only a
 // critter wider than that pulls the camera back for itself. The old
 // fit used a sphere around the world box, which overstated the width
 // by 10–35 % and sized each critter by it: 98–288 px on a 440 px canvas.
-const FIT_REFERENCE_RADIUS = 1.25;
+const FIT_REFERENCE_RADIUS = 1.26;
 // Margin over the exact no-clip distance (~265 px of 440 at 500×440).
 const FIT_PADDING = 1.2;
 

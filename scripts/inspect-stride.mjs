@@ -130,6 +130,7 @@ async function measure(id) {
     // Centro del apoyo como media circular de las fases en contacto.
     let cs = 0, sn = 0;
     let rangeX = [Infinity, -Infinity], rangeZ = [Infinity, -Infinity];
+    let lateral = 0, planted = 0;
     for (let i = 0; i < SAMPLES; i++) {
       const [x, y, z] = s[i];
       rangeX = [Math.min(rangeX[0], x), Math.max(rangeX[1], x)];
@@ -137,6 +138,7 @@ async function measure(id) {
       if (y > contactY) continue;
       const a = (i / SAMPLES) * 2 * Math.PI;
       cs += Math.cos(a); sn += Math.sin(a);
+      lateral += Math.abs(x); planted++;
       const next = s[(i + 1) % SAMPLES], prev = s[(i - 1 + SAMPLES) % SAMPLES];
       const vz = (next[2] - prev[2]) / (2 * dt);
       if (vz < 0) back.push(-vz);
@@ -151,12 +153,17 @@ async function measure(id) {
       swingZ: rangeZ[1] - rangeZ[0],
       swingX: rangeX[1] - rangeX[0],
       lift: yMax - yMin,
+      lateral: lateral / planted,
     };
   }).filter((f) => Number.isFinite(f.contactSpeed));
 
   const stride = median(perFoot.map((f) => f.contactSpeed));
   const swingZ = median(perFoot.map((f) => f.swingZ));
   const swingX = median(perFoot.map((f) => f.swingX));
+  // Mean sideways offset of a planted foot from the model's origin: the
+  // body sway rolls about that origin, so this is how much it would sink
+  // the planted foot (see the sway lift in critter-animation.ts).
+  const halfWidth = perFoot.reduce((a, f) => a + f.lateral, 0) / perFoot.length;
   const leftFoot = perFoot.find((f) => f.left);
   const warnings = [];
   if (perFoot.length < 2) warnings.push('menos de 2 pies medidos');
@@ -164,7 +171,7 @@ async function measure(id) {
   if (swingX > swingZ * 1.25) warnings.push(`los pies barren más en X (${swingX.toFixed(3)}) que en Z (${swingZ.toFixed(3)}): ¿rotation del roster mal?`);
   return {
     id, clip: clipName, duration: dur, feetSource, feet: perFoot.map((f) => f.bone),
-    stride, leftPhase: leftFoot?.contactPhase ?? 0, swingZ, rosterScale: entry.scale, strideWorld: stride * entry.scale,
+    stride, leftPhase: leftFoot?.contactPhase ?? 0, halfWidth, swingZ, rosterScale: entry.scale, strideWorld: stride * entry.scale,
     perFoot, warnings,
   };
 }
@@ -176,23 +183,25 @@ if (asJson) {
   console.log(JSON.stringify(results, null, 2));
 } else {
   console.log('\nZancada del clip Run (unidades de modelo por segundo de clip, timeScale 1)\n');
-  console.log('critter     clip  dur(s)  pies  zancada  f.izq  barrido  escala  zancada·escala  avisos');
-  console.log('-'.repeat(102));
+  console.log('critter     clip  dur(s)  pies  zancada  f.izq  anchura  barrido  escala  zancada·escala  avisos');
+  console.log('-'.repeat(111));
   for (const r of results) {
     if (r.error) { console.log(`${r.id.padEnd(11)} ERROR: ${r.error}`); continue; }
     console.log(
-      `${r.id.padEnd(11)} ${r.clip.padEnd(5)} ${r.duration.toFixed(3).padStart(6)}  ${String(r.feet.length).padStart(4)}  ${r.stride.toFixed(3).padStart(7)}  ${r.leftPhase.toFixed(2).padStart(5)}  ${r.swingZ.toFixed(3).padStart(7)}  ${r.rosterScale.toFixed(2).padStart(6)}  ${r.strideWorld.toFixed(2).padStart(14)}  ${r.warnings.join('; ')}`,
+      `${r.id.padEnd(11)} ${r.clip.padEnd(5)} ${r.duration.toFixed(3).padStart(6)}  ${String(r.feet.length).padStart(4)}  ${r.stride.toFixed(3).padStart(7)}  ${r.leftPhase.toFixed(2).padStart(5)}  ${r.halfWidth.toFixed(3).padStart(7)}  ${r.swingZ.toFixed(3).padStart(7)}  ${r.rosterScale.toFixed(2).padStart(6)}  ${r.strideWorld.toFixed(2).padStart(14)}  ${r.warnings.join('; ')}`,
     );
   }
 }
 
 if (doCheck) {
-  // Same tolerance the table is written with (3 decimals / 2 decimals).
+  // Looser than the rounding --write uses (3/2/3 decimals): the table is
+  // measured through a float pipeline that can drift in the last digit
+  // across platforms, and only a real change of the clip should fail.
   const table = readFileSync(OUT_TS, 'utf8');
   const stale = results.filter((r) => {
-    const m = table.match(new RegExp(`\\n  ${r.id}: \\{ stride: ([\\d.]+), leftPhase: ([\\d.]+) \\}`));
+    const m = table.match(new RegExp(`\\n  ${r.id}: \\{ stride: ([\\d.]+), leftPhase: ([\\d.]+), halfWidth: ([\\d.]+) \\}`));
     const phaseGap = Math.abs((((+m?.[2] - r.leftPhase + 0.5) % 1) + 1) % 1 - 0.5); // phases wrap at 1
-    return r.error || !m || Math.abs(+m[1] - r.stride) > 0.005 || phaseGap > 0.02;
+    return r.error || !m || Math.abs(+m[1] - r.stride) > 0.005 || phaseGap > 0.02 || Math.abs(+m[3] - r.halfWidth) > 0.005;
   });
   if (stale.length) {
     console.error(`\nRUN_GAIT desfasado para ${stale.map((r) => r.id).join(', ')}: node scripts/inspect-stride.mjs --write`);
@@ -217,7 +226,7 @@ if (doWrite) {
   const end = src.indexOf('\n};', start);
   if (start < 0 || end < 0) { console.error('No encuentro RUN_GAIT en', OUT_TS); process.exit(1); }
   const body = results.map((r) =>
-    `  ${r.id}: { stride: ${r.stride.toFixed(3)}, leftPhase: ${r.leftPhase.toFixed(2)} }, // ${r.clip} ${r.duration.toFixed(2)} s · ${r.feet.join(' + ')}`,
+    `  ${r.id}: { stride: ${r.stride.toFixed(3)}, leftPhase: ${r.leftPhase.toFixed(2)}, halfWidth: ${r.halfWidth.toFixed(3)} }, // ${r.clip} ${r.duration.toFixed(2)} s · ${r.feet.join(' + ')}`,
   ).join('\n');
   const next = src.slice(0, start) + 'export const RUN_GAIT: Record<string, RunGait> = {\n' + body + src.slice(end);
   writeFileSync(OUT_TS, next);

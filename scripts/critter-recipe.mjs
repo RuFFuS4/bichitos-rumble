@@ -14,23 +14,32 @@
 //   2. per edited clip, run Blender headless with
 //      scripts/blender/critter-clip-edit.py → a donor GLB;
 //   3. copy only that clip's listed channels from the donor into the base
-//      (meshes, textures and the other clips stay byte-identical in data);
+//      — every bone Blender edited must be in `nodes`, or it fails;
 //   4. repack with gltfpack -c -kn (same tail as compress-critter-glbs), so
-//      the new keys are quantised like the rest;
+//      the new keys are quantised like the rest: geometry and the other
+//      clips come out equivalent (same triangles, rotations within
+//      ~0.003°), textures byte-identical;
 //   5. when writing the game GLB: regenerate RUN_GAIT
-//      (inspect-stride --write) and the URL version (stamp-critter-glbs).
+//      (inspect-stride --write) and the URL version (stamp-critter-glbs),
+//      and record the output hash in the recipe (`output`).
 //
 // Usage:
 //   node scripts/critter-recipe.mjs kowalski                    # apply → public/models/critters/kowalski.glb
 //   node scripts/critter-recipe.mjs kowalski --out=x.glb        # A/B: write elsewhere, touch nothing else
-//   node scripts/critter-recipe.mjs kowalski --set=Run.torso.pitchDeg=8   # try a value (repeatable)
+//   node scripts/critter-recipe.mjs kowalski --out=x.glb --set=Run.torso.pitchDeg=8   # try a value
+//
+// The game GLB only ever comes from the versioned recipe: --set needs
+// --out, and the script refuses to overwrite a game GLB that is neither
+// the recipe's last `output` nor its base (someone changed it outside the
+// recipe — a re-import?) unless --force.
 //
 // Blender: $BLENDER, else `blender` on the PATH (tested with 5.2 LTS).
-// After a re-import of the critter, point `base.ref` at the new import
+// After a re-import of the critter, commit it, point `base.ref` at that
 // commit and replay — see ASSET_PIPELINE.md §"Recetas post-import".
 // ---------------------------------------------------------------------------
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -46,12 +55,30 @@ if (!id) {
   process.exit(1);
 }
 const outArg = args.find((a) => a.startsWith('--out='))?.slice(6);
+const force = args.includes('--force');
+const sets = args.filter((a) => a.startsWith('--set='));
 const gamePath = resolve(ROOT, 'public/models/critters', `${id}.glb`);
 const outPath = outArg ? resolve(outArg) : gamePath;
-const recipe = JSON.parse(readFileSync(resolve(ROOT, 'scripts/critter-recipes', `${id}.json`), 'utf8'));
+const writesGame = outPath === gamePath;
+const recipePath = resolve(ROOT, 'scripts/critter-recipes', `${id}.json`);
+const recipe = JSON.parse(readFileSync(recipePath, 'utf8'));
+const hash8 = (buf) => createHash('sha256').update(buf).digest('hex').slice(0, 8);
+const fail = (msg) => { console.error(`[receta] ${msg}`); process.exit(1); };
+const baseBytes = execFileSync('git', ['show', `${recipe.base.ref}:public/models/critters/${id}.glb`], { cwd: ROOT, maxBuffer: 1 << 28 });
+
+if (writesGame && sets.length) {
+  fail('--set solo con --out: el GLB del juego sale siempre de la receta versionada. Pasa el valor a la receta y relánzala.');
+}
+if (writesGame && !force) {
+  const current = hash8(readFileSync(gamePath));
+  if (current !== recipe.output && current !== hash8(baseBytes)) {
+    fail(`${id}.glb (${current}) no es la última salida de la receta (${recipe.output ?? '—'}) ni su base ${recipe.base.ref}: `
+      + 'ha cambiado por fuera (¿un re-import?). Commitéalo, apunta base.ref a ese commit y relanza; --force para pisarlo igualmente.');
+  }
+}
 
 // --set=Run.torso.pitchDeg=8 → recipe.clips[Run].blender.torso.pitchDeg = 8
-for (const set of args.filter((a) => a.startsWith('--set='))) {
+for (const set of sets) {
   const [path, raw] = set.slice(6).split('=');
   const [clipName, ...keys] = path.split('.');
   const edit = recipe.clips.find((c) => c.clip === clipName);
@@ -65,7 +92,7 @@ const tmp = mkdtempSync(join(tmpdir(), `critter-recipe-${id}-`));
 const mb = (p) => (statSync(p).size / 1048576).toFixed(3);
 try {
   const basePath = join(tmp, 'base.glb');
-  writeFileSync(basePath, execFileSync('git', ['show', `${recipe.base.ref}:public/models/critters/${id}.glb`], { cwd: ROOT, maxBuffer: 1 << 28 }));
+  writeFileSync(basePath, baseBytes);
   console.log(`[receta] ${id}: base ${recipe.base.ref} (${mb(basePath)} MB)`);
 
   await MeshoptDecoder.ready;
@@ -82,6 +109,9 @@ try {
     const log = execFileSync(blender, ['-b', '--factory-startup', '--python-exit-code', '1', '--python', resolve(ROOT, 'scripts/blender/critter-clip-edit.py'), '--', basePath, donorPath, params],
       { encoding: 'utf8', maxBuffer: 1 << 26 });
     for (const line of log.split('\n')) if (/^\[(edit|hold|ik|saltos|torso)\]/.test(line)) console.log(`  ${line.trim()}`);
+    const written = (log.match(/^\[escritos\] (.*)$/m)?.[1] ?? '').trim().split(',').filter(Boolean);
+    const left = edit.nodes === 'all' ? [] : written.filter((bone) => !edit.nodes.includes(bone));
+    if (left.length) throw new Error(`${edit.clip}: Blender editó ${left.join(', ')}, que no está en "nodes": la edición se perdería`);
     const lines = transplantClip(game, await io.read(donorPath), edit.clip, edit.nodes);
     console.log(`  trasplante: ${lines.length} canales (${edit.nodes === 'all' ? 'todos' : edit.nodes.join(', ')})`);
   }
@@ -89,15 +119,20 @@ try {
   const plainPath = join(tmp, 'plain.glb');
   writeFileSync(plainPath, await io.writeBinary(game));
   if (recipe.repack) {
-    execFileSync('npx', ['gltfpack', '-i', plainPath, '-o', outPath, '-c', '-kn'], { cwd: ROOT, shell: true, stdio: 'inherit' });
+    // gltfpack's own CLI through node, no shell: paths with spaces survive.
+    execFileSync(process.execPath, [resolve(ROOT, 'node_modules/gltfpack/cli.js'), '-i', plainPath, '-o', outPath, '-c', '-kn'],
+      { cwd: ROOT, stdio: 'inherit' });
   } else {
     writeFileSync(outPath, readFileSync(plainPath));
   }
   console.log(`[receta] → ${outPath} (${mb(outPath)} MB)`);
 
-  if (outPath === gamePath) {
-    execFileSync('node', [resolve(ROOT, 'scripts/inspect-stride.mjs'), '--write'], { cwd: ROOT, stdio: 'inherit' });
-    execFileSync('node', [resolve(ROOT, 'scripts/stamp-critter-glbs.mjs')], { cwd: ROOT, stdio: 'inherit' });
+  if (writesGame) {
+    execFileSync(process.execPath, [resolve(ROOT, 'scripts/inspect-stride.mjs'), '--write'], { cwd: ROOT, stdio: 'inherit' });
+    execFileSync(process.execPath, [resolve(ROOT, 'scripts/stamp-critter-glbs.mjs')], { cwd: ROOT, stdio: 'inherit' });
+    recipe.output = hash8(readFileSync(gamePath));
+    writeFileSync(recipePath, `${JSON.stringify(recipe, null, 2)}\n`);
+    console.log(`[receta] output ${recipe.output} anotado en ${id}.json`);
   }
 } finally {
   rmSync(tmp, { recursive: true, force: true });
