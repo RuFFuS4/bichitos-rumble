@@ -1,0 +1,13 @@
+{
+  "base": {
+    "ref": "a745b84",
+    "note": "sergei.glb de Meshy tras compress-critter-glbs (4.184 triángulos, meshopt)"
+  },
+  "repack": true,
+  "textures": {
+    "why": "La emisiva es la misma imagen que el color base.",
+    "dedup": true
+  },
+  "clips": [],
+  "output": "8d2e9c41"
+}

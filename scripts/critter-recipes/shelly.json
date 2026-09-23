@@ -1,0 +1,13 @@
+{
+  "base": {
+    "ref": "a745b84",
+    "note": "shelly.glb de Tripo tras compress-critter-glbs (meshopt)"
+  },
+  "repack": true,
+  "textures": {
+    "why": "JPEG 512² de Tripo a WebP.",
+    "webp": 82
+  },
+  "clips": [],
+  "output": "239c7aaa"
+}

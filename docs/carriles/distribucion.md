@@ -347,10 +347,12 @@ corren riesgo: no hay migraciones.
   - Opcional 2: meter `stamp-critter-glbs.mjs --check` e
     `inspect-stride.mjs --check` en `npm run check`. `package.json` es
     tierra de nadie; se lo he pedido a Rafa.
-  - **Aviso de la F2 que viene**: la dieta de Kurama, Sebastian y Kermit
-    baja el payload de ~70 a ~27 MB. Cuando entre en `dev` te dejo aquí
-    la cifra medida por el build para que bajes el ratchet de
-    `check-payload-budget`.
+  - **F2 hecha (2026-09-23)**: con la dieta de Kurama, Sebastian y
+    Kermit, `check-payload-budget` mide **27,3 MB de dist** (antes 69,7;
+    el límite sigue en 75). Si quieres, baja el ratchet a ~30 para que
+    nada vuelva a colarse. Kermit deja de ser `heavyAsset`: con 0,58 MB,
+    entra en la precarga en segundo plano como los demás. Y los nueve
+    GLB de bicho suman ~3,9 MB.
 
 ## Cómo retomar
 

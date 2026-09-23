@@ -11,6 +11,8 @@
 //
 //   1. take the BASE GLB pinned in the recipe (`git show <ref>:<path>`),
 //      never the file it is about to overwrite — replaying is idempotent;
+//      then the optional `diet` (simplify to a triangle target) and
+//      `textures` (dedup, WebP) sections — see their functions below;
 //   2. per edited clip, run Blender headless with
 //      scripts/blender/critter-clip-edit.py → a donor GLB;
 //   3. copy only that clip's listed channels from the donor into the base
@@ -43,9 +45,11 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { NodeIO } from '@gltf-transform/core';
+import { NodeIO, PropertyType } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
+import { dedup, simplify, textureCompress, weld } from '@gltf-transform/functions';
+import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
+import sharp from 'sharp';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const args = process.argv.slice(2);
@@ -97,16 +101,27 @@ try {
 
   await MeshoptDecoder.ready;
   await MeshoptEncoder.ready;
+  await MeshoptSimplifier.ready;
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS)
     .registerDependencies({ 'meshopt.decoder': MeshoptDecoder, 'meshopt.encoder': MeshoptEncoder });
   const game = await io.read(basePath);
+  if (recipe.diet) await diet(game, recipe.diet);
+  if (recipe.textures) await textures(game, recipe.textures);
+
+  // Blender edits the prepared model: same rig and clips, and far lighter
+  // to import once the diet has run.
+  let blenderInput = basePath;
+  if ((recipe.diet || recipe.textures) && recipe.clips?.length) {
+    blenderInput = join(tmp, 'prepared.glb');
+    writeFileSync(blenderInput, await io.writeBinary(game));
+  }
 
   const blender = process.env.BLENDER || 'blender';
-  for (const edit of recipe.clips) {
+  for (const edit of recipe.clips ?? []) {
     const params = join(tmp, `${edit.clip}.json`);
     const donorPath = join(tmp, `${edit.clip}.donor.glb`);
     writeFileSync(params, JSON.stringify({ clip: edit.clip, ...edit.blender }));
-    const log = execFileSync(blender, ['-b', '--factory-startup', '--python-exit-code', '1', '--python', resolve(ROOT, 'scripts/blender/critter-clip-edit.py'), '--', basePath, donorPath, params],
+    const log = execFileSync(blender, ['-b', '--factory-startup', '--python-exit-code', '1', '--python', resolve(ROOT, 'scripts/blender/critter-clip-edit.py'), '--', blenderInput, donorPath, params],
       { encoding: 'utf8', maxBuffer: 1 << 26 });
     for (const line of log.split('\n')) if (/^\[(edit|hold|ik|saltos|torso)\]/.test(line)) console.log(`  ${line.trim()}`);
     const written = (log.match(/^\[escritos\] (.*)$/m)?.[1] ?? '').trim().split(',').filter(Boolean);
@@ -120,12 +135,14 @@ try {
   writeFileSync(plainPath, await io.writeBinary(game));
   if (recipe.repack) {
     // gltfpack's own CLI through node, no shell: paths with spaces survive.
-    execFileSync(process.execPath, [resolve(ROOT, 'node_modules/gltfpack/cli.js'), '-i', plainPath, '-o', outPath, '-c', '-kn'],
+    execFileSync(process.execPath, [resolve(ROOT, 'node_modules/gltfpack/cli.js'), '-i', plainPath, '-o', outPath, '-c', '-kn', ...(recipe.gltfpack ?? [])],
       { cwd: ROOT, stdio: 'inherit' });
   } else {
     writeFileSync(outPath, readFileSync(plainPath));
   }
-  console.log(`[receta] → ${outPath} (${mb(outPath)} MB)`);
+  const out = await io.read(outPath);
+  console.log(`[receta] → ${outPath} (${mb(outPath)} MB · ${triangleCount(out)} triángulos · `
+    + `${out.getRoot().listTextures().map((t) => t.getMimeType().replace('image/', '')).join('+') || 'sin texturas'})`);
 
   if (writesGame) {
     execFileSync(process.execPath, [resolve(ROOT, 'scripts/inspect-stride.mjs'), '--write'], { cwd: ROOT, stdio: 'inherit' });
@@ -184,4 +201,130 @@ function transplantClip(target, donor, clip, nodes) {
   if (missing.length) throw new Error(`${clip}: no channel to replace for ${missing.join(', ')}`);
   if (!done.length) throw new Error(`${clip}: nothing transplanted`);
   return done;
+}
+
+// ---------------------------------------------------------------------------
+// Diet and textures (graphics pass F2, 2026-09-23). Validated at game scale
+// in .tmp/graficos/dieta of the PERSONAJES worktree: Kurama 20 k, Sebastian
+// 15 k and Kermit 30 k triangles are indistinguishable in a match and in the
+// character select, and Kermit keeps his warts at 30 k.
+// ---------------------------------------------------------------------------
+
+function primitives(doc) {
+  return doc.getRoot().listMeshes().flatMap((m) => m.listPrimitives());
+}
+
+function triangleCount(doc) {
+  return primitives(doc).reduce((n, p) => n + (p.getIndices()?.getCount() ?? p.getAttribute('POSITION').getCount()) / 3, 0);
+}
+
+/**
+ * `diet`: { targetTris, dropNormals?, uvSnapTexels?, renormal? }.
+ * - dropNormals: Meshy exports split normals per face, which leaves every
+ *   vertex "complex" for the simplifier (it stalls near 45 k): drop them,
+ *   weld, and rebuild smooth ones by position.
+ * - uvSnapTexels: at each position, UVs closer than this many texels are
+ *   fake seams (about half of Meshy's) — make them equal so weld merges them.
+ * - renormal: smooth normals rebuilt on the simplified mesh (inherited ones
+ *   leave a dark notch at the base of Kurama's ear).
+ * Refuses a model already at or below the target, so a diet never nests.
+ */
+async function diet(doc, { targetTris, dropNormals = false, uvSnapTexels = 0, renormal = true }) {
+  const before = triangleCount(doc);
+  if (before <= targetTris) throw new Error(`diet: the base already has ${before} triangles (target ${targetTris})`);
+  if (dropNormals) for (const p of primitives(doc)) p.setAttribute('NORMAL', null);
+  if (uvSnapTexels > 0) for (const p of primitives(doc)) snapUVs(p, uvSnapTexels);
+  await doc.transform(weld());
+  if (dropNormals) for (const p of primitives(doc)) smoothNormals(doc, p);
+  await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio: targetTris / before, error: 1 }));
+  if (renormal) for (const p of primitives(doc)) smoothNormals(doc, p);
+  // Skin weights survive weld/simplify untouched; check it anyway.
+  const w = [];
+  for (const p of primitives(doc)) {
+    const weights = p.getAttribute('WEIGHTS_0');
+    for (let i = 0; weights && i < weights.getCount(); i++) {
+      weights.getElement(i, w);
+      if (Math.abs(w[0] + w[1] + w[2] + w[3] - 1) > 0.02) throw new Error('diet: skin weights no longer add up to 1');
+    }
+  }
+  console.log(`  dieta: ${before} → ${triangleCount(doc)} triángulos`);
+}
+
+/** Area-weighted face normals accumulated per POSITION, so UV seams don't
+ *  split the shading. */
+function smoothNormals(doc, prim) {
+  const pos = prim.getAttribute('POSITION');
+  const n = pos.getCount();
+  const P = new Float32Array(n * 3);
+  const el = [0, 0, 0];
+  for (let i = 0; i < n; i++) { pos.getElement(i, el); P[3 * i] = el[0]; P[3 * i + 1] = el[1]; P[3 * i + 2] = el[2]; }
+  const remap = MeshoptSimplifier.generatePositionRemap(P, 3);
+  const acc = new Float32Array(n * 3);
+  const idx = prim.getIndices().getArray();
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+    const ux = P[3 * b] - P[3 * a], uy = P[3 * b + 1] - P[3 * a + 1], uz = P[3 * b + 2] - P[3 * a + 2];
+    const vx = P[3 * c] - P[3 * a], vy = P[3 * c + 1] - P[3 * a + 1], vz = P[3 * c + 2] - P[3 * a + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; // |n| = 2 × area
+    for (const v of [a, b, c]) { const r = remap[v]; acc[3 * r] += nx; acc[3 * r + 1] += ny; acc[3 * r + 2] += nz; }
+  }
+  const N = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const r = remap[i];
+    const l = Math.hypot(acc[3 * r], acc[3 * r + 1], acc[3 * r + 2]) || 1;
+    N[3 * i] = acc[3 * r] / l; N[3 * i + 1] = acc[3 * r + 1] / l; N[3 * i + 2] = acc[3 * r + 2] / l;
+  }
+  prim.setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(N).setBuffer(pos.getBuffer()));
+}
+
+/** At each position, give UVs closer than `texels` the same value so weld
+ *  can merge them. Real seams (tens of texels apart) are left alone. */
+function snapUVs(prim, texels) {
+  const pos = prim.getAttribute('POSITION');
+  const uv = prim.getAttribute('TEXCOORD_0');
+  if (!uv) return;
+  const info = prim.getMaterial()?.getBaseColorTextureInfo();
+  const scale = info?.getExtension('KHR_texture_transform')?.getScale() ?? [1, 1];
+  const size = prim.getMaterial()?.getBaseColorTexture()?.getSize() ?? [1024, 1024];
+  const n = pos.getCount();
+  const P = new Float32Array(n * 3);
+  const e = [];
+  for (let i = 0; i < n; i++) { pos.getElement(i, e); P[3 * i] = e[0]; P[3 * i + 1] = e[1]; P[3 * i + 2] = e[2]; }
+  const remap = MeshoptSimplifier.generatePositionRemap(P, 3);
+  const groups = new Map();
+  for (let i = 0; i < n; i++) {
+    const r = remap[i];
+    if (r === i && !groups.has(r)) continue;
+    let g = groups.get(r);
+    if (!g) groups.set(r, (g = [r]));
+    if (r !== i) g.push(i);
+  }
+  const raw = uv.getArray();
+  const a = [], b = [];
+  for (const g of groups.values()) {
+    for (let x = 1; x < g.length; x++) {
+      uv.getElement(g[x], b);
+      for (let y = 0; y < x; y++) {
+        uv.getElement(g[y], a);
+        const d = Math.hypot((a[0] - b[0]) * scale[0] * size[0], (a[1] - b[1]) * scale[1] * size[1]);
+        if (d === 0) break;
+        if (d < texels) { raw[2 * g[x]] = raw[2 * g[y]]; raw[2 * g[x] + 1] = raw[2 * g[y] + 1]; break; }
+      }
+    }
+  }
+  uv.setArray(raw);
+}
+
+/**
+ * `textures`: { dedup?, webp? }.
+ * - dedup: one image for textures with identical bytes (the Meshy critters
+ *   ship the base colour a second time as the emissive map).
+ * - webp: re-encode as WebP at this quality (the Tripo 512² JPEGs).
+ */
+async function textures(doc, { dedup: shareIdentical = false, webp }) {
+  const before = doc.getRoot().listTextures().reduce((n, t) => n + (t.getImage()?.byteLength ?? 0), 0);
+  if (shareIdentical) await doc.transform(dedup({ propertyTypes: [PropertyType.TEXTURE] }));
+  if (webp) await doc.transform(textureCompress({ encoder: sharp, targetFormat: 'webp', quality: webp }));
+  const after = doc.getRoot().listTextures().reduce((n, t) => n + (t.getImage()?.byteLength ?? 0), 0);
+  console.log(`  texturas: ${(before / 1024).toFixed(0)} → ${(after / 1024).toFixed(0)} KB`);
 }

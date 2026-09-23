@@ -1,5 +1,33 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-23 — [PERSONAJES] Mejora gráfica, fase 2: el juego pasa de 69,7 a 27,3 MB sin que se note
+
+La dieta del estudio gráfico, hecha por receta (`scripts/critter-recipes/`,
+secciones `diet` y `textures`), reproducible desde el GLB fijado:
+
+| Bicho | Triángulos | GLB |
+|---|---|---|
+| Kurama | 945 k → 20 k | 13,8 → 0,36 MB |
+| Sebastian | 1,09 M → 15 k | 15,2 → 0,28 MB |
+| Kermit | 1,94 M → 30 k, con sus verrugas (Rafa: «granulada») | 14,2 → 0,58 MB |
+
+Además, la emisiva duplicada de los Meshy (misma imagen que el color) se
+comparte, y las texturas JPEG de los Tripo pasan a WebP.
+
+- **Dist**: 69,7 → 27,3 MB. Los nueve bichos, ~3,9 MB.
+- **Tirón al cambiar de bicho en la selección**: de 250-520 ms a un
+  fotograma. Era `SkinnedMesh.computeBoundingSphere` recorriendo 1-2 M de
+  vértices en el primer render.
+- **Kermit** deja de ser `heavyAsset` y se precarga como los demás.
+- **Sin cambios visibles**: selección de frente y a 90° antes/después, y
+  de cerca. Clips con la misma duración y ≤0,003° (Kermit con `-af 0`).
+- **Partida**: los nueve a 1,65-1,71 de alto y pie apoyado como antes.
+  `RUN_GAIT` solo mueve a Kermit (1,471 → 1,472).
+- `compress-critter-glbs.mjs` se salta los bichos con receta.
+
+Golden 3/3 sin regenerar, 115 tests y `npm run check`. El ratchet del
+payload (75 MB) es de DISTRIBUCIÓN: aviso en su buzón.
+
 ## 2026-09-23 — [PERSONAJES] Mejora gráfica, fase 1: Kowalski derecho y la selección a la misma altura
 
 Rafa preguntó si se podían mejorar gráficamente los personajes. Hubo un

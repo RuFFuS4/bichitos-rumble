@@ -197,6 +197,20 @@ and `node scripts/critter-recipe.mjs <id>` replays them:
 5. when writing the game GLB, regenerates `RUN_GAIT` and the URL version
    and records the output hash in the recipe (`output`).
 
+Two optional sections run on the base before the clip edits (F2 of the
+graphics pass, 2026-09-23):
+- `diet`: `{ targetTris, dropNormals, uvSnapTexels, renormal }`,
+  simplify to a triangle target with the recipe validated at game scale
+  (Meshy: drop the split normals, snap UVs within 1 texel, weld, rebuild
+  smooth normals; Tripo: keep normals to weld, rebuild after). It refuses
+  a base already at the target, so a diet never nests.
+- `textures`: `{ dedup, webp }`, share byte-identical images (the Meshy
+  emissive is the base colour again) and/or re-encode as WebP.
+
+`gltfpack: ["-af", "0"]` adds flags to the repack (Kermit never went
+through gltfpack before, and its default 30 Hz resampling stretched his
+clips).
+
 `--out=x.glb` writes elsewhere for an A/B without touching anything, and
 only with it `--set=Run.torso.pitchDeg=8` tries a value without editing
 the recipe: the game GLB always comes from the versioned recipe.
@@ -215,9 +229,20 @@ tilt in the swing dipped the toes through the floor), and legs kept out
 of both ends of their reach (the log prints each leg's range and fold
 limit; `soft` cushions the ends). The Blender script refuses a knee that
 flips (>90° between frames) and warns from 25°; the real check is in
-game: `critter-motion.mjs` (foot slip ≈ 1) and the visor A/B. Recipes
-today: `kowalski` (Run: pelvis as in Idle, upright torso, IK feet —
-FEELING.md §7.8).
+game: `critter-motion.mjs` (foot slip ≈ 1) and the visor A/B.
+
+Recipes today — every critter but Sihans; for those, **run the recipe,
+never `compress-critter-glbs.mjs`**, which would repack the game GLB
+outside it:
+
+| Critter | Recipe |
+|---|---|
+| kowalski | Run: pelvis as in Idle, upright torso, IK feet (FEELING.md §7.8); WebP |
+| kurama | diet 945 k → 20 k; emissive dedup — 13.8 → 0.36 MB |
+| sebastian | diet 1.09 M → 15 k; emissive dedup — 15.2 → 0.28 MB |
+| kermit | diet 1.94 M → 30 k (warts intact); WebP; `-af 0` — 14.2 → 0.58 MB |
+| sergei | emissive dedup |
+| trunk, shelly, cheeto | WebP (Cheeto at 90: its stripes drop to 33 dB at 82) |
 
 ---
 

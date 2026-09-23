@@ -1,0 +1,20 @@
+{
+  "base": {
+    "ref": "59bf430",
+    "note": "sebastian.glb de Meshy tras canonicalizar los clips (1.086.255 triángulos, meshopt)"
+  },
+  "repack": true,
+  "diet": {
+    "why": "Indistinguible de 1,09 M en partida, selección y victoria (estudio F2). Payload 15,2 → ~0,3 MB.",
+    "targetTris": 15000,
+    "dropNormals": true,
+    "uvSnapTexels": 1,
+    "renormal": true
+  },
+  "textures": {
+    "why": "La emisiva es la misma imagen que el color base.",
+    "dedup": true
+  },
+  "clips": [],
+  "output": "35df4b84"
+}

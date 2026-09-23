@@ -1,0 +1,13 @@
+{
+  "base": {
+    "ref": "a745b84",
+    "note": "cheeto.glb de Tripo tras compress-critter-glbs (meshopt)"
+  },
+  "repack": true,
+  "textures": {
+    "why": "JPEG 512² de Tripo a WebP; a 90 porque sus rayas a 82 caen a 33 dB de PSNR (estudio F2).",
+    "webp": 90
+  },
+  "clips": [],
+  "output": "039a6139"
+}

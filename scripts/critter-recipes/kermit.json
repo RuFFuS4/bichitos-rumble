@@ -1,0 +1,24 @@
+{
+  "base": {
+    "ref": "419d038",
+    "note": "kermit.glb de Tripo reducido de 76 a 14 MB en el jam (1.941.116 triángulos, sin pasar por gltfpack)"
+  },
+  "repack": true,
+  "gltfpack": [
+    "-af",
+    "0"
+  ],
+  "diet": {
+    "why": "Indistinguible en partida; a 30 k conserva las verrugas (Rafa, 2026-09-23: «granulada»). Payload 14,2 → ~0,6 MB. Normales de Tripo conservadas para soldar, recalculadas tras simplificar.",
+    "targetTris": 30000,
+    "dropNormals": false,
+    "uvSnapTexels": 0,
+    "renormal": true
+  },
+  "textures": {
+    "why": "JPEG 512² de Tripo a WebP.",
+    "webp": 82
+  },
+  "clips": [],
+  "output": "5fcffc12"
+}

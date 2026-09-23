@@ -3,8 +3,12 @@
     "ref": "a745b84",
     "note": "kowalski.glb tal como lo dejó compress-critter-glbs (8 clips de Tripo Animate, meshopt)"
   },
-  "output": "4b7ee108",
+  "output": "8d1b4f69",
   "repack": true,
+  "textures": {
+    "why": "JPEG 512² de Tripo a WebP.",
+    "webp": 82
+  },
   "clips": [
     {
       "clip": "Run",

@@ -54,10 +54,20 @@ antes de commitear el JSON.
          selección (tamaños iguales para los nueve). Herramientas:
          `critter-recipe.mjs`, `stamp-critter-glbs.mjs`, `inspect-stride
          --check`.
-   - [ ] **F2** — dieta de polígonos: Kurama 20 k, Sebastian 15 k y Kermit
-         30 k (granulado intacto a 30 k). La emisiva duplicada, fuera.
-         Texturas de los Tripo de JPEG a WebP. El límite de peso lo baja
-         DISTRIBUCIÓN (buzón). Regenerar `RUN_GAIT`.
+   - [x] **F2** — dieta hecha el 2026-09-23 por receta
+         (`ASSET_PIPELINE.md` §«Recetas post-import»):
+         - Kurama 20 k, Sebastian 15 k y Kermit 30 k (con sus verrugas);
+         - la emisiva duplicada, fuera;
+         - los Tripo, a WebP;
+         - payload 69,7 → 27,3 MB;
+         - el tirón al cambiar de bicho en la selección baja de 250-520 ms
+           a un fotograma;
+         - Kermit sin `heavyAsset`.
+
+         El límite lo baja DISTRIBUCIÓN (buzón). Queda desfasado un
+         comentario de `src/game.ts:309/324` («Kermit es el único
+         heavyAsset»): corregirlo cuando alguien toque `game.ts` con
+         permiso.
    - [ ] **Run más vivos** (decisión 7): Cheeto y Kermit a 3-4 ciclos/s,
          Shelly y Trunk a ~2, y el IK del Run de Sebastian (pie en 1,33).
          Cada uno, receta propia.
