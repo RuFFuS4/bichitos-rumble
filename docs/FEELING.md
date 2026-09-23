@@ -351,9 +351,8 @@ bootstrap por partidas enteras, y revisión adversarial del diff):
 | Ciclos de zancada/s | 5,6 | 2,1 | 6 (techo) | 1,3 | 2,2 | 5,6 | 6 (techo) | 2,8 | 6 (techo) |
 | Pie (1 = apoyado) | 1,00 | 1,00 | 1,04 | 0,77 | 0,63 | 1,00 | **2,17** | 0,67 | 1,33 |
 
-Media vuelta: 9 fotogramas (antes 1). **Pendiente de gusto**: Kowalski
-patina ×2 (su clip pediría ~13 pasos/s: o se acepta como deslizamiento
-de pingüino, o se alarga su zancada en `bichitos-mesh2motion`).
+Media vuelta: 9 fotogramas (antes 1). ~~**Pendiente de gusto**:
+Kowalski patina ×2~~ → resuelto en §7.8 (Run nuevo, pie 1,00).
 **2026-09-23 (Rafa: «sí, lo quitamos»)**: fuera los sesgos de
 `FEEL.runCadence` de Kermit, Cheeto y Shelly, que eran de antes de la
 velocidad nueva. Ahora los tres pisan con el pie apoyado (1,00): Shelly
@@ -363,3 +362,35 @@ velocidad nueva. Ahora los tres pisan con el pie apoyado (1,00): Shelly
 `BrawlRoom.ts:1476` y el suavizado del bicho local en online (buzón de
 DISTRIBUCIÓN). Hasta que exista ese suavizado, la velocidad nueva no
 debería salir a producción.
+
+### 7.8 Kowalski: carrera nueva (2026-09-23, rama `claude/feature/personajes-kowalski-seleccion`)
+
+Rafa, ante el A/B: **«derecho»** (pingüino erguido y con bamboleo, no el
+Run agachado de la primera prueba). Por qué patinaba: su Run de Tripo
+apoya el pie en el punto más atrasado del recorrido, así que el pie
+apoyado casi no barre el suelo (zancada 0,142). Además corría encorvado,
+con la pelvis girada ~150° respecto al Idle (la parte baja del cuerpo se
+iba hacia atrás) y el tronco a 17°.
+
+Receta reproducible (`scripts/critter-recipes/kowalski.json`,
+`ASSET_PIPELINE.md` §«Recetas post-import»):
+- pelvis fija como en el Idle, sin mover los muslos;
+- IK analítico de los pies con la rodilla siempre hacia delante, porque
+  el solver de Blender sin polo invertía una rodilla en un fotograma;
+- pisada centrada bajo la cadera, para que la pierna no llegue a
+  estirarse del todo (1,01 → 0,95);
+- tronco de 17° a 0°.
+
+En la capa visual, `PERSONALITY_OVERRIDES.Kowalski` baja la inclinación
+al correr de 12° a ~5° y sube el balanceo sobre el pie apoyado de ~3° a
+~7-9°: el bamboleo.
+
+| Kowalski en partida (`critter-motion`) | Antes | Después |
+|---|---|---|
+| Ciclos de zancada/s | 6 (techo) | 4,04 |
+| Pie (1 = apoyado) | 2,17 | **1,00** |
+| Inclinación / balanceo | 12° / 3,1° | 5,2° / 7,3° |
+| Velocidad, altura | 3,07 u/s, 1,69 | iguales |
+
+Los otros 7 clips no se tocan; `RUN_GAIT.kowalski` pasa a 0,457 / 0,14.
+Vídeo: `.tmp/graficos/_informe/entrega/kowalski-partida-antes-despues-camara-lenta.mp4`.

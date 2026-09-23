@@ -33,7 +33,7 @@ export const RUN_GAIT: Record<string, RunGait> = {
   shelly: { stride: 0.893, leftPhase: 0.54 }, // Run 1.30 s · L_Foot + R_Foot
   kermit: { stride: 1.471, leftPhase: 0.54 }, // Run 1.29 s · L_Foot + R_Foot
   sihans: { stride: 0.817, leftPhase: 0.27 }, // Run 0.63 s · LeftFoot + RightFoot
-  kowalski: { stride: 0.142, leftPhase: 0.66 }, // Run 0.80 s · L_Foot + R_Foot
+  kowalski: { stride: 0.457, leftPhase: 0.14 }, // Run 0.80 s · L_Foot + R_Foot
   cheeto: { stride: 0.999, leftPhase: 0.49 }, // Run 1.30 s · L_Foot + R_Foot
   sebastian: { stride: 0.608, leftPhase: 0.25 }, // Run 0.63 s · LeftFoot + RightFoot
 };
