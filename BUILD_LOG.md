@@ -1,5 +1,27 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-23 — [PERSONAJES] Mejora gráfica: Run más vivos para Cheeto, Kermit, Shelly y Trunk
+
+Decisión 7 de Rafa (pasitos más rápidos). Los cuatro Tripo compartían
+el mismo sprint genérico: zancada larga, tronco a 36° y un bucle que
+saltaba 19,5° en el brazo derecho y 7-12° en las piernas.
+
+Cada uno tiene ahora receta (`scripts/critter-recipes/`) con:
+- pelvis del Idle;
+- IK con la zancada calculada desde la cadencia buscada;
+- suelo y pie del Idle;
+- bucle cerrado (sección `loop`, nueva en el script de Blender);
+- `fps` por clip (el Run de Kermit va a 24).
+
+En partida:
+- Cheeto: 1,85 → 3,49 ciclos/s;
+- Kermit: 1,35 → 3,51;
+- Shelly: 1,01 → 2,00;
+- Trunk: 2,12 → 2,36, simétrico y con apoyo corto.
+
+Los cuatro con el pie apoyado y sin hundirse. Golden 3/3 sin regenerar,
+115 tests, `npm run check`. Pendiente de gusto: la inclinación de 36°.
+
 ## 2026-09-23 — [PERSONAJES] Mejora gráfica, fase 2: el juego pasa de 69,7 a 27,3 MB sin que se note
 
 La dieta del estudio gráfico, hecha por receta (`scripts/critter-recipes/`,

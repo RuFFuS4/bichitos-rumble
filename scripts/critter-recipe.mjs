@@ -123,7 +123,7 @@ try {
     writeFileSync(params, JSON.stringify({ clip: edit.clip, ...edit.blender }));
     const log = execFileSync(blender, ['-b', '--factory-startup', '--python-exit-code', '1', '--python', resolve(ROOT, 'scripts/blender/critter-clip-edit.py'), '--', blenderInput, donorPath, params],
       { encoding: 'utf8', maxBuffer: 1 << 26 });
-    for (const line of log.split('\n')) if (/^\[(edit|hold|ik|saltos|torso)\]/.test(line)) console.log(`  ${line.trim()}`);
+    for (const line of log.split('\n')) if (/^\[(edit|hold|ik|saltos|torso|loop)\]/.test(line)) console.log(`  ${line.trim()}`);
     const written = (log.match(/^\[escritos\] (.*)$/m)?.[1] ?? '').trim().split(',').filter(Boolean);
     const left = edit.nodes === 'all' ? [] : written.filter((bone) => !edit.nodes.includes(bone));
     if (left.length) throw new Error(`${edit.clip}: Blender editó ${left.join(', ')}, que no está en "nodes": la edición se perdería`);

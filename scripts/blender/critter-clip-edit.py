@@ -14,7 +14,8 @@
 # params.json (todas las secciones son opcionales y se aplican en este orden):
 #   {
 #     "clip": "Run",
-#     "hold": [                       fija la rotación local de un hueso a la de
+#     "fps": 30,                      fotogramas por segundo del clip (Kermit: 24)
+#     "hold": [                      fija la rotación local de un hueso a la de
 #       { "bone": "Pelvis",           otro clip (p. ej. la pelvis del Idle) en
 #         "fromClip": "Idle",         todos los fotogramas; va antes del IK, que
 #         "frame": 0 }                recoloca las piernas desde ahí
@@ -44,7 +45,11 @@
 #       "bone": "Waist",              hueso que se gira (arrastra lo de encima)
 #       "base": "Waist", "tip": "Head",   segmento con el que se mide
 #       "pitchDeg": 6                 inclinación media hacia delante buscada
-#     }
+#     },
+#     "loop": { "minDeg": 1 }         cierra el bucle: a cada hueso cuyo último
+#                                     fotograma no vuelve al primero (el Run de
+#                                     Tripo: brazo derecho a 19,5°) le reparte
+#                                     la diferencia por todo el ciclo
 #   }
 #
 # Convenciones del rig (Tripo): Z arriba, +X adelante, +Y a la izquierda del
@@ -64,7 +69,7 @@ FWD, UP, SIDE = Vector((1, 0, 0)), Vector((0, 0, 1)), Vector((0, 1, 0))
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
-scene.render.fps = 30
+scene.render.fps = int(P.get('fps', 30))   # el importador pasa segundos a fotogramas con esto
 scene.render.fps_base = 1.0
 bpy.ops.import_scene.gltf(filepath=SRC, disable_bone_shape=True)
 
@@ -77,6 +82,9 @@ act = bpy.data.actions[CLIP]
 slot = act.slots[0]
 cb = anim_utils.action_get_channelbag_for_slot(act, slot)
 F0, F1 = int(round(act.frame_range[0])), int(round(act.frame_range[1]))
+if abs(act.frame_range[1] - F1) > 0.01:
+    raise SystemExit(f'[edit] {CLIP} acaba en el fotograma {act.frame_range[1]:.2f} a {scene.render.fps} fps: '
+                     'no cae en fotogramas enteros; pasa el "fps" del clip en la receta')
 FRAMES = list(range(F0, F1 + 1))
 N = F1 - F0
 pb = arm.pose.bones
@@ -338,6 +346,35 @@ def edit_torso(p):
           f'(oscila {min(after):.1f}..{max(after):.1f})')
 
 
+def edit_loop(p):
+    """El clip se repite de su último fotograma al primero, que deberían ser
+    la misma pose. Si un hueso no vuelve (seam > minDeg), se le suma una
+    corrección que crece de 0 a la diferencia a lo largo del ciclo: el tirón
+    del salto se reparte en pasos imperceptibles."""
+    min_deg = float(p.get('minDeg', 1.0))
+    fixed = []
+    for bone in pb:
+        path = f'pose.bones["{bone.name}"].rotation_quaternion'
+        if cb.fcurves.find(path, index=0) is None:
+            continue
+        quats = []
+        for f in FRAMES:
+            scene.frame_set(f)
+            quats.append(bone.rotation_quaternion.copy())
+        first, last = quats[0], quats[-1]
+        if first.dot(last) < 0:
+            last = -last
+        seam = math.degrees(last.rotation_difference(first).angle)
+        seam = min(seam, 360 - seam)
+        if seam <= min_deg:
+            continue
+        delta = last.inverted() @ first
+        ident = Quaternion((1, 0, 0, 0))
+        write_quat_keys(bone.name, [q @ ident.slerp(delta, i / N) for i, q in enumerate(quats)])
+        fixed.append(f'{bone.name} {seam:.1f}°')
+    print('[loop] ' + (', '.join(fixed) if fixed else 'nada que cerrar'))
+
+
 legs = sample_legs() if 'ik' in P else None
 ground = sample_ground(P['ik']['groundFrom']) if 'ik' in P and 'groundFrom' in P['ik'] else None
 if 'hold' in P:
@@ -346,6 +383,8 @@ if 'ik' in P:
     edit_ik(P['ik'], legs, ground)
 if 'torso' in P:
     edit_torso(P['torso'])
+if 'loop' in P:
+    edit_loop(P['loop'])
 # La receta solo copia al juego los huesos de su lista `nodes`: comprueba
 # con esta línea que no se queda fuera ninguno de los que se han editado.
 print('[escritos] ' + ','.join(sorted(WRITTEN)))

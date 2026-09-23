@@ -416,3 +416,37 @@ quiere afinar, entra en el corte 2 (acentos de arranque y frenada).
 
 Los otros 7 clips no se tocan; `RUN_GAIT.kowalski` pasa a 0,456 / 0,14.
 Vídeo: `.tmp/graficos/_informe/entrega/kowalski-partida-antes-despues-camara-lenta.mp4`.
+
+### 7.9 Run más vivos: Cheeto, Kermit, Shelly y Trunk (2026-09-23)
+
+Rafa (decisión 7 del plan gráfico): **«sí»** a pasitos más rápidos, con
+Cheeto y Kermit a 3-4 ciclos/s y Shelly y Trunk a ~2.
+
+Hallazgo: los cuatro Tripo comparten el MISMO clip Run. Es un sprint
+humano genérico, con el tronco inclinado 36°, zancadas largas de 1,3 s y
+un bucle que no cierra: el brazo derecho salta 19,5° al repetirse y las
+piernas, 7-12°. En Trunk además pisa como un galope asimétrico.
+
+Receta de cada uno (`scripts/critter-recipes/`):
+- pelvis del Idle;
+- IK con zancada corta, suelo y pie del Idle;
+- fase del pie izquierdo la del clip, para que los brazos sigan en
+  oposición;
+- bucle cerrado (`loop`).
+
+La zancada sale de la cadencia buscada: `L = zancada × d × duración`.
+
+| En partida | Antes (ciclos/s) | Después | Pie |
+|---|---|---|---|
+| Cheeto | 1,85 | **3,49** | 1,00 |
+| Kermit | 1,35 | **3,51** | 1,00 |
+| Shelly | 1,01 | **2,00** (sigue la más pausada) | 1,00 |
+| Trunk | 2,12 | 2,36 (apoyo corto, d = 0,2) | 1,00 |
+
+El pie apoyado queda sobre el suelo del Idle (hundimiento en modelo
+≤0,007) y los dos pies barren igual.
+
+No se ha tocado la inclinación de 36° del tronco, que es gusto de Rafa:
+queda como pregunta.
+
+Vídeo lateral: `.tmp/graficos/_informe/entrega/runs-vivos-lateral.mp4`.

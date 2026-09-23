@@ -65,7 +65,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'trunk',
     displayName: 'Trunk',
-    glbPath: './models/critters/trunk.glb?v=65c9f9c3',
+    glbPath: './models/critters/trunk.glb?v=9f9c98ab',
     baseColor: 0x8c8c8c,
     // Bruiser — largest silhouette (mass 1.4). Tripo Animate meshes have
     // their origin at the feet (minY=0 in GLB space), so pivotY=0 lands
@@ -122,7 +122,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'shelly',
     displayName: 'Shelly',
-    glbPath: './models/critters/shelly.glb?v=239c7aaa',
+    glbPath: './models/critters/shelly.glb?v=cae13d1e',
     baseColor: 0x2d8659,
     // Tank turtle (mass 1.5) — second largest silhouette after Trunk.
     // New Tripo Animate rig aligns her forward axis with the others.
@@ -141,7 +141,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'kermit',
     displayName: 'Kermit',
-    glbPath: './models/critters/kermit.glb?v=5fcffc12',
+    glbPath: './models/critters/kermit.glb?v=81f985b3',
     baseColor: 0x9c3cee,
     // Controller frog (mass 1.0) — medium size. Tripo mesh origin at feet.
     scale: 2.6, rotation: -Math.PI / 2, offset: [0, 0, 0],
@@ -200,7 +200,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'cheeto',
     displayName: 'Cheeto',
-    glbPath: './models/critters/cheeto.glb?v=039a6139',
+    glbPath: './models/critters/cheeto.glb?v=c9bbd243',
     baseColor: 0xffaa22,
     // Assassin tiger (mass 0.7) — smallest + sleek. Tripo mesh origin at feet.
     scale: 2.3, rotation: -Math.PI / 2, offset: [0, 0, 0],

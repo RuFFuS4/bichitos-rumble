@@ -240,9 +240,18 @@ outside it:
 | kowalski | Run: pelvis as in Idle, upright torso, IK feet (FEELING.md §7.8); WebP |
 | kurama | diet 945 k → 20 k; emissive dedup — 13.8 → 0.36 MB |
 | sebastian | diet 1.09 M → 15 k; emissive dedup — 15.2 → 0.28 MB |
-| kermit | diet 1.94 M → 30 k (warts intact); WebP; `-af 0` — 14.2 → 0.58 MB |
+| kermit | diet 1.94 M → 30 k (warts intact); WebP; `-af 0` — 14.2 → 0.58 MB; Run at 24 fps: 1.35 → 3.5 cycles/s |
 | sergei | emissive dedup |
-| trunk, shelly, cheeto | WebP (Cheeto at 90: its stripes drop to 33 dB at 82) |
+| cheeto | WebP 90 (its stripes drop to 33 dB at 82); Run 1.85 → 3.5 cycles/s |
+| shelly | WebP; Run 1.0 → 2.0 cycles/s |
+| trunk | WebP; Run symmetric with a short stance (d 0.2), 2.4 cycles/s |
+
+The four Tripo Runs (Cheeto, Kermit, Shelly, Trunk) are the same generic
+sprint. Each recipe holds the pelvis, re-plants the feet with a stride
+set from the wanted cadence and closes the loop (`loop`), because the
+sprint's right arm jumps 19.5° on every wrap. Stride from cadence:
+`L = stride × d × clip duration`, with `stride = old stride × old
+cadence / new cadence` (FEELING.md §7.9).
 
 ---
 

@@ -33,12 +33,12 @@ export interface RunGait {
 
 export const RUN_GAIT: Record<string, RunGait> = {
   sergei: { stride: 1.129, leftPhase: 0.50, halfWidth: 0.247 }, // Run 0.80 s · LeftFoot + RightFoot
-  trunk: { stride: 0.940, leftPhase: 0.52, halfWidth: 0.091 }, // Run 1.30 s · L_Foot + R_Foot
+  trunk: { stride: 0.844, leftPhase: 0.52, halfWidth: 0.123 }, // Run 1.30 s · L_Foot + R_Foot
   kurama: { stride: 2.664, leftPhase: 0.34, halfWidth: 0.154 }, // Run 0.63 s · LeftFoot + RightFoot
-  shelly: { stride: 0.893, leftPhase: 0.54, halfWidth: 0.105 }, // Run 1.30 s · L_Foot + R_Foot
-  kermit: { stride: 1.472, leftPhase: 0.54, halfWidth: 0.041 }, // Run 1.29 s · L_Foot + R_Foot
+  shelly: { stride: 0.451, leftPhase: 0.54, halfWidth: 0.120 }, // Run 1.30 s · L_Foot + R_Foot
+  kermit: { stride: 0.567, leftPhase: 0.55, halfWidth: 0.059 }, // Run 1.29 s · L_Foot + R_Foot
   sihans: { stride: 0.817, leftPhase: 0.27, halfWidth: 0.153 }, // Run 0.63 s · LeftFoot + RightFoot
   kowalski: { stride: 0.456, leftPhase: 0.14, halfWidth: 0.115 }, // Run 0.80 s · L_Foot + R_Foot
-  cheeto: { stride: 0.999, leftPhase: 0.49, halfWidth: 0.052 }, // Run 1.30 s · L_Foot + R_Foot
+  cheeto: { stride: 0.528, leftPhase: 0.49, halfWidth: 0.093 }, // Run 1.30 s · L_Foot + R_Foot
   sebastian: { stride: 0.608, leftPhase: 0.25, halfWidth: 0.260 }, // Run 0.63 s · LeftFoot + RightFoot
 };

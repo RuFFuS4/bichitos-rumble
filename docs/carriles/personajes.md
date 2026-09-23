@@ -68,9 +68,13 @@ antes de commitear el JSON.
          comentario de `src/game.ts:309/324` («Kermit es el único
          heavyAsset»): corregirlo cuando alguien toque `game.ts` con
          permiso.
-   - [ ] **Run más vivos** (decisión 7): Cheeto y Kermit a 3-4 ciclos/s,
-         Shelly y Trunk a ~2, y el IK del Run de Sebastian (pie en 1,33).
-         Cada uno, receta propia.
+   - [x] **Run más vivos** (decisión 7), hechos el 2026-09-23
+         (`FEELING.md §7.9`): Cheeto 3,49, Kermit 3,51, Shelly 2,00 y
+         Trunk 2,36 ciclos/s, con el pie apoyado y el bucle cerrado. Queda
+         preguntar a Rafa por la inclinación de 36° del sprint genérico.
+   - [ ] IK del Run de Sebastian (pie en 1,33). Es un rig Meshy con otros
+         nombres de hueso: el script de Blender necesita el mapeo de
+         nombres primero.
    - [ ] **Pulido de clips**: bucles que saltan (Victory de Sihans 143°,
          Kurama, Sergei; Fall de Kurama, Kermit, Cheeto), Victory largos,
          el segundo «Fall» de Sebastian.
