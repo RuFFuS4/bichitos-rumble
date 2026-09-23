@@ -30,6 +30,7 @@
 //   node scripts/inspect-stride.mjs              # table for the 9 critters
 //   node scripts/inspect-stride.mjs --json       # machine-readable
 //   node scripts/inspect-stride.mjs --write      # regenerate src/critter-locomotion.ts
+//   node scripts/inspect-stride.mjs --check      # exit 1 if the table no longer matches the GLBs
 //   node scripts/inspect-stride.mjs kermit       # one critter
 // ---------------------------------------------------------------------------
 
@@ -53,6 +54,7 @@ const OUT_TS = resolve(ROOT, 'src/critter-locomotion.ts');
 const args = process.argv.slice(2);
 const asJson = args.includes('--json');
 const doWrite = args.includes('--write');
+const doCheck = args.includes('--check');
 const only = args.filter((a) => !a.startsWith('--'));
 const ids = only.length ? only : CRITTERS;
 
@@ -87,7 +89,7 @@ function median(a) {
 async function measure(id) {
   const entry = getRosterEntry(id.charAt(0).toUpperCase() + id.slice(1)) ?? getRosterEntry(id);
   if (!entry?.glbPath) return { id, error: 'no GLB in roster' };
-  const path = resolve(ROOT, 'public', entry.glbPath.replace(/^\.\//, ''));
+  const path = resolve(ROOT, 'public', entry.glbPath.replace(/^\.\//, '').replace(/\?.*$/, ''));
   const gltf = await loadForAnimation(path);
   const clipName = runClipName(id, gltf.animations);
   if (!clipName) return { id, error: 'no Run clip' };
@@ -182,6 +184,21 @@ if (asJson) {
       `${r.id.padEnd(11)} ${r.clip.padEnd(5)} ${r.duration.toFixed(3).padStart(6)}  ${String(r.feet.length).padStart(4)}  ${r.stride.toFixed(3).padStart(7)}  ${r.leftPhase.toFixed(2).padStart(5)}  ${r.swingZ.toFixed(3).padStart(7)}  ${r.rosterScale.toFixed(2).padStart(6)}  ${r.strideWorld.toFixed(2).padStart(14)}  ${r.warnings.join('; ')}`,
     );
   }
+}
+
+if (doCheck) {
+  // Same tolerance the table is written with (3 decimals / 2 decimals).
+  const table = readFileSync(OUT_TS, 'utf8');
+  const stale = results.filter((r) => {
+    const m = table.match(new RegExp(`\\n  ${r.id}: \\{ stride: ([\\d.]+), leftPhase: ([\\d.]+) \\}`));
+    const phaseGap = Math.abs((((+m?.[2] - r.leftPhase + 0.5) % 1) + 1) % 1 - 0.5); // phases wrap at 1
+    return r.error || !m || Math.abs(+m[1] - r.stride) > 0.005 || phaseGap > 0.02;
+  });
+  if (stale.length) {
+    console.error(`\nRUN_GAIT desfasado para ${stale.map((r) => r.id).join(', ')}: node scripts/inspect-stride.mjs --write`);
+    process.exit(1);
+  }
+  console.log('\nRUN_GAIT al día con los GLB.');
 }
 
 if (doWrite) {

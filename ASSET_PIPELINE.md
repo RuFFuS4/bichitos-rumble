@@ -161,11 +161,50 @@ node scripts/inspect-bounds.mjs public/models/critters/<id>.glb
 # table in src/critter-locomotion.ts is measured, never hand-tuned:
 node scripts/inspect-stride.mjs <id>
 node scripts/inspect-stride.mjs --write
+node scripts/inspect-stride.mjs --check   # exit 1 if the table is stale
+
+# Cache-busting version of every critter GLB URL in src/roster.ts:
+node scripts/stamp-critter-glbs.mjs          # after ANY change to a GLB
+node scripts/stamp-critter-glbs.mjs --check  # exit 1 if a ?v= is stale
+
+# If the critter has a post-import recipe (below), replay it NOW:
+node scripts/critter-recipe.mjs <id>
 ```
 
 A critter with a new or re-exported Run clip and a stale `RUN_GAIT` row
 runs with the wrong leg rhythm (feet gliding or treadmilling). See
 [`docs/FEELING.md`](docs/FEELING.md) §3.3.
+
+### Recetas post-import (2026-09-23)
+
+Some clips need surgery the source never had — Kowalski's Run feet that
+did not sweep the ground, a hunched pelvis. Those edits are **never done
+by hand on the binary**: they live in `scripts/critter-recipes/<id>.json`
+and `node scripts/critter-recipe.mjs <id>` replays them:
+
+1. takes the BASE GLB pinned in the recipe (`base.ref`, a commit), never
+   the file it overwrites — replaying twice gives the same result;
+2. per edited clip, runs Blender headless with
+   `scripts/blender/critter-clip-edit.py` (sections `hold` → `ik` →
+   `torso`, documented at the top of that file) to get a donor GLB;
+3. copies ONLY that clip's listed channels from the donor into the base,
+   so meshes, textures and the other clips keep their encoding;
+4. repacks with `gltfpack -c -kn` and, when writing the game GLB,
+   regenerates `RUN_GAIT` and the URL version.
+
+`--out=x.glb` writes elsewhere for an A/B without touching anything;
+`--set=Run.torso.pitchDeg=8` tries a value without editing the recipe.
+Blender comes from `$BLENDER` (else `blender` on the PATH; tested 5.2 LTS).
+
+**After a re-import** (`import-critter`, e.g. a Tripo re-export), the
+recipe does not apply itself: commit the new import, point `base.ref` at
+that commit and run `critter-recipe.mjs <id>`. Otherwise the import wipes
+the edits silently while `RUN_GAIT` keeps describing the edited clip.
+
+The Blender script refuses a knee that flips (>90° between frames) and
+warns from 25°; the real check is in game: `critter-motion.mjs` (foot
+slip ≈ 1) and the visor A/B. Recipes today: `kowalski` (Run: pelvis as in
+Idle, upright torso, IK feet — FEELING.md §7.8).
 
 ---
 
