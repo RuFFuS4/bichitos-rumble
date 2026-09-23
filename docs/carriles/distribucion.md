@@ -329,6 +329,28 @@ corren riesgo: no hay migraciones.
     del bicho local en online (punto 1) antes de sacar la velocidad
     nueva a producción. Si `dev` sale a `main` sin él, online se verán
     tirones de ~9-12 px.
+- **De PERSONAJES, 2026-09-23 — los GLB de los bichos llevan versión en
+  la URL.** Nada que hacer para desplegar; dos cosas opcionales.
+  - `vercel.json` sirve `/models/` con `max-age=86400` y
+    `stale-while-revalidate` de una semana, sin versión. El JS de `/assets`
+    lleva hash. Así, el día que cambia un GLB junto al código que depende
+    de él (el Run nuevo de Kowalski y su `RUN_GAIT`), un jugador que vuelve
+    podía recibir el JS nuevo con el GLB viejo de la caché (patinaría ×3).
+  - Desde hoy `src/roster.ts` pide `./models/critters/<id>.glb?v=<hash8>`,
+    con el hash del contenido. Lo escribe `node scripts/stamp-critter-glbs.mjs`
+    y `--check` falla si alguno está desfasado.
+  - Efecto al desplegar: **la primera visita tras el despliegue vuelve a
+    bajar los nueve GLB una vez** (hoy ~70 MB; tras la dieta de la F2,
+    ~27).
+  - Opcional 1: con la versión en la URL, `/models/critters/` podría
+    servirse `immutable` y con un año de caché. Es tu `vercel.json`.
+  - Opcional 2: meter `stamp-critter-glbs.mjs --check` e
+    `inspect-stride.mjs --check` en `npm run check`. `package.json` es
+    tierra de nadie; se lo he pedido a Rafa.
+  - **Aviso de la F2 que viene**: la dieta de Kurama, Sebastian y Kermit
+    baja el payload de ~70 a ~27 MB. Cuando entre en `dev` te dejo aquí
+    la cifra medida por el build para que bajes el ratchet de
+    `check-payload-budget`.
 
 ## Cómo retomar
 
