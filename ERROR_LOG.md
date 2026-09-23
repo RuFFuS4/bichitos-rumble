@@ -1,5 +1,29 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-23] Kermit llegó a `dev` con la textura rota (fallo intermitente de la receta)
+- **Where**: `scripts/critter-recipe.mjs`, sección `textures.webp`. Commit
+  cce77f4 (Run más vivos); no llegó a producción.
+- **Symptom**: los primeros 22 bytes de la imagen WebP de Kermit estaban
+  pisados (`78156700…` en vez de `RIFF…WEBP`). Repitiendo la misma
+  receta, 2 ejecuciones de 3 lo rompían. Las demás pruebas (`--out`) y la
+  F2 salieron bien por suerte.
+- **Cause**: `textureCompress` (gltf-transform + sharp) devuelve el WebP
+  como una VISTA dentro de un bloque de 16 MB que el proceso reutiliza.
+  Leer después otro GLB grande (el donante de Blender, en la cadena de
+  Kermit) sobrescribía el principio de la imagen dentro del documento
+  antes de escribirlo.
+- **Fix**:
+  - `ownMemory()` copia cada imagen y accesor que sea vista de un bloque
+    mayor a su propio búfer, justo tras la dieta y las texturas;
+  - `checkImages()` comprueba la firma de cada imagen del GLB escrito y
+    para la receta si alguna está rota;
+  - Kermit rehecho.
+
+  Verificado: las 8 recetas reproducen byte a byte los GLB del juego, y
+  8 de 8 ejecuciones de la prueba de la carrera salen limpias. Lección:
+  cualquier búfer que venga de un codificador nativo o WASM se copia
+  antes de guardarlo en un documento que vive más que la llamada.
+
 ### [2026-09-23] El Run nuevo de Kowalski enterraba el pie apoyado 20-27 cm
 - **Where**: `scripts/blender/critter-clip-edit.py`, IK de los pies de la
   receta de Kowalski (rama de la fase 1 gráfica; no llegó a `dev`).

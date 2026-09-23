@@ -107,6 +107,7 @@ try {
   const game = await io.read(basePath);
   if (recipe.diet) await diet(game, recipe.diet);
   if (recipe.textures) await textures(game, recipe.textures);
+  ownMemory(game);
 
   // Blender edits the prepared model: same rig and clips, and far lighter
   // to import once the diet has run.
@@ -141,6 +142,7 @@ try {
     writeFileSync(outPath, readFileSync(plainPath));
   }
   const out = await io.read(outPath);
+  checkImages(out);
   console.log(`[receta] → ${outPath} (${mb(outPath)} MB · ${triangleCount(out)} triángulos · `
     + `${out.getRoot().listTextures().map((t) => t.getMimeType().replace('image/', '')).join('+') || 'sin texturas'})`);
 
@@ -327,4 +329,32 @@ async function textures(doc, { dedup: shareIdentical = false, webp }) {
   if (webp) await doc.transform(textureCompress({ encoder: sharp, targetFormat: 'webp', quality: webp }));
   const after = doc.getRoot().listTextures().reduce((n, t) => n + (t.getImage()?.byteLength ?? 0), 0);
   console.log(`  texturas: ${(before / 1024).toFixed(0)} → ${(after / 1024).toFixed(0)} KB`);
+}
+/**
+ * Give every image and accessor array its own memory. `textureCompress`
+ * hands back the WebP as a view into a 16 MB block that the process reuses
+ * later (reading the next big GLB overwrote its first bytes): 2 runs out of
+ * 3 shipped a Kermit with a broken texture (ERROR_LOG 2026-09-23).
+ */
+function ownMemory(doc) {
+  for (const t of doc.getRoot().listTextures()) {
+    const img = t.getImage();
+    if (img && img.buffer.byteLength !== img.byteLength) t.setImage(img.slice());
+  }
+  for (const a of doc.getRoot().listAccessors()) {
+    const arr = a.getArray();
+    if (arr && arr.buffer.byteLength !== arr.byteLength) a.setArray(arr.slice());
+  }
+}
+
+/** Every image of the written GLB must start with its format's signature. */
+function checkImages(doc) {
+  const magic = { 'image/png': [0x89, 0x50, 0x4e, 0x47], 'image/jpeg': [0xff, 0xd8, 0xff], 'image/webp': [0x52, 0x49, 0x46, 0x46] };
+  for (const t of doc.getRoot().listTextures()) {
+    const img = t.getImage();
+    const sig = magic[t.getMimeType()];
+    if (!img || (sig && sig.some((b, i) => img[i] !== b))) {
+      throw new Error(`the written GLB has a broken ${t.getMimeType()} image (${img ? Buffer.from(img.slice(0, 8)).toString('hex') : 'empty'})`);
+    }
+  }
 }
