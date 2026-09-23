@@ -36,15 +36,17 @@ export const FEEL = {
   // Cadencia de carrera por bicho (claves = RosterEntry.id), relativa a la
   // del "pie apoyado": 1 = el pie no patina; >1 = las patas van más rápido
   // que el suelo (correteo con esfuerzo); <1 = planea. Gusto, no medida.
+  // 2026-09-23 (Rafa): los sesgos de Shelly 1,3, Kermit 1,6 y Cheeto 1,5
+  // eran un parche para la velocidad vieja; con la de ×1,375 se quitan.
   runCadence: {
     sergei: 1.0,
     trunk: 1.0,
     kurama: 1.0,
-    shelly: 1.3,
-    kermit: 1.6,
+    shelly: 1.0,
+    kermit: 1.0,
     sihans: 1.0,
     kowalski: 1.0,
-    cheeto: 1.5,
+    cheeto: 1.0,
     sebastian: 1.0,
   },
 

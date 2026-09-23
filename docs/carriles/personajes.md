@@ -25,11 +25,12 @@ antes de commitear el JSON.
          y capa visual (giro de ~150 ms, patas a la velocidad real).
          **No sale a producción** sin el suavizado online del bicho local
          (buzón de DISTRIBUCIÓN).
+   - [x] Sesgos de `FEEL.runCadence` quitados (Rafa, 2026-09-23): los
+         nueve pisan con el pie apoyado salvo los que tocan el techo.
    - [ ] **Gusto pendiente** (`§7.7`): Kowalski patina ×2 con su clip de
-         zancada diminuta; revisar los sesgos de `FEEL.runCadence` de
-         Kermit, Cheeto y Shelly con la velocidad nueva; y si las rondas
-         se sienten cortas al jugar (−13 % en solo-bots), hablarlo con
-         ARENA (colapso) o tocar vidas.
+         zancada diminuta (entra en la mejora gráfica de personajes); y si
+         las rondas se sienten cortas al jugar (−13 % en solo-bots),
+         hablarlo con ARENA (colapso) o tocar vidas.
    - [ ] **Corte 2** (`§5`): ~~giro con peso~~ (hecho con la velocidad),
          acentos de arranque y frenada, reacciones al golpe/cabezazo que
          hoy se pintan en mallas ocultas, y personalidad con el rango real

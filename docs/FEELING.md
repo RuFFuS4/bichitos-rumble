@@ -353,9 +353,11 @@ bootstrap por partidas enteras, y revisión adversarial del diff):
 
 Media vuelta: 9 fotogramas (antes 1). **Pendiente de gusto**: Kowalski
 patina ×2 (su clip pediría ~13 pasos/s: o se acepta como deslizamiento
-de pingüino, o se alarga su zancada en `bichitos-mesh2motion`); Kermit,
-Cheeto y Shelly llevan las patas algo más rápidas que el suelo por los
-sesgos de `FEEL.runCadence`, que eran de antes de la velocidad nueva.
+de pingüino, o se alarga su zancada en `bichitos-mesh2motion`).
+**2026-09-23 (Rafa: «sí, lo quitamos»)**: fuera los sesgos de
+`FEEL.runCadence` de Kermit, Cheeto y Shelly, que eran de antes de la
+velocidad nueva. Ahora los tres pisan con el pie apoyado (1,00): Shelly
+1,0, Kermit 1,35 y Cheeto 1,85 ciclos/s. Golden 3/3.
 
 **Queda fuera de este carril**: el espejo de la zona muerta en
 `BrawlRoom.ts:1476` y el suavizado del bicho local en online (buzón de
