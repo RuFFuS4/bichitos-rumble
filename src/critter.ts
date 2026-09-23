@@ -9,6 +9,7 @@ import { SkeletalAnimator, type SkeletalState } from './critter-skeletal';
 import { createCritterParts } from './critter-parts';
 import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, type AnimationPersonality } from './critter-animation';
 import { deriveCritterStats } from './pws-stats';
+import { measurePosedBox } from './posed-bounds';
 
 /**
  * Behaviour tag used ONLY by the /tools.html dev lab to isolate bot
@@ -1342,29 +1343,16 @@ export class Critter {
 /** Vertices sampled per mesh by `measurePosedHeight` — plenty for a
  *  silhouette height, and cheap on the 100k-vertex Meshy rigs. */
 const POSED_HEIGHT_SAMPLES = 4000;
+const posedBox = new THREE.Box3();
 
 /**
  * Height of `root`'s visible meshes in their CURRENT pose. Skinned
- * vertices go through the live bones (`getVertexPosition`) —
+ * vertices go through the live bones (see `measurePosedBox`) —
  * `Box3.setFromObject` reuses a skinned mesh's cached bind-pose box, which
  * misjudged the idle silhouette by up to ~20 % (Kurama "fitted" to 1.7
  * stood 2.08 tall).
  */
 function measurePosedHeight(root: THREE.Object3D): number {
-  root.updateMatrixWorld(true);
-  let lo = Infinity;
-  let hi = -Infinity;
-  const v = new THREE.Vector3();
-  root.traverse((node) => {
-    const mesh = node as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.visible) return;
-    const count = mesh.geometry.attributes.position?.count ?? 0;
-    const step = Math.max(1, Math.floor(count / POSED_HEIGHT_SAMPLES));
-    for (let i = 0; i < count; i += step) {
-      mesh.getVertexPosition(i, v).applyMatrix4(mesh.matrixWorld);
-      if (v.y < lo) lo = v.y;
-      if (v.y > hi) hi = v.y;
-    }
-  });
-  return hi > lo ? hi - lo : 0;
+  if (!measurePosedBox(root, posedBox, POSED_HEIGHT_SAMPLES)) return 0;
+  return posedBox.max.y - posedBox.min.y;
 }
