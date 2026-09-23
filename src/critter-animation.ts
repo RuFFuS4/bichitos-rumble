@@ -327,6 +327,14 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
     const swayLerp = Math.min(1, dt * SWAY_LERP);
     critter.glbMesh.rotation.z +=
       (swayTarget - critter.glbMesh.rotation.z) * swayLerp;
+    // The roll pivots on the model's origin, between the feet, so it
+    // would push the planted foot into the floor (~3 cm on Kowalski's
+    // waddle). Lift the body by that much: the roll turns about the
+    // planted foot instead, and the other foot is in the air anyway.
+    if (gait) {
+      critter.glbMesh.position.y +=
+        gait.halfWidth * critter.glbMesh.scale.x * Math.abs(Math.sin(critter.glbMesh.rotation.z));
+    }
   }
 
   // --- Scale (x, y, z) ---

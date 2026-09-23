@@ -351,9 +351,8 @@ bootstrap por partidas enteras, y revisión adversarial del diff):
 | Ciclos de zancada/s | 5,6 | 2,1 | 6 (techo) | 1,3 | 2,2 | 5,6 | 6 (techo) | 2,8 | 6 (techo) |
 | Pie (1 = apoyado) | 1,00 | 1,00 | 1,04 | 0,77 | 0,63 | 1,00 | **2,17** | 0,67 | 1,33 |
 
-Media vuelta: 9 fotogramas (antes 1). **Pendiente de gusto**: Kowalski
-patina ×2 (su clip pediría ~13 pasos/s: o se acepta como deslizamiento
-de pingüino, o se alarga su zancada en `bichitos-mesh2motion`).
+Media vuelta: 9 fotogramas (antes 1). ~~**Pendiente de gusto**:
+Kowalski patina ×2~~ → resuelto en §7.8 (Run nuevo, pie 1,00).
 **2026-09-23 (Rafa: «sí, lo quitamos»)**: fuera los sesgos de
 `FEEL.runCadence` de Kermit, Cheeto y Shelly, que eran de antes de la
 velocidad nueva. Ahora los tres pisan con el pie apoyado (1,00): Shelly
@@ -363,3 +362,57 @@ velocidad nueva. Ahora los tres pisan con el pie apoyado (1,00): Shelly
 `BrawlRoom.ts:1476` y el suavizado del bicho local en online (buzón de
 DISTRIBUCIÓN). Hasta que exista ese suavizado, la velocidad nueva no
 debería salir a producción.
+
+### 7.8 Kowalski: carrera nueva (2026-09-23, rama `claude/feature/personajes-kowalski-seleccion`)
+
+Rafa, ante el A/B: **«derecho»** (pingüino erguido y con bamboleo, no el
+Run agachado de la primera prueba). Por qué patinaba: su Run de Tripo
+apoya el pie en el punto más atrasado del recorrido, así que el pie
+apoyado casi no barre el suelo (zancada 0,142). Además corría encorvado,
+con la pelvis girada ~150° respecto al Idle (la parte baja del cuerpo se
+iba hacia atrás) y el tronco a 17°.
+
+Receta reproducible (`scripts/critter-recipes/kowalski.json`,
+`ASSET_PIPELINE.md` §«Recetas post-import»):
+- pelvis fija como en el Idle, sin mover los muslos;
+- IK analítico de los pies con la rodilla siempre hacia delante, porque
+  el solver de Blender sin polo invertía una rodilla en un fotograma;
+- suelo, anchura de la pisada y pie plano tomados del Idle, y el pie casi
+  plano también en el vuelo;
+- pisada centrada bajo la cadera, y agachado y altura de paso elegidos
+  para que ninguna pierna llegue a sus topes (extensión 0,57-0,97; la
+  izquierda se pliega del todo a 0,47);
+- tronco de 17° a 0°.
+
+En la capa visual:
+- `PERSONALITY_OVERRIDES.Kowalski` baja la inclinación al correr de 12° a
+  ~5° y sube el balanceo sobre el pie apoyado de ~3° a ~7°: el bamboleo.
+- El balanceo rueda ahora sobre el pie apoyado. Antes lo hacía sobre el
+  centro del modelo y metía ese pie ~3 cm en el suelo. El cuerpo sube
+  `halfWidth × sen(balanceo)`, con `halfWidth` medido por `inspect-stride`
+  en los nueve.
+
+| Kowalski en partida (`critter-motion`) | Antes | Después |
+|---|---|---|
+| Ciclos de zancada/s | 6 (techo) | 4,05 |
+| Pie (1 = apoyado) | 2,17 | **1,00** |
+| Inclinación / balanceo | 12° / 3,1° | 5,2° / 7,2° |
+| Pie apoyado, lo más bajo (y, en u) | — | −0,08 (en Idle, −0,05) |
+| Velocidad, altura | 3,07 u/s, 1,69 | iguales |
+
+**Lo que cazó la revisión adversarial** antes de integrar:
+- La primera versión tomaba el suelo del fotograma más hundido del Run de
+  Tripo: el pie apoyado quedaba 20-27 cm bajo el suelo todo el apoyo.
+- La pantorrilla izquierda daba un latigazo de 64° al tocar su tope de
+  plegado.
+- En el vuelo, la punta del pie atravesaba el suelo.
+
+Los tres están arreglados en la receta, que además avisa de cada caso.
+
+Queda, y es de antes: al frenar, el pie apoyado resbala ~8 cm en 0,1 s.
+Lo causa el suavizado de 60 ms de la velocidad de suelo, que absorbe los
+saltos de posición de online. «Pie 1,00» es en carrera sostenida; si se
+quiere afinar, entra en el corte 2 (acentos de arranque y frenada).
+
+Los otros 7 clips no se tocan; `RUN_GAIT.kowalski` pasa a 0,456 / 0,14.
+Vídeo: `.tmp/graficos/_informe/entrega/kowalski-partida-antes-despues-camara-lenta.mp4`.

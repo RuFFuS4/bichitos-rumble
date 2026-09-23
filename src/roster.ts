@@ -65,7 +65,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'trunk',
     displayName: 'Trunk',
-    glbPath: './models/critters/trunk.glb',
+    glbPath: './models/critters/trunk.glb?v=557cc92d',
     baseColor: 0x8c8c8c,
     // Bruiser — largest silhouette (mass 1.4). Tripo Animate meshes have
     // their origin at the feet (minY=0 in GLB space), so pivotY=0 lands
@@ -80,7 +80,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'kurama',
     displayName: 'Kurama',
-    glbPath: './models/critters/kurama.glb',
+    glbPath: './models/critters/kurama.glb?v=98900995',
     baseColor: 0xff6633,
     // Trickster — Meshy AI mesh, imported 2026-04-24. Source bounds
     // Y [0, 2.95], height 2.95u, feet-at-origin (Mixamo convention).
@@ -104,7 +104,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'sergei',
     displayName: 'Sergei',
-    glbPath: './models/critters/sergei.glb',
+    glbPath: './models/critters/sergei.glb?v=46d0f480',
     baseColor: 0xb5651d,
     // Meshy AI regen landed 2026-04-24, full 8-clip kit (Gorilla Rush /
     // Shockwave / Frenzy / Idle / Run / Victory / Defeat / Fall).
@@ -122,7 +122,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'shelly',
     displayName: 'Shelly',
-    glbPath: './models/critters/shelly.glb',
+    glbPath: './models/critters/shelly.glb?v=8f301ed5',
     baseColor: 0x2d8659,
     // Tank turtle (mass 1.5) — second largest silhouette after Trunk.
     // New Tripo Animate rig aligns her forward axis with the others.
@@ -141,7 +141,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'kermit',
     displayName: 'Kermit',
-    glbPath: './models/critters/kermit.glb',
+    glbPath: './models/critters/kermit.glb?v=db993d63',
     baseColor: 0x9c3cee,
     // Controller frog (mass 1.0) — medium size. Tripo mesh origin at feet.
     scale: 2.6, rotation: -Math.PI / 2, offset: [0, 0, 0],
@@ -166,7 +166,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'sihans',
     displayName: 'Sihans',
-    glbPath: './models/critters/sihans.glb',
+    glbPath: './models/critters/sihans.glb?v=e7d8187c',
     baseColor: 0x8b6914,
     // Trapper mole (mass 1.15). Meshy AI mesh imported 2026-04-24.
     // Source bounds Y [0, 1.044], feet-at-origin (Mixamo convention).
@@ -186,7 +186,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'kowalski',
     displayName: 'Kowalski',
-    glbPath: './models/critters/kowalski.glb',
+    glbPath: './models/critters/kowalski.glb?v=4b7ee108',
     baseColor: 0x1a1a3e,
     // Mage penguin (mass 0.9) — compact. Tripo mesh origin at feet.
     scale: 2.5, rotation: -Math.PI / 2, offset: [0, 0, 0],
@@ -203,7 +203,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'cheeto',
     displayName: 'Cheeto',
-    glbPath: './models/critters/cheeto.glb',
+    glbPath: './models/critters/cheeto.glb?v=00956b38',
     baseColor: 0xffaa22,
     // Assassin tiger (mass 0.7) — smallest + sleek. Tripo mesh origin at feet.
     scale: 2.3, rotation: -Math.PI / 2, offset: [0, 0, 0],
@@ -220,7 +220,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'sebastian',
     displayName: 'Sebastian',
-    glbPath: './models/critters/sebastian.glb',
+    glbPath: './models/critters/sebastian.glb?v=eac4067f',
     baseColor: 0xcc3333,
     // Glass Cannon crab (mass 0.75). Meshy AI mesh imported 2026-04-24.
     // Source bounds Y [0, 1.147] height 1.147u, feet-at-origin (Mixamo

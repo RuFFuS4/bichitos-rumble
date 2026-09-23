@@ -1,5 +1,28 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-23] El Run nuevo de Kowalski enterraba el pie apoyado 20-27 cm
+- **Where**: `scripts/blender/critter-clip-edit.py`, IK de los pies de la
+  receta de Kowalski (rama de la fase 1 gráfica; no llegó a `dev`).
+- **Symptom**: con la cámara de partida no se veía, pero de cerca el pie
+  palmeado quedaba reducido a una loncha o a una cúpula medio enterrada
+  durante todo el apoyo. Las métricas del plan (pie 1,00, 4 ciclos/s)
+  salían perfectas.
+- **Cause**: el suelo del IK era el fotograma MÁS BAJO del Run de Tripo,
+  que ya iba hundido, y el pie plano era el giro de ese mismo fotograma
+  (48° respecto al Idle). El IK mantenía esa postura hundida todo el
+  apoyo, porque medía que el pie no resbalaba, no que estuviera sobre el
+  suelo. Además, la pantorrilla izquierda (el rig es asimétrico) tocaba
+  su tope de plegado y daba un latigazo de 64°.
+- **Fix**:
+  - `groundFrom` (suelo, anchura y pie plano del Idle) y `swingFlat`;
+  - IK suave en los dos topes y el límite de cada pierna en el registro;
+  - el balanceo rueda sobre el pie apoyado.
+
+  Lo cazó la revisión adversarial con una sonda de vértices del pie contra
+  el suelo real. Lección: al tocar una animación, medir también dónde
+  queda la malla respecto al suelo del Idle, no solo el ritmo y el
+  patinaje.
+
 ### [2026-09-22] `--feel` cambiaba una copia de FEEL que el juego no leía
 - **Where**: `scripts/run-match-batch.mjs` y `scripts/critter-motion.mjs`,
   opción `--feel`.

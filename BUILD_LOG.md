@@ -1,5 +1,52 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-23 — [PERSONAJES] Mejora gráfica, fase 1: Kowalski derecho y la selección a la misma altura
+
+Rafa preguntó si se podían mejorar gráficamente los personajes. Hubo un
+estudio con seis agentes y dos refutadores (en `.tmp/graficos/_informe/`
+del worktree), y Rafa decidió:
+- empezar por Kowalski y la selección;
+- Kowalski «derecho»;
+- solo colores, sin tocar las formas;
+- Kermit granulado;
+- contorno sin toon;
+- Tripo aparcado;
+- Run más vivos.
+
+Fase 1, en `claude/feature/personajes-kowalski-seleccion`:
+- **Recetas post-import** (`scripts/critter-recipe.mjs` + Blender
+  headless). Las ediciones de clips se rehacen desde un GLB fijado por
+  commit: idempotente, byte a byte. Se niega a pisar un GLB cambiado por
+  fuera, y `--set` solo va con `--out`.
+- **`?v=<hash>` en las URL de los GLB** (`stamp-critter-glbs.mjs`), para
+  que la caché de `/models/` no empareje JS nuevo con GLB viejo. La
+  primera visita tras desplegar vuelve a bajarlos una vez (buzón de
+  DISTRIBUCIÓN).
+- **Kowalski**:
+  - pelvis como en el Idle, tronco de 17° a 0°, IK de pies sobre el suelo
+    del Idle;
+  - bamboleo en la capa visual;
+  - en partida: 6 → 4,05 pasos/s, pie 2,17 → 1,00, inclinación 12 → 5°,
+    balanceo 3 → 7°.
+- **El balanceo rueda sobre el pie apoyado** en los nueve. Antes rodaba
+  sobre el centro y metía ese pie en el suelo. `RUN_GAIT` gana
+  `halfWidth`.
+- **Selección**:
+  - antes 98-288 px de alto, ahora 263-286 px;
+  - medida con vértices posados (`src/posed-bounds.ts`);
+  - encuadre de cilindro, con una cámara común para los nueve;
+  - nada se corta en ningún giro ni tamaño de lienzo.
+
+**Verificación**: golden 3/3 sin regenerar (todo es presentación), 115
+tests y `npm run check`. Hubo revisión adversarial con tres lentes:
+- **pipeline y runtime**: sin defectos de fondo;
+- **animación**: cazó el pie de Kowalski enterrado 20-27 cm en la primera
+  versión, el latigazo de la pantorrilla y la punta atravesando el suelo.
+  Los tres están arreglados y medidos (ERROR_LOG).
+
+Siguiente: F2 (dieta de Kurama, Sebastian y Kermit, ~70 → ~27 MB), los
+Run más vivos, la paleta y el contorno (`docs/carriles/personajes.md`).
+
 ## 2026-09-22 — [Arena] Jungle con pozo claro, y el rebote de luz aprobado
 
 Rafa decide sobre las hojas de la F0 del fondo v2:

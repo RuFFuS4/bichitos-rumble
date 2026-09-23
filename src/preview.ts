@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Critter, type CritterConfig } from './critter';
+import { forEachPosedVertex } from './posed-bounds';
 
 // ---------------------------------------------------------------------------
 // PreviewScene — isolated WebGL renderer for menu 3D previews
@@ -21,32 +22,40 @@ const PEDESTAL_RADIUS_BOT = 1.85;
 const CRITTER_LIFT = PEDESTAL_HEIGHT + 0.06;
 
 // Auto-fit target — every critter is uniformly scaled so its
-// VISIBLE silhouette HEIGHT lands on this value. We measure the
-// LIVE world bbox (skipping invisible procedural placeholders) on
-// every frame until the envelope stabilises, because Tripo critters
-// have decorative non-skinned Mesh nodes parented to bones; the
-// idle clip moves those bones, so the silhouette grows over the
-// first second of playback. The previous build trusted the static
-// `Critter.bindPoseHeight` (frame 1/30 of idle) which underestimated
-// the steady-state silhouette by 30–60% on Trunk / Sergei / Kermit,
-// pushing them past the camera's vertical frustum.
+// VISIBLE silhouette HEIGHT lands on this value. Measured on the
+// POSED vertices (skinned through the live bones, see
+// `posed-bounds.ts`). The previous build unioned each mesh's
+// bind-pose box with the bone positions: Kermit read 3.28 u for a
+// 1.70 u frog and landed at half the size of the rest, the others
+// drifted up to 10 %, and the same inflated box fed the camera sphere.
 const TARGET_HEIGHT = 1.9;
 
-// Camera-fit knobs.
-//
-// PADDING multiplies the minimum-fit distance derived from the
-// bounding sphere. Sphere (not box) so the silhouette never clips
-// when the user spins the model — sphere radius is rotation-invariant.
-// 1.35 leaves a noticeable margin around the bichito on every side
-// at every rotation. Tighter values (we tried 1.18) clipped on the
-// widest builds (gorilla, elephant, frog antennae).
-const FIT_PADDING = 1.35;
-//
-// Distance floor — keeps tiny critters (Sebastian / Sihans) from
-// getting glued to the lens, where perspective skew makes them look
-// distorted. Lowered from 5.6 to 4.6 so the "small builds look small"
-// reading is preserved relative to the pedestal scale.
-const MIN_FIT_DISTANCE = 4.6;
+// Posed-vertex budgets of the two fit measures, spread across the
+// critter's visible meshes (see `measureFit`). A sample is one
+// skinned vertex (~0.25 µs on a desktop), so the budget — not the
+// rig — bounds the cost: Tripo rigs ship 11–18 pieces, Meshy ones a
+// single mesh of up to 2 M vertices. The scale is read once per
+// critter and wants a tight height; the envelope is re-read every
+// frame until it settles (90+ frames), so it stays light: 1000
+// samples miss the all-vertex extent by ~1 % (up to ~4 % on the
+// many-piece Tripo rigs), which FIT_PADDING swallows, at ~0.4 ms a
+// frame (~1.6 ms on a 4× slower CPU).
+const FIT_SCALE_SAMPLES = 10000;
+const FIT_TRACK_SAMPLES = 1000;
+
+// Camera fit. The critter spins on the holder's Y axis, so what has to
+// stay in frame at any drag yaw is a CYLINDER: its height and its turn
+// radius (the farthest posed vertex from that axis). Every critter is
+// framed as if it were FIT_REFERENCE_RADIUS wide — the widest of the
+// roster, Sihans, measured 1.26 u at TARGET_HEIGHT (2026-09-23, every
+// vertex across his whole idle; the slimmest, Kermit, 0.5–0.7) — so all
+// nine stand the same height on screen, as they do in the arena. Only a
+// critter wider than that pulls the camera back for itself. The old
+// fit used a sphere around the world box, which overstated the width
+// by 10–35 % and sized each critter by it: 98–288 px on a 440 px canvas.
+const FIT_REFERENCE_RADIUS = 1.26;
+// Margin over the exact no-clip distance (~265 px of 440 at 500×440).
+const FIT_PADDING = 1.2;
 
 // Manual rotation smoothing (drag → target, render → eased)
 const ROTATION_SMOOTH_SPEED = 12;
@@ -66,23 +75,26 @@ let visible = false;
 //
 // `scaleApplied` flips true the first frame we manage to apply a
 // uniform scale to the wrapper (i.e. the GLB has loaded and at least
-// one visible mesh contributed to the live bbox). The scale itself
-// is computed from the live bbox, NOT from the stale
-// `Critter.bindPoseHeight` snapshot, because per-bone non-skinned
-// decoration meshes (Tripo) move with idle and inflate the bbox
-// over the first ~half second.
+// one visible mesh contributed to the posed box). The scale itself
+// is computed from the live pose, NOT from `Critter.bindPoseHeight`,
+// which after the in-game fit holds that fit's target height.
 //
-// `maxSphereRadius` tracks the LARGEST bounding-sphere radius seen
-// across recent ticks. The camera distance is recomputed from this
-// monotonic envelope so it only ever pushes back, never zooms in.
-// `framesSinceGrowth` lets us stop measuring after the silhouette
-// has plateaued — keeps `tickPreview` cheap for the steady state.
+// `fitTop` / `fitBottom` / `fitRadius` hold the LARGEST extent seen
+// across recent ticks (world Y range and turn radius). The camera is
+// re-aimed from this monotonic envelope, so it only ever pushes back,
+// never zooms in. `framesSinceGrowth` lets us stop measuring after the
+// silhouette has plateaued — keeps `tickPreview` cheap for the steady
+// state.
 let scaleApplied = false;
-let maxSphereRadius = 0;
-let lastSphereCenterY = 0;
+let fitTop = -Infinity;
+let fitBottom = Infinity;
+let fitRadius = 0;
 let framesSinceGrowth = 0;
 const FIT_STABLE_FRAMES = 90;       // ~1.5 s at 60 fps
-const FIT_GROWTH_THRESHOLD = 0.02;  // re-fit when sphere grows >2 %
+const FIT_GROWTH_THRESHOLD = 0.02;  // re-fit when the needed distance grows >2 %
+const fitBox = new THREE.Box3();
+const fitAxis = new THREE.Vector3();
+let measuredRadius = 0;
 
 // Rotation state
 let targetRotationY = 0;
@@ -187,7 +199,7 @@ export function swapPreviewCritter(config: CritterConfig): void {
 // Removed before ship.
 if (typeof window !== 'undefined') {
   (window as unknown as { __previewSnap?: () => unknown }).__previewSnap = () => ({
-    scene, holder, critter, camera, visible, scaleApplied, maxSphereRadius, framesSinceGrowth,
+    scene, holder, critter, camera, visible, scaleApplied, fitTop, fitBottom, fitRadius, framesSinceGrowth,
   });
 }
 
@@ -201,57 +213,52 @@ export function tickPreview(dt: number): void {
   // miss any growth caused by the just-played idle keyframe.
   critter.update(dt);
 
-  // Ease drag rotation toward its target. We also rotate AFTER the
-  // measurement so the bbox we sample reflects the current pose, not
-  // the post-rotation orientation. (Sphere fit is rotation-invariant
-  // anyway, but reading at rotation=0 is a touch cheaper for Box3.)
+  // Ease drag rotation toward its target. The holder only takes the new
+  // yaw AFTER the measurement below; the fit doesn't care, since both
+  // the height and the turn radius are the same at any yaw.
   const f = Math.min(dt * ROTATION_SMOOTH_SPEED, 1);
   currentRotationY += (targetRotationY - currentRotationY) * f;
 
   // Step 2: maintain the auto-fit envelope.
-  if (fitWrapper) {
+  const glb = critter.glbMesh;
+  if (fitWrapper && glb) {
     if (!scaleApplied) {
-      // First-frame scale: measure the LIVE silhouette and uniform-scale
-      // the wrapper so it's TARGET_HEIGHT tall. We can't trust
-      // `Critter.bindPoseHeight` because Tripo critters have non-
-      // skinned decoration meshes that animate with bones — the
-      // bind-pose snapshot underestimates the steady silhouette by
-      // 30–60 % on the heavier builds.
+      // First-frame scale: measure the posed silhouette and uniform-
+      // scale the wrapper so it's TARGET_HEIGHT tall. The height of the
+      // posed vertices doesn't depend on the drag yaw, so the holder
+      // keeps its rotation.
       //
       // Gate: wait for `Critter.bindPoseHeight != null`, which signals
       // that `attachGlbMesh` has completed (the GLB scene graph has
       // been parented and procedural body+head hidden). Without this
       // gate we'd scale the procedural placeholder ovoids, then never
       // re-fit when the GLB later attaches with a wildly different
-      // silhouette. (`bindPoseHeight` itself is unreliable for the
-      // ACTUAL scale value — see comment above — but as a "GLB ready"
-      // signal it is correct.)
-      if (critter.bindPoseHeight == null || !critter.glbMesh) {
-        // GLB still loading. Skip until the next tick.
-      } else {
-        const savedRotY = holder.rotation.y;
-        holder.rotation.y = 0;
+      // silhouette. (Its value is the in-game fit target, useless as
+      // this viewport's scale, but as a "GLB ready" signal it is
+      // correct.)
+      if (critter.bindPoseHeight != null) {
         fitWrapper.scale.setScalar(1);
-        const rawSize = measureVisibleSize(fitWrapper);
-        if (rawSize && rawSize.y > 0.1) {
-          const k = TARGET_HEIGHT / rawSize.y;
-          fitWrapper.scale.setScalar(k);
+        const height = measureFit(glb, FIT_SCALE_SAMPLES) ? fitBox.max.y - fitBox.min.y : 0;
+        if (height > 0.1) {
+          fitWrapper.scale.setScalar(TARGET_HEIGHT / height);
           scaleApplied = true;
-          maxSphereRadius = 0;
           framesSinceGrowth = 0;
         }
-        holder.rotation.y = savedRotY;
       }
     } else if (framesSinceGrowth < FIT_STABLE_FRAMES) {
-      // Steady-state envelope tracking: sample the bounding sphere and
-      // grow `maxSphereRadius` if the current silhouette pushed past
-      // the previous max. The camera fit is recomputed only when the
-      // envelope expands meaningfully, so we don't redo trig every
-      // frame for a critter that's already settled.
-      const sphere = measureVisibleSphere(fitWrapper);
-      if (sphere && sphere.radius > maxSphereRadius * (1 + FIT_GROWTH_THRESHOLD)) {
-        maxSphereRadius = sphere.radius;
-        lastSphereCenterY = sphere.center.y;
+      // Steady-state envelope tracking: widen the envelope when this
+      // frame's pose pushes past it meaningfully, and only then re-aim
+      // the camera — no trig every frame for a critter that has settled.
+      const slack = FIT_GROWTH_THRESHOLD * TARGET_HEIGHT;
+      const grew = measureFit(glb, FIT_TRACK_SAMPLES) && (
+        fitBox.max.y > fitTop + slack ||
+        fitBox.min.y < fitBottom - slack ||
+        measuredRadius > fitRadius * (1 + FIT_GROWTH_THRESHOLD)
+      );
+      if (grew) {
+        fitTop = Math.max(fitTop, fitBox.max.y);
+        fitBottom = Math.min(fitBottom, fitBox.min.y);
+        fitRadius = Math.max(fitRadius, measuredRadius);
         framesSinceGrowth = 0;
         applyCameraToFit();
       } else {
@@ -265,113 +272,72 @@ export function tickPreview(dt: number): void {
 }
 
 /**
- * Pull the camera back / re-aim its lookAt so the current bounding
- * sphere fits the canvas aspect with margin. Called:
- *   · whenever the live envelope (`maxSphereRadius`) grows past the
- *     previous fit (see tickPreview's growth check).
+ * Pull the camera back / re-aim its lookAt so the envelope fits the
+ * canvas aspect with margin at any drag yaw. Called:
+ *   · whenever the live envelope grows past the previous fit (see
+ *     tickPreview's growth check).
  *   · on resize (aspect → horizontal half-FOV → required distance).
  *
- * Math: required distance is `radius / tan(halfFov)`. We compute the
- * value for both vertical and horizontal axes and take the larger
- * — sphere is rotation-invariant so this is the smallest distance
- * that guarantees the silhouette never clips at any drag rotation.
- * The result is multiplied by `FIT_PADDING` for breathing room and
- * clamped to `MIN_FIT_DISTANCE` so tiny critters (Sebastian, Sihans)
- * don't get glued to the lens.
+ * The distance is the larger of what this critter's cylinder needs and
+ * what the reference one needs (FIT_REFERENCE_RADIUS at TARGET_HEIGHT),
+ * times FIT_PADDING — so the whole roster shares one camera distance.
  */
 function applyCameraToFit(): void {
-  if (!camera || maxSphereRadius <= 0) return;
-  const halfFovV = (camera.fov * Math.PI / 180) / 2;
-  const halfFovH = Math.atan(Math.tan(halfFovV) * camera.aspect);
-  const distForV = maxSphereRadius / Math.tan(halfFovV);
-  const distForH = maxSphereRadius / Math.tan(halfFovH);
-  const dist = Math.max(MIN_FIT_DISTANCE, Math.max(distForV, distForH) * FIT_PADDING);
-  // Aim the camera at the sphere's vertical centre so the framing is
-  // symmetric: ear tips and feet land equidistant from the top/bottom
-  // of the canvas regardless of how the silhouette's mass distributes.
-  camera.position.set(0, lastSphereCenterY, dist);
-  camera.lookAt(0, lastSphereCenterY, 0);
+  if (!camera || !(fitTop > fitBottom)) return;
+  const dist = Math.max(
+    cylinderDistance(camera, fitTop - fitBottom, fitRadius),
+    cylinderDistance(camera, TARGET_HEIGHT, FIT_REFERENCE_RADIUS),
+  ) * FIT_PADDING;
+  // Aim at the envelope's vertical centre so the framing is symmetric:
+  // ear tips and feet land equidistant from the top/bottom of the
+  // canvas regardless of how the silhouette's mass distributes.
+  const centerY = (fitTop + fitBottom) / 2;
+  camera.position.set(0, centerY, dist);
+  camera.lookAt(0, centerY, 0);
 }
 
 /**
- * Walk visible descendants of `obj` and union their world bboxes
- * into `out`. Returns true if at least one mesh contributed.
- *
- * Two-tier strategy because the roster mixes two GLB shapes:
- *
- * 1. Tripo critters (Trunk / Shelly / Kermit / Kowalski / Cheeto):
- *    multiple Mesh children parented to skeleton bones. Each Mesh's
- *    `geometry.boundingBox` is small (one body part) but its
- *    `matrixWorld` already captures the bone's current pose, so the
- *    union of per-mesh world bboxes gives a tight, animation-aware
- *    envelope.
- *
- * 2. Meshy critters (Kurama / Sergei / Sihans / Sebastian): one big
- *    SkinnedMesh whose `geometry.boundingBox` is the BIND POSE box.
- *    Idle animation moves bones (Kurama's 9 tails fan out, Sergei's
- *    arms extend) but the bind-pose box doesn't grow with the pose,
- *    so it underestimates the steady silhouette by 30–40 %.
- *
- *    For these we ALSO union every bone's world position in the
- *    skeleton — that gives the skeletal envelope at the current
- *    frame. The skin still extends a bit past the bone tips, so we
- *    keep the geometry box too and take the union of both.
- *
- * Three.js r172 `Box3.setFromObject` doesn't skip invisible objects
- * either, which is why we walk manually (procedural body+head
- * placeholders are visible:false and shouldn't contribute).
+ * Closest distance (camera on the level of the cylinder's centre) at
+ * which a cylinder `height` tall and `radius` wide stays in frame while
+ * it spins about its axis: its top and bottom rims can swing `radius`
+ * towards the lens, and a rim point seen edge-on needs
+ * `radius / sin(halfFovH)`.
  */
-function expandByVisibleMeshes(obj: THREE.Object3D, out: THREE.Box3): boolean {
-  obj.updateMatrixWorld(true);
-  let any = false;
-  const tmpBox = new THREE.Box3();
-  const tmpVec = new THREE.Vector3();
-  obj.traverse((node) => {
-    if (!node.visible) return;
-    const mesh = node as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.geometry) return;
-    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-    const local = mesh.geometry.boundingBox;
-    if (local) {
-      tmpBox.copy(local).applyMatrix4(mesh.matrixWorld);
-      out.union(tmpBox);
-      any = true;
-    }
-    // SkinnedMesh tier 2: union bone world positions so the envelope
-    // tracks the current pose (idle anim, drag rotation, etc.). Bind-
-    // pose `geometry.boundingBox` alone misses the animation reach.
-    const skin = mesh as THREE.SkinnedMesh;
-    if (skin.isSkinnedMesh && skin.skeleton) {
-      for (const bone of skin.skeleton.bones) {
-        bone.matrixWorld.decompose(tmpVec, new THREE.Quaternion(), new THREE.Vector3());
-        out.expandByPoint(tmpVec);
-      }
-    }
+function cylinderDistance(cam: THREE.PerspectiveCamera, height: number, radius: number): number {
+  const tanV = Math.tan((cam.fov * Math.PI) / 360);
+  const halfFovH = Math.atan(tanV * cam.aspect);
+  return Math.max(height / 2 / tanV + radius, radius / Math.sin(halfFovH));
+}
+
+/**
+ * Posed extent of the critter GLB `glb`, reading about `totalSamples`
+ * vertices split evenly across its visible meshes: the world box into
+ * `fitBox` and the turn radius (farthest sample from the holder's Y
+ * axis) into `measuredRadius`. False while nothing visible is there.
+ *
+ * The GLB and not the whole critter: the procedural head is hidden
+ * once the GLB attaches, but its eyes and pupils keep their own
+ * `visible` flag and would count. Its ancestors are refreshed first
+ * because `forEachPosedVertex` only updates the subtree, and the
+ * wrapper scale and whatever `critter.update` moved above it change
+ * during this tick.
+ */
+function measureFit(glb: THREE.Object3D, totalSamples: number): boolean {
+  let meshes = 0;
+  glb.traverse((node) => {
+    if ((node as THREE.Mesh).isMesh && node.visible) meshes++;
   });
-  return any;
-}
-
-/**
- * World-space axis-aligned size of every VISIBLE descendant.
- * Returns null when nothing visible has been added yet (e.g. the
- * GLB hasn't attached).
- */
-function measureVisibleSize(obj: THREE.Object3D): THREE.Vector3 | null {
-  const bbox = new THREE.Box3();
-  if (!expandByVisibleMeshes(obj, bbox) || bbox.isEmpty()) return null;
-  return bbox.getSize(new THREE.Vector3());
-}
-
-/**
- * World-space bounding sphere of every VISIBLE descendant. Used for
- * the camera-fit math — sphere is the natural primitive when the
- * user can rotate the model freely, since its radius doesn't depend
- * on orientation.
- */
-function measureVisibleSphere(obj: THREE.Object3D): THREE.Sphere | null {
-  const bbox = new THREE.Box3();
-  if (!expandByVisibleMeshes(obj, bbox) || bbox.isEmpty()) return null;
-  return bbox.getBoundingSphere(new THREE.Sphere());
+  if (meshes === 0 || !holder) return false;
+  glb.updateWorldMatrix(true, false);
+  holder.getWorldPosition(fitAxis);
+  fitBox.makeEmpty();
+  let radius = 0;
+  forEachPosedVertex(glb, Math.ceil(totalSamples / meshes), (p) => {
+    fitBox.expandByPoint(p);
+    radius = Math.max(radius, Math.hypot(p.x - fitAxis.x, p.z - fitAxis.z));
+  });
+  measuredRadius = radius;
+  return !fitBox.isEmpty();
 }
 
 // ---------------------------------------------------------------------------
@@ -470,8 +436,9 @@ function swapCritter(config: CritterConfig): void {
   // first frame the new critter has any visible mesh.
   fitWrapper.scale.setScalar(1);
   scaleApplied = false;
-  maxSphereRadius = 0;
-  lastSphereCenterY = 0;
+  fitTop = -Infinity;
+  fitBottom = Infinity;
+  fitRadius = 0;
   framesSinceGrowth = 0;
 }
 
@@ -502,7 +469,7 @@ function resize(): void {
   // Re-fit the camera distance for the new aspect — a narrow window
   // needs the camera further back to keep the silhouette inside the
   // horizontal frustum. No-op when no critter has loaded yet (the
-  // function early-returns when `maxSphereRadius` is still 0).
+  // function early-returns while the envelope is still empty).
   applyCameraToFit();
   // Reset the steady-state counter so we re-measure once after the
   // resize settles — handles edge cases like dock/undock or a CSS

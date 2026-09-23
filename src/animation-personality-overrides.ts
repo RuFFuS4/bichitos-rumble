@@ -24,4 +24,9 @@
 import type { AnimationPersonality } from './critter-animation';
 
 export const PERSONALITY_OVERRIDES: Record<string, Partial<AnimationPersonality>> = {
+  // 2026-09-23 — Rafa: Kowalski «derecho», a pasitos de pingüino. His Run
+  // clip is already upright (scripts/critter-recipes/kowalski.json), so the
+  // run lean drops from the formula's 12° to ~5°, and the side-to-side roll
+  // over the planted foot grows from ~3.5° to ~9°: the waddle.
+  Kowalski: { leanRadians: 0.09, runSwayRadians: 0.16 },
 };
