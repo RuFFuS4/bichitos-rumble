@@ -187,20 +187,39 @@ antes de commitear el JSON.
 
 ## Cómo retomar
 
-**2026-09-23** — en `dev`: feeling corte 1, tamaño 1,7, velocidad ×1,375
-(`docs/FEELING.md` §7.7), sin sesgos de ritmo, y la **fase 1 de la mejora
-gráfica** (§7.8): Kowalski derecho y sin patinar, y la selección con los
-nueve a la misma altura. Lo siguiente es el punto 2 de arriba (F2, la
-dieta), y después los Run más vivos, la paleta y el contorno.
+**2026-09-23 (noche)** — en `dev` (ab1d0bd) está todo lo del feeling (corte
+1, tamaño 1,7, velocidad ×1,375, sin sesgos de ritmo) y tres fases de la
+mejora gráfica:
+- **F1** (§7.8): Kowalski derecho y sin patinar; la selección con los
+  nueve a la misma altura.
+- **F2**: dieta de Kurama, Sebastian y Kermit (dist 69,7 → 27,3 MB),
+  texturas de los Tripo en WebP y la emisiva duplicada, fuera.
+- **Run más vivos** (§7.9): Cheeto y Kermit a 3,5 ciclos/s, Shelly a 2,
+  Trunk simétrico, y el bucle cerrado.
+- Una corrección: la textura de Kermit salía rota 2 de cada 3 veces
+  (ERROR_LOG).
 
-Herramientas nuevas:
-- `critter-recipe.mjs` y su receta por bicho. Toda edición de un clip va
-  ahí, nunca a mano en el binario.
+Lo siguiente, del punto 2 de arriba: la paleta (solo color), el contorno
+(primero `STYLE_LOCK.md`), el pulido de clips y el IK de Sebastian.
+
+Preguntas abiertas a Rafa:
+- la inclinación de 36° del sprint genérico de los Tripo;
+- permiso para meter los `--check` en `npm run check` (`package.json`);
+- permiso para añadir `setCritterLook` a `dev-api.ts` cuando llegue el
+  contorno.
+
+Herramientas:
+- `critter-recipe.mjs` y la receta de cada bicho (8 de 9; Sihans no
+  tiene). Toda edición de un GLB va ahí, nunca a mano en el binario ni
+  con `compress-critter-glbs`.
 - `stamp-critter-glbs.mjs`.
 - `inspect-stride --check`.
 
-Los hallazgos de la F1 (ERROR_LOG 2026-09-23) valen para cada Run que se
-rehaga: mide el pie contra el suelo del Idle, no solo el ritmo.
+Lecciones que valen para cada Run que se rehaga (ERROR_LOG 2026-09-23):
+- mide el pie contra el suelo del Idle, no solo el ritmo;
+- fija la pelvis si el clip la gira;
+- pasa el `fps` real del clip;
+- la receta ya copia a memoria propia y valida las imágenes.
 
 Herramientas del carril: `scripts/critter-motion.mjs` (mide velocidad
 real, ritmo de patas, patinaje, inclinación, balanceo, fotogramas de la
