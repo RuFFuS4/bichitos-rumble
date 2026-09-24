@@ -4,16 +4,21 @@
 //
 // THREE-only spawners: frenzy entry burst, Sebastian All-in trajectory
 // preview, Kurama decoy clone, persistent zone rings and the shockwave
-// ring. Every function here is fire-and-forget (self-animating via
-// requestAnimationFrame, self-disposing) and writes NO gameplay state.
+// ring. Every function here writes NO gameplay state, and all but one are
+// fire-and-forget (self-animating via requestAnimationFrame, self-
+// disposing). The exception is the decoy, whose life runs on the game
+// clock: its owner's Critter.update advances it (tickDecoy).
 //
 // Import rule (no cycles): may import types/palettes from ./abilities
-// (config) only. Importing from ./abilities-runtime is FORBIDDEN.
+// (config), FEEL and the critter look only. Importing from
+// ./abilities-runtime is FORBIDDEN.
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
 import type { Critter } from './critter';
 import type { ZoneVfxKind } from './abilities';
+import { FEEL } from './gamefeel';
+import { outlineEnabled } from './critter-look';
 
 // ---------------------------------------------------------------------------
 // VFX: frenzy activation burst
@@ -221,16 +226,37 @@ export interface ShockwaveRingOpts {
   holdMs?: number;
 }
 
+/** A live Kurama decoy (see spawnDecoyAt). */
+interface Decoy {
+  scene: THREE.Scene;
+  ttl: number;
+  /** Seconds of game time since the cast (advanced by tickDecoy). */
+  age: number;
+  /** The clone; null until the SkeletonUtils import resolves. */
+  root: THREE.Object3D | null;
+  /** The clone's own materials (the only GPU resources it owns). */
+  mats: THREE.MeshStandardMaterial[];
+  /** Its outline hulls, hidden once it goes translucent. */
+  hulls: THREE.Object3D[];
+  fading: boolean;
+}
+
+/** One decoy per caster: a new cast replaces the previous one. */
+const decoys = new Map<Critter, Decoy>();
+
 /**
- * v0.11 — Static decoy clone of a critter at the current position.
- * Used by Kurama Mirror Trick: the visual ghost stays where she
- * was while she's semi-invisible elsewhere. Fire-and-forget clone
- * of her GLB scene graph (skeleton-cloned so it doesn't keep
- * tracking the live skeleton), tinted to alpha 0.4 + violet
- * emissive. No physics, no collision, no AI redirect — purely
- * visual.
+ * Kurama Mirror Trick decoy: a static clone of the caster's model where it
+ * cast (skeleton-cloned so it doesn't keep tracking the live bones), drawn
+ * like the critter itself — opaque, plain materials, cartoon outline — so
+ * the decoy is the Kurama on screen while the real one ghosts away at
+ * FEEL.decoy.ghostAlpha (Critter.updateVisuals). The last
+ * (1 − FEEL.decoy.fadeFrom) of its life fades it out. No physics, no
+ * collision, no AI redirect — purely visual.
  *
- * Lifecycle: ttl seconds, then dispose. Fade-out in the last 30 %.
+ * Its life runs on the game clock: the owner's Critter.update advances it
+ * (tickDecoy), so pause, hit stop and the lab's fixed step hold it like
+ * the rest of the match. It goes with its owner (removeDecoy on a fall or
+ * a dispose).
  */
 export function spawnDecoyAt(
   scene: THREE.Scene,
@@ -241,6 +267,7 @@ export function spawnDecoyAt(
   overrideRotY?: number,
 ): void {
   if (!critter.glbMesh) return; // procedural-only critters: skip
+  removeDecoy(critter);
   // 2026-04-30 final-polish — snapshot the GLB world transform NOW,
   // before the SkeletonUtils dynamic import resolves. Fire path:
   // the K dispatcher calls spawnDecoyAt and IMMEDIATELY moves
@@ -259,17 +286,25 @@ export function spawnDecoyAt(
     ? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), overrideRotY)
     : critter.glbMesh.getWorldQuaternion(new THREE.Quaternion());
   const snapScl = critter.glbMesh.getWorldScale(new THREE.Vector3());
-  // SkeletonUtils.clone gives an independent skeleton so the clone
-  // doesn't keep retargeting Kurama's live bones. Imported lazily
-  // to avoid a top-level cycle.
+  // The life starts now; the clone joins it when the import resolves.
+  const decoy: Decoy = { scene, ttl, age: 0, root: null, mats: [], hulls: [], fading: false };
+  decoys.set(critter, decoy);
+  // SkeletonUtils imported lazily to avoid a top-level cycle.
   void (async () => {
     const SkeletonUtils = await import('three/examples/jsm/utils/SkeletonUtils.js');
-    const decoy = SkeletonUtils.clone(critter.glbMesh!);
-    decoy.position.copy(snapPos);
-    decoy.quaternion.copy(snapRot);
-    decoy.scale.copy(snapScl);
-    const decoyMats: THREE.MeshStandardMaterial[] = [];
-    decoy.traverse((node) => {
+    // Gone before the import resolved (a fall, a dispose, a newer cast).
+    if (decoys.get(critter) !== decoy || !critter.glbMesh) return;
+    const root = SkeletonUtils.clone(critter.glbMesh);
+    root.position.copy(snapPos);
+    root.quaternion.copy(snapRot);
+    root.scale.copy(snapScl);
+    root.traverse((node) => {
+      if (node.userData.critterOutline) {
+        // The live critter may be mid-blink with its hulls hidden.
+        node.visible = outlineEnabled();
+        decoy.hulls.push(node);
+        return;
+      }
       const m = node as THREE.Mesh;
       if (!m.isMesh || !m.material) return;
       const mats = Array.isArray(m.material) ? m.material : [m.material];
@@ -280,40 +315,66 @@ export function spawnDecoyAt(
           clonedList.push(raw as THREE.Material);
           continue;
         }
+        // Her plain look: the cast frame can carry the K's wind-up glow,
+        // a hit flash or a blink frame. Opaque with depth writes (the
+        // skinned sort bug, see Critter.updateVisuals).
         const cloned = std.clone();
-        cloned.transparent = true;
-        cloned.opacity = 0.4;
-        cloned.depthWrite = false;
-        cloned.emissive.setHex(0xc83cff);
-        cloned.emissiveIntensity = 0.6;
-        decoyMats.push(cloned);
+        cloned.transparent = false;
+        cloned.opacity = 1;
+        cloned.depthWrite = true;
+        cloned.emissive.setHex(0x000000);
+        cloned.emissiveIntensity = 0;
+        decoy.mats.push(cloned);
         clonedList.push(cloned);
       }
       m.material = Array.isArray(m.material) ? clonedList as THREE.Material[] : clonedList[0];
     });
-    scene.add(decoy);
-    const startTime = performance.now();
-    const total = ttl * 1000;
-    const fadeStart = total * 0.7;
-    const tick = () => {
-      const elapsed = performance.now() - startTime;
-      if (elapsed >= total) {
-        scene.remove(decoy);
-        decoy.traverse((n) => {
-          const m = n as THREE.Mesh;
-          if (m.isMesh) m.geometry?.dispose();
-        });
-        for (const mat of decoyMats) mat.dispose();
-        return;
-      }
-      if (elapsed > fadeStart) {
-        const t = (elapsed - fadeStart) / (total - fadeStart);
-        for (const mat of decoyMats) mat.opacity = 0.4 * (1 - t);
-      }
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
+    decoy.root = root;
+    scene.add(root);
+    updateDecoyLook(decoy);
   })();
+}
+
+/** Advance `critter`'s decoy by `dt` of game time (Critter.update). */
+export function tickDecoy(critter: Critter, dt: number): void {
+  const decoy = decoys.get(critter);
+  if (!decoy) return;
+  decoy.age += dt;
+  if (decoy.age >= decoy.ttl) {
+    removeDecoy(critter);
+    return;
+  }
+  updateDecoyLook(decoy);
+}
+
+/** Take `critter`'s decoy off the scene now, if it has one. */
+export function removeDecoy(critter: Critter): void {
+  const decoy = decoys.get(critter);
+  if (!decoy) return;
+  decoys.delete(critter);
+  if (decoy.root) decoy.scene.remove(decoy.root);
+  // Geometry and the outline material are shared with the live critter:
+  // only the cloned materials are the decoy's to free.
+  for (const mat of decoy.mats) mat.dispose();
+}
+
+/** Solid until FEEL.decoy.fadeFrom of its life, then a fade to nothing. */
+function updateDecoyLook(decoy: Decoy): void {
+  if (!decoy.root) return;
+  const fadeStart = decoy.ttl * FEEL.decoy.fadeFrom;
+  if (decoy.age <= fadeStart) return;
+  if (!decoy.fading) {
+    // Translucent from here on, so the outline goes: a solid contour
+    // around a see-through body reads as a hole (critter-look.ts).
+    decoy.fading = true;
+    for (const hull of decoy.hulls) hull.visible = false;
+    for (const mat of decoy.mats) {
+      mat.transparent = true;
+      mat.depthWrite = false;
+    }
+  }
+  const t = (decoy.age - fadeStart) / (decoy.ttl - fadeStart);
+  for (const mat of decoy.mats) mat.opacity = 1 - t;
 }
 
 /**
@@ -332,6 +393,11 @@ export function spawnDecoyAt(
  * used elsewhere — when t reaches 1 we remove + dispose. The mesh has
  * `depthWrite: false` so it never z-fights with the arena floor or
  * the critters standing inside it.
+ *
+ * `age`: the zone's own clock (seconds since it spawned), so the ring
+ * lives exactly as long as the zone it paints — hit stop and pause hold
+ * both, like the decoy (tickDecoy). Without it (online, where the
+ * server owns the zone) the ring runs on wall time.
  */
 export function spawnZoneRing(
   scene: THREE.Scene,
@@ -341,6 +407,7 @@ export function spawnZoneRing(
   color: number = 0x66ff44,
   secondary: number = 0xffffff,
   vfxKind?: ZoneVfxKind,
+  age?: () => number,
 ): void {
   const duration = durationSec * 1000;
   const startTime = performance.now();
@@ -462,7 +529,7 @@ export function spawnZoneRing(
   }
 
   function animate() {
-    const elapsed = performance.now() - startTime;
+    const elapsed = age ? age() * 1000 : performance.now() - startTime;
     const t = Math.min(elapsed / duration, 1);
     // Gentle pulse on the torus, slow fade on both during the last 25 %
     const pulse = 0.85 + 0.15 * Math.sin(elapsed * 0.006);

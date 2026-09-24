@@ -22,6 +22,8 @@ import { defineServer, defineRoom } from 'colyseus';
 import type { Request, Response, NextFunction } from 'express';
 import { BrawlRoom } from './BrawlRoom.js';
 import { handleApiRequest } from './api.js';
+import { NET_PROTOCOL } from './protocol.js';
+import { isGuardEnabled, rejectedJoins } from './net-protocol-guard.js';
 
 const PORT = Number(process.env.PORT) || 2567;
 
@@ -41,9 +43,18 @@ const server = defineServer({
       }
     });
 
-    // Health check endpoint for hosting platforms (Railway).
+    // Health check endpoint for hosting platforms (Railway). Also the
+    // agent/post-deploy surface of the version guard: which protocol this
+    // server speaks, whether the guard is on, and how many joins it has
+    // turned away since boot (ONLINE.md → "Versión de protocolo").
     app.get("/health", (_req: Request, res: Response) => {
-      res.json({ status: 'ok', uptime: process.uptime() });
+      res.json({
+        status: 'ok',
+        uptime: process.uptime(),
+        protocol: NET_PROTOCOL,
+        protocolGuard: isGuardEnabled() ? 'on' : 'off',
+        rejectedJoins: rejectedJoins(),
+      });
     });
 
     app.get("/", (_req: Request, res: Response) => {
@@ -56,4 +67,7 @@ server.listen(PORT).then(() => {
   console.log(`[server] listening on ws://localhost:${PORT}`);
   console.log(`[server] health:   http://localhost:${PORT}/health`);
   console.log(`[server] api:      http://localhost:${PORT}/api/leaderboard`);
+  if (!isGuardEnabled()) {
+    console.warn(`[server] NET_PROTOCOL_GUARD=off — the server accepts joins of ANY protocol (emergency only: v1.7 tabs WILL desync; v1.8+ clients still check /health and the state echo themselves)`);
+  }
 });

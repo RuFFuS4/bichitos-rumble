@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { Arena } from './arena';
+import { ARENA_LOOK } from './arena-look';
+import { BlobShadows, BLOB_SHADOW } from './blob-shadows';
 import { Critter, CRITTER_PRESETS, type CritterConfig } from './critter';
 import { updatePlayer } from './player';
 import { consumeMenuAction, clearMenuActions } from './input';
@@ -22,6 +24,7 @@ import {
   type EndResult, type WaitingScreenData,
 } from './hud';
 import { applyHitStop, FEEL } from './gamefeel';
+import { NetSmoother } from './net-smoothing';
 import { showPreview, swapPreviewCritter, hidePreview } from './preview';
 import { play as playSound, playMusic, preloadMusic } from './audio';
 import {
@@ -172,6 +175,9 @@ export class Game {
   // --- Online mode state (null when offline) ---
   private room: Room | null = null;
   private onlineCritters = new Map<string, Critter>(); // sessionId → visual
+  /** Where online critters are drawn between server patches (visual only,
+   *  src/net-smoothing.ts; `__game.netSmoother.config` / `.stats()`). */
+  readonly netSmoother = new NetSmoother(() => ({ ...FEEL.movement, fallSpeed: FEEL.lives.fallSpeed }));
   private lastServerPhase: string = '';                 // for transition detection
   /** When true, confirming the character select connects to server instead
    *  of starting a local match. Set by enterOnlineCharacterSelect(). */
@@ -199,11 +205,21 @@ export class Game {
    *  when the player enters online mode. Sent with match-result writes so
    *  the server can credit stats to the right player row. Null offline. */
   private onlineIdentity: OnlineIdentity | null = null;
+  /** Pool de sombras de contacto y el slot que ocupa cada critter vivo en
+   *  la escena. Se reconcilia cada frame en syncCritterShadows. */
+  private blobShadows: BlobShadows;
+  private critterShadowSlots = new Map<Critter, number>();
 
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.arena = new Arena(scene);
+    // Sombras de contacto de los critters (dioramas, 2026-09-07). Nada en
+    // el juego proyecta sombra real —los critters gordos tienen hasta 1,9 M
+    // de triángulos y castShadow es inviable— y por eso todo flotaba sobre
+    // el suelo. Un InstancedMesh, un draw call, se actualiza en syncCritterShadows.
+    this.blobShadows = new BlobShadows();
+    scene.add(this.blobShadows.mesh);
 
     // Initial "background" roster for the title and character select phases.
     // These critters are disposed and rebuilt at enterCountdown with the
@@ -884,6 +900,18 @@ export class Game {
         // 'room_already_started' in the race window before the lock
         // lands. Same copy for both.
         alert(t('connect-room-started'));
+      } else if (msg.includes('client_outdated')
+        || (navigator.onLine !== false && /dynamically imported module|Importing a module script failed/i.test(msg))) {
+        // Guard de versión (ONLINE.md): esta pestaña es de una versión
+        // vieja. También cuando el chunk de red ya no existe (cada
+        // despliegue lo renombra y Vercel da 404 al viejo) — salvo sin red,
+        // donde recargar tiraría la partida offline. Vercel sirve `/` sin
+        // caché → recargar trae la nueva.
+        if (confirm(t('connect-client-outdated'))) location.reload();
+      } else if (msg.includes('server_outdated')) {
+        alert(t('connect-server-outdated'));
+      } else if (msg.includes('no_state_from_server')) {
+        alert(t('connect-failed'));
       } else {
         const detail = msg ? `\n\n${tf('connect-failed-server-said', { msg })}` : '';
         alert(t('connect-failed') + detail);
@@ -1146,6 +1174,10 @@ export class Game {
         showOverlay(t('hud-disconnected'), t('hud-disconnected-sub'));
       }
     });
+    // Exact patch arrival for the online smoothing clock (src/net-smoothing.ts).
+    room.onStateChange((s: any) => {
+      if (this.room === room) this.netSmoother.notePatch(performance.now(), s?.matchTimer, s?.phase);
+    });
   }
 
   private spawnOnlineCritter(sessionId: string, playerState: any): void {
@@ -1244,6 +1276,7 @@ export class Game {
         ability2: isHeld('ability2'),
         ultimate: isHeld('ultimate'),
       });
+      this.netSmoother.noteLocalInput(move.x, move.z, performance.now());
     }
 
     // Apply server state to each critter. Every access is guarded because
@@ -1279,22 +1312,20 @@ export class Game {
       this.arena.tickVisuals(dt);
     }
 
+    const room = this.room;
+    this.netSmoother.maybePing(performance.now(), (cb) => room.ping(cb));
+    this.netSmoother.beginFrame(performance.now(), state.matchTimer, state.phase === 'playing');
     const allPlayers: Array<{ sessionId: string; alive: boolean }> = [];
     state.players.forEach((p: any, sid: string) => {
       if (!p) return; // defensive: shouldn't happen but some schema edges do this
       allPlayers.push({ sessionId: sid, alive: !!p.alive });
       const c = this.onlineCritters.get(sid);
       if (!c) return;
-      // Position — snap local, lerp remote
-      const px = p.x ?? c.x;
-      const pz = p.z ?? c.z;
-      if (sid === this.room?.sessionId) {
-        c.x = px;
-        c.z = pz;
-      } else {
-        c.x += (px - c.x) * Math.min(1, dt * 15);
-        c.z += (pz - c.z) * Math.min(1, dt * 15);
-      }
+      // Position — visual only: prediction + soft correction between server
+      // patches (src/net-smoothing.ts; ?netsmooth=legacy = the old snap/lerp)
+      const pos = this.netSmoother.place(c, p, sid === this.room?.sessionId, dt);
+      c.x = pos.x;
+      c.z = pos.z;
       if (typeof p.rotationY === 'number') c.mesh.rotation.y = p.rotationY;
       c.vx = p.vx ?? 0;
       c.vz = p.vz ?? 0;
@@ -1307,7 +1338,7 @@ export class Game {
         c.playSkeletal('defeat', { fallback: 'defeat' });
       }
       c.falling = p.falling ?? false;
-      c.mesh.position.y = p.fallY ?? 0;
+      c.mesh.position.y = pos.y;
       c.mesh.visible = c.alive;
       c.immunityTimer = p.immunityTimer ?? 0;
       // 2026-04-29 — Snowball hit-slow status. Server writes
@@ -2175,6 +2206,36 @@ export class Game {
         }
         break;
     }
+    this.syncCritterShadows();
+  }
+
+  /**
+   * Reconcilia el pool de sombras con los critters que hay en escena esta
+   * fase (menú, offline u online): cada uno tiene su slot mientras exista
+   * y lo devuelve al desaparecer. La sombra sigue la posición del critter
+   * y se desvanece al despegar del suelo (salto, caída), que es lo que
+   * hace legible la altura en un juego cenital.
+   */
+  private syncCritterShadows(): void {
+    const active = this.getActiveCritters();
+    for (const [c, slot] of this.critterShadowSlots) {
+      if (!active.includes(c)) {
+        this.blobShadows.remove(slot);
+        this.critterShadowSlots.delete(c);
+      }
+    }
+    for (const c of active) {
+      let slot = this.critterShadowSlots.get(c);
+      if (slot === undefined) {
+        slot = this.blobShadows.add();
+        if (slot < 0) continue;
+        this.critterShadowSlots.set(c, slot);
+      }
+      const height = Math.max(0, c.mesh.position.y);
+      const fade = Math.max(0, 1 - height / BLOB_SHADOW.fadeHeight);
+      const opacity = c.alive && !c.falling ? ARENA_LOOK.critterShadowOpacity * fade : 0;
+      this.blobShadows.set(slot, c.x, c.z, c.radius * ARENA_LOOK.critterShadowScale, opacity);
+    }
   }
 
   // --- Diagnostics (window.__arena.checkPlayer) -------------------------
@@ -2307,31 +2368,46 @@ export class Game {
     this.arena.buildFromSeed(seed, desiredPack);
   }
 
-  /** Lab-only: read-only snapshot of arena state for display panels. */
+  /** Lab-only: read-only snapshot of arena state for display panels.
+   *
+   *  Reads the Arena's PUBLIC API (`getLayout` + `getCollapseState`), so
+   *  the numbers are the live ones in both modes. Antes se casteaba a los
+   *  privados `syncedLevel` / `syncedWarning`, que offline se quedan en
+   *  −1 / −2: el lab mostraba "level −1/N", los contadores de fragmentos
+   *  de dev-api salían mal y el golden no registraba ningún evento
+   *  `collapse_*` (docs/ARENA_V2.md §1.3 punto 15). */
   public debugGetArenaInfo(): {
     seed: number;
     batches: Array<{ band: number; size: number; delay: number }>;
     collapseLevel: number;
     warningBatch: number;
     currentRadius: number;
+    fragmentsAlive: number;
+    fragmentsTotal: number;
     patternLabel: 'A (outer→inner sweep)' | 'B (axis-split)' | 'unknown';
   } | null {
-    const layout = (this.arena as unknown as { layout?: { seed: number; fragments: Array<{ band: number }>; batches: Array<{ indices: number[]; delay: number }> } }).layout;
+    const layout = this.arena.getLayout();
     if (!layout) return null;
+    const collapse = this.arena.getCollapseState();
     const batches = layout.batches.map(b => {
       const bands = [...new Set(b.indices.map(i => layout.fragments[i].band))];
       return { band: bands.length === 1 ? bands[0] : -1, size: b.indices.length, delay: b.delay };
     });
-    // Pattern heuristic: Pattern B always has 6 batches (3 per side).
-    // Pattern A has 3-5 batches, each one band.
+    // 2026-09-06 (fase 0.5): el patrón lo DICE el generador
+    // (`layout.pattern`). Antes se re-derivaba aquí de la secuencia de
+    // bandas, y antes de eso con una heurística por número de lotes que
+    // fallaba en el 8,5 % de las partidas. El único que lo sabe de primera
+    // mano es quien lo elige.
     const patternLabel: 'A (outer→inner sweep)' | 'B (axis-split)' | 'unknown' =
-      layout.batches.length >= 6 ? 'B (axis-split)' : 'A (outer→inner sweep)';
+      layout.pattern === 'axis-split' ? 'B (axis-split)' : 'A (outer→inner sweep)';
     return {
       seed: layout.seed,
       batches,
-      collapseLevel: (this.arena as unknown as { syncedLevel: number }).syncedLevel,
-      warningBatch: (this.arena as unknown as { syncedWarning: number }).syncedWarning,
+      collapseLevel: collapse.level,
+      warningBatch: collapse.warningBatch,
       currentRadius: this.arena.currentRadius,
+      fragmentsAlive: collapse.fragmentsAlive,
+      fragmentsTotal: collapse.fragmentsTotal,
       patternLabel,
     };
   }

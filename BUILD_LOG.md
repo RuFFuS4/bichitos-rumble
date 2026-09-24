@@ -1,5 +1,1153 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-24 — [PERSONAJES] Repaso de las 27 habilidades: bugs de producción, IA de los bots y contorno más fino
+
+- **Método**: las 27 habilidades filmadas y medidas
+  (`scripts/ability-shots.mjs`), más una tanda de bots. Repaso con un
+  revisor y un escéptico por bicho, y arreglos en ocho grupos verificados
+  antes y después, con revisión adversarial del diff. Todo en
+  `docs/REPASO_HABILIDADES.md`, con el informe completo en
+  `REPASO_HABILIDADES_INFORME.md`.
+- **Bugs de producción arreglados**:
+  - la inmunidad se ignoraba offline;
+  - al caer no se limpiaba nada;
+  - el All-in eliminaba por detrás y fallar no garantizaba la caída;
+  - el hit stop no congelaba la sierra de Shelly (600-1260 u/s);
+  - Copycat mutaba la definición compartida (en el servidor, entre
+    salas);
+  - el Sinkhole se comía la baldosa de Sihans;
+  - los aterrizajes caían al vacío;
+  - el hielo de Kowalski no frenaba la aceleración offline;
+  - Mirror Trick no se veía como se diseñó;
+  - las velocidades de clip del laboratorio no llegaban a las
+    habilidades.
+- **IA**:
+  - Trunk Grip, Sand Trap y Shadow Step se usan por fin (antes, 0 veces);
+  - el All-in de los bots ya no se suicida (13 → 0);
+  - sonda del dash, puertas de puntería y radiales con criterio.
+- **Medido**: roster más igualado (dispersión del «eliminado» 17,9 → 13,0
+  puntos) y Sebastian de eliminado en el 72 % a en el 53 %.
+- **Golden** regenerado: las K ya no empujan a inmunes, Shelly no embiste
+  anclada, los bots usan las habilidades nuevas y el laboratorio conecta
+  el arena. 3/3 detrás.
+- **Fuera de carril, dicho aquí**:
+  - `src/tools/main.ts` (+2 líneas: el laboratorio conecta el arena a
+    las habilidades, como ya hace `main.ts`);
+  - `tests/sim/server-bot.test.ts` y `feel-sim-parity.test.ts`, que
+    prueban mis módulos;
+  - un test nuevo de paridad de kits.
+- **Contorno** (Rafa vía INTERFAZ, «¿quizás es muy grueso?»):
+  `outlineMinPx` 2 → 1. En móvil queda a la mitad; en escritorio, ~1,5 px.
+- **BLOQUEO DE DESPLIEGUE**: `BrawlRoom` tiene que leer la L con
+  `getLDef(p)` en el mismo despliegue que este `server/src/sim`. Aviso y
+  lista completa en el buzón de DISTRIBUCIÓN.
+
+## 2026-09-24 — [Interfaz] El HUD en móvil, reestructurado (lo que le faltaba al jugador)
+
+La medición (`scripts/hud-shots.mjs`, que queda como herramienta) dijo que
+la arena estaba bien servida: el HUD tapa 0-1 % del disco en cualquier
+móvil. El problema no era el espacio, sino lo que le faltaba al jugador.
+Rafa eligió los cuatro arreglos:
+
+- **Enfriamiento en los botones táctiles.** En móvil la barra de
+  habilidades se oculta y los botones decían J/K/L: no había ninguna
+  indicación de enfriamiento. Ahora cada botón lleva el medallón de la
+  barra (icono del bicho, barrido cónico y destello de listo), con los
+  mismos estados.
+- **Las cuatro vidas.** Solo se veían TL y TR. Ahora las cuatro fichas
+  compactas van en la franja de arriba, en parejas alrededor del reloj.
+- **La ficha en castellano.** Rol, lema y descripciones se traducen por
+  el propio texto inglés (`CONTENT_ES`), con un test en las dos
+  direcciones. Los nombres propios, no.
+- **La selección cabe entera**, en tres columnas: parrilla | 3D | ficha.
+
+`hud-shots` destapó además que la selección **también desbordaba en
+escritorio**: a 1280×720 el título se salía por arriba y la ficha se
+cortaba, y en iPad pasaba lo mismo. Rafa eligió conservar el diseño y
+encoger el 3D con el alto. Ahora cabe en 1280×720, en un portátil de
+1366×650 y en iPad, y en 1920×1080 no cambia nada.
+
+Rafa pidió además un contorno más fino en los bichos. Es de PERSONAJES,
+que ya lo tiene: el mínimo en px era lo que pesaba en pantallas pequeñas.
+
+## 2026-09-24 — [PERSONAJES] Arrancar y frenar con el pie apoyado, y un empujón ya no gira al bicho
+
+- **Animador** (`critter-skeletal.ts`):
+  - un apaño tras `crossFadeTo` cancelaba el fundido y la pose saltaba a
+    mitad de camino (hasta 25 cm de pie); ahora el fundido es propio y
+    parte de los pesos en pantalla;
+  - Idle y Run son una sola pose, mezclada por la velocidad de avance y
+    con las patas frenando con el suelo;
+  - los saltos al entrar y salir de las habilidades bajan de 90-180 cm a
+    25-55 cm.
+- **Acentos**: al arrancar, inclinación hacia delante; al frenar, echarse
+  atrás con un aplastón. Salen de la aceleración y están en
+  `FEEL.locomotion.accent*`.
+- **Medido** en ocho bichos (FEELING §7.11): el pie resbala un 55 % menos
+  al frenar y un 25 % menos al arrancar, y el mayor salto de pose baja de
+  25,7 a 10,1 cm.
+- **Física (permiso de Rafa: «toca toda la física que necesites»)**: la
+  orientación sigue a la velocidad solo mientras va hacia donde empuja el
+  propio bicho, así que un empujón o el retroceso ya no lo giran.
+  - Cliente (`critter.ts`, `player.ts`, `bot.ts`) y servidor
+    (`BrawlRoom`).
+  - Golden regenerado (3/3 detrás).
+  - Tanda con las mismas semillas: caídas −6 %, roster algo más igualado
+    y Sebastian de eliminado en el 91 % a en el 72 %.
+- **Herramientas nuevas**:
+  - `critter-motion` mide los pies de verdad al arrancar y al frenar;
+  - `scripts/ability-shots.mjs` filma y mide cada habilidad contra tres
+    muñecos;
+  - `scripts/vite.snapshot.config.mjs` levanta un servidor «foto fija»
+    para capturas largas mientras se edita.
+
+## 2026-09-24 — [Interfaz] Los móviles grandes arrancaban sin joystick
+
+Salió al medir el HUD en móvil (primer paso de la reestructura: medir
+antes de rediseñar). `isLikelyMobile` exigía `innerWidth < 900` y solo se
+evalúa al arrancar. En apaisado, un Pixel 7 o un Galaxy (915 px), un
+iPhone Pro Max (932 px) y cualquier iPad pasan de 900: el juego abría con
+el HUD de escritorio, sin joystick ni botones. **Injugable sin teclado, y
+lleva así desde el jam.**
+
+- Ahora se decide por el puntero (`pointer: coarse`) además del ancho.
+  Los portátiles táctiles reportan `fine` y siguen como estaban.
+- En tablet caben las cuatro esquinas de vidas, así que las de abajo
+  suben por encima del joystick y de los botones.
+- Test de smoke con 915×412 táctil; comprobado que falla sin el arreglo.
+
+El resto de la medición (sin enfriamiento en los botones táctiles, dos de
+cuatro esquinas de vidas, selección bajo el pliegue, textos sin traducir)
+está en `docs/carriles/interfaz.md` §Pendiente y espera a que Rafa elija
+prioridades.
+
+## 2026-09-24 — [Interfaz] Los retratos del HUD se ponen al día con la paleta nueva
+
+PERSONAJES cambió los bichos a la paleta de los bocetos de Rafa y les puso
+contorno. Con eso, dos superficies de este carril enseñaban otro bicho.
+
+- **Sprites chibi (lo que se ve en la parrilla y en las esquinas).** Sergei
+  seguía siendo un gorila marrón y Shelly llevaba el caparazón marrón, así
+  que se elegía un bicho y se jugaba con otro. Rafa eligió un recoloreado
+  por código antes que redibujar, y lo aprobó sobre la hoja
+  antes/después/3D. `scripts/recolor-hud-tiles.mjs` mueve solo los
+  píxeles marrón oscuro de esos dos tiles, fundidos por peso. Sergei
+  conserva las muñequeras, que el 3D también lleva, y se separan del pelo
+  por saturación: 0,9 frente a 0,3-0,5. El fundido suave hacía que una
+  segunda pasada moviera 240 px más, así que la idempotencia va por
+  guarda (menos de 1.000 px marrones = hecho). `HUD_mejorado.png` sigue
+  con la paleta del jam: si se rehace la hoja, el recoloreado va después
+  de `compress-images`.
+- **Miniaturas 3D (sala de espera online).** Llevan el contorno de
+  `critter-look.ts` y se encuadran por su silueta posada
+  (`measurePosedBox`). Con la escala cruda del roster, a Kurama se le
+  cortaban orejas y cola y Sebastian ocupaba un tercio del cuadro.
+- `baseColor` (brillo de las casillas) **no se toca**: es color de
+  identidad (Kermit brilla morado siendo lima) y además es el
+  `config.color` del bicho.
+
+## 2026-09-24 — [PERSONAJES] El bicho encaja el golpe: inclinación visible, fotograma de impacto y destello en los nueve
+
+- `reactionRig` (`mesh → rig → pivot → GLB`): el empujón inclina el
+  modelo entero hacia donde lo empujan (0,38 rad, 0,5 s, contragolpe
+  −11 %). Antes el tilt escribía en las esferas procedurales, que con el
+  GLB están ocultas. Cada golpe pasa ahora su dirección a
+  `applyImpactFeedback`.
+- El hit stop se congelaba antes de la reacción. Ahora
+  `showImpactFrame()` pinta el primer fotograma en el acto, así que la
+  congelación muestra a la víctima blanca, aplastada e inclinada.
+- La víctima ya no da la espalda en pleno vuelo: el giro visual se
+  sujeta mientras dura la inclinación.
+- Los rigs de Meshy (Sergei, Sebastian, Kurama, Sihans) destellan
+  blanco: se les quita al montarlos el mapa emisivo, que era una copia
+  del albedo.
+- Capa visual pura: golden 3/3 sin regenerar, 115 tests, `check`. Queda
+  para Rafa que la orientación de juego no siga a los empujes (física).
+  Detalle en FEELING §7.10.
+
+## 2026-09-24 — [PERSONAJES] Sebastian escabulle con el pie apoyado; dos puntos del plan descartados con medida
+
+- `FEEL.locomotion.runCadenceMaxHz` 6 → 8. Solo lo tocaban Sebastian
+  (pedía 8 ciclos/s, pie 1,33 → 1,00, escabullirse de cangrejo) y Kurama
+  (6,24, pie 1,04 → 1,00); el resto va por debajo de 4. Con esto sobra
+  el IK de su Run, que habría exigido generalizar el script de Blender a
+  un rig humanoide doblado en cangrejo.
+- Pulido de clips, descartado: Victory, Defeat y Fall se reproducen una
+  vez y se quedan en la última pose, así que sus saltos de bucle no se
+  ven. Además, todas las victorias se mueven desde el primer segundo
+  (FEELING §7.9).
+
+## 2026-09-24 — [PERSONAJES] Mejora gráfica: contorno de dibujo animado en los bichos
+
+Decisión 5 de Rafa: contorno sobre el sombreado actual, sin toon. Hecho
+con permiso para `dev-api.ts`.
+
+- **`src/critter-look.ts`**: casco invertido. Cada malla del bicho tiene
+  una gemela con su geometría y su esqueleto; las caras traseras se
+  empujan en pantalla a lo largo de la normal con skinning, así que siguen
+  cualquier animación sin coste de CPU.
+  - Ancho en u de mundo (~4,5 % del alto), recortado a 2-5 px CSS: en la
+    arena se lee como el trazo de los iconos del HUD y en los primeros
+    planos no engorda.
+  - Apartado 0,12 u en profundidad, para no manchar los huecos del propio
+    bicho.
+- **Estados**: se oculta cuando el bicho es translúcido (parpadeo de
+  inmunidad, invisibilidad, niebla de Kermit). El señuelo de Kurama sale
+  sin contorno. `posed-bounds` y la selección ignoran los cascos: las
+  medidas no cambian.
+- **Doble superficie**: `FEEL.look` (deslizadores del tuner y
+  `feel-patch`), `DevApi.setCritterLook` y `?look=plain`. Regla en
+  `STYLE_LOCK.md` («art direction changes require updating this document
+  first»).
+- **Coste** con 4 bichos: +15 draw calls y +65 k triángulos (+6 %), sin
+  cambio medible en el fotograma.
+
+**Revisión adversarial** con dos lentes (estados visuales, shader y
+rendimiento), con máscaras de píxeles:
+- El único fallo real: el empuje en profundidad movía el casco en
+  pantalla hacia el punto de fuga. En la pantalla de victoria se perdía
+  entre la mitad y dos tercios del anillo, y fuera del centro salía
+  descentrado. Ahora el empuje solo cambia la profundidad: con y sin él,
+  la máscara del casco es idéntica píxel a píxel.
+- Los cascos comparten la esfera envolvente de su malla, en vez de
+  recalcularla en CPU en el primer fotograma.
+- Sin fugas de GPU en 20 cambios de selección y 6 partidas.
+- El parpadeo va sincronizado en 120 fotogramas y el primer fotograma
+  sale sin contorno gigante.
+
+Golden 3/3 sin regenerar, 115 tests y `npm run check`. Aviso a INTERFAZ:
+sus miniaturas de la sala de espera no pasan por `Critter`.
+
+## 2026-09-24 — [PERSONAJES] Mejora gráfica: la paleta de los bocetos
+
+Decisión 3 de Rafa: acercar los colores a sus bocetos sin tocar las
+formas.
+
+Las texturas de Tripo son cientos de islas UV, así que no se puede pintar
+por zonas. `scripts/critter-grade.mjs` selecciona familias de color (por
+tono, saturación y luz, con bordes suaves) y desplaza su media al color
+objetivo en CIELAB. El detalle se conserva, incluidas las verrugas de
+Kermit.
+
+Destinos: las muestras de paleta de la hoja de bocetos, ahora en
+`STYLE_LOCK.md`, afinadas renderizando cada bicho junto a su boceto.
+
+- **Sergei**: negro → carbón, y piel melocotón → beige grisáceo.
+- **Kowalski**: negro → marino, gris → crema, cresta caqui → amarilla, y
+  pico y pies → naranja.
+- **Kermit**: oliva → lima, y barriga → amarillo pálido.
+- **Shelly**: caparazón marrón → verde, con piel y placas del boceto.
+- **Cheeto**: naranja apagado → vivo.
+- **Sihans**: rojizo → marrón topo, con receta nueva.
+
+Kurama y Sebastian ya estaban en su paleta, y Trunk no tiene boceto. Todo
+va por receta (`textures.grade`), así que es reproducible. La parrilla de
+selección usa renders en vivo y coge los colores sola.
+
+## 2026-09-23 — [PERSONAJES] Mejora gráfica: Run más vivos para Cheeto, Kermit, Shelly y Trunk
+
+Decisión 7 de Rafa (pasitos más rápidos). Los cuatro Tripo compartían
+el mismo sprint genérico: zancada larga, tronco a 36° y un bucle que
+saltaba 19,5° en el brazo derecho y 7-12° en las piernas.
+
+Cada uno tiene ahora receta (`scripts/critter-recipes/`) con:
+- pelvis del Idle;
+- IK con la zancada calculada desde la cadencia buscada;
+- suelo y pie del Idle;
+- bucle cerrado (sección `loop`, nueva en el script de Blender);
+- `fps` por clip (el Run de Kermit va a 24).
+
+En partida:
+- Cheeto: 1,85 → 3,49 ciclos/s;
+- Kermit: 1,35 → 3,51;
+- Shelly: 1,01 → 2,00;
+- Trunk: 2,12 → 2,36, simétrico y con apoyo corto.
+
+Los cuatro con el pie apoyado y sin hundirse. Golden 3/3 sin regenerar,
+115 tests, `npm run check`. Pendiente de gusto: la inclinación de 36°.
+
+## 2026-09-23 — [PERSONAJES] Mejora gráfica, fase 2: el juego pasa de 69,7 a 27,3 MB sin que se note
+
+La dieta del estudio gráfico, hecha por receta (`scripts/critter-recipes/`,
+secciones `diet` y `textures`), reproducible desde el GLB fijado:
+
+| Bicho | Triángulos | GLB |
+|---|---|---|
+| Kurama | 945 k → 20 k | 13,8 → 0,36 MB |
+| Sebastian | 1,09 M → 15 k | 15,2 → 0,28 MB |
+| Kermit | 1,94 M → 30 k, con sus verrugas (Rafa: «granulada») | 14,2 → 0,58 MB |
+
+Además, la emisiva duplicada de los Meshy (misma imagen que el color) se
+comparte, y las texturas JPEG de los Tripo pasan a WebP.
+
+- **Dist**: 69,7 → 27,3 MB. Los nueve bichos, ~3,9 MB.
+- **Tirón al cambiar de bicho en la selección**: de 250-520 ms a un
+  fotograma. Era `SkinnedMesh.computeBoundingSphere` recorriendo 1-2 M de
+  vértices en el primer render.
+- **Kermit** deja de ser `heavyAsset` y se precarga como los demás.
+- **Sin cambios visibles**: selección de frente y a 90° antes/después, y
+  de cerca. Clips con la misma duración y ≤0,003° (Kermit con `-af 0`).
+- **Partida**: los nueve a 1,65-1,71 de alto y pie apoyado como antes.
+  `RUN_GAIT` solo mueve a Kermit (1,471 → 1,472).
+- `compress-critter-glbs.mjs` se salta los bichos con receta.
+
+Golden 3/3 sin regenerar, 115 tests y `npm run check`. El ratchet del
+payload (75 MB) es de DISTRIBUCIÓN: aviso en su buzón.
+
+## 2026-09-23 — [PERSONAJES] Mejora gráfica, fase 1: Kowalski derecho y la selección a la misma altura
+
+Rafa preguntó si se podían mejorar gráficamente los personajes. Hubo un
+estudio con seis agentes y dos refutadores (en `.tmp/graficos/_informe/`
+del worktree), y Rafa decidió:
+- empezar por Kowalski y la selección;
+- Kowalski «derecho»;
+- solo colores, sin tocar las formas;
+- Kermit granulado;
+- contorno sin toon;
+- Tripo aparcado;
+- Run más vivos.
+
+Fase 1, en `claude/feature/personajes-kowalski-seleccion`:
+- **Recetas post-import** (`scripts/critter-recipe.mjs` + Blender
+  headless). Las ediciones de clips se rehacen desde un GLB fijado por
+  commit: idempotente, byte a byte. Se niega a pisar un GLB cambiado por
+  fuera, y `--set` solo va con `--out`.
+- **`?v=<hash>` en las URL de los GLB** (`stamp-critter-glbs.mjs`), para
+  que la caché de `/models/` no empareje JS nuevo con GLB viejo. La
+  primera visita tras desplegar vuelve a bajarlos una vez (buzón de
+  DISTRIBUCIÓN).
+- **Kowalski**:
+  - pelvis como en el Idle, tronco de 17° a 0°, IK de pies sobre el suelo
+    del Idle;
+  - bamboleo en la capa visual;
+  - en partida: 6 → 4,05 pasos/s, pie 2,17 → 1,00, inclinación 12 → 5°,
+    balanceo 3 → 7°.
+- **El balanceo rueda sobre el pie apoyado** en los nueve. Antes rodaba
+  sobre el centro y metía ese pie en el suelo. `RUN_GAIT` gana
+  `halfWidth`.
+- **Selección**:
+  - antes 98-288 px de alto, ahora 263-286 px;
+  - medida con vértices posados (`src/posed-bounds.ts`);
+  - encuadre de cilindro, con una cámara común para los nueve;
+  - nada se corta en ningún giro ni tamaño de lienzo.
+
+**Verificación**: golden 3/3 sin regenerar (todo es presentación), 115
+tests y `npm run check`. Hubo revisión adversarial con tres lentes:
+- **pipeline y runtime**: sin defectos de fondo;
+- **animación**: cazó el pie de Kowalski enterrado 20-27 cm en la primera
+  versión, el latigazo de la pantorrilla y la punta atravesando el suelo.
+  Los tres están arreglados y medidos (ERROR_LOG).
+
+Siguiente: F2 (dieta de Kurama, Sebastian y Kermit, ~70 → ~27 MB), los
+Run más vivos, la paleta y el contorno (`docs/carriles/personajes.md`).
+
+## 2026-09-22 — [Arena] Jungle con pozo claro, y el rebote de luz aprobado
+
+Rafa decide sobre las hojas de la F0 del fondo v2:
+
+- **Jungle pasa a pozo claro**, una bruma verde (luma ~146, suelo 115).
+  Los otros cuatro siguen con pozo oscuro.
+  - Por qué: con pozo oscuro, jungle se leía como un agujero negro. Su
+    hierba es la arena más oscura del juego y el techo del pozo oscuro
+    era luma 25.
+  - Con el claro, la arena se recorta a contraluz. El ΔL mediano del
+    canto sube de 49,5 a 73,9 (p10 de 35 a 58) y hay 0 violaciones del
+    contrato del pozo.
+- **El rebote del hemisferio se queda**: la parte de abajo de los bichos
+  sale un poco más clara y fría. PERSONAJES tiene la nota en su buzón.
+## 2026-09-22 — [PERSONAJES] Más rápidos, sin bichos que no arrancan, y verificado a 96 partidas
+
+Rafa aprobó el plan del estudio de velocidad (*"1 sí, 2 sí, 3 sí, 4
+identidad"*). Cinco commits en `claude/feature/personajes-velocidad`,
+cada uno con su golden, integrados con merge commit para que cada cambio
+de balance tenga su motivo en el historial:
+
+- **Zona muerta** (bug de producción, ERROR_LOG): solo actúa al soltar y
+  cuando el empuje no podría superarla ni a velocidad terminal. Ya no hay
+  bichos que no arrancan a 120-240 Hz, y un stick con deriva no resbala.
+- **Velocidad**: `accelerationScale` 1,6 → 2,2 (mediana 2,5 alturas/s
+  reales, la franja de los brawlers cenitales). Fricción y `maxSpeed`
+  intactos: los golpes llegan igual de lejos.
+- **Bots** a 0,7 de la aceleración del jugador **offline y online**
+  (antes 0,55 offline y 1,0 online). Todo en `server/src/sim/*`: para la
+  velocidad no hace falta tocar `BrawlRoom.ts`.
+- **Retoques acoplados**: Sinkhole ×1,375, rebote del caparazón ×1,375,
+  embestida del cabezazo ×√1,375.
+- **Paridad**: `tests/sim/feel-sim-parity.test.ts` compara 50 pares
+  `FEEL`↔`SIM`; las constantes del bot y del caparazón que el servidor
+  llevaba a mano pasan a `SIM`.
+- **Visual**: giro de ~150 ms en un pivote hijo (la orientación de juego
+  sigue instantánea), patas a la velocidad de suelo real (+15,5 %), y los
+  bots se inclinan como corredores.
+
+**Verificación**: 48+48 partidas solo-bots con las mismas semillas y
+bootstrap por partidas, más una revisión adversarial del diff con dos
+escépticos por hallazgo. Enganche 25 % → 31 %; más caídas en el borde
+(sobre todo empujados); partidas solo-bots −13 % (57 s). Ampliar la
+detección del borde de los bots no cambió nada medible.
+
+**Dos fallos de herramienta cazados por el camino** (ERROR_LOG): `--feel`
+escribía en una copia de `FEEL` tras una recarga en caliente, y el batch
+runner se colgaba si la página dejaba de responder.
+
+**No sale a producción** hasta que DISTRIBUCIÓN suavice el bicho local en
+online (tirones de ~9-12 px a la velocidad nueva). Nota en su buzón.
+
+## 2026-09-21 — [Arena] Fondo v2, F0: la isla ya flota en el cielo
+
+El slice F0 del plan aprobado hoy (`docs/DIORAMAS.md` §«Fondo v2»):
+
+- **Sin foto:** fuera la foto también en la pantalla final, y sin raya de
+  horizonte. Lo sustituye una cúpula generada con color por latitud que
+  sigue a la cámara.
+- **Nubes:** un mar de cúmulos abierto en cráter alrededor de la isla, un
+  cuello de nubes en sombra bajo la punta del cono y nubes lejanas que se
+  funden con el horizonte.
+- **Islotes hermanos** flotando más abajo.
+- **Luz:** rebote del hemisferio por bioma, que es lo que por fin ilumina
+  la panza del cono.
+- **Coste:** 0 bytes, 4 draw calls, 26-29k triángulos, sin GLSL.
+- **Gameplay intacto:** golden 3/3 sin regenerar.
+- **A/B:** el mar y la foto siguen vivos detrás de
+  `BACKDROP_LOOK.mode = 'sea'` hasta la F4.
+
+**Lo que decide si el canto se ve: el pasillo.** La cámara de juego no
+rota nunca, así que se sabe qué parte del cuadro tapa el disco. Todo lo
+claro que se acerque a menos de 2,5° del labio se descarta al colocarlo,
+y detrás del canto solo queda pozo. Se mide EN ÁNGULO contra 256 rayos
+del labio.
+
+**Cifras de aceptación.** Con `arena-shots --metrics`, 35 mediciones:
+5 biomas × (semillas 1/7/42, 1080p, 390×844, t=29, t=50). Son el
+contrato del FONDO, así que la captura va sin scatter ni props.
+- **ΔL mediano del canto: 47,8-76,4** (umbral 45). **p10: 31,1-68,1**
+  (umbral 15). Mínimo local ≥15 en 29 de 35. Los 6 que no llegan (t=50
+  en los cinco, kitsune a 1080p) caen en los escalones del labio donde
+  falta un sector, donde la muestra de 6 px roza la pared del vecino.
+- **El fondo siempre ≥20 por debajo de la arena**, y **≤7,6 % del fondo
+  más claro que su p75** (decisión 1: ≤8 %).
+- **`corridorViolations` 0**, `maxExtent` 384 (límite 403,5) y
+  construcción en 4-7,5 ms. El objetivo era 5 ms y dos biomas se pasan en
+  la primera construcción en frío; la colocación sola son 0,8 ms en node.
+
+**Lo que cazó la revisión adversarial**: 4 lentes, un verificador por
+hallazgo, 18 confirmados y todos arreglados antes de enseñarlo.
+- La pose de juego congelada seguía **temblando** (shake con dt = 0) y
+  falseaba capturas y métricas. `setCameraPose('game')` fija ahora la
+  pose exacta.
+- `setBackdropLook`/`setPackSky` rehacían la arena entera: **resucitaban
+  los sectores caídos** a mitad de partida. Ahora rehacen solo el fondo
+  (`Arena.rebuildBackdrop`), comprobado en headless.
+- `corridorViolations` daba 0 por construcción. El contrato del pozo
+  (`pit`, `abyssCeiling`, `abyssFloor`) pasa a ser datos.
+- El pasillo, medido en el plano de imagen, era más estrecho que δ fuera
+  del eje. Las nubes lejanas entraban en el cuadro en 53 de 400 semillas.
+  Y `coverage` no era la fracción que decía el comentario.
+- Una pose mal formada en `setCameraPose` paraba el bucle del lab.
+
+**Trampas de medida resueltas por el camino**:
+- A t=29 el sector que se desploma está pegado por fuera del labio: es
+  arena, no fondo, y hundía la mediana a 4-18. La métrica excluye esos
+  azimuts.
+- Las palmeras del borde contaban como «fondo claro»: jungle daba 8,2 %
+  solo por ellas.
+
+**Hojas para Rafa** en `.tmp/shots-cielo/`: `_hoja`, `_hoja_colapso`,
+`_hoja_ab_mar`, `_pozo_ab` (decisión 2, pendiente) y `_roster_ab` (rebote
+de luz en los 9 bichos; nota en el buzón de PERSONAJES). Lo que la F0 no
+resuelve y le toca a la F1 está en `docs/carriles/arena.md`.
+
+## 2026-09-21 — [Arena] Las tres decisiones: techos del código, isla en cono y el fondo se rehace en el cielo
+
+Las tres decisiones que bloqueaban el carril se cerraron mirando capturas.
+
+**Techos del scatter: manda el código** (`SCATTER_LIMITS`). La tabla que
+proponía `docs/DIORAMAS.md §3` queda retirada, y el doc cuenta ahora lo
+que el código hace cumplir. El motivo: el fleco que asoma por fuera del
+labio es justo lo que enseñan las referencias, y la tabla lo prohibía.
+
+**La isla es un cono en punta.** Antes de decidir se hizo un A/B sin tocar
+código, con `setArenaLook` en vivo: `.tmp/shots-cono/`. Resultado: **en la
+cámara de juego las tres variantes salen idénticas**; el cono solo se lee
+con cámara baja (pantalla final, capturas de tienda) y en los sectores que
+vuelcan al caer.
+- Los valores: `cliffTaper` 0,08, 9 u de alto y 10 estratos con más
+  rizado. Coste: +10,5k tris y 0 draws. Golden 3/3 sin regenerar.
+- La panza sale algo oscura porque mira hacia abajo y solo le llega el
+  hemisferio. El rebote desde las nubes se probó en vivo y la arregla,
+  pero va con la luz del fondo v2.
+
+**El fondo del mar no vale.** Rafa marcó las cuatro quejas: «no se lee qué
+hay abajo», «está vacío», **«quiero cielo, no suelo»** y «fuera la foto
+del final». Es un cambio de concepto: la isla ya no flota sobre un mar a
+y=−32, cuelga sobre un pozo de cielo.
+- **Cómo se diseñó el sustituto.** Cuatro propuestas en paralelo:
+  geometría, la textura `clouds.png` de Rafa, shader y escenografía
+  primero. Dos jueces eligieron la misma, geometría. Después, síntesis y
+  un verificador adversarial que revisó 62 afirmaciones contra el código.
+- **Lo que cazó el verificador**, y hubiera costado caro:
+  - `bandTint` multiplica en lineal, no en sRGB. La decisión «abismo
+    casi negro en jungle» era un error de cuenta.
+  - Los hooks `onBeforeRender` sin `updateMatrixWorld` no se aplican en
+    ese frame.
+  - `getPerf()` no mide GPU (`frameMs` es el intervalo de rAF).
+  - La métrica del canto con el labio fijo en r=12 no mide nada a t=29.
+- **Rafa lo aprobó** y va por delante de los dioramas.
+  - Decisiones: nubes más claras que la arena sí, con condiciones;
+    `clouds.png` solo si hace falta, en F2 y nunca en juego.
+  - Queda abierta la decisión 2 (pozo oscuro o claro), que se decide
+    sobre el A/B del slice.
+  - Plan: `docs/DIORAMAS.md` §«Fondo v2».
+  - Por qué falló el intento de abril: `9047031`, revertido a los 22 min.
+    Un plano con `clouds.png` 18 u por debajo tapaba todo el cuadro en
+    blanco.
+
+**Trampa de herramientas arreglada.** `scripts/arena-shots.mjs` con
+varios packs y `--at-seconds` sacaba del segundo pack en adelante la
+**cuenta atrás**, con el reloj marcando el t pedido. El HUD no reinicia
+el reloj hasta `playing` y seguía enseñando el de la partida anterior.
+Ahora se espera por `__game.phase`. Es la misma familia de fallo que el
+del 2026-09-07: capturas que mienten sobre el instante.
+## 2026-09-21 (tarde) — [PERSONAJES] Los nueve miden 1,7 y un estudio de velocidad destapa un bug de producción
+
+**Tamaño — decisión de Rafa: «1», el 1,7 para todos.** La capa procedural
+pisaba cada frame el ajuste de altura con la escala del roster; ahora lo
+multiplica (`Critter.glbFitFactor`). Y el ajuste medía mal: la caja de
+una malla *skinned* que da `Box3.setFromObject` es la del *bind pose*
+(three.js la cachea), así que Kurama «ajustado» medía 2,08. Ahora se
+mide la pose real vértice a vértice. En partida: **1,66-1,71 los nueve**
+(antes 1,45-2,69), sin salto en el «¡YA!». Golden 3/3. En `/calibrate`
+el deslizador de escala queda de solo lectura (el ajuste anula el
+`scale` del roster) y «Re-fit» solo previsualiza otra altura.
+
+**Velocidad de suelo — estudio para la pregunta de Rafa** (*"¿qué
+velocidad me recomiendas para un resultado más profesional?"*). Workflow
+de 9 agentes con refutación (detalle en `docs/FEELING.md §7`):
+- Referencias en alturas del personaje por segundo: brawlers cenitales
+  2,0-3,2 (Brawl Stars ≈2,1, Bomberman 2,8, plantillas UE5/Unity
+  2,8-3,0). Aquí la mediana real es 1,8.
+- 144 partidas solo-bots de ×1 a ×2,5: de ×1 a ×2 no se rompe nada; a
+  ×2,5 los bots se tiran solos por el borde. La simulación no elige la
+  cifra: la eligen las referencias, la animación y el mando de Rafa.
+- **Recomendación: `accelerationScale` 1,6 → 2,2 (×1,375), alternativa
+  2,4**, sin tocar fricción ni `maxSpeed` (distancia de los golpes), con
+  los bots en un factor configurable igual offline y online, y los
+  retoques acoplados que lista §7.5. Pendiente de aprobación: es física.
+- **Bug de producción encontrado**: la zona muerta de velocidad
+  (`src/critter.ts:593`) actúa aunque haya input, y con monitores de
+  120-240 Hz hay bichos que **no pueden arrancar** (Shelly desde 120 Hz,
+  Sergei desde 144). El bot Shelly ya no arranca a 60 Hz. Arreglo de una
+  línea, pendiente de aprobación porque cambia el golden.
+- Correcciones de medida: la velocidad real es ×1,155 la que leíamos
+  (la posición avanza antes de la fricción).
+
+Herramientas nuevas (doble superficie): `run-match-batch --feel=S.K=N`
+y `--gpu` (una partida ~14 s de reloj en vez de minutos), y `--feel` en
+`critter-motion`. Notas en los buzones de ARENA (bots que caen por los
+agujeros del colapso) y DISTRIBUCIÓN (tirones del bicho local en online,
+espejo de la zona muerta y factor de los bots online).
+
+## 2026-09-21 — [PERSONAJES] El feeling, medido: las patas siguen al suelo y el cuerpo por fin se inclina
+
+Petición de Rafa del 2026-09-07: *"se sienten pesados en vez de
+animalillos graciosos"*. El diagnóstico de aquel día murió con su sesión;
+este se ha hecho **midiendo**, no mirando: una ruta de teclas fija a paso
+de 1/60 s en el lab (`scripts/critter-motion.mjs`) y la zancada de cada
+clip Run leída del GLB en node (`scripts/inspect-stride.mjs`). Informe
+completo, con cifras por bicho: [`docs/FEELING.md`](docs/FEELING.md).
+
+Lo que apareció, en orden de peso:
+- **Los tamaños en partida están rotos.** El ajuste a 1,7 se aplica al
+  cargar el GLB y la capa procedural lo pisa cada frame con la escala del
+  roster: en el «¡YA!» cada bicho cambia de tamaño (Trunk +64 %, Sebastian
+  −21 %) y en partida miden de 1,45 a 2,69. Grandes y lentos (casi todos
+  avanzan menos de su altura por segundo) se leen pesados. **Decisión de
+  Rafa**, no lo toco sin él.
+- **La capa cartoon estaba apagada**: la intensidad de carrera se
+  normalizaba por 15 u/s y la velocidad real es 1,4-3,1 u/s. Inclinación
+  de 1,8-2,5° donde el diseño decía 12°.
+- **Patas a ritmo fijo**: unos planeaban (Sebastian ×4,7, Kowalski ×4,3)
+  y otros iban en cinta.
+- **En los 5 rigs de Tripo el balanceo era un cabeceo**, por el orden de
+  Euler XYZ con el modelo girado −90°.
+- Pendiente para el corte 2: la media vuelta ocurre en **un fotograma**,
+  arrancar y frenar no tienen acento, y el tilt del golpe y la
+  recuperación del cabezazo se pintan en las esferas procedurales, que
+  están ocultas.
+
+**Corte 1 (rama `claude/feature/personajes-feeling`)** — todo en la capa
+visual, golden **3/3 sin regenerar**:
+- El Run se reproduce a la velocidad real ÷ zancada medida × escala del
+  GLB × `FEEL.runCadence[id]` (gusto por bicho), con suelo y techo en
+  `FEEL.locomotion`. Tabla medida en `src/critter-locomotion.ts`,
+  regenerable con `inspect-stride.mjs --write`.
+- Inclinación y balanceo sobre la velocidad terminal real de cada bicho:
+  12° a tope (Shelly 6,9°), balanceo 3-5° y **al compás de las patas**
+  (se engancha a la fase del clip y se inclina sobre el pie que apoya).
+- `glbMesh.rotation.order = 'XZY'`: el balanceo es de lado en los 9.
+- Los mandos nuevos son secciones planas de `FEEL`: salen solos en el
+  sintonizador del match lab y se escriben con `feel-patch` (probado en
+  seco). Sin tocar `tool-patch-core.mjs` (tierra de nadie).
+- Vídeo antes/después, mismo suelo, seis bichos:
+  `.tmp/feeling/v2/feeling-corte1-antes-despues.mp4`.
+
+**Cómo se trabajó, y por qué importa**: al abrir, las **cuatro sesiones de
+carril estaban vivas a la vez en la carpeta compartida** — justo lo que
+`docs/SESIONES.md` prohíbe. Mientras este carril creaba su worktree, la
+carpeta principal ya había saltado a la rama de Interfaz. Este carril
+trabajó entero en `.claude/worktrees/personajes` (el `npm install` tarda
+5 s desde caché) con su dev server en el 5181 y el golden con
+`--url=http://localhost:5181`. Si las cuatro van a convivir, lo sano es
+un worktree por carril, no turnos de palabra.
+
+## 2026-09-21 — [Interfaz] El portal del Vibe Jam se apaga en itch y Steam
+
+Rafa decide el alcance que faltaba: **fuera de la web propia, en itch y
+en Steam**. En la web se queda como está.
+
+El plan heredado pedía que Rafa volviera a subir el zip de itch con
+`?portal=0` en la URL. Antes de pedírselo se leyó en vivo el wrapper
+publicado (`html-classic.itch.zone/html/18849633/index.html`): es un
+iframe a `https://www.bichitosrumble.com/?ref=itch`. Nadie en el código
+lee ese `ref=itch` salvo `portal.ts`, que lo ignoraba (el protocolo del
+jam solo mira `ref` con `?portal=true`). Así que **ese `ref=itch` ya es
+el interruptor de itch** y el re-upload sobra — que no es poco: la vez
+anterior el upload falló en silencio y el flag `embed` hubo que marcarlo
+a mano.
+
+- `src/portal.ts`: el portal se apaga con `?ref=itch`, `?portal=0` o
+  `VITE_PORTAL=off` al compilar (Steam). Apagado = sin portales en la
+  escena, sin leyenda, sin botón 🌀 táctil, y un `?portal=true` entrante
+  se ignora. Pone `body.portal-off` y `hud.partial.html` oculta sus
+  piezas con eso. **`game.ts` no se toca**: sin mallas, `updatePortals`
+  no puede disparar, ni offline ni online.
+- `tests/smoke.spec.ts`: el test base ahora exige **un** portal en la web
+  propia (si no, los de apagado pasarían en falso) y dos tests nuevos
+  exigen cero con `?portal=0` y con `?ref=itch`. El aro se cuenta por su
+  geometría exacta porque los VFX de habilidades también usan toros.
+- Trampa encontrada al verificar: `debugStartOfflineMatch` (el camino del
+  lab y del batch runner) **no crea portales**, así que una comprobación
+  por ahí da "0 portales" siempre. Hay que ir por el flujo real
+  (`enterCountdown`).
+- **Llega a itch cuando `dev` salga a `main`**: itch embebe producción.
+  Viaja con el despliegue de H4.5 (carril DISTRIBUCIÓN, nota en su
+  buzón junto con el flag de Steam).
+
+## 2026-09-16 — El proyecto se parte en cuatro sesiones, una por carril
+
+Rafa: *"vamos a usar la estrategia de separar en diferentes sesiones dentro
+del proyecto los diferentes aspectos que estemos trabajando, lo único que
+hay que tener cuidado es en no pisarnos"*. El motivo es el coste: una
+sesión que lo toca todo arrastra un contexto enorme y se paga entero en
+cada turno.
+
+**El riesgo real no era de git.** Todas las sesiones abiertas en esta
+carpeta comparten **el mismo checkout y los mismos ficheros en disco**: dos
+trabajando a la vez no dan un conflicto de merge que se resuelve, dan una
+sesión cambiando de rama mientras la otra edita. Ninguna convención de
+nombres arregla eso, así que la regla es **una sesión activa a la vez** —
+tener las cuatro abiertas y dormidas es justo lo que se busca.
+
+Medido antes de recomendar, porque de ahí salía la decisión: el repo
+versiona **375 ficheros, 170 MB**, así que un worktree es barato en disco;
+lo caro es su propio `npm install` (304 MB) y que **no vería `resources/`**
+(5,4 GB de arte local, en .gitignore) ni `.tmp/`. Por turnos no hay
+fricción ninguna, así que el worktree queda para si algún día hace falta
+paralelismo de verdad.
+
+- **`docs/SESIONES.md`**: el reparto fichero a fichero de los cuatro
+  carriles (arena · personajes · interfaz · distribución), la **tierra de
+  nadie** que los cuatro quieren tocar (`game.ts` con sus 2.410 líneas,
+  `dev-api.ts` con 1.290 —la doble superficie hace que todos quieran
+  añadirle métodos— y los docs troncales), el **testigo del golden** para
+  que dos carriles no se borren la prueba del balance, el protocolo de
+  apertura y cierre, y el encargo listo para pegar en cada sesión nueva.
+- **`docs/carriles/*.md`**: checklist corto por carril, con lo pendiente
+  ordenado, lo que no puede romper y un **buzón** — el patrón que ya
+  funciona en el nexo: si necesitas algo de un fichero ajeno, dejas la nota
+  en vez de editarlo.
+- La regla va también en `CLAUDE.md` y su espejo `AGENTS.md`, que se cargan
+  solos: así la lee cualquier sesión aunque nadie se acuerde de contarlo.
+
+**Una decisión de reparto que conviene recordar**: Rafa dijo "dioramas y
+las físicas de las cosas". La física del **decorado** (qué le pasa a un prop
+cuando su sector cae) es del carril ARENA; `physics.ts` —la física del
+bicho— se queda en PERSONAJES, porque es donde vive el *feeling* que hay
+que arreglar.
+
+**Queda pendiente lo único que no puedo hacer yo: abrir las cuatro
+sesiones.** No tengo forma de crear una; Rafa abre sesión nueva en esta
+carpeta y pega el encargo del carril (cada uno se pone su propio título).
+Y la sesión larga que lo tocaba todo se cierra en cuanto existan las otras:
+es la que está costando cara.
+
+## 2026-09-07 (cierre) — Las instancias de prueba nacen mudas + foto del estado
+
+Petición de Rafa a media tarde: *"por favor cuando lances instancias para
+las pruebas silencia la musica y sonidos"*. Una tanda de agentes abre diez
+o quince navegadores a la vez y **cada uno arrancaba su propia música y
+sus efectos** en la máquina de Rafa mientras él trabaja.
+
+- **`scripts/lib/headless-browser.mjs`** — `launchMutedBrowser()`,
+  `muteGameAudio()`, `newMutedPage()`. Silencia por **dos vías a
+  propósito**, porque cada una tapa el agujero de la otra:
+  1. `--mute-audio` en el proceso de Chromium: corta el sonido aunque la
+     instancia se abra en modo visible, aunque el juego cambie o aunque
+     alguien añada un `<audio>` nuevo.
+  2. Las banderas `bichitos.sfxMuted` / `bichitos.musicMuted` de
+     `src/audio.ts`, escritas en `localStorage` con `addInitScript`
+     **antes del primer script** de la página: así el juego no llega ni a
+     crear los nodos de audio, y de paso los botones del HUD salen ya
+     apagados en las capturas.
+- Aplicado en los **tres** sitios que abren navegador: `arena-shots.mjs`,
+  `run-match-batch.mjs` y `playwright.config.ts` (`launchOptions.args`).
+- Verificado con una captura real, no de palabra: `jungle.png` con los
+  dos iconos de audio tachados.
+- Escrito como **regla permanente** en `CLAUDE.md` §"Test instances must
+  be SILENT" y en `DEV_TOOLS.md`, para que no dependa de que yo me acuerde
+  en la próxima sesión. Los scripts ad-hoc de `.tmp/` también deben usar
+  el helper.
+
+Commit `0bb2044`.
+
+### Lo que queda abierto al cerrar el día
+
+Ordenado, con el "cómo retomar" completo en `NEXT_STEPS.md` §Cómo retomar.
+
+- **Hoja de contactos honesta del estado final**: `.tmp/shots-cierre/`
+  (los 5 biomas a t=0 sobre el `dev` de hoy), tomada ya con el navegador
+  mudo — y de paso vale como prueba del helper en los cinco packs, sin
+  un solo error de consola. Es la **única** que enseña el estado de hoy:
+  todos los demás sets del `.tmp/` son anteriores a algún cambio, o son
+  directamente los rotos del segundo ~52.
+- **El diagnóstico del *feeling* se cortó sin entregar.** Se lanzó una
+  tanda de 9 agentes (física del movimiento, clips vs velocidad, lectura
+  artística en tiras de capturas) y murió con la sesión anterior sin
+  dejar informe. Su caché (`resumeFromRunId`) **solo sirve dentro de la
+  misma sesión**, así que mañana se relanza de cero. No se perdió código
+  —era medición pura—, pero sí las horas de agente: la lección es no
+  dejar una tanda larga viva al final de una sesión.
+- **Nada de esto está en producción**: en `main` sigue
+  `v1.7-h4-social`, y el terreno v2, el fondo y los dioramas viven solo
+  en `dev`, esperando a que Rafa mire las capturas y dé el visto bueno.
+- **Una pregunta menos**: la duda de cómo está publicado el juego en
+  itch.io ya estaba contestada en este mismo documento (2026-08-19): es
+  un **embed fullscreen de producción**, o sea nuestro propio build en un
+  iframe, no un zip. Cambia el plan del portal del Vibe Jam —un flag de
+  build lo apagaría también en la web propia— y deja una decisión mucho
+  más pequeña para Rafa. *(Lo encontró la auditoría del cierre; la
+  lección es mirar el BUILD_LOG antes de declarar algo "sin responder".)*
+- **Higiene de la máquina**: quedaron ~70 procesos de Chrome huérfanos de
+  las tandas de hoy. Rafa pidió expresamente **no cerrarlos**. Los
+  lanzaron agentes anteriores al helper, así que ésos no están mudos; los
+  de mañana sí.
+
+## 2026-09-07 — La escala del suelo es cosa de cada bioma (idea de Rafa)
+
+Rafa, sobre las capturas del slice 1: *"se sigue viendo raro… quizás de
+alguna forma se podría superponer la imagen como textura del terreno y
+que se destruya también"*. Al ir a probarlo apareció el dato que lo
+explica todo: **las texturas de suelo del proyecto no son patrones
+abstractos, traen el detalle PINTADO** — conchas, estrellas de mar y
+piedras en `coral_beach`; pétalos de sakura y musgo entre losas en
+`kitsune_shrine`. Y son de 1254², el mismo tamaño que las referencias de
+`resources/Terrenos`.
+
+Con `tileSize` global de 4 u, esos detalles se repetían **seis veces por
+diámetro**: el ojo leía la rejilla, y eso era buena parte del "raro".
+
+- **Probado el mapa único** (la idea literal: una imagen sobre todo el
+  disco, UV normalizadas): el santuario clava las losas grandes de su
+  referencia, pero la playa pierde las conchas, que quedan de 2 px. O
+  sea: la escala buena **no es global, es de cada textura**.
+- **Solución: `PackDef.groundTile`** (u de mundo por repetición, por
+  bioma), medido sobre capturas: kitsune 26 (una vez, losas a tamaño de
+  referencia), tundra 18 (placas grandes), desert 16 (los rizos de arena
+  a menos escala parecen tela), jungle 14, coral 9 (por encima de 10 las
+  conchas desaparecen). El `repeat` se fija en `applyGroundTexture`, no
+  en el cargador, porque la textura se cachea por ruta y la comparten los
+  cinco packs.
+- **Y lo de "que se destruya también" ya sale gratis**: las UV son
+  coordenadas de MUNDO, así que dos sectores vecinos continúan el dibujo
+  y el fragmento que cae se lleva su trozo de imagen.
+- Sobre la otra idea (pasar la referencia por una IA para modelarla):
+  descartada para el diorama entero — saldría un único objeto de varios
+  MB, imposible de partir en los 29 sectores que exige el colapso, con
+  escala ajena al gameplay y sin determinismo. Para props sueltos sí
+  valdría, pero el cuello de botella no son los props sino el payload.
+
+Golden 3/3 sin regenerar, 57 tests y `npm run check` en verde: sigue
+siendo capa visual pura y cero bytes nuevos.
+
+## 2026-09-07 — Dioramas slice 1: la isla tiene masa y el suelo es un sitio
+
+Primer slice visible del diorama denso, guiado por las cinco referencias
+de Rafa en `resources/Terrenos/*/<NOMBRE>.png` (un canto grueso con
+material de bioma, un anillo perimetral cargado en capas, centro limpio y
+detalle rasante por todas partes). Todo en `claude/feature/dioramas-1`.
+Cero bytes de payload nuevo; `npm run golden` 3/3 sin regenerar: es capa
+visual pura.
+
+- **Contrato primero** (`src/arena-scatter-types.ts`): capas con
+  primitiva, anclaje (disco o fleco del borde), banda radial, racimos,
+  escala, inclinación, paleta, viento y sombra; techos de gameplay
+  (`SCATTER_LIMITS`: ≤0,4 u en el interior, ≤1,2 u en el arco que da a la
+  cámara) y una sola válvula de densidad (`SCATTER_DENSITY`). Se escribió
+  ANTES de repartir el trabajo para que cuatro agentes en paralelo
+  hablaran el mismo idioma.
+- **Motor instanciado** (`src/arena-scatter.ts`, primer `InstancedMesh`
+  del repo): un draw call por capa, stream `mulberry32(seed ^ SALT_SCATTER
+  ^ hash(layer.id))` por capa, instancias ORDENADAS por fragmento
+  anfitrión de modo que cada sector posee un rango contiguo y, al
+  temblar o caer, se recompone solo ese rango (`applyFragmentTransform`,
+  `addUpdateRange`). La hierba cae con su losa. Siete primitivas de 2 a
+  36 triángulos generadas por código (`src/arena-scatter-geometry.ts`),
+  cacheadas y compartidas.
+- **Recetas de los cinco biomas** (`src/arena-scatter-recipes.ts`, 8
+  capas cada uno) traducidas de las referencias: hojarasca, hierba y
+  helechos bajo las palmeras; pétalos a sotavento de la sakura; cristales
+  de hielo al pie de los témpanos; huesos y piedrecitas rojas; conchas,
+  estrellas y corales de la marea. 400-475 instancias por bioma a densidad
+  0,5 y 3.400-7.250 triángulos — el 1 % de los 900.815 que la jungla ya
+  gasta en 16 objetos.
+- **La isla tiene masa** (`createFragmentMesh` en `src/arena.ts`): la
+  tapa es el contorno jugable exacto (ShapeGeometry, misma rotación que
+  exige `pointInFragment`) y debajo cuelga un acantilado propio de 2,6 u
+  con base estrechada hacia el eje (`cliffTaper` 0,82: la cuña de un
+  tronco de cono, que deja preparada la idea de Rafa de que la isla sea
+  un cono sin comprometerla), estratos por bioma en color de vértice
+  (`PackDef.cliff`) y rizado radial hasheado por ÁNGULO cuantizado, para
+  que dos sectores vecinos generen exactamente los mismos vértices en su
+  arista. La pared ya no lleva la textura de suelo estirada.
+- **Sombras de contacto** (`src/blob-shadows.ts`): un InstancedMesh con el
+  degradado horneado en alpha de vértice; los critters dejan de flotar y
+  la sombra se desvanece al saltar o caer (`syncCritterShadows` en
+  `game.ts`). Consumen por fin `critterShadowScale/Opacity`, que llevaban
+  desde la fase 1a sin usuario.
+- **Red de seguridad** (`tests/sim/arena-scatter.test.ts`, 6 tests):
+  misma semilla ⇒ `instanceMatrix` idéntico byte a byte en los cinco
+  biomas (lo que garantiza que una sala online ve el mismo diorama con
+  solo seed + packId), ninguna instancia por encima de su techo de altura
+  en 15 combinaciones, centro libre, y coste acotado (≤16 draws, ≤25k
+  tris por bioma). 57 tests del sim en total.
+- **Doble superficie**: `__devApi.getScatterStats()` /
+  `setScatterDensity(d)` (reconstruye en vivo con la misma semilla) y
+  `scripts/arena-shots.mjs` para mirar el resultado.
+- **Método y coste**: cuatro agentes sobre ficheros disjuntos (masa,
+  motor, recetas, sombras) + integración a mano. Dos cortes de créditos
+  a mitad: el motor quedó escrito pero sin acta, y la masa dejó la
+  configuración hecha y la geometría sin tocar — la rematé yo en vez de
+  relanzar una tercera tanda. Lección: en tareas largas, que cada agente
+  escriba su fichero ENTERO antes de verificar nada, para que un corte
+  deje código y no solo intención.
+- **Revisión adversarial** (1 agente, 32 comprobaciones, incluido un test
+  propio de 2.890 vértices de la tapa nueva contra `pointInFragment`: 0
+  fuera). Dos altas arregladas en el commit siguiente: el Sinkhole de
+  Sihans resucitaba el scatter de un sector ya hundido cuando su lote
+  llegaba al colapso (ahora el motor recuerda los fragmentos ocultados),
+  y `setArenaLook` no reconstruía con las claves nuevas del canto. Una
+  media aplicada: los acentos altos van solo a la mitad trasera
+  (`arc: 'back'`, campo aditivo) en vez de recortarse a arbustos enanos.
+  Quedan anotadas para Rafa: los techos de altura del contrato frente a
+  las reglas del doc (M2) y, como flecos, `FRAG.arenaHeight` muerto en
+  cliente (vive en el espejo del servidor), `rebuildArenaVisuals` no es
+  "visual puro" (resetea `alive[]`) y un sector hundido durante su propio
+  aviso se renderiza clavado en y=0 (pre-existente).
+- **Sobre capturas, ajustado a ojo**: arbustos y azaleas bajaron de 2,4 u
+  y verde casi negro a ≤1,3 u con luz (eran pedruscos); los decals de
+  arena pasaron del naranja saturado al tono de la arena (eran losetas).
+  Y una lección medida: los "papeles blancos" de la tundra no eran las
+  grietas del scatter (apagándolo, los mismos 277 píxeles blancos): son
+  las placas claras de la TEXTURA de suelo, que a 4 u de losa se ven
+  enormes. Es arte de la textura (o tileSize por pack), no del diorama.
+
+## 2026-09-07 — Dioramas fase 0: mirar bien antes de tocar
+
+La tanda de dioramas (10 agentes) devolvió el plan —en
+[`docs/DIORAMAS.md`](docs/DIORAMAS.md), parte 2— y de paso destapó dos
+fallos que hacían que estuviéramos juzgando el diorama sobre imágenes
+falsas. Los dos son míos.
+
+- **El script de capturas esperaba a un método que no existe.**
+  `scripts/arena-shots.mjs` hacía `window.__devApi.snapshot()?.matchTime`
+  y `DevApi` no tiene ningún `snapshot()` público. El `?? 0` hacía que la
+  condición no se cumpliera nunca, así que el `waitForFunction` agotaba
+  sus **60 s con el juego a 20×** y el `.catch(() => {})` se lo tragaba
+  en silencio. Resultado: TODAS las capturas de `.tmp/shots-despues/`
+  están tomadas a **~52 s de partida**, con un jugador ya eliminado y el
+  95 % del decor caído (el 93-100 % vive en la banda exterior, que cae la
+  primera, a los 28 s). Sobre esas imágenes se dijo "un círculo con 4
+  cosas sueltas". Ahora la espera lee el reloj del HUD —`#hud-timer`, lo
+  que ve el jugador— y avisa por consola si no llega.
+- **Y la espera de carga se conformaba con dos lecturas iguales**, así
+  que disparaba la foto en cuanto el recuento de mallas del suelo se
+  repetía, antes de que llegaran los props. Por eso jungle salía con
+  CERO árboles. Ahora exige tres lecturas seguidas.
+- **Los props se cargaban de uno en uno.** `loadInArenaDecorations` hacía
+  `await loadModel(...)` DENTRO del bucle de placements: 16 esperas en
+  fila para 4 GLB distintos en jungle, más de 20 s hasta poblarse. Eso no
+  era solo un problema de capturas: **el jugador entraba a una arena
+  pelada y veía aparecer los árboles a mitad de cuenta atrás.** Ahora se
+  precargan en paralelo los tipos ÚNICOS y el bucle resuelve al instante
+  desde la caché.
+- Línea base honesta guardada en `.tmp/base-t0/` (t=0, los cuatro vivos).
+  Con ella el diagnóstico se sostiene igual, pero por su motivo real:
+  jungle tiene sus 16 props **en una corona pegada al canto** y el 25 %
+  central del disco está vacío en los cinco biomas.
+
+## 2026-09-07 — El fondo deja de ser una foto: la isla flota sobre un sitio
+
+Petición de Rafa: *"unificar el fondo de alguna forma para que no parezca
+una foto mal puesta"*. Tanda de 7 agentes (dos medidores, tres enfoques,
+juez y síntesis) → plan en [`docs/DIORAMAS.md`](docs/DIORAMAS.md).
+Implementado el primer slice.
+
+- **Por qué fallaba, y no era la resolución.** La cámara mira 46° hacia
+  abajo y NO rota nunca, así que **el horizonte queda 22° por encima del
+  borde superior del cuadro** en el 100 % de los frames. Todo lo que
+  llamábamos cielo era, por geometría, terreno lejano visto en picado — y
+  eso una panorámica no lo puede dar. Encima solo se veía el **7,7 %** de
+  cada imagen (ventana fija de 555×218 px de 1774×887) ampliada ×3,5 en
+  720p y **×8,2 en móvil**, con 1,44× de anamorfosis. Y las cinco no son
+  equirects: son mattes planas con el horizonte pintado fuera de sitio.
+- **Tres cosas más que lo delataban**: la niebla no podía unir nada
+  (three crea el material del fondo con `fog:false`, así que `FogExp2`
+  jamás tocaba el cielo); el fondo era **más claro que la arena en los
+  cinco packs** (+38 a +70 de luminancia: jerarquía invertida); y en
+  jungle y kitsune había tramos del borde del disco con ΔL de **0,4 y
+  1,1** — el borde del vacío, que es la información crítica del juego,
+  literalmente no se veía.
+- **La solución es geometría, no una foto mejor**: `src/arena-backdrop.ts`
+  pone un plano enorme (r=300) 32 u por debajo del disco, con la rampa de
+  color de su bioma horneada en los vértices, la perspectiva aérea y la
+  sombra de la isla incluidas. Cada bioma tiene su mar: laguna, mar de
+  nubes, dosel, banquisa, cañón de dunas. **0 bytes de payload, 1 draw
+  call.** `far` de cámara 200→500 (el plano se recortaba) y `near`
+  0,1→0,5 para recuperar precisión de profundidad.
+- **Medido antes/después** (luminancia del fondo, columna x=170): de un
+  color casi plano (185/164/146 de arriba abajo) a un degradado real
+  (coral 178/129/**94**, jungle 148/101/**71**, kitsune 162/113/**79**).
+  Pegado al canto, el fondo ya es más oscuro que la arena en los cinco.
+- **Tres errores propios que costaron tres iteraciones**, por si vuelven:
+  (1) delegué la niebla en `scene.fog` y a esa distancia lo aplana todo a
+  un color liso — hay que hornearla en el vértice; (2) el anillo tenía el
+  agujero interior a r=11 y la cámara veía por él bajo la isla; (3) el
+  remapeo radial daba NaN por una base negativa elevada a 2,2 (falta de
+  clamp), y el NaN se propaga al boundingSphere. Y una lección de método:
+  **el dev server se cayó a mitad y mis capturas medían la imagen vieja
+  del disco** porque el `| tail -2` se tragaba el error del script; hay
+  que mirar el exit code, no la última línea.
+- Verificado: `npm run check` verde, 51 tests del sim, y **golden 3/3
+  exactas sin regenerar** — todo es capa visual.
+- **Pendiente de decisión de Rafa**: el vacío deja de estar vacío (ahora
+  se cae *al agua* / *a las nubes*). Se decide sobre la captura, y se
+  revierte borrando una línea.
+
+## 2026-09-06 — Terreno v2 fase 1a: el disco se convierte en un lugar
+
+El primer slice VISIBLE, y el que responde a la queja original. Cero
+gameplay: `npm run golden` da 3/3 exactas SIN regenerar, que es la prueba
+de que todo lo de abajo es capa visual.
+
+- **El tile de suelo, a escala.** `tex.repeat 4×4` sobre UV de mundo
+  significaba 4 repeticiones POR UNIDAD: un tile de 25 cm, ~96 en el
+  diámetro, que el mipmap promediaba a color plano. Ahora el tile mide
+  `ARENA_LOOK.tileSize` = 4 u (≈2,5 critters) y se reescriben a
+  coordenadas de mundo las UV del centro inmune, que iban por libre
+  (tres superficies con densidades de 0,25 / 1,25 / 2,08 u).
+- **Los colores de banda existen otra vez.** `applyGroundTexture` teñía
+  0xdadada todo mesh con `receiveShadow` —incluido el centro inmune, pese
+  a que su comentario juraba lo contrario—, así que en partida, donde
+  siempre hay pack, `BAND_COLORS` no se veía JAMÁS. Ahora cada malla
+  nace con su tinte (banda × pack × jitter por semilla, stream visual
+  propio para no tocar el gameplay) y la textura solo multiplica. La zona
+  segura vuelve a distinguirse de un vistazo.
+- **El canto se ve.** Los sectores llevan `[tapa, acantilado]` sobre los
+  dos grupos que `ExtrudeGeometry` ya emitía; el acantilado va al 62 % de
+  brillo. Requisito previo: `forEachMaterial` en shake/restore/texturas —
+  con un array de materiales, el cast a material único reventaba en el
+  primer aviso de colapso (lo avisó el crítico del diagnóstico).
+- **Fuera el void** (decisión de Rafa): eran DOS mallas, un cilindro
+  negro al 90 % y un disco opaco, y tapaban el skybox justo en el cono
+  que ve la cámara. El "borrón oscuro" nunca fue el cielo. Ahora cada
+  bioma asoma su horizonte bajo el borde de la isla.
+- **Fuera la falda exterior.** Con el void quitado dejó de tener función
+  (era su anti-gap) y pasó a leerse como una plataforma flotante — y
+  encima SOBREVIVÍA a la banda que la sostenía, porque solo caía con el
+  último lote. Fuera ella y su código de caída.
+- **Anillo de sombra: probado y descartado.** Lo construí, lo miré y
+  sobre los horizontes claros de los cinco biomas (agua turquesa, nieve,
+  dunas) se leía como un halo sucio alrededor de la isla. El canto del
+  acantilado ya da el peso. Queda anotado como opción por bioma.
+- **Aviso de colapso a 0.34 de emisivo**: el 0.65 de siempre, sobre el
+  suelo claro de ahora, tapaba la textura con un naranja plano.
+- **Luz** más lateral (elevación 60° → ~45°) y `shadow.radius` en lugar
+  de `PCFSoftShadowMap`, que three r185 deprecó (el renderer lo avisaba
+  por consola y caía a PCF). **Tone mapping NO**: afecta a los 9 critters
+  y el skybox no se tone-mapea, así que vive tras flag hasta poder
+  compararlo con el roster delante.
+- **Doble superficie**: `__devApi.getArenaLook()` / `setArenaLook(patch)`
+  (reconstruye solo si el cambio es estructural, conservando semilla y
+  pack) y `node scripts/arena-shots.mjs`, que captura los 5 biomas con la
+  cámara de juego, espera a que los GLB de decor terminen de poblar la
+  escena y salta la cuenta atrás. Es lo que me ha permitido iterar
+  mirando en vez de adivinar.
+- **Pendiente para 1b**: los critters siguen sin sombra de contacto (y se
+  nota), bisel de junta entre sectores, applier ToolPatch `look-patch` +
+  panel del studio, y la dieta de props antes de encender `castShadow`.
+
+## 2026-09-06 — Terreno v2 fase 0.5: el colapso por fin se lee
+
+Primer cambio de gameplay de H4.5 (zona hard-stop, aprobado por Rafa).
+Toca el generador, así que va con despliegue cliente+servidor a la vez.
+
+- **Los lotes parciales caen como un ARCO CONTIGUO.** El patrón A cortaba
+  el array ya barajado, así que el anillo exterior perdía dientes sueltos
+  repartidos por todo el disco: solo el 2,8 % de las partidas de ese
+  patrón tenían un frente legible. Ahora se ordena por ángulo y se rota
+  el arranque con el primer elemento del shuffle que ya existía —sin
+  consumir `rand()` extra, que desplazaría toda la salida—, así que las
+  dos mitades son arcos continuos y el arco no empieza siempre en el
+  mismo sitio. Medido con `npm run arena -- --sweep 5000`: **48,3 % →
+  100 %** de partidas con frente legible (contando los dos patrones).
+  La rotación no es un adorno: sin ella caería siempre la mitad más
+  cercana a la cámara y el tempo pasaría de ilegible a aprendible, que
+  para el jugador es peor (lo avisó el crítico del diagnóstico).
+- **`layout.pattern` explícito** (`'sweep' | 'axis-split'`): lo dice el
+  generador, que es el único que lo sabe. Mueren las dos re-derivaciones
+  (la heurística por número de lotes fallaba en el 8,5 % de las
+  partidas); el CLI conserva la derivación por bandas como comprobación
+  cruzada y para leer JSON antiguos.
+- **`radiusAt(angle)`** en `Arena` y `ArenaSim`: radio vivo en UNA
+  dirección. `currentRadius` es el máximo global, así que en un colapso
+  por eje se quedaba en 12 mientras sobreviviera un solo sector exterior
+  en la otra punta: un bot al borde del vacío no sentía peligro alguno.
+  Lo usan los bots (banda de peligro y presión de borde, ambos lados) y
+  la expiración de proyectiles del servidor. El **respawn NO**: su bucle
+  ya prueba 12 posiciones con `isOnArena` y converge al islote inmune;
+  cambiarlo movería el reparto sin arreglar nada. Desviación consciente
+  del plan, anotada en `docs/ARENA_V2.md`.
+- **Verificación**: 51 tests del sim (3 nuevos: arco contiguo en 200
+  semillas, arranque variable, `pattern` coherente con la secuencia de
+  bandas), paridad de espejos byte a byte, `npm run check` verde, golden
+  de layout y de partidas regenerados, y **captura en el lab** con el
+  mordisco contiguo del anillo exterior
+  (`.tmp/checklist/fase05_frente_contiguo.png`).
+- **Fleco descubierto del batch runner**: el primer `golden:write` tras
+  un cambio grande escribió una partida con un evento de menos (el
+  `match_ended` final llegaba después del corte de la grabación), y la
+  verificación siguiente cantaba un falso "CAMBIO DE BALANCE". Un
+  segundo write lo dejó estable y `npm run golden` da 3/3 exactas dos
+  veces seguidas. Regla mientras no se arregle: **después de
+  `golden:write`, correr siempre `npm run golden`**; si sale DIF sin
+  haber tocado nada, reescribir.
+
+## 2026-09-06 — Terreno v2 fase 0: la red de seguridad del generador
+
+Rafa aprobó los 4 puntos abiertos del plan (`docs/ARENA_V2.md §6`):
+micro-slice de gameplay AHORA, fuera el void, dieta de props, y perfil
+8P provisional (r 16, islote 3,5 u, 4 bandas, 150 s). Registrados en
+NEXT_STEPS y ROADMAP. Arranca H4.5 con la fase 0, que es todo red de
+seguridad: cero cambios de juego, todo lo que viene después se apoya
+aquí.
+
+- **Scraper de paridad de espejos** (`scripts/check-sim-parity.mjs`, en
+  `npm run check`): compara BYTE A BYTE las copias cliente/servidor del
+  sim (hoy `arena-fragments.ts`, 9.627 bytes idénticos) ignorando solo
+  el bloque de cabecera. Hallazgo del propio trabajo: la normalización
+  no podía ser "la línea 2" como decía el plan — al arreglar la cabecera
+  autorreferente del espejo (se citaba a sí misma), cada fichero nombra
+  al OTRO y ya nunca pueden coincidir; de ahí el bloque entero con
+  presupuesto de líneas para que la tolerancia no se trague lógica.
+  Probado en rojo: `maxRadius 12→13` en una copia → exit 1 con
+  `client:58 / server:59`.
+- **16 invariantes Vitest del generador** (`tests/sim/arena-layout.test.ts`,
+  48 tests del sim en total) + **golden de layout por hash**
+  (`tests/sim/arena-layout-golden.json`, 67 semillas, FNV-1a de
+  fragments/batches con floats cuantizados, milisegundos y sin
+  navegador): separa "cambió el terreno" de "cambió el balance". El
+  testeo de mutación del revisor dejó dicho el alcance real: los
+  invariantes protegen la ESTRUCTURA, el tempo lo protege el golden
+  (subir `delayJitter` 0,2→0,6 pasa todos los invariantes y rompe los 67
+  hashes). Anotado en la cabecera del test.
+- **CLI `npm run arena`** (`scripts/arena-layout.mjs`): dibuja el disco
+  en ASCII rasterizado con la MISMA `pointInFragment` de la física,
+  `--timeline`, `--curve`, `--json`, `--svg` y `--sweep K`. Sin modo o
+  con argumento inválido sale con exit 1 (una herramienta para agentes
+  no puede devolver 0 ante una invocación mal escrita). Reproduce las
+  cifras del diagnóstico bit a bit sobre 5.000 semillas.
+- **Observabilidad del colapso**: `Arena.getCollapseState()` como API
+  pública (offline lee el estado real, online los campos `synced*`);
+  `debugGetArenaInfo` deja de castear a privados y los eventos
+  `collapse_warn`/`collapse_batch` —que ya existían— por fin se emiten
+  offline. Consecuencia esperada y verificada: `npm run golden:write`
+  añade **22 eventos de colapso** a las 3 partidas doradas y **ni un
+  solo evento de gameplay cambia de posición** (288/311/243, `npm run
+  golden` 3/3 exactas). El diff del JSON es puramente instrumentación.
+- **Patrón de colapso, una sola regla**: la heurística
+  `batches.length >= 6 → B` clasificaba mal el 8,5 % de las partidas.
+  Ahora cliente y CLI usan la misma regla exacta (hay corte por eje si y
+  solo si la secuencia de bandas SUBE en algún punto), que además
+  sobrevive al descarte de grupos vacíos. En la fase 0.5 pasa a ser un
+  campo explícito del layout.
+- **Docs veraces**: GAME_DESIGN, RULES y README decían 29 fragmentos,
+  lotes de 4-8, primer colapso a ~20 s y colapso total a ~53 s. Lo real
+  (medido sobre 5.000 semillas): 26-32 fragmentos, 4-6 lotes de 3-11,
+  primer colapso a 28,0 s en el 100 % de las semillas, total 85-107 s.
+  Corrección del revisor incorporada: 8,5-23,6 s es el retardo hasta el
+  AVISO; entre caídas pasan 11,5-26,6 s. También cayó el comentario de
+  `camera.ts` que decía que el cielo era un backdrop de cámara (es
+  `scene.background`), dato que importa para quitar el void en la fase 1.
+- **CI**: `npm run test:sim` entra en el job client (antes ni vitest ni
+  golden corrían en CI). Los dos scripts que importan `.ts` directamente
+  necesitan Node ≥ 22.18; documentado en DEV_TOOLS junto al resto de la
+  superficie programática nueva.
+- Método: 5 agentes en paralelo sobre ficheros disjuntos + 2 revisores
+  adversariales que ejecutaron todo (incluido testeo de mutación con 7
+  mutantes y una reimplementación independiente del generador para
+  validar la regla del patrón sobre 20.000 semillas). De sus 22
+  hallazgos, los 2 bloqueantes (cableado y golden sin regenerar) y 6
+  correcciones se aplicaron antes del commit.
+
+## 2026-09-05 (tarde) — v1.7 en producción y el terreno bajo la lupa
+
+- **Merge dev→main `--no-ff` (f41fb7e) + tag `v1.7-h4-social`.** Vercel
+  READY en 18 s; Railway sirvió la imagen nueva a los ~30 s (autodeploy
+  Docker desde `main`, confirmado: cliente y servidor salen del mismo
+  push). Smoke de prod: título en ES, botón de amigos, manifest
+  standalone, GLB de arena a 200 KB, belts webp, 0 errores; endpoint de
+  retención 200; **sala privada real con 2 clientes Playwright** (misma
+  sala, enlace `?room=`, 2 jugadores vistos; salieron antes del arranque,
+  `matches` sigue a 0). Quedan 2 nicks `SMOKE*` en la DB de prod.
+- **Nueva dirección de Rafa**: juego más grande y monetizable
+  (referencias smashkarts.io y krunker.io), hasta 8 por partida, Steam.
+  Acordado el orden modo-por-tiempo → progresión → cosméticos → Steam,
+  interpolado en la ruta como **H6** tras H5; y antes, **H4.5 "Arreglar
+  antes de crecer"**, empezando por la generación de terrenos ("muy muy
+  pobre").
+- **Diagnóstico del terreno con un workflow de 15 agentes** (6 lectores
+  por capa, 4 propuestas art/procedural/gameplay/pipeline-first, 3
+  jueces, síntesis, crítico): **art-first unánime** (50/49/49) con
+  injertos de las otras tres. Causas contrastadas a mano contra el
+  código: `applyGroundTexture` tiñe 0xdadada todo mesh con
+  `receiveShadow` (mata `BAND_COLORS` y el centro inmune), textura
+  repetida 4×4 sobre UV de mundo (tile de 0,25 u, se colapsa a color
+  plano), void de dos mallas que tapa el skybox, cero `castShadow` en
+  partida (se paga el shadow pass sin resultado), un solo rig de luz sin
+  tone mapping para 5 biomas, y un GLB crudo de **54 MB versionado en
+  git** (`public/models/arenas/jungle/_raw/`, fuera del patrón del
+  `.gitignore`). El generador (`arena-fragments.ts`) solo varía ±1
+  sector por banda y ±14 % de jitter: radios, bandas, tempo (primer
+  colapso a 28,0 s en el 100 % de semillas) y forma son constantes.
+  Plan de 7 fases (≈13 días, una regeneración de golden) en
+  **[`docs/ARENA_V2.md`](docs/ARENA_V2.md)**; ROADMAP con H4 cerrado,
+  H4.5 y H6; NEXT_STEPS con las 4 decisiones para Rafa.
+- Lección de créditos: el workflow cayó en el crítico por límite de
+  sesión; `resumeFromRunId` recuperó los 14 agentes de caché y solo
+  re-ejecutó el crítico. Lección de herramienta: el Bash tool trunca
+  comandos largos (~10 KB) dejando comillas sin cerrar — los scripts
+  largos van con Write y se ejecutan aparte.
+
 ## 2026-09-05 — La checklist, simulada: campaña Playwright + review de networking
 
 - **12 de 14 items verificados por Claude** con una campaña Playwright

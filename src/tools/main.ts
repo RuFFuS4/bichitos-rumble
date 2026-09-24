@@ -20,8 +20,9 @@ import * as THREE from 'three';
 import { createCamera, handleResize, syncSize } from '../camera';
 import { initSceneAtmosphere } from '../scene-atmosphere';
 import { tickSharedGameplay } from '../frame-ticks';
+import { setArenaForAbilities } from '../abilities-runtime';
 import { Game } from '../game';
-import { updateCameraShake } from '../gamefeel';
+import { updateCameraShake, FEEL } from '../gamefeel';
 import { initPreview, tickPreview } from '../preview';
 import { isLikelyMobile } from '../input';
 import { initTouchInput } from '../input-touch';
@@ -76,6 +77,7 @@ loadMutedState();
 
 // --- Game instance ---------------------------------------------------------
 const game = new Game(scene);
+setArenaForAbilities(game.arena); // as main.ts: Sinkhole holes and landing checks use the live arena
 
 // DevApi centralises every lab-only capability. The sidebar only talks to
 // this layer — no direct game.debug* calls from UI code anymore. Keeps Game
@@ -188,3 +190,9 @@ requestAnimationFrame(loop);
 // engine internals.
 (window as unknown as { __game: Game; __devApi: DevApi }).__game = game;
 (window as unknown as { __game: Game; __devApi: DevApi }).__devApi = devApi;
+// The FEEL object the game actually reads — for `--feel` what-ifs in
+// scripts/run-match-batch.mjs and scripts/critter-motion.mjs. A page-side
+// `import('/src/gamefeel.ts')` is NOT the same module once Vite has
+// hot-reloaded gamefeel.ts (the game imports it as `?t=<stamp>`), so an
+// override made that way silently missed the game (2026-09-22).
+(window as unknown as { __feel: typeof FEEL }).__feel = FEEL;

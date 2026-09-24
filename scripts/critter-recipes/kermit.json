@@ -1,0 +1,111 @@
+{
+  "base": {
+    "ref": "419d038",
+    "note": "kermit.glb de Tripo reducido de 76 a 14 MB en el jam (1.941.116 triángulos, sin pasar por gltfpack)"
+  },
+  "repack": true,
+  "gltfpack": [
+    "-af",
+    "0"
+  ],
+  "diet": {
+    "why": "Indistinguible en partida; a 30 k conserva las verrugas (Rafa, 2026-09-23: «granulada»). Payload 14,2 → ~0,6 MB. Normales de Tripo conservadas para soldar, recalculadas tras simplificar.",
+    "targetTris": 30000,
+    "dropNormals": false,
+    "uvSnapTexels": 0,
+    "renormal": true
+  },
+  "textures": {
+    "why": "JPEG 512² de Tripo a WebP.",
+    "webp": 82,
+    "paletteWhy": "Paleta (Rafa, 2026-09-23): verde oliva → verde lima y barriga → amarillo pálido, como en su boceto (#99bb28 / #fcc736); las verrugas se conservan.",
+    "grade": [
+      {
+        "name": "verde oliva → verde lima",
+        "select": {
+          "h": [
+            60,
+            110
+          ],
+          "s": [
+            0.25,
+            1
+          ],
+          "l": [
+            0.08,
+            0.45
+          ]
+        },
+        "to": "#8cb82a"
+      },
+      {
+        "name": "barriga verdosa → amarillo pálido",
+        "select": {
+          "h": [
+            45,
+            70
+          ],
+          "s": [
+            0.15,
+            0.6
+          ],
+          "l": [
+            0.45,
+            0.75
+          ]
+        },
+        "to": "#ecd978"
+      },
+      {
+        "name": "blanco de los ojos → blanco",
+        "select": {
+          "s": [
+            0,
+            0.15
+          ],
+          "l": [
+            0.65,
+            1
+          ]
+        },
+        "to": "#eeede6"
+      }
+    ]
+  },
+  "clips": [
+    {
+      "clip": "Run",
+      "why": "Rafa, 2026-09-23 (decisión 7): pasitos más vivos. Kermit corría a 1,35 ciclos/s con el sprint genérico de Tripo; con L = 0,22 sube a ~3,5 a la misma velocidad. Pelvis como en el Idle, pisada bajo la cadera, suelo y pie del Idle, fase del pie izquierdo la del clip y el bucle cerrado (brazo derecho a 19,5°). Su Run va a 24 fps.",
+      "blender": {
+        "fps": 24,
+        "hold": [
+          {
+            "bone": "Pelvis",
+            "fromClip": "Idle",
+            "frame": 0
+          }
+        ],
+        "ik": {
+          "d": 0.3,
+          "L": 0.22,
+          "H": 0.07,
+          "D": 0.07,
+          "A": 0.022,
+          "phaseL": 0.54,
+          "x0": -0.03,
+          "footFlat": true,
+          "swingFlat": 0.9,
+          "groundFrom": {
+            "clip": "Idle",
+            "frame": 0
+          }
+        },
+        "loop": {
+          "minDeg": 1
+        }
+      },
+      "nodes": "all"
+    }
+  ],
+  "output": "3b315de5"
+}

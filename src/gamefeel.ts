@@ -11,14 +11,67 @@ export const FEEL = {
     frictionHalfLife: 0.08,   // seconds for velocity to halve (slightly less aggressive for higher top speed)
     idleFrictionHalfLife: 0.03, // much faster stop when no input is held
     maxSpeed: 20,             // raised to let Rojo actually feel fast
-    accelerationScale: 1.6,   // snappy response
+    // 2026-09-21 (Rafa): 1.6 → 2.2 (×1.375). La mediana del roster pasa de
+    // 1,8 a 2,5 alturas/s reales, dentro de la franja de los brawlers
+    // cenitales (2,0-3,2). Solo sube la punta: el tiempo de arrancada y la
+    // distancia de los golpes los fija la fricción, que no se toca.
+    // Espejo: SIM.movement.accelerationScale. docs/FEELING.md §7.
+    accelerationScale: 2.2,
     velocityDeadZone: 0.15,   // below this speed → snap to 0 (kills micro-drift)
+  },
+
+  // --- Locomoción visual (feeling, 2026-09-21) ---
+  // PRESENTACIÓN, nunca física: el ritmo de las patas y la intensidad del
+  // cuerpo en carrera salen de la velocidad REAL del bicho (medida:
+  // 1,4-3,1 u/s, no los 8-18 de `config.speed`, que es una aceleración).
+  // La zancada de cada clip vive en critter-locomotion.ts (medida del GLB).
+  locomotion: {
+    runRateMin: 0.45,         // timeScale mínimo del clip Run: arrancar y frenar no van a cámara lenta
+    runCadenceMaxHz: 8,       // techo de ciclos/s: por encima el pie patina antes que girar como un ventilador. 6 → 8 el 2026-09-24: solo lo tocaban Sebastian (pedía 8: pie 1,33 → 1,00, escabullirse de cangrejo) y Kurama (6,24: 1,04 → 1,00); el resto va por debajo de 4
+    topSpeedReach: 0.9,       // fracción de la velocidad terminal a la que el cuerpo ya va inclinado del todo
+    groundSpeedSmoothing: 0.06, // s — suavizado de la velocidad de suelo, SOLO online (absorbe los saltos de posición entre parches); offline la posición es exacta y suavizarla retrasaba las patas (FEELING §7.11)
+    runBlendSpeed: 1.5,       // u/s de avance a las que la pose ya es 100 % Run; por debajo se funde con el Idle (smoothstep) y las patas frenan con el suelo
+    runBlendTime: 0.1,        // s mínimos para pasar de Idle a Run del todo: un acelerón brusco (estocada, dash, empujón) no cambia la pose en un fotograma
+    // Acentos de arranque y frenada (corte 2, FEELING §7.11): salen de la
+    // aceleración de avance del modelo en «velocidades punta por segundo»
+    // (arrancar ≈ +4, frenar en seco ≈ −8), así pesan igual en Shelly que
+    // en Kurama. Llenos a `accent*Full`; en medio, proporcionales.
+    accentStartFull: 4,       // aceleración a la que el acento de arranque es pleno
+    accentStopFull: 6,        // deceleración a la que el de frenada es pleno
+    accentStartLean: 0.14,    // rad extra hacia delante al arrancar
+    accentStopLean: 0.22,     // rad hacia atrás al frenar: se planta sobre los talones
+    accentStopSquash: 0.12,   // aplastón vertical al frenar
+    accentSmoothing: 0.05,    // s — suavizado de la aceleración (online llega a saltos)
+    accentFade: 0.08,         // s mínimos para que un acento entre o salga del todo (al empezar o acabar un cabezazo no salta)
+    turnHalfLife: 0.025,      // s — el MODELO tarda esto en recorrer la mitad de un giro (≈90 % en 80 ms); la orientación de juego sigue siendo instantánea
+  },
+
+  // Cadencia de carrera por bicho (claves = RosterEntry.id), relativa a la
+  // del "pie apoyado": 1 = el pie no patina; >1 = las patas van más rápido
+  // que el suelo (correteo con esfuerzo); <1 = planea. Gusto, no medida.
+  // 2026-09-23 (Rafa): los sesgos de Shelly 1,3, Kermit 1,6 y Cheeto 1,5
+  // eran un parche para la velocidad vieja; con la de ×1,375 se quitan.
+  runCadence: {
+    sergei: 1.0,
+    trunk: 1.0,
+    kurama: 1.0,
+    shelly: 1.0,
+    kermit: 1.0,
+    sihans: 1.0,
+    kowalski: 1.0,
+    cheeto: 1.0,
+    sebastian: 1.0,
   },
 
   // --- Bot brain (balance v2, 2026-08-21) ---
   // Conciencia del borde: sin esto los bots persiguen recto hacia el
   // vacío (el audit midió 2.4-3.0 caídas/partida en todo el roster).
   bots: {
+    // Fracción de la aceleración del jugador con la que corre un bot.
+    // Estaba escrita a mano en bot.ts (0.55) y online no existía (1.0).
+    // 2026-09-21 (Rafa): 0.7 en los dos lados — el bot corre en vez de
+    // pasear y el humano le saca 1,43×. Espejo: SIM.bots.moveAccelFactor.
+    moveAccelFactor: 0.7,
     edgeMargin: 1.4,      // distancia al borde donde arranca la autoconservación
     edgeSteer: 1.6,       // peso del tirón hacia el centro en pleno borde
     lookAhead: 1.1,       // sonda de vacío por delante (aware de patrones de colapso)
@@ -35,7 +88,50 @@ export const FEEL = {
       cone: 0.839,
       ranged: 0.737,
       buff: 0.382,
+      // 2026-09-24 (repaso de habilidades §5): the K and L the bot never
+      // cast because another slot took their tag first.
+      blinkSeek: 0.702,   // Shadow Step (Cheeto K), same rate as the dash
+      trap: 0.596,        // Sand Trap (Sihans K), what the server rolled for it as a radial
+      grip: 0.5,          // Trunk Grip (Trunk L)
+      risky: 0.382,       // All-in (Sebastian L), the rate it had as a buff
     },
+    // Enemies counted as "nearby" (surrounded) and the cap on a radial K's
+    // radius when the bot judges it (Trunk Slam reaches 7 u; with the cap
+    // it is judged like today). Mirror: SIM.bots.nearbyRadius.
+    nearbyRadius: 4.0,
+    // A pushing radial K also fires on a single enemy this close, as a
+    // fraction of min(radius, nearbyRadius): Sergei's Shockwave never came
+    // out in a 1v1 (0 of 81). Mirror: SIM.bots.radialSoloFrac.
+    radialSoloFrac: 0.7,
+    // Void probe along the FACING before a J (the dash leaves by the
+    // facing, not toward the target): both points must be live floor.
+    // Sihans fell 0.01-0.14 s after 12 of her 16 falls following a J.
+    // Mirror: SIM.bots.dashProbeNear/Far.
+    dashProbeNear: 1.0,
+    dashProbeFar: 3.0,
+    // Snowball only within ±this of the facing: it flies along it, and
+    // 17 of 51 audited throws started with the target 150°+ off.
+    // Mirror: SIM.bots.rangedAimDeg.
+    rangedAimDeg: 35,
+    // Grip and Shadow Step aren't spent on someone already at headbutt
+    // range. Mirror: SIM.bots.targetedMinRange (Shadow Step).
+    targetedMinRange: 3.0,
+    // Trunk Grip reaches 28 u, more than the arena's diameter: the bot
+    // doesn't yank from the far side. Offline only (online bots cast no L).
+    gripMaxRange: 10,
+    // Sand Trap when the nearest enemy stands within zone.radius × this of
+    // the bot, so the quicksand left behind catches them.
+    // Mirror: SIM.bots.trapRadiusFrac.
+    trapRadiusFrac: 0.8,
+    // Frozen Floor needs min(2, enemies alive) within floorRadius × this.
+    floorCastRadiusFrac: 0.6,
+    // Sebastian's All-in: a miss falls into the void. The bot charges only
+    // with someone inside the real hit lane narrowed by this inset (u),
+    // holds for allInReactionSec like a player would, then re-checks the
+    // full lane: a hit resolves, an empty lane drops the charge without
+    // spending the cooldown.
+    allInLaneInset: 0.4,
+    allInReactionSec: 0.5,
   },
 
   // --- Headbutt ---
@@ -48,7 +144,7 @@ export const FEEL = {
     lunge: {
       duration: 0.15,         // snap forward (shorter = sharper)
       headExtend: 0.45,       // head reaches further
-      velocityBoost: 4.0,     // micro-lunge: critter steps into the hit
+      velocityBoost: 4.7,     // micro-lunge: critter steps into the hit (4.0 × √1.375 with the 2026-09-21 speed-up, so it still stands out from the run)
     },
     cooldown: 0.45,           // recovery time
     recoilFactor: 0.35,       // attacker bounces back on connect
@@ -58,7 +154,7 @@ export const FEEL = {
   collision: {
     normalPushForce: 3.0,     // casual bumps are gentle nudges
     headbuttMultiplier: 3.5,  // headbutt = headbuttForce * this (Rojo: 14*3.5=49)
-    anchoredBounceFactor: 1.4, // × normalPushForce — rebound applied to whoever runs into an anchored critter (Shelly Steel Shell)
+    anchoredBounceFactor: 1.925, // × normalPushForce — rebound applied to whoever runs into an anchored critter (Shelly Steel Shell). 1.4 × 1.375 with the 2026-09-21 speed-up: a faster runner must still bounce off
     shellReflectFactor: 0.85,  // headbutting an anchored critter reflects the attacker's OWN force × this (balance v2 mechanic)
     stunnedVulnerability: 4,  // knockback multiplier while stunTimer > 0 (Trunk Slam/Grip follow-ups)
   },
@@ -96,6 +192,33 @@ export const FEEL = {
     cooldown: 18.0,           // ultimate-tier cooldown
   },
 
+  // --- All-in (Sebastian L) resolution. Mirror: SIM.allIn ---
+  allIn: {
+    hitMargin: 0.55,          // lane half-width = caster radius + target radius + this; only targets ahead count
+    missProbeStep: 0.5,       // a miss walks the dash line in these steps to the first point off the arena and falls there
+  },
+
+  // --- Blink landing (Sand Trap, Shadow Step). Mirror: SIM.blink ---
+  blink: {
+    landingProbeStep: 0.5,    // a target off live floor steps back toward the origin in these steps; none on floor = stay put
+  },
+
+  // --- Mirror Trick (Kurama K) look. Visual only, no SIM mirror ---
+  decoy: {
+    ghostAlpha: 0.08,         // Kurama's own opacity while the trick lasts: the decoy is the Kurama on screen (Rafa 2026-05-01: «invisible o casi invisible»)
+    fadeFrom: 0.7,            // share of the decoy's life it stays solid, outline included; it fades out over the rest
+    arrivalPuffs: 2,          // dust puffs where she reappears: a hint for whoever looks, not a beacon
+  },
+
+  // --- L contact passes (Saw Shell, Stampede ram, Toxic Touch). Mirror: SIM.abilities ---
+  // Here and not in the ability defs: a def field that a copied L must
+  // carry has to join COPYCAT_KEYS on both sides (src/abilities.ts and
+  // server/src/sim/abilities.ts); this cooldown belongs to every contact
+  // pass, copied or not.
+  abilities: {
+    contactRehitCooldown: 0.3, // s before the same caster can contact-hit the same victim again (it used to land every frame)
+  },
+
   // --- Match ---
   match: {
     duration: 120,            // seconds total (raised from 90 for 3-life matches)
@@ -124,7 +247,7 @@ export const FEEL = {
   shake: {
     headbutt: 0.22,           // amplitude when a headbutt connects
     groundPound: 0.45,        // stronger, it's a slam
-    chargeRush: 0.15,         // online dash broadcast only — offline fireChargeRush has no shake today (known drift)
+    chargeRush: 0.15,         // online dash broadcast; offline, a dash's first contact with each victim (physics.ts rushContactFeedback) — fireChargeRush itself has no shake (known drift)
     frenzyFactor: 0.55,       // × groundPound on frenzy activation; abilities.ts fireFrenzy still inlines the same 0.55 — unify when touching that file
     decay: 0.18,              // how fast the shake fades (seconds)
   },
@@ -165,9 +288,18 @@ export const FEEL = {
   },
 
   // --- Knockback Reaction (visual tilt when hit) ---
+  // The whole model leans ALONG the knockback — the top goes first, the
+  // feet drag — so the critter reads as taking the blow, not just
+  // flashing. Fast attack, then a damped return with one small
+  // counter-swing. The hit-stop frame already shows `impactLean` of the
+  // peak, so the frozen instant reads as the impact pose. The peak lands
+  // as the hit flash fades (≈0.12 s after the freeze): under the white
+  // the lean doesn't read (measured, docs/FEELING.md §7.10).
   knockbackReaction: {
-    tiltAngle: 0.25,          // radians of backward lean when hit
-    duration: 0.3,            // time to return to upright
+    tiltAngle: 0.38,          // rad of peak lean along the knockback
+    duration: 0.5,            // s, lean + return
+    attack: 0.25,             // fraction of the duration spent reaching the peak
+    impactLean: 0.55,         // fraction of the peak already on the hit frame
   },
 
   // --- Accessibility (H4 — prefers-reduced-motion) ---
@@ -184,6 +316,21 @@ export const FEEL = {
   accessibility: {
     motionScale: 1.0,
   } as { motionScale: number },
+
+  // --- Contorno de los bichos (mejora gráfica, 2026-09-24) ---
+  // PRESENTACIÓN: casco invertido alrededor de cada bicho (critter-look.ts,
+  // regla en STYLE_LOCK.md). Rafa: «contorno» sobre el sombreado actual,
+  // sin toon. El ancho va en unidades de MUNDO (~4,5 % del alto de 1,7),
+  // así crece con el tamaño del bicho en pantalla, y se recorta a
+  // [outlineMinPx, outlineMaxPx] px CSS: se lee en la arena y no se vuelve
+  // un marco grueso en los primeros planos. Mutable en vivo (tuner / DevApi).
+  look: {
+    outline: 1,               // 1 = contorno, 0 = sin él (también `?look=plain`)
+    outlineWidth: 0.075,      // u de mundo
+    outlineMinPx: 1,          // px CSS. 2 → 1 el 2026-09-24 (Rafa, viendo móvil: «¿quizás es muy grueso?»): en un móvil apaisado los bichos miden 20-25 px y el suelo de 2 px por lado se comía la silueta; en escritorio queda ~1,5 px (lo decide el ancho de mundo)
+    outlineMaxPx: 5,          // px CSS
+    outlineDepthPush: 0.12,   // u: el casco se aparta hacia el fondo (solo en profundidad, sin moverse en pantalla) para no manchar los huecos del propio bicho (brazos de Kermit, patas de Cheeto)
+  } as { outline: number; outlineWidth: number; outlineMinPx: number; outlineMaxPx: number; outlineDepthPush: number },
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -198,12 +345,37 @@ export function triggerHitStop(duration: number): void {
   hitStopTimer = Math.max(hitStopTimer, duration * FEEL.accessibility.motionScale);
 }
 
+// The gameplay ticks that run outside game.update (ability zones, offline
+// L mechanics, projectiles) must freeze with it. applyHitStop runs once
+// per offline 'playing' step: `simStep` counts those calls and
+// `frozenStep` marks the last one that froze.
+let simStep = 0;
+let frozenStep = -1;
+
 export function applyHitStop(dt: number): number {
+  simStep++;
   if (hitStopTimer > 0) {
     hitStopTimer -= dt;
+    frozenStep = simStep;
     return 0;
   }
   return dt;
+}
+
+/**
+ * A reader of the hit-stop freeze for one of those ticks: call the
+ * returned function once at the top of the tick and skip the tick when it
+ * says true. It is true only when a step ran since the previous call AND
+ * that step froze, so a freeze can't go stale once applyHitStop stops
+ * running (pause menu, title, online — where the ticks must keep going).
+ */
+export function createFrozenFrameGate(): () => boolean {
+  let seen = simStep;
+  return () => {
+    const frozen = simStep !== seen && frozenStep === simStep;
+    seen = simStep;
+    return frozen;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +393,10 @@ interface ScaleEffect {
 
 const activeEffects = new WeakMap<Critter, ScaleEffect>();
 
-export function applyImpactFeedback(critter: Critter): void {
+/** `dirX/dirZ`: world direction the hit pushes the critter (any length).
+ *  Omitted (a self pulse, an attacker whose push we don't know) → squash
+ *  and flash without the lean. */
+export function applyImpactFeedback(critter: Critter, dirX = 0, dirZ = 0): void {
   activeEffects.set(critter, {
     targetX: FEEL.impact.scaleX,
     targetY: FEEL.impact.scaleY,
@@ -230,10 +405,13 @@ export function applyImpactFeedback(critter: Critter): void {
     elapsed: 0,
     overshoot: FEEL.impact.bounceOvershoot,
   });
-  // Knockback tilt: lean backward from hit direction
-  applyKnockbackTilt(critter);
+  // Knockback tilt: lean along the push
+  applyKnockbackTilt(critter, dirX, dirZ);
   // Flash white briefly to clearly read the hit
   applyHitFlash(critter);
+  // The hit stop that usually follows freezes the game before the next
+  // update: show the impact pose now so the freeze is the blow landing.
+  critter.showImpactFrame();
 }
 
 export function applyDashFeedback(critter: Critter): void {
@@ -299,32 +477,68 @@ function bounceEase(t: number, overshoot: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Knockback tilt — critter leans backward when hit
+// Knockback tilt — critter leans along the push when hit
 // ---------------------------------------------------------------------------
 
-const activeTilts = new WeakMap<Critter, { elapsed: number }>();
-
-function applyKnockbackTilt(critter: Critter): void {
-  activeTilts.set(critter, { elapsed: 0 });
+interface KnockbackTilt {
+  elapsed: number;
+  dirX: number;  // unit world direction of the push
+  dirZ: number;
 }
 
-/** Update tilt on the critter's body mesh (visual lean when hit). */
+const activeTilts = new WeakMap<Critter, KnockbackTilt>();
+const _tiltAxis = new THREE.Vector3();
+
+function applyKnockbackTilt(critter: Critter, dirX: number, dirZ: number): void {
+  const len = Math.hypot(dirX, dirZ);
+  if (len < 1e-6) return;
+  activeTilts.set(critter, { elapsed: 0, dirX: dirX / len, dirZ: dirZ / len });
+}
+
+/** True while the knockback lean plays (the turn lag holds meanwhile). */
+export function isKnockbackLeaning(critter: Critter): boolean {
+  return activeTilts.has(critter);
+}
+
+/** 0..1 lean envelope: from `impactLean` up to the peak in `attack`, then
+ *  back to upright through one small counter-swing (≈ −11 %). */
+function knockbackLeanShape(t: number): number {
+  const { attack, impactLean } = FEEL.knockbackReaction;
+  if (t < attack) {
+    return impactLean + (1 - impactLean) * Math.sin((t / attack) * Math.PI * 0.5);
+  }
+  const u = (t - attack) / (1 - attack);
+  return (1 - u) * (1 - u) * Math.cos(u * Math.PI * 1.5);
+}
+
+/** Visual lean when hit. GLB critters tilt their `reactionRig` (the model
+ *  sits under it) toward the push; the procedural placeholder keeps its
+ *  body/head pitch. */
 export function updateKnockbackTilt(critter: Critter, dt: number): void {
   const tilt = activeTilts.get(critter);
   if (!tilt) return;
 
   tilt.elapsed += dt;
   const t = Math.min(tilt.elapsed / FEEL.knockbackReaction.duration, 1);
-  // Quick lean then return
-  const angle = FEEL.knockbackReaction.tiltAngle * Math.sin(t * Math.PI);
+  const angle = t >= 1 ? 0 : FEEL.knockbackReaction.tiltAngle * knockbackLeanShape(t);
   critter.body.rotation.x = angle;
   critter.head.rotation.x = angle * 0.5;
 
-  if (t >= 1) {
-    critter.body.rotation.x = 0;
-    critter.head.rotation.x = 0;
-    activeTilts.delete(critter);
+  const rig = critter.reactionRig;
+  if (rig) {
+    // World push → the rig's frame (mesh.rotation.y is the facing, and it
+    // may turn during the knockback: recomputed every frame so the lean
+    // stays on the push, not on the model).
+    const yaw = critter.mesh.rotation.y;
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    const lx = tilt.dirX * c - tilt.dirZ * s;
+    const lz = tilt.dirX * s + tilt.dirZ * c;
+    // Tip +Y toward (lx, 0, lz): rotate about (lz, 0, −lx).
+    rig.quaternion.setFromAxisAngle(_tiltAxis.set(lz, 0, -lx), angle);
   }
+
+  if (t >= 1) activeTilts.delete(critter);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,127 @@
+{
+  "base": {
+    "ref": "a745b84",
+    "note": "kowalski.glb tal como lo dejó compress-critter-glbs (8 clips de Tripo Animate, meshopt)"
+  },
+  "output": "c60c1f6b",
+  "repack": true,
+  "textures": {
+    "why": "JPEG 512² de Tripo a WebP.",
+    "webp": 82,
+    "paletteWhy": "Paleta (Rafa, 2026-09-23: «solo los colores»): cuerpo negro → azul marino, barriga gris → blanco crema, cresta caqui → amarillo, pico y pies → naranja, como en su boceto (#2f3647 / #f3efe6 / #f9ba27).",
+    "grade": [
+      {
+        "name": "cuerpo negro → azul marino",
+        "select": {
+          "s": [
+            0,
+            0.35
+          ],
+          "l": [
+            0,
+            0.24
+          ]
+        },
+        "to": "#283248",
+        "contrast": 1.2
+      },
+      {
+        "name": "barriga gris → blanco crema",
+        "select": {
+          "s": [
+            0,
+            0.14
+          ],
+          "l": [
+            0.5,
+            1
+          ]
+        },
+        "to": "#ebe6da"
+      },
+      {
+        "name": "cresta caqui → amarillo",
+        "select": {
+          "h": [
+            34,
+            56
+          ],
+          "s": [
+            0.2,
+            1
+          ],
+          "l": [
+            0.4,
+            0.85
+          ]
+        },
+        "to": "#f6c224"
+      },
+      {
+        "name": "pico, pies y sombra de la cresta → naranja",
+        "select": {
+          "h": [
+            18,
+            42
+          ],
+          "s": [
+            0.35,
+            1
+          ],
+          "l": [
+            0.16,
+            0.42
+          ]
+        },
+        "to": "#d88a26"
+      }
+    ]
+  },
+  "clips": [
+    {
+      "clip": "Run",
+      "why": "El Run de Tripo apoyaba el pie en el punto más atrasado de su recorrido (zancada 0,142: patinaba ×2 a 6 ciclos/s) y corría encorvado: pelvis girada ~150° y tronco a 17°. Pelvis como en el Idle, tronco derecho e IK de los pies con zancada real, apoyando sobre el suelo del Idle y con el pie casi plano en el vuelo (Rafa, 2026-09-23: «derecho»).",
+      "blender": {
+        "hold": [
+          {
+            "bone": "Pelvis",
+            "fromClip": "Idle",
+            "frame": 0
+          }
+        ],
+        "ik": {
+          "d": 0.3,
+          "L": 0.11,
+          "H": 0.025,
+          "D": 0.02,
+          "A": 0.008,
+          "phaseL": 0.14,
+          "x0": 0,
+          "footFlat": true,
+          "swingFlat": 0.9,
+          "groundFrom": {
+            "clip": "Idle",
+            "frame": 0
+          }
+        },
+        "torso": {
+          "bone": "Waist",
+          "base": "Waist",
+          "tip": "Head",
+          "pitchDeg": 0
+        }
+      },
+      "nodes": [
+        "Pelvis",
+        "L_Thigh",
+        "L_Calf",
+        "L_Foot",
+        "R_Thigh",
+        "R_Calf",
+        "R_Foot",
+        "Root",
+        "Waist"
+      ]
+    }
+  ]
+}

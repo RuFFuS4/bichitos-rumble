@@ -26,6 +26,22 @@
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
 import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
+import { type SeaRamp, type CliffRamp, type PackSky } from './arena-look';
+
+/** Anisotropía máxima del dispositivo, cacheada. La fija el renderer al
+ *  arrancar (`setArenaTextureAnisotropy`); sin renderer (tests, headless)
+ *  se queda en 1 y las texturas se cargan igual. */
+let maxAnisotropy = 1;
+export function setArenaTextureAnisotropy(value: number): void {
+  maxAnisotropy = Math.max(1, Math.floor(value));
+  for (const tex of textureCache.values()) {
+    if (tex.mapping !== THREE.EquirectangularReflectionMapping) {
+      tex.anisotropy = maxAnisotropy;
+      tex.needsUpdate = true;
+    }
+  }
+}
+function getMaxAnisotropy(): number { return maxAnisotropy; }
 
 // --- Public API ----------------------------------------------------------
 
@@ -70,6 +86,30 @@ interface PackDef {
   props: string[];
   /** Fog colour (hex). Picked to match the horizon band of the skybox. */
   fogColor: number;
+  /** Lado del tile de suelo EN UNIDADES DE MUNDO para este bioma. La
+   *  escala buena no es global: las texturas del proyecto traen el detalle
+   *  PINTADO (conchas y estrellas en la playa, pétalos y musgo entre losas
+   *  en el santuario) y cada una pide su tamaño. Con 4 u se repetían seis
+   *  veces por diámetro y el ojo leía la rejilla; con 24 u (el diámetro
+   *  entero) el santuario clava sus losas grandes de la referencia pero la
+   *  playa pierde las conchas, que quedan de 2 px. Idea de Rafa
+   *  (2026-09-07), medida bioma a bioma sobre capturas. */
+  groundTile: number;
+  /** Rampa del mar de fondo sobre el que flota la isla (fase de fondo,
+   *  docs/DIORAMAS.md). Oscuro pegado al disco para que el canto se
+   *  recorte, claro al alejarse para leer distancia. */
+  backdrop: SeaRamp;
+  /** Estratos del canto de la isla, de arriba (t = 0, el labio bajo la
+   *  tapa) abajo (t = 1, la base). Es lo que convierte la pared del
+   *  disco en acantilado DE ESTE bioma: roca apilada con musgo, bloques
+   *  de hielo, roca roja estratificada (docs/DIORAMAS.md parte 2, fase
+   *  "la isla tiene masa"). Va en vertex color; sin textura nueva. */
+  cliff: CliffRamp;
+  /** Cielo del bioma (fondo v2, docs/DIORAMAS.md §«Fondo v2»). El pozo
+   *  lleva su techo y su suelo de luma como datos (`abyssCeiling` /
+   *  `abyssFloor`, plan §4 corregido a sRGB). Los `abyss` de aquí van por
+   *  debajo del techo con margen. */
+  sky: PackSky;
   /** Per-prop uniform scale hint (default 1.0). Lets us pre-tune bulky
    *  props (the 5 MB palm, sakura tree, etc) without a second authoring
    *  pass on the GLB — applied on top of whatever the GLB ships with. */
@@ -92,23 +132,113 @@ interface PackDef {
 const PACKS: Record<ArenaPackId, PackDef> = {
   jungle: {
     props: [],
+    groundTile: 14,   // hierba y hojarasca: a 14 u la mata se lee sin repetirse
     fogColor: 0xa6c68a, // warm green horizon
+    // Mar de copas: verde profundo bajo la isla (la hierba del disco está
+    // en L≈78, así que el dosel tiene que quedar POR DEBAJO — hoy la foto
+    // estaba 44 puntos por encima) aclarando a bruma cálida al fondo.
+    backdrop: { stops: [[0, 0x0c1a0f], [0.18, 0x182d1a], [0.5, 0x3f6137], [1, 0x93b483]] },
+    // Labio de musgo → tierra oscura con raíces → sillares de piedra
+    // tostada (los bloques de la referencia JUNGLE TROPIC) → base en
+    // sombra. El verde del labio es lo que hace que la hierba parezca
+    // colgar sobre el canto y no acabar en un corte.
+    cliff: { stops: [[0, 0x5a6a2c], [0.14, 0x4e3620], [0.3, 0x6b4a2a], [0.5, 0x9a7a48], [0.8, 0x7e6238], [1, 0x4a3820]] },
+    // Sima verde con BRUMA CLARA: pozo claro (decisión 2 de Rafa,
+    // 2026-09-21). La hierba es la arena más oscura del juego; con pozo
+    // oscuro el techo era luma 25 y se leía como un agujero negro. Claro
+    // (luma ~146, suelo 115) la arena se recorta a contraluz y el canto
+    // sube de ΔL 51 a 69 (.tmp/shots-cielo/_pozo_ab.png).
+    sky: {
+      zenith: 0x8fc0b8, abyss: 0x7da07d, abyssDeep: 0x9fbf9f,
+      pit: 'light', abyssCeiling: 25.3, abyssFloor: 115.3,
+      cloudTop: 0xc4d4b0, cloudFar: 0xb4c8a0, coverage: 0.4,
+      isletTop: 0x46642e, hemiGround: 0x5f7a55, hemiIntensity: 0.7,
+    },
   },
   frozen_tundra: {
     props: [],
+    groundTile: 18,   // placas de hielo grandes, como los anillos de la referencia
     fogColor: 0xbcc8e0, // pale lavender ice horizon
+    // Banquisa: azul frío cerca, casi blanco lejos. Es el pack más claro
+    // del juego, así que su movimiento es de VALOR, no de tono; el hielo
+    // va más oscuro que la tapa para que no se lea como pisable.
+    backdrop: { stops: [[0, 0x152230], [0.2, 0x283d50], [0.55, 0x728ca0], [1, 0xd6e2ee]] },
+    // Tapa de nieve → hielo claro → azul profundo. Es el bioma donde el
+    // corte vertical cuenta más: lo que se rompe es hielo, y el azul
+    // saturado bajo la nieve blanca es la firma de FROZEN TUNDRA.
+    cliff: { stops: [[0, 0xf4f8fc], [0.1, 0xd6ecf8], [0.35, 0x8fd0f2], [0.65, 0x4fa4e0], [1, 0x2a6cb0]] },
+    // Abismo azul frío (luma ~63, techo 77, el más holgado). Nubes finas
+    // blanco-lavanda y poca cobertura: el hielo ya es claro de por sí.
+    sky: {
+      zenith: 0x8fb4e8, abyss: 0x264466, abyssDeep: 0x13253a,
+      pit: 'dark', abyssCeiling: 77.2, abyssFloor: 167.2,
+      cloudTop: 0xeef0fa, cloudFar: 0xdde4f2, coverage: 0.34,
+      isletTop: 0xa6b6c8, hemiGround: 0x8a9cc0, hemiIntensity: 0.7,
+    },
   },
   desert_dunes: {
     props: [],
+    groundTile: 16,   // los rizos de arena piden escala grande o parecen tela
     fogColor: 0xeab88a, // dusty golden sunset horizon
+    // Cañón de dunas: aquí el terreno CONTINÚA y la isla se lee como
+    // meseta. Naranja quemado en la sombra del cañón, arena clara lejos.
+    backdrop: { stops: [[0, 0x28160e], [0.16, 0x4b2d1a], [0.5, 0x9b6b3b], [1, 0xecc394]] },
+    // Arena en el labio → roca roja → veta ocre → roja otra vez → base
+    // oscura: la meseta estratificada de DESERT DUNES. Es la rampa con más
+    // paradas porque el estrato ocre en medio es lo que la hace desierto
+    // y no ladrillo.
+    cliff: { stops: [[0, 0xe0aa5c], [0.1, 0xb84a2c], [0.4, 0xd48a46], [0.55, 0xa8402a], [0.8, 0xc4703e], [1, 0x74291a]] },
+    // Cañón de polvo naranja quemado (luma ~42, techo 52) y calima ocre.
+    sky: {
+      zenith: 0x9cc0e0, abyss: 0x44220f, abyssDeep: 0x241208,
+      pit: 'dark', abyssCeiling: 52.3, abyssFloor: 142.3,
+      cloudTop: 0xf0d2a8, cloudFar: 0xe8c49a, coverage: 0.38,
+      isletTop: 0xa27a48, hemiGround: 0xa8784a, hemiIntensity: 0.7,
+    },
   },
   coral_beach: {
     props: [],
+    groundTile: 9,   // conchas y estrellas pintadas: por encima de 10 u desaparecen
     fogColor: 0x9fd9e0, // cream-turquoise sea horizon
+    // Laguna: bajío junto a la isla, turquesa somero y teal profundo al
+    // alejarse. Es el peor caso de partida (57,7 % del cuadro era una
+    // mancha turquesa sin un solo borde) y donde más gana lo generado.
+    backdrop: { stops: [[0, 0x052126], [0.14, 0x0b3d44], [0.45, 0x25868b], [1, 0x8fdfe0]] },
+    // Arena mojada → roca gris → verde-teal de algas hacia la línea de
+    // agua: la roca de CORAL REEF BEACH se hunde en la laguna y la parte
+    // baja del canto va del color del mar del backdrop, no del suelo.
+    cliff: { stops: [[0, 0xe6d3a6], [0.12, 0x9a9a92], [0.45, 0x7a7e7a], [0.7, 0x5e8c80], [1, 0x3a5c58]] },
+    // Laguna del cielo: turquesa profundo a azul marino, sin verde —no es
+    // agua— (luma ~47, techo 59). Cúmulos crema con panza aguamarina.
+    sky: {
+      zenith: 0x7fd0f0, abyss: 0x0b3a52, abyssDeep: 0x06202e,
+      pit: 'dark', abyssCeiling: 58.8, abyssFloor: 148.8,
+      cloudTop: 0xfff2dc, cloudFar: 0xe8f4ee, coverage: 0.38,
+      isletTop: 0xb09e74, hemiGround: 0x6fb3b5, hemiIntensity: 0.7,
+    },
   },
   kitsune_shrine: {
     props: [],
+    groundTile: 26,   // losas del patio a tamaño de referencia, sin repetición
     fogColor: 0xd4a8c0, // dusty pink mist
+    // Mar de nubes: oscuras bajo el canto (ahí el borde del vacío llegaba
+    // a tener ΔL de 1,1 — literalmente invisible) y retroiluminadas hacia
+    // el ciruela del pack. A este bioma hay que SUBIRLE color, no bajarlo.
+    backdrop: { stops: [[0, 0x1a141c], [0.18, 0x3a2b36], [0.5, 0x866578], [1, 0xdcc0cf]] },
+    // Musgo en el labio → sillares grises apilados que se oscurecen hacia
+    // la base: la muralla del patio de KITSUNE SHRINE. Sin color: aquí
+    // el bermellón y los pétalos van encima, y el canto es piedra.
+    cliff: { stops: [[0, 0x6b7d4a], [0.12, 0x8a877e], [0.45, 0x736f68], [0.75, 0x5e5a55], [1, 0x3f3c3a]] },
+    // Mar de nubes ciruela al anochecer (luma ~38, techo 48): el más
+    // cubierto, la bruma violeta de bajo la isla en KITSUNE SHRINE.png. La
+    // cobertura la limita la decisión 1: ≤8 % del fondo más claro que el
+    // p75 de la arena, medido con `arena-shots --metrics --scatter 0`.
+    sky: {
+      zenith: 0xb89ac8, abyss: 0x2f1f36, abyssDeep: 0x1a111e,
+      pit: 'dark', abyssCeiling: 47.8, abyssFloor: 137.8,
+      cloudTop: 0xdcbccf, cloudFar: 0xd8b4c8, coverage: 0.45,
+      isletTop: 0x86867a, hemiGround: 0x9a7890, hemiIntensity: 0.7,
+    },
   },
 };
 
@@ -274,12 +404,21 @@ function loadTexture(path: string, mode: 'ground' | 'skybox'): Promise<THREE.Tex
       path,
       (tex) => {
         if (mode === 'ground') {
-          // Tileable across the whole arena. The ground shader uses UV
-          // coords from ExtrudeGeometry so a single repeat is enough for
-          // each fragment — the pattern loops naturally between sectors.
+          // Tileable across the whole arena. TODAS las superficies de suelo
+          // (tapas de sector, centro inmune y falda) llevan UV en
+          // COORDENADAS DE MUNDO, así que un único repeat vale para las
+          // tres y el tile mide `ARENA_LOOK.tileSize` unidades de mundo.
+          //
+          // 2026-09-06: antes era repeat 4×4 sobre UV de mundo = 4
+          // repeticiones POR UNIDAD → un tile de 25 cm, ~96 en el diámetro.
+          // El mipmap lo promediaba a color plano: de ahí la sensación de
+          // "plato liso" pese a haber textura cargada.
+          // El repeat lo fija `applyGroundTexture` con el tile del pack:
+          // aquí solo se deja envolviendo, porque la textura se cachea por
+          // ruta y la comparten los cinco biomas.
           tex.wrapS = THREE.RepeatWrapping;
           tex.wrapT = THREE.RepeatWrapping;
-          tex.repeat.set(4, 4);
+          tex.anisotropy = getMaxAnisotropy();
           tex.colorSpace = THREE.SRGBColorSpace;
         } else {
           // Equirect skybox bound directly to `scene.background` via
@@ -357,8 +496,49 @@ export async function loadPackPropMeshes(
 }
 
 /** Fog colour for the pack, used to tint scene.fog when the pack loads. */
+/** Rampa del mar de fondo del pack (fase de fondo, docs/DIORAMAS.md). */
+export function getPackBackdrop(packId: ArenaPackId): SeaRamp {
+  return PACKS[packId].backdrop;
+}
+
+/** Cielo del bioma (fondo v2). */
+export function getPackSky(packId: ArenaPackId): PackSky {
+  return PACKS[packId].sky;
+}
+
+/**
+ * Parche en vivo sobre el cielo de un bioma (superficie programática: lo
+ * llama `__devApi.setPackSky`). Devuelve qué claves aplicó y cuáles
+ * rechazó por desconocidas o de otro tipo, para que quien llama no crea
+ * que aplicó lo que no existe. No reconstruye: eso lo decide quien llama.
+ */
+export function patchPackSky(packId: ArenaPackId, patch: Record<string, unknown>): { applied: string[]; rejected: string[] } {
+  const applied: string[] = [];
+  const rejected: string[] = [];
+  if (!Object.prototype.hasOwnProperty.call(PACKS, packId)) return { applied, rejected: Object.keys(patch) };
+  const sky = PACKS[packId].sky as unknown as Record<string, unknown>;
+  for (const [k, v] of Object.entries(patch)) {
+    const badPit = k === 'pit' && v !== 'dark' && v !== 'light';
+    if (!Object.prototype.hasOwnProperty.call(sky, k) || typeof v !== typeof sky[k] || badPit) { rejected.push(k); continue; }
+    sky[k] = v;
+    applied.push(k);
+  }
+  return { applied, rejected };
+}
+
+/** Lado del tile de suelo del bioma (u de mundo). */
+export function getPackGroundTile(packId: ArenaPackId): number {
+  return PACKS[packId].groundTile;
+}
+
 export function getPackFogColor(packId: ArenaPackId): number {
   return PACKS[packId]?.fogColor ?? 0xb6d1e8;
+}
+
+/** Rampa de estratos del canto del pack (vertex color de la pared de cada
+ *  fragmento, `src/arena.ts`). */
+export function getPackCliff(packId: ArenaPackId): CliffRamp {
+  return PACKS[packId].cliff;
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +615,24 @@ export async function loadInArenaDecorations(
   packScale: number = 1.0,
 ): Promise<InArenaDecor[]> {
   if (placements.length === 0) return [];
+
+  // 2026-09-07: precarga en PARALELO de los tipos únicos. El bucle de
+  // abajo hacía `await loadModel(...)` DENTRO del for, así que los 16
+  // props de jungle esperaban en fila por 4 GLB distintos: la arena
+  // tardaba más de 20 s en poblarse y el jugador entraba a un disco
+  // pelado (se ve en las capturas de línea base a t=0). Con el modelo ya
+  // en la caché de model-loader, el await de dentro resuelve al instante
+  // y el orden de inserción se conserva.
+  const uniqueTypes = [...new Set(
+    placements.map(p => DECOR_TYPES[p.type]?.glbPath).filter((v): v is string => !!v),
+  )];
+  await Promise.all(uniqueTypes.map(path =>
+    loadModel(path).catch(err => {
+      console.debug('[arena-decorations] preload failed:', path, err);
+      return null;
+    }),
+  ));
+
   const out: InArenaDecor[] = [];
   for (const p of placements) {
     const type = DECOR_TYPES[p.type];

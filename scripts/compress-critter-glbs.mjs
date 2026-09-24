@@ -24,6 +24,10 @@
 // `npm run check`; el pase visual va aparte.
 //
 // Uso: node scripts/compress-critter-glbs.mjs
+//
+// 2026-09-23: los bichos con receta post-import (scripts/critter-recipes/)
+// se saltan — su GLB sale de `node scripts/critter-recipe.mjs <id>`, que ya
+// reempaqueta igual; repasarlo aquí lo sacaría de la receta.
 // ---------------------------------------------------------------------------
 
 import { NodeIO } from '@gltf-transform/core';
@@ -31,6 +35,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { dedup, textureCompress } from '@gltf-transform/functions';
 import sharp from 'sharp';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { stat, writeFile, unlink, rename } from 'node:fs/promises';
 
 const DIR = 'public/models/critters';
@@ -51,6 +56,10 @@ function runGltfpack(inPath, outPath) {
 let before = 0, after = 0;
 
 for (const id of [...PLAIN, ...WITH_TEXTURE_PASS]) {
+  if (existsSync(`scripts/critter-recipes/${id}.json`)) {
+    console.log(`[glb] ${id.padEnd(10)} tiene receta: node scripts/critter-recipe.mjs ${id}`);
+    continue;
+  }
   const path = `${DIR}/${id}.glb`;
   const srcSize = (await stat(path)).size;
   before += srcSize;

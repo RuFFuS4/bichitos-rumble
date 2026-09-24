@@ -21,7 +21,7 @@ el lab se vuelve ilegible para quien entre después.
 > **Sibling tools** — all internal (`noindex`), accessible by URL only,
 > linked from the bottom of this sidebar:
 >
-> 1. [`animations lab`](../../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano `bichitos-mesh2motion`, dev server `:5174`) —
+> 1. [`animations lab`](../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano `bichitos-mesh2motion`, dev server `:5174`) —
 >    mesh2motion-based lab for **CREATING** animation clips and
 >    exporting GLBs. Upstream flows (Explore/Retarget) stripped;
 >    only `create.html` ships.
@@ -113,6 +113,89 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   setSpeed/requestStep, forzar habilidades, bots, recording.
 - **Inspección de assets**: `npm run inspect:clips|parts|bounds`,
   `verify:glbs`, `check-pws-parity`.
+- **Zancada del clip Run** (feeling, 2026-09-21):
+  `node scripts/inspect-stride.mjs [id] [--json] [--write] [--check]` mide
+  en node, sin navegador, a qué velocidad barre cada Run el pie apoyado y
+  en qué fase apoya el izquierdo; `--write` regenera
+  `src/critter-locomotion.ts` y `--check` sale con 1 si la tabla ya no
+  cuadra con los GLB.
+- **Editar clips de un bicho sin abrir Blender** (2026-09-23):
+  `node scripts/critter-recipe.mjs <id> [--out=x.glb [--set=Run.ik.L=0.12]]`
+  rehace las ediciones de `scripts/critter-recipes/<id>.json` (Blender
+  headless: pelvis fija, IK de pies, tronco enderezado) sobre el GLB
+  fijado en la receta. Sin `--out` escribe el GLB del juego, `RUN_GAIT` y
+  la versión de la URL; `--set` solo va con `--out`. `node scripts/stamp-critter-glbs.mjs [--check]`
+  pone `?v=<hash>` a cada GLB en `roster.ts` para que la caché nunca
+  empareje JS nuevo con GLB viejo. Detalle: `ASSET_PIPELINE.md` §«Recetas
+  post-import».
+- **Contorno de los bichos** (2026-09-24): `FEEL.look` (activo, ancho en
+  u de mundo, límites en px y empuje en profundidad) sale como deslizador
+  en «Game feel» del match lab y se cambia con `feel-patch`;
+  `__devApi.setCritterLook({ outline: false })` lo apaga en vivo para un
+  A/B, y `?look=plain` en la URL lo apaga en la carga (capturas).
+- **Medir el HUD por pantalla** (INTERFAZ, 2026-09-24): con el dev server
+  vivo, `node scripts/hud-shots.mjs [--out .tmp/hud-shots]
+  [--viewports 667x375,844x390,1280x720]` captura título, selección y
+  partida en cada viewport (móviles en apaisado con toque y DPR 2) y
+  escribe `report.json`: si arrancó en modo táctil, qué % del disco de la
+  arena tapa el HUD (proyectado con la cámara de juego), los solapes entre
+  piezas y el alto de la selección frente a la pantalla. Navegador mudo y
+  con GPU.
+- **Sprites chibi del HUD a la paleta de los bichos** (2026-09-24):
+  `node scripts/recolor-hud-tiles.mjs` recolorea los tiles de Sergei y
+  Shelly en el máster `_raw/hud-icons.png` y regenera el `.webp`; es
+  idempotente. Va después de `rebuild-hud-sheet` y `compress-images`.
+- **Recolorear un bicho por familias de color** (paleta, 2026-09-24):
+  `node scripts/critter-grade.mjs <id> [--ops=ops.json] [--out=x.glb]
+  [--png=textura.png]` aplica a la textura actual las ops de color
+  (selección por tono/saturación/luz, destino en color) sin Blender, e
+  informa de cuánto ocupa cada familia y a qué color va. Las ops
+  definitivas viven en `textures.grade` de la receta.
+  El gusto (ritmo por bicho, techos) vive en `FEEL.locomotion` y
+  `FEEL.runCadence`: sliders solos en «Game feel» del match lab y
+  `feel-patch` (`"runCadence.kermit": 1.8`).
+- **Cómo se mueve un bicho, medido** (feeling, 2026-09-21): con el dev
+  server vivo, `node scripts/critter-motion.mjs [--critters=A,B]
+  [--video --label=antes] [--json]` recorre una ruta fija a paso 1/60 y
+  saca velocidad real, ritmo de patas, patinaje del pie, inclinación,
+  balanceo, fotogramas de la media vuelta y altura en partida; `--video`
+  graba el MP4 (GPU por defecto, mudo como siempre). `--feel=S.K=N`
+  prueba otros valores de FEEL sin tocar código. Los dos `--feel` escriben
+  en `window.__feel`, el `FEEL` que usa el juego (lo expone
+  `src/tools/main.ts`); un `import('/src/gamefeel.ts')` desde la página
+  NO sirve tras una recarga en caliente (ERROR_LOG 2026-09-22).
+  **Pies de verdad** (2026-09-24): sigue los vértices de los huesos de pie
+  y dedo (los dos esquemas de rig, Tripo `L_Foot` y Meshy `LeftFoot` +
+  `LeftToeBase`) y suma lo que resbala el pie apoyado. En cada fotograma
+  cuenta el pie más quieto de los que tocan el suelo. Columnas:
+  `startSlideCm` y `stopSlideCm` (arrancar y frenar), `stoppedSlideCm`
+  (lo que aún se mueve con el cuerpo ya parado; debería ser ~0) y `popCm`
+  (el mayor salto de pose en un fotograma). Vuelca además
+  `<label>-<bicho>-frames.json` fotograma a fotograma. La carrera tiene
+  fases de vuelo, así que arrancar y frenar nunca dan 0: se comparan
+  antes contra después. En Sebastian no es fiable, porque su carrera de
+  cangrejo no apoya los huesos de pie.
+- **Cada habilidad, filmada y medida** (2026-09-24): con el dev server
+  vivo, `node scripts/ability-shots.mjs [--critters=A,B] [--slots=J,K,L]
+  [--video] [--json]`.
+  - **Montaje:** pone al bicho mirando a +x frente a tres muñecos quietos
+    (cerca a 1,8 u, lejos a 4,2 u y uno a un lado), lanza la habilidad a
+    paso 1/60 y deja una hoja de fotogramas por habilidad
+    (`<bicho>-<slot>.png`, cada viñeta con los pasos desde que se pulsó).
+  - **Datos** (fila en `ability-shots.json`): ventana de carga y activa,
+    cuánto se desplaza el bicho y, por muñeco, fotograma del golpe,
+    empujón máximo con su dirección, distancia, si cae y qué estados
+    recibe (stun, slow, confused…).
+  - La L de Sebastian, que es de mantener, se mantiene `--hold` pasos.
+  - Sirve para revisar habilidades con pruebas.
+- **Servidor «foto fija» para capturas largas** (2026-09-24):
+  `npx vite --config scripts/vite.snapshot.config.mjs --port 5182
+  --strictPort` levanta un segundo servidor sin vigilancia de ficheros ni
+  HMR, con su propia caché de dependencias. Sirve el código tal como
+  estaba al cargar la página, así que se puede editar `src` en el
+  servidor normal mientras una tanda o una grabación de media hora corre
+  contra este. Es también un «antes» gratis para comparar. Para que
+  coja código nuevo, se reinicia.
 - **Batch runner headless** (afilado slice G — LA herramienta
   Claude-first): con el dev server vivo,
   `npm run batch -- --matches=20 --seed=1 --player=Shelly --bots=Trunk,Sergei,Kurama --speed=8`
@@ -122,7 +205,11 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   seed dos veces (con reload entre medias) y compara la secuencia de
   eventos completa → `REPRODUCIBLE: yes/no`. `--dump-recordings=dir`
   vuelca la RecordingSession completa de cada partida (cierra el hueco
-  del volcado headless).
+  del volcado headless). **Qué-pasaría-si** (2026-09-21):
+  `--feel=movement.accelerationScale=2.4[,S.K=N]` cambia valores de FEEL
+  en la página antes de cada partida sin tocar el código (prohibido con
+  el golden); `--gpu` renderiza con la GPU (ANGLE/D3D11): ~14 s de reloj
+  por partida a `--speed=8` frente a minutos con SwiftShader.
 
 - **Golden sim guardian** (2026-08-24): `npm run golden` corre una
   matriz FIJA de 3 partidas doradas (cubre los 9 critters, seeds
@@ -134,6 +221,122 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   `npm run golden:write` y el diff del JSON documenta el cambio en el
   commit. Ojo: correr con el dev server ASENTADO (una edición de src
   en caliente dispara HMR a mitad de partida y aborta el run).
+  **Después de `golden:write`, correr SIEMPRE `npm run golden`** y ver
+  3/3 antes de commitear: el 2026-09-07 una primera escritura tras un
+  cambio grande dejó el último `match_ended` truncado y la comparación
+  siguiente gritó "cambio de balance" sobre un cambio puramente visual
+  (ERROR_LOG 2026-09-07).
+
+- **Terreno / generador de arena** (terreno v2 fase 0, 2026-09-06):
+  - `npm run arena -- --seed 501 --ascii` dibuja el disco EN LA TERMINAL
+    rasterizado con la misma `pointInFragment` que usa la física (no una
+    aproximación), con `--at-batch K` / `--at-seconds S` para ver el
+    estado tras N lotes caídos. Otros modos: `--json` (ArenaLayout
+    entero, pipeable a jq), `--timeline` (aviso y caída de cada lote en
+    segundos), `--curve` (área viva por instante), `--svg <ruta>` y
+    `--sweep K` (barrido determinista de K semillas: fragmentos,
+    patrón A/B, contigüidad del primer lote, colapso total, área viva).
+    Sin modo o con un argumento inválido sale con exit 1 — una
+    invocación mal escrita nunca devuelve un resumen engañoso.
+  - `npm run golden:layout` (Vitest, milisegundos, sin navegador)
+    compara el hash FNV-1a del layout de 67 semillas contra
+    `tests/sim/arena-layout-golden.json`: separa "cambió el terreno" de
+    "cambió el balance", que es lo que mide el golden de partidas.
+    Cambio intencional → `npm run golden:layout:write` y el diff del
+    JSON lo documenta. Los invariantes que lo acompañan
+    (`tests/sim/arena-layout.test.ts`, dentro de `npm run test:sim`)
+    protegen la ESTRUCTURA (cobertura sin huecos, contigüidad angular,
+    pertenencia a lotes, determinismo); el TEMPO lo protege el golden.
+  - `node scripts/check-sim-parity.mjs` (dentro de `npm run check`)
+    compara byte a byte las copias espejo cliente/servidor del sim
+    —hoy `arena-fragments.ts`— ignorando solo el bloque de cabecera
+    (que se nombran mutuamente y nunca pueden coincidir), con
+    presupuesto de líneas para que la tolerancia no se trague lógica.
+    Añadir un par futuro es una entrada más en su lista `PAIRS`.
+  - Estado del colapso en vivo: `Arena.getCollapseState()` (nivel, lote
+    en aviso, fragmentos vivos/total) alimenta `debugGetArenaInfo` y los
+    eventos `collapse_warn` / `collapse_batch` del recording, que desde
+    2026-09-06 se emiten TAMBIÉN offline (antes leían campos que solo
+    cambiaban online, así que el golden de partidas nunca vio caer la
+    arena).
+  - Requisito: `arena-layout.mjs` y `write-arena-layout-golden.mjs`
+    importan `src/arena-fragments.ts` directamente, así que necesitan
+    **Node ≥ 22.18** (type stripping). El resto del repo sigue con
+    `engines.node >= 20.19`; los npm scripts ya pasan el flag.
+  - **Look del suelo** (fase 1a): `ARENA_LOOK` en `src/arena-look.ts` es
+    la fuente única de cómo se ve la arena (tamaño de tile, tintes por
+    banda, acantilado, emisivo del aviso, tone mapping). Desde el lab:
+    `__devApi.getArenaLook()` y `__devApi.setArenaLook({tileSize: 6})`
+    — los cambios de color se ven al frame siguiente y los estructurales
+    disparan `rebuildArenaVisuals()`, que rehace las mallas conservando
+    semilla y pack sin cortar la partida.
+  - **Fondo del bioma — fondo v2, la isla en el cielo** (carril ARENA,
+    2026-09-21; plan en `docs/DIORAMAS.md` §«Fondo v2»). Hay cuatro piezas:
+    - **Módulos**: `src/arena-backdrop.ts` hace las mallas y
+      `src/arena-sky-layout.ts` las coloca. Este último es un módulo hoja
+      y determinista: decide nubes, islotes, cúpula y el pasillo del canto.
+    - **Valores**: los globales van en `BACKDROP_LOOK` y los de cada bioma
+      en `PackDef.sky`.
+    - **En vivo**: `__devApi.getBackdropLook()` y
+      `setBackdropLook({ mode: 'sea' })` (`mode: 'sea'` es el A/B con el mar
+      y la foto de antes). También `getPackSky(id)` y `setPackSky(id, patch)`,
+      que devuelven `{applied, rebuilt, rejected}`. `getBackdropStats()`
+      da capas, tris, draws, `corridorViolations` (tiene que ser 0),
+      `maxExtent`, `buildMs` y el hash. `setCameraPose('victory' | 'defeat'
+      | 'wide' | 'low' | 'game')` sirve para mirar las poses de fin de
+      partida sin jugar una.
+    - **CLI**: `arena-shots.mjs` con `--pose`, `--backdrop`, `--scatter 0`,
+      `--no-hud`, `--metrics`, `--critters` y `--sky-patch` (abajo).
+    Esto cierra el hueco de doble superficie que había: antes
+    `BACKDROP_LOOK` solo se tocaba editando el fichero.
+  - **Escala del suelo por bioma**: `PackDef.groundTile` en
+    `src/arena-decorations.ts` (u de mundo por repetición de la textura).
+    No es un capricho: las texturas traen conchas, pétalos y musgo
+    pintados, y cada una pide su tamaño (coral 9 · jungle 14 · desert 16
+    · tundra 18 · kitsune 26 = una sola vez sobre el disco). Se aplica en
+    `Arena.applyGroundTexture`, porque la textura se cachea por ruta y la
+    comparten los cinco packs. `ARENA_LOOK.tileSize` queda de fallback
+    sin pack.
+  - **Diorama denso** (dioramas slice 1): `__devApi.getScatterStats()`
+    devuelve instancias, draw calls y triángulos por capa;
+    `__devApi.setScatterDensity(0.8)` reconstruye la capa en vivo con la
+    misma semilla (0 = sin diorama, útil para comparar). Las recetas
+    viven en `src/arena-scatter-recipes.ts` (hoja de números por bioma) y
+    los techos de gameplay en `src/arena-scatter-types.ts`; `npm run
+    test:sim` incluye `tests/sim/arena-scatter.test.ts` (determinismo
+    byte a byte, techos de altura, coste). Las sombras de contacto son
+    `src/blob-shadows.ts`, un InstancedMesh para todos los critters.
+  - **Instancias de prueba mudas** (directiva de Rafa 2026-09-07):
+    `scripts/lib/headless-browser.mjs` (`launchMutedBrowser`,
+    `muteGameAudio`, `newMutedPage`). Silencia por dos vías —
+    `--mute-audio` en Chromium y las banderas de `src/audio.ts` en
+    localStorage antes del primer script — así que la instancia no suena
+    ni en headed, y en las capturas los botones del HUD ya salen
+    apagados. Ya aplicado en `arena-shots.mjs`, `run-match-batch.mjs` y
+    `playwright.config.ts`; úsalo en cualquier script nuevo.
+  - **Hoja de contactos**: `node scripts/arena-shots.mjs [--out dir]
+    [--seed N] [--packs a,b] [--at-seconds S]` captura los 5 biomas con
+    la cámara de juego y el panel del lab oculto. Es la forma de MIRAR el
+    efecto de un cambio de `ARENA_LOOK` sin abrir el navegador: esperar
+    a que el recuento de meshes se estabilice (los GLB de decor tardan)
+    y saltar la cuenta atrás ya lo hace el script.
+    - **Opciones del fondo v2**: `--pose game,victory,wide,defeat,low`
+      (varias poses del mismo instante congelado), `--viewport 390x844`,
+      `--backdrop sky|sea`, `--scatter 0`, `--no-hud`, `--critters
+      A,B,C,D` y `--sky-patch '{json}'`.
+    - **`--metrics`**: escribe `metrics*.json`, que se acumula entre
+      ejecuciones (`scripts/lib/arena-metrics.mjs`). Mide el ΔL del canto
+      en 64 azimuts sobre el **labio vivo**, más la luma media de fondo y
+      arena y el % de fondo por encima del p75 de la arena. Solo vale en
+      la pose de juego.
+    - **La captura de la métrica va sin HUD, sin scatter y sin props**:
+      los oculta ella sola y luego los devuelve, porque el fleco y las
+      palmeras asoman por el labio y no son culpa del fondo. Excluye además
+      los azimuts con un sector cayendo, y usa la pose de juego exacta, sin
+      temblor.
+  - Registro histórico: `scripts/research/arena-stats.mts` es la
+    medición congelada del diagnóstico del 2026-09-05 que respalda
+    `docs/ARENA_V2.md §1.2`. Para medir de aquí en adelante, el CLI.
 
 Huecos de AFILADO_PLAN cerrados: el applier de ability-tuner llegó el
 2026-08-24 como **`ability-patch`** (6º tool type) — ver "Tuner de
@@ -286,7 +489,7 @@ a fallback when clipboard / Node is unavailable.
 > Full anim-lab design in BUILD_LOG.md §"2026-04-25 Animation
 > Validation Lab". Decor system design in BUILD_LOG.md §"2026-04-25
 > In-arena decor". Full mesh2motion integration notes:
-> [`bichitos-mesh2motion/README-INTEGRATION.md`](../../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano desde H3 slice 8).
+> [`bichitos-mesh2motion/README-INTEGRATION.md`](../bichitos-mesh2motion/README-INTEGRATION.md) (repo hermano desde H3 slice 8).
 
 ## Propósito
 

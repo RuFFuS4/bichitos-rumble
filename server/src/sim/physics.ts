@@ -9,7 +9,7 @@
 
 import type { PlayerSchema } from '../state/PlayerSchema.js';
 import { SIM, getCritterConfig } from './config.js';
-import { getAbilityKit } from './abilities.js';
+import { cancelActiveAbilities, getAbilityKit, type SlipperyEffect } from './abilities.js';
 
 /**
  * Minimal shape for the per-player internal data used here.
@@ -26,6 +26,13 @@ interface InternalLike {
   respawnTimer: number;
   lastAttackerSid?: string | null;
   lastAttackTimeMs?: number;
+  /** Ability flags outside `p.abilities` (Sebastian's All-in charge and
+   *  resolution, the Cone Pulse edge) that a fall must clear. */
+  lHoldCharging?: boolean;
+  lHoldChargeTime?: number;
+  lHoldPrevInput?: boolean;
+  allInActive?: boolean;
+  pulseLastActive?: boolean;
 }
 
 /** Headbutt-credit is ignored if the last hit was more than this long ago.
@@ -100,12 +107,12 @@ export function resolveCollisions(
         // "running into Shelly does nothing" behaviour Rafa flagged.
         const aAnchored = isAnchored(a);
         const bAnchored = isAnchored(b);
-        const BOUNCE = SIM.collision.normalPushForce * 1.4;
+        const BOUNCE = SIM.collision.normalPushForce * SIM.collision.anchoredBounceFactor;
         // 2026-08-24 balance v2 — shell reflect (espejo del cliente,
         // src/physics.ts): headbuttear al anclado devuelve tu propia
         // fuerza × SHELL_REFLECT. Mantener en sync con
         // FEEL.collision.shellReflectFactor.
-        const SHELL_REFLECT = 0.85;
+        const SHELL_REFLECT = SIM.collision.shellReflectFactor;
         const reflectForce = (cfg: { headbuttForce: number; headbuttBoost?: number }) =>
           cfg.headbuttForce * SIM.collision.headbuttMultiplier *
           (cfg.headbuttBoost ?? 1.0) * SHELL_REFLECT;
@@ -160,8 +167,8 @@ export function resolveCollisions(
         // stunned side (was ×2). Mirrors client physics. Currently
         // only Trunk's K+L write `stunTimer > 0`; safe to bump
         // globally without disturbing other critters.
-        const aVulnMul = a.stunTimer > 0 ? 4 : 1;
-        const bVulnMul = b.stunTimer > 0 ? 4 : 1;
+        const aVulnMul = a.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1;
+        const bVulnMul = b.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1;
         if (a.isHeadbutting) {
           b.vx += nx * force * ratioB * bVulnMul;
           b.vz += nz * force * ratioB * bVulnMul;
@@ -212,13 +219,31 @@ export function checkFalloff(
 ): void {
   for (const p of players) {
     if (!p.alive || p.falling || p.immunityTimer > 0) continue;
-    if (!isOnArena(p.x, p.z)) {
-      p.falling = true;
-      p.lives -= 1;
-      const data = internal.get(p.sessionId);
-      if (data) data.respawnTimer = SIM.lives.respawnDelay;
-    }
+    if (!isOnArena(p.x, p.z)) startFalling(p, internal.get(p.sessionId));
   }
+}
+
+/**
+ * Put a player into the fall: one life lost, respawn countdown armed, and
+ * everything in flight ended — active abilities (cooldown started), the
+ * All-in charge or pending resolution, the Cone Pulse edge. The ability
+ * steps skip fallers, so those used to resume at the respawn point (a
+ * charge cut by a fall resolved from there). Ignores immunity on purpose:
+ * callers that force a fall (the All-in hit and miss) want it regardless.
+ * Mirror of the client's Critter.startFalling.
+ */
+export function startFalling(p: PlayerSchema, data: InternalLike | undefined): void {
+  if (p.falling) return;
+  p.falling = true;
+  p.lives = Math.max(0, p.lives - 1);
+  cancelActiveAbilities(p);
+  if (!data) return;
+  data.respawnTimer = SIM.lives.respawnDelay;
+  data.lHoldCharging = false;
+  data.lHoldChargeTime = 0;
+  data.lHoldPrevInput = false;
+  data.allInActive = false;
+  data.pulseLastActive = false;
 }
 
 /**
@@ -345,12 +370,12 @@ export interface ActiveZoneSnapshot {
    *  through his own Poison Cloud, etc.). Optional — caller can
    *  omit for tests or generic snapshots. */
   ownerSid?: string;
-  /** 2026-04-30 final-L — Kowalski Frozen Floor flag. When true,
-   *  critters inside the zone keep more of their velocity (low
-   *  friction) and move with reduced control authority. Read
-   *  by `simulatePlaying` to scale the friction half-life and
-   *  the input acceleration. */
-  slippery?: boolean;
+  /** 2026-04-30 final-L — Kowalski Frozen Floor. Present only on
+   *  slippery zones: critters inside keep more of their velocity
+   *  (friction half-life × `frictionMult`) and have less control
+   *  (input acceleration × `accelMult`). Read through
+   *  `getSlipperyZone`. */
+  slippery?: SlipperyEffect;
   /** 2026-04-30 final-L — Sihans Sinkhole flag. When true, the
    *  zone applies a continuous inward pull on critters (their
    *  velocity is nudged toward the zone centre each tick). */
@@ -361,19 +386,30 @@ export interface ActiveZoneSnapshot {
 }
 
 /**
- * Returns true if the player is currently standing inside a
- * slippery zone (Kowalski Frozen Floor) that they don't own.
- * Used by `simulatePlaying` to branch friction + accel.
+ * The ice under the player, if they stand inside a slippery zone
+ * (Kowalski Frozen Floor) they don't own: its friction half-life and
+ * input acceleration multipliers. Overlapping ice doesn't stack: the
+ * first zone found wins. Mirror of the client's getSlipperyZone
+ * (src/abilities-runtime.ts).
  */
-export function isOnSlipperyZone(p: PlayerSchema, zones: readonly ActiveZoneSnapshot[]): boolean {
+export function getSlipperyZone(p: PlayerSchema, zones: readonly ActiveZoneSnapshot[]): SlipperyEffect | undefined {
   for (const z of zones) {
     if (!z.slippery) continue;
     if (z.ownerSid !== undefined && z.ownerSid === p.sessionId) continue;
     const dx = p.x - z.x;
     const dz = p.z - z.z;
-    if (dx * dx + dz * dz <= z.radius * z.radius) return true;
+    if (dx * dx + dz * dz <= z.radius * z.radius) return z.slippery;
   }
-  return false;
+  return undefined;
+}
+
+/**
+ * Boolean form of `getSlipperyZone`. BrawlRoom's input and friction
+ * steps still use it with their own ×0.35 / ×5; once they read the
+ * zone's `accelMult` / `frictionMult` this goes.
+ */
+export function isOnSlipperyZone(p: PlayerSchema, zones: readonly ActiveZoneSnapshot[]): boolean {
+  return getSlipperyZone(p, zones) !== undefined;
 }
 
 export function effectiveSpeed(p: PlayerSchema, activeZones: readonly ActiveZoneSnapshot[] = []): number {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Critter } from './critter';
-import { activateAbility, tickSebastianHoldToFire } from './abilities-runtime';
+import { activateAbility, getSlipperyZone, tickSebastianHoldToFire } from './abilities-runtime';
 import { FEEL } from './gamefeel';
 import { getMoveVector, isHeld } from './input';
 
@@ -15,7 +15,10 @@ export function updatePlayer(
   scene?: THREE.Scene,
   allCritters?: readonly Critter[],
 ): void {
-  if (!critter.alive) return;
+  // No input while falling (bots and the server skip fallers too): a J/K
+  // pressed in the void used to arm and go off at the respawn point, and
+  // Sebastian could fire the All-in mid-fall at whoever pushed him.
+  if (!critter.alive || critter.falling) return;
 
   const move = getMoveVector();
   let mx = move.x;
@@ -35,8 +38,16 @@ export function updatePlayer(
 
   // Signal whether player is actively steering (kills drift when idle)
   critter.hasInput = mx !== 0 || mz !== 0;
+  critter.moveX = mx;
+  critter.moveZ = mz;
 
-  const accel = critter.effectiveSpeed * FEEL.movement.accelerationScale;
+  // On someone else's ice (Kowalski Frozen Floor) there is less grip.
+  // Applied before moveAccel so the friction loop's dead zone sees the
+  // real push. Mirror: bot.ts and BrawlRoom's input step.
+  const ice = getSlipperyZone(critter.x, critter.z, critter.config.name);
+  const accel = critter.effectiveSpeed * FEEL.movement.accelerationScale * (ice?.accelMult ?? 1);
+  critter.moveAccel = Math.hypot(mx, mz) * accel;
+  critter.pace = 1;
   critter.vx += mx * accel * dt;
   critter.vz += mz * accel * dt;
 

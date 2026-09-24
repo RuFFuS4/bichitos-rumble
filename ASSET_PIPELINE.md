@@ -155,7 +155,117 @@ npm run inspect:parts public/models/critters/<id>.glb
 
 # Local bounds + suggested scale/pivotY for the roster entry:
 node scripts/inspect-bounds.mjs public/models/critters/<id>.glb
+
+# Run clip stride + left-foot phase (drives the leg rhythm in game).
+# Re-run with --write after re-exporting ANY critter's Run clip — the
+# table in src/critter-locomotion.ts is measured, never hand-tuned:
+node scripts/inspect-stride.mjs <id>
+node scripts/inspect-stride.mjs --write
+node scripts/inspect-stride.mjs --check   # exit 1 if the table is stale
+
+# Cache-busting version of every critter GLB URL in src/roster.ts:
+node scripts/stamp-critter-glbs.mjs          # after ANY change to a GLB
+node scripts/stamp-critter-glbs.mjs --check  # exit 1 if a ?v= is stale
+
+# If the critter has a post-import recipe (below): commit the import,
+# point the recipe's base.ref at that commit, THEN replay it (without
+# that it refuses: the GLB changed outside the recipe):
+node scripts/critter-recipe.mjs <id>
 ```
+
+A critter with a new or re-exported Run clip and a stale `RUN_GAIT` row
+runs with the wrong leg rhythm (feet gliding or treadmilling). See
+[`docs/FEELING.md`](docs/FEELING.md) §3.3.
+
+### Recetas post-import (2026-09-23)
+
+Some clips need surgery the source never had — Kowalski's Run feet that
+did not sweep the ground, a hunched pelvis. Those edits are **never done
+by hand on the binary**: they live in `scripts/critter-recipes/<id>.json`
+and `node scripts/critter-recipe.mjs <id>` replays them:
+
+1. takes the BASE GLB pinned in the recipe (`base.ref`, a commit), never
+   the file it overwrites — replaying twice gives the same result;
+2. per edited clip, runs Blender headless with
+   `scripts/blender/critter-clip-edit.py` (sections `hold` → `ik` →
+   `torso`, documented at the top of that file) to get a donor GLB;
+3. copies ONLY that clip's listed channels (`nodes`) from the donor into
+   the base — and fails if Blender edited a bone that is not listed;
+4. repacks with `gltfpack -c -kn`: geometry and the other clips come out
+   equivalent (same triangles, rotations within ~0.003°), textures
+   byte-identical;
+5. when writing the game GLB, regenerates `RUN_GAIT` and the URL version
+   and records the output hash in the recipe (`output`).
+
+Two optional sections run on the base before the clip edits (F2 of the
+graphics pass, 2026-09-23):
+- `diet`: `{ targetTris, dropNormals, uvSnapTexels, renormal }`,
+  simplify to a triangle target with the recipe validated at game scale
+  (Meshy: drop the split normals, snap UVs within 1 texel, weld, rebuild
+  smooth normals; Tripo: keep normals to weld, rebuild after). It refuses
+  a base already at the target, so a diet never nests.
+- `textures`: `{ dedup, webp }`, share byte-identical images (the Meshy
+  emissive is the base colour again) and/or re-encode as WebP.
+
+`gltfpack: ["-af", "0"]` adds flags to the repack (Kermit never went
+through gltfpack before, and its default 30 Hz resampling stretched his
+clips).
+
+`--out=x.glb` writes elsewhere for an A/B without touching anything, and
+only with it `--set=Run.torso.pitchDeg=8` tries a value without editing
+the recipe: the game GLB always comes from the versioned recipe.
+Blender comes from `$BLENDER` (else `blender` on the PATH; tested 5.2 LTS).
+
+**After a re-import** (`import-critter`, e.g. a Tripo re-export), the
+recipe does not apply itself: commit the new import, point `base.ref` at
+that commit and run `critter-recipe.mjs <id>`. If you forget, it refuses
+to run: the game GLB is neither its last `output` nor its base
+(`--force` overrides).
+
+What the IK needs to look right (Kowalski's first pass got each wrong):
+`groundFrom` (the Idle's ankle height and flat foot — the Run's lowest
+frame sank the planted foot 20-27 cm), `swingFlat` (the clip's own foot
+tilt in the swing dipped the toes through the floor), and legs kept out
+of both ends of their reach (the log prints each leg's range and fold
+limit; `soft` cushions the ends). The Blender script refuses a knee that
+flips (>90° between frames) and warns from 25°; the real check is in
+game: `critter-motion.mjs` (foot slip ≈ 1) and the visor A/B.
+
+A third optional part of `textures`, `grade`, is the palette pass
+(2026-09-24, STYLE_LOCK.md §Roster Visual Reference). It is a list of
+colour-family ops (`select` hue/sat/light, `to` a colour, optional
+`contrast`) that move each family towards the sketch while keeping the
+texture's own detail: `scripts/critter-grade.mjs`. A graded texture
+always ships as WebP.
+
+Preview a grade on the current GLB, without Blender:
+
+```bash
+node scripts/critter-grade.mjs <id> --ops=try.json --out=preview.glb
+```
+
+Recipes today — all nine critters; **run the recipe, never
+`compress-critter-glbs.mjs`**, which would repack the game GLB outside
+it. The palette went to kowalski, sergei, kermit, shelly, cheeto and
+sihans; sihans' recipe is the palette only.
+
+| Critter | Recipe |
+|---|---|
+| kowalski | Run: pelvis as in Idle, upright torso, IK feet (FEELING.md §7.8); WebP |
+| kurama | diet 945 k → 20 k; emissive dedup — 13.8 → 0.36 MB |
+| sebastian | diet 1.09 M → 15 k; emissive dedup — 15.2 → 0.28 MB |
+| kermit | diet 1.94 M → 30 k (warts intact); WebP; `-af 0` — 14.2 → 0.58 MB; Run at 24 fps: 1.35 → 3.5 cycles/s |
+| sergei | emissive dedup |
+| cheeto | WebP 90 (its stripes drop to 33 dB at 82); Run 1.85 → 3.5 cycles/s |
+| shelly | WebP; Run 1.0 → 2.0 cycles/s |
+| trunk | WebP; Run symmetric with a short stance (d 0.2), 2.4 cycles/s |
+
+The four Tripo Runs (Cheeto, Kermit, Shelly, Trunk) are the same generic
+sprint. Each recipe holds the pelvis, re-plants the feet with a stride
+set from the wanted cadence and closes the loop (`loop`), because the
+sprint's right arm jumps 19.5° on every wrap. Stride from cadence:
+`L = stride × d × clip duration`, with `stride = old stride × old
+cadence / new cadence` (FEELING.md §7.9).
 
 ---
 

@@ -27,11 +27,11 @@ import type { Critter } from '../critter';
  * Keys map to single-emoji glyphs (easy to extend, no asset pipeline).
  */
 export type CritterStatus =
-  | 'frozen'        // Kowalski Snowball hit (slowTimer > 0, source = projectile)
+  | 'frozen'        // Kowalski Snowball hit (slowTimer > 0) or on his Frozen Floor (ice zone)
   | 'slowed'        // generic slow (Sihans Quicksand zone, etc.)
   | 'poisoned'      // Kermit Poison Cloud
   | 'stunned'       // Trunk Grip stun window (stunTimer > 0)
-  | 'vulnerable'    // post-stun "everyone hits double" window
+  | 'vulnerable'    // stun window: every hit pushes ×4 (FEEL.collision.stunnedVulnerability)
   | 'frenzy'        // L active
   | 'steel-shell'   // Shelly Steel Shell
   | 'decoy-ghost';  // Kurama Mirror Trick caster

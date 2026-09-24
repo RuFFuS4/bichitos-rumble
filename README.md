@@ -156,9 +156,10 @@ raw numeric stats (speed / mass / headbuttForce) via a linear mapping
 and the server imports the same table byte-identical, so rebalancing
 is a 3-character edit per row that propagates to both client + server.
 
-The arena is a stone platform floating high in a painted sky (custom
-shader skydome + distant cloud disc) — when a fragment collapses it
-tumbles away under gravity instead of vanishing. Countdown entry: the
+The arena is a stone platform floating high in a painted sky (the
+pack's equirect panorama bound as `scene.background`, plus a dark void
+cylinder under the platform) — when a fragment collapses it tumbles
+away under gravity instead of vanishing. Countdown entry: the
 fighters drop from the sky with a gravity arc, a dust puff + thud fire
 as each one lands. The 3-2-1 digits ramp colour with urgency (red →
 amber → yellow) and GO! paints in green with a radial burst.
@@ -199,12 +200,15 @@ them.
 
 ## Arena packs
 
-Five visually distinct arena packs roll randomly per match: jungle,
-frozen tundra, desert dunes, coral beach, kitsune shrine. Each ships
-its own skybox, fog tint, ground texture, and ~40-50 in-arena decor
-GLBs (palms, icebergs, cacti, corals, torii). The countdown waits for
-the pack assets to settle before "GO!" so the match never starts on
-a bare floor.
+Five visually distinct arena packs roll randomly per match: jungle
+(16 props), frozen tundra (13), desert dunes (11), coral beach (18),
+kitsune shrine (15). Each ships its own skybox, fog tint, ground
+texture, and its slice of the 73 authored in-arena decor placements
+(palms, icebergs, cacti, corals, torii — `src/arena-decor-layouts.ts`,
+all of them between r 7.0 and r 11.5). The countdown waits for the
+pack assets to settle before "GO!" so the match never starts on a
+bare floor. Prop coherence, weight and shadows are fase 4 of
+[`docs/ARENA_V2.md`](docs/ARENA_V2.md).
 
 **Local achievement system** (BADGES) — 16 offline belts
 (9 per-critter Champions + 7 global trophies like Speedrun / Iron

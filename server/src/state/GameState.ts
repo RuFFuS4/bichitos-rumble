@@ -1,6 +1,7 @@
 import { MapSchema, Schema, type } from '@colyseus/schema';
 import { PlayerSchema } from './PlayerSchema.js';
 import { SIM } from '../sim/config.js';
+import { NET_PROTOCOL } from '../protocol.js';
 
 export type MatchPhase = 'waiting' | 'countdown' | 'playing' | 'ended';
 
@@ -38,4 +39,10 @@ export class GameState extends Schema {
   @type('string') arenaPackId: string = 'jungle';
 
   @type({ map: PlayerSchema }) players = new MapSchema<PlayerSchema>();
+
+  /** Eco de NET_PROTOCOL (2026-09-21). El cliente lo lee tras unirse y se
+   *  va si no coincide con el suyo: así detecta un servidor VIEJO, que no
+   *  tiene guard (src/network.ts). Va el último a propósito: añadir al
+   *  final no mueve los índices del schema. No se quita nunca. */
+  @type('number') protocol: number = NET_PROTOCOL;
 }

@@ -17,6 +17,27 @@ function isAnchoredCritter(c: Critter): boolean {
   return false;
 }
 
+/**
+ * A dash (J, charge_rush) has no hit of its own: running into someone is
+ * the plain nudge of resolveCollisions, and the victim didn't react at
+ * all. This is its visual beat, once per victim per activation
+ * (`AbilityState.rammed`): the victim flashes and leans away from the
+ * rusher, the headbutt hit sounds and the camera shakes like a dash. No
+ * hit stop and no extra force — the push stays the nudge. Offline only:
+ * online the server resolves collisions.
+ */
+function rushContactFeedback(rusher: Critter, victim: Critter, dirX: number, dirZ: number): void {
+  for (const s of rusher.abilityStates) {
+    if (!s.active || s.windUpLeft > 0 || s.def.type !== 'charge_rush') continue;
+    if (s.rammed.has(victim)) return;
+    s.rammed.add(victim);
+    applyImpactFeedback(victim, dirX, dirZ);
+    playSound('headbuttHit');
+    triggerCameraShake(FEEL.shake.chargeRush);
+    return;
+  }
+}
+
 /** Check and resolve collisions between all critters. */
 export function resolveCollisions(critters: Critter[]): void {
   for (let i = 0; i < critters.length; i++) {
@@ -75,7 +96,7 @@ export function resolveCollisions(critters: Critter[]): void {
           attacker.vz += dirZ * rf;
           triggerHitStop(FEEL.hitStop.headbutt);
           triggerCameraShake(FEEL.shake.headbutt);
-          applyImpactFeedback(attacker);
+          applyImpactFeedback(attacker, dirX, dirZ);
           playSound('headbuttHit');
         };
         if (aAnchored && !bAnchored) {
@@ -129,7 +150,7 @@ export function resolveCollisions(critters: Critter[]): void {
           a.vz -= nz * force * FEEL.headbutt.recoilFactor * aVuln;
           triggerHitStop(FEEL.hitStop.headbutt);
           triggerCameraShake(FEEL.shake.headbutt * boost);
-          applyImpactFeedback(b);
+          applyImpactFeedback(b, nx, nz);
           playSound('headbuttHit');
           // Badge aggregation: count the hit on the receiver. Used by
           // Untouchable / Pain Tolerance evaluation via recordWin().
@@ -143,7 +164,7 @@ export function resolveCollisions(critters: Critter[]): void {
           b.vz += nz * force * FEEL.headbutt.recoilFactor * bVuln;
           triggerHitStop(FEEL.hitStop.headbutt);
           triggerCameraShake(FEEL.shake.headbutt * boost);
-          applyImpactFeedback(a);
+          applyImpactFeedback(a, -nx, -nz);
           playSound('headbuttHit');
           a.matchStats.hitsReceived++;
           if (b.config.name === 'Kurama') b.lastHitTargetCritter = a.config.name;
@@ -153,6 +174,9 @@ export function resolveCollisions(critters: Critter[]): void {
           a.vz -= nz * force * massRatioA * aVuln;
           b.vx += nx * force * massRatioB * bVuln;
           b.vz += nz * force * massRatioB * bVuln;
+          // A dash that runs into someone still reads as a hit.
+          rushContactFeedback(a, b, nx, nz);
+          rushContactFeedback(b, a, -nx, -nz);
         }
       }
     }

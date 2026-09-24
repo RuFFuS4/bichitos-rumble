@@ -15,11 +15,13 @@
 
 import * as THREE from 'three';
 import type { Critter } from './critter';
-import { triggerHitStop, triggerCameraShake, applyDashFeedback, applyLandingFeedback, applyImpactFeedback, FEEL } from './gamefeel';
+import { triggerHitStop, triggerCameraShake, applyDashFeedback, applyLandingFeedback, applyImpactFeedback, createFrozenFrameGate, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
 import { spawnDustPuff } from './dust-puff';
 import { spawnLocalProjectile } from './projectiles';
+import { FRAG, pointInFragment, type ArenaLayout } from './arena-fragments';
 import {
+  COPYCAT_KEYS,
   CRITTER_ABILITIES,
   CRITTER_VFX_PALETTE,
   type AbilityDef,
@@ -40,16 +42,24 @@ import {
 // We need access to the live Arena (to query + kill fragments under
 // the hole disc) without making this module depend on `./arena`
 // directly (which imports DECOR_TYPES → THREE → cycles). Boot wires
-// the arena via `setArenaForAbilities` from main.ts so the gameplay
-// path can call `arena.killFragmentIndices(...)` without a static
-// circular import.
+// the arena via `setArenaForAbilities` from main.ts (and the lab from
+// tools/main.ts) so the gameplay path can call
+// `arena.killFragmentIndices(...)` without a static circular import.
 interface ArenaForAbilities {
   getAliveFragmentsInDisc(cx: number, cz: number, r: number): number[];
   killFragmentIndices(indices: number[]): void;
+  isOnArena(x: number, z: number): boolean;
+  getLayout(): ArenaLayout | null;
 }
 let _arenaRef: ArenaForAbilities | null = null;
 export function setArenaForAbilities(a: ArenaForAbilities | null): void {
   _arenaRef = a;
+}
+
+/** Live floor at (x, z): the wired arena's alive fragments, or the whole
+ *  disc when no arena is wired. */
+function isOnLiveFloor(x: number, z: number): boolean {
+  return _arenaRef ? _arenaRef.isOnArena(x, z) : Math.hypot(x, z) <= FRAG.maxRadius;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +75,7 @@ function stateFromDef(def: AbilityDef): AbilityState {
     active: false,
     effectFired: false,
     trailTimer: 0,
+    rammed: new Set(),
   };
 }
 
@@ -98,8 +109,23 @@ export function findAbilityByTag(
   return null;
 }
 
-export function activateAbility(state: AbilityState, _critter: Critter): boolean {
+/** Dash and blink are the abilities that move the caster on purpose. */
+function isMovementAbility(def: AbilityDef): boolean {
+  return def.type === 'charge_rush' || def.type === 'blink';
+}
+
+/** True while another slot holds a self-anchoring buff (Shelly Steel
+ *  Shell), wind-up included: anchored means "invulnerable but can't
+ *  move", so no dash or blink can start. Server mirror: `blockedByAnchor`
+ *  in server/src/sim/abilities.ts. */
+function blockedByAnchor(state: AbilityState, critter: Critter): boolean {
+  if (!isMovementAbility(state.def)) return false;
+  return critter.abilityStates.some((s) => s !== state && s.active && s.def.selfAnchorWhileBuffed === true);
+}
+
+export function activateAbility(state: AbilityState, critter: Critter): boolean {
   if (!canActivateAbility(state)) return false;
+  if (blockedByAnchor(state, critter)) return false;
   state.active = true;
   state.effectFired = false;
   state.windUpLeft = state.def.windUp;
@@ -108,6 +134,15 @@ export function activateAbility(state: AbilityState, _critter: Critter): boolean
   // Effect is fired from updateAbilities, which always has access to scene.
   // This avoids needing a null-scene placeholder and keeps the firing path unified.
   return true;
+}
+
+/** End an ability early: whatever it had left doesn't fire, and its
+ *  cooldown starts as if it had run its course. */
+export function cancelAbility(state: AbilityState): void {
+  state.active = false;
+  state.windUpLeft = 0;
+  state.durationLeft = 0;
+  state.cooldownLeft = state.def.cooldown;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +172,41 @@ const DASH_TRAIL_DRIFT_FRACTION = 0.20;
  *  shockwave so the dash reads as "explosive launch" not "AoE attack". */
 const DASH_ENTRY_BURST_RADIUS = 1.4;
 
+/** Below this yank length (world units) the grip's victim barely moved,
+ *  so its impact lean falls back to "toward Trunk" (-facing). */
+const GRIP_MIN_YANK_FOR_LEAN = 0.05;
+
+/**
+ * Who a Trunk Grip would take right now: the closest valid enemy within
+ * `gripFrontalRange` and ±`gripFrontalAngleDeg` of the caster's facing,
+ * and how far it is. Shared by the grip itself and the bot AI's decision
+ * to cast it (src/bot.ts), so both read the same geometry.
+ */
+export function findGripTarget(
+  def: AbilityDef,
+  critter: Critter,
+  allCritters: readonly Critter[],
+): { target: Critter; dist: number } | null {
+  const range = def.gripFrontalRange ?? 6.0;
+  const cosHalf = Math.cos(((def.gripFrontalAngleDeg ?? 50) * Math.PI) / 180);
+  const facingX = Math.sin(critter.mesh.rotation.y);
+  const facingZ = Math.cos(critter.mesh.rotation.y);
+  let best: { target: Critter; dist: number } | null = null;
+  for (const other of allCritters) {
+    // Immune critters aren't candidates (server: same filter), so the
+    // grip takes the next one instead of whiffing on a Steel Shell.
+    if (other === critter || !other.alive || other.falling || other.isImmune) continue;
+    const dx = other.x - critter.x;
+    const dz = other.z - critter.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d > range || d < 0.01) continue;
+    if ((dx * facingX + dz * facingZ) / d < cosHalf) continue;
+    // Closest wins.
+    if (!best || d < best.dist) best = { target: other, dist: d };
+  }
+  return best;
+}
+
 function fireChargeRush(def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
   const angle = critter.mesh.rotation.y;
   critter.vx += Math.sin(angle) * def.impulse;
@@ -158,14 +228,25 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   // and rooted-during-active behaviour come from the existing
   // ROOTED_K spread.
   if (def.selfBuffOnly) {
+    // Anchoring also ends a dash or blink still running (the J pressed
+    // just before the shell); its cooldown starts as if it had expired.
+    if (def.selfAnchorWhileBuffed) {
+      for (const s of critter.abilityStates) {
+        if (s.active && isMovementAbility(s.def)) cancelAbility(s);
+      }
+    }
+    // The activation ring goes where the K was cast: under the shell, or
+    // under Mirror Trick's decoy — not where Kurama reappears.
+    const castX = critter.x;
+    const castZ = critter.z;
     const dur = def.selfImmunityDuration ?? 0;
     const invisDur = def.invisibilityDuration ?? 0;
     const total = Math.max(dur, invisDur);
     if (total > 0) {
       // Extend the existing immunity window so the caster can't be
       // pushed during the buff. Bumping critter.immunityTimer is the
-      // simplest path — the immunity blink renderer already handles
-      // the visual feedback for the duration.
+      // simplest path; the look is the buff's own (tint or ghost —
+      // Critter.updateVisuals skips the respawn blink under a self-buff).
       critter.immunityTimer = Math.max(critter.immunityTimer, total);
     }
     if (invisDur > 0) {
@@ -175,10 +256,12 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       //   1. snapshot original position
       //   2. spawn the decoy at that original spot (BEFORE moving)
       //   3. move Kurama backward (opposite of her facing) by
-      //      `decoyEscapeDistance`, clamped to arena
-      //   4. ghost her mesh + dust burst at the arrival point
-      const originX = critter.x;
-      const originZ = critter.z;
+      //      `decoyEscapeDistance`, clamped to arena, landing on
+      //      live floor (`decoyEscapeFallbacks`, else she stays)
+      //   4. ghost her mesh + a couple of dust puffs at the arrival
+      //      point (a hint, not a beacon: the ring marks the decoy)
+      const originX = castX;
+      const originZ = castZ;
       // 1+2 — decoy first.
       spawnDecoyAt(scene, critter, invisDur);
       const escDist = def.decoyEscapeDistance ?? 0;
@@ -194,32 +277,34 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
           nx = (nx / r) * ARENA_BLINK_RADIUS;
           nz = (nz / r) * ARENA_BLINK_RADIUS;
         }
+        [nx, nz] = pickSafeLanding(originX, originZ, nx, nz, def.decoyEscapeFallbacks ?? [1]);
         critter.x = nx;
         critter.z = nz;
         critter.mesh.position.x = nx;
         critter.mesh.position.z = nz;
         critter.vx = 0;
         critter.vz = 0;
-        // 4 — dust at arrival so the reappearance reads even at
-        // alpha 0.25.
-        for (let i = 0; i < 6; i++) {
-          const a = (i / 6) * Math.PI * 2;
+        // 4 — a little dust at arrival: whoever watches closely can
+        // follow her; at a glance the decoy is the one on screen.
+        const puffs = FEEL.decoy.arrivalPuffs;
+        for (let i = 0; i < puffs; i++) {
+          const a = (i / puffs) * Math.PI * 2;
           spawnDustPuff(scene, nx + Math.cos(a) * 0.4, 0, nz + Math.sin(a) * 0.4);
         }
       }
       // Ghost Kurama AFTER the move so the alpha layer applies to
-      // the new position, not the origin (decoy stays opaque-ish
-      // because the clone owns its own materials).
+      // the new position, not the origin (the decoy stays solid:
+      // the clone owns its own materials).
       critter.invisibilityTimer = invisDur;
     }
     if (def.selfTintHex !== undefined) {
       critter.selfTintHex = def.selfTintHex;
       critter.selfTintTimer = total;
     }
-    // Soft burst at the caster's feet so the activation reads, but
-    // no force is applied to anyone.
+    // Soft burst at the cast spot so the activation reads, but no
+    // force is applied to anyone.
     const palette = CRITTER_VFX_PALETTE[critter.config.name]?.pound;
-    spawnShockwaveRing(scene, critter.x, critter.z, 1.6, palette);
+    spawnShockwaveRing(scene, castX, castZ, 1.6, palette);
     triggerCameraShake(FEEL.shake.groundPound * 0.4);
     playSound('abilityFire');
     return;
@@ -230,25 +315,9 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   // and write `target.stunTimer`. Pure offline path; the online
   // server runs the same logic in `fireGroundPound`.
   if (def.gripK) {
-    const range = def.gripFrontalRange ?? 6.0;
-    const halfCone = ((def.gripFrontalAngleDeg ?? 50) * Math.PI) / 180;
     const facingX = Math.sin(critter.mesh.rotation.y);
     const facingZ = Math.cos(critter.mesh.rotation.y);
-    let target: Critter | null = null;
-    let bestScore = Infinity;
-    for (const other of allCritters) {
-      if (other === critter || !other.alive || other.falling) continue;
-      const dx = other.x - critter.x;
-      const dz = other.z - critter.z;
-      const d = Math.sqrt(dx * dx + dz * dz);
-      if (d > range || d < 0.01) continue;
-      const nx = dx / d;
-      const nz = dz / d;
-      const dot = nx * facingX + nz * facingZ;
-      if (dot < Math.cos(halfCone)) continue;
-      // Score by distance (closest wins).
-      if (d < bestScore) { bestScore = d; target = other; }
-    }
+    const target = findGripTarget(def, critter, allCritters)?.target ?? null;
     const palette = CRITTER_VFX_PALETTE[critter.config.name]?.pound;
     spawnShockwaveRing(scene, critter.x, critter.z, 1.4, palette);
     triggerCameraShake(FEEL.shake.groundPound * (def.shakeBoost ?? 1.0));
@@ -257,6 +326,14 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       const pull = def.gripPullDistance ?? 1.6;
       const tx = critter.x + facingX * pull;
       const tz = critter.z + facingZ * pull;
+      // The lean follows the real yank: a target already inside the pull
+      // distance, or off to a side, isn't moved straight at Trunk.
+      let yankX = tx - target.x;
+      let yankZ = tz - target.z;
+      if (Math.hypot(yankX, yankZ) < GRIP_MIN_YANK_FOR_LEAN) {
+        yankX = -facingX;
+        yankZ = -facingZ;
+      }
       // Snap target to the pull point (yank reads as "trunk pulled
       // them in" not "they slid"). Zero their velocity.
       target.x = tx;
@@ -265,10 +342,11 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       target.mesh.position.z = tz;
       target.vx = 0;
       target.vz = 0;
-      target.stunTimer = def.gripStunDuration ?? 2.0;
+      // Max, like the server: a grip never shortens a longer stun.
+      target.stunTimer = Math.max(target.stunTimer, def.gripStunDuration ?? 2.0);
       // Burst at the target so the yank reads.
       spawnShockwaveRing(scene, tx, tz, 1.0, palette);
-      applyImpactFeedback(target);
+      applyImpactFeedback(target, yankX, yankZ);
       triggerHitStop(FEEL.hitStop.groundPound);
     }
     return;
@@ -284,7 +362,10 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   const facingX = Math.sin(critter.mesh.rotation.y);
   const facingZ = Math.cos(critter.mesh.rotation.y);
   for (const other of allCritters) {
-    if (other === critter || !other.alive) continue;
+    // Immune (Steel Shell, Mirror Trick, respawn) and falling critters
+    // take nothing: no push, no stun, no flash. Same filter as the
+    // server's fireGroundPound.
+    if (other === critter || !other.alive || other.falling || other.isImmune) continue;
     const dx = other.x - critter.x;
     const dz = other.z - critter.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
@@ -299,13 +380,13 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       const falloff = 1 - dist / def.radius;
       other.vx += nx * def.force * falloff;
       other.vz += nz * def.force * falloff;
-      applyImpactFeedback(other);
+      applyImpactFeedback(other, nx, nz);
       // 2026-05-01 final — Trunk Slam K applies a brief stun on
       // every critter inside the AoE via `slamStunDuration`.
       // Stuns from this source compose with the global ×4
       // vulnerable rule in physics — Slam alone reads as a heavy
       // thump, Slam → headbutt deletes the target.
-      if (def.slamStunDuration && def.slamStunDuration > 0 && !other.isImmune) {
+      if (def.slamStunDuration && def.slamStunDuration > 0) {
         other.stunTimer = Math.max(other.stunTimer, def.slamStunDuration);
       }
       hitCount++;
@@ -361,7 +442,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   // covers offline matches.
   if (def.zone) {
     const kind = deriveZoneVfxKind(critter.config.name);
-    activeZones.push({
+    const age = pushOfflineZone({
       x: critter.x, z: critter.z,
       radius: def.zone.radius,
       slowMultiplier: def.zone.slowMultiplier,
@@ -369,7 +450,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       vfxKind: kind,
       ownerKey: critter.config.name,
     });
-    spawnZoneRing(scene, critter.x, critter.z, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary, kind);
+    spawnZoneRing(scene, critter.x, critter.z, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary, kind, age);
   }
 }
 
@@ -401,10 +482,10 @@ interface ActiveZone {
    *  name; online path stores the session id. Either matches the
    *  same field passed to `getZoneSlowMultiplier`. */
   ownerKey?: string;
-  /** 2026-04-30 final-L — Kowalski Frozen Floor flag. Read by
-   *  Critter friction loop to multiply the half-life when this
-   *  critter stands inside a slippery zone they don't own. */
-  slippery?: boolean;
+  /** 2026-04-30 final-L — Kowalski Frozen Floor. Present only on
+   *  slippery zones, with what the ice does to anyone standing in
+   *  it who doesn't own it (`getSlipperyZone`). */
+  slippery?: SlipperyEffect;
   /** 2026-04-30 final-L — Sihans Sinkhole flag. Per-frame pull
    *  toward the centre is applied in `tickAbilityZones`. */
   sinkhole?: boolean;
@@ -412,6 +493,16 @@ interface ActiveZone {
 }
 
 const activeZones: ActiveZone[] = [];
+
+/** Push an offline zone and return the clock its ring runs on
+ *  (spawnZoneRing `age`): seconds of game time since it spawned, which
+ *  stop with the zone on hit stop and pause, and read as its whole
+ *  lifetime once it has left the list (expired or cleared). */
+function pushOfflineZone(zone: ActiveZone): () => number {
+  activeZones.push(zone);
+  const lifetime = zone.ttl;
+  return () => (activeZones.includes(zone) ? lifetime - zone.ttl : lifetime);
+}
 
 /** Map a critter name to the zone visual kind they spawn. Centralised
  *  so offline (`fireGroundPound`/`fireBlink`) and online
@@ -433,12 +524,53 @@ export function deriveZoneVfxKind(critterName: string): ZoneVfxKind {
  *
  * The All-in resolution edge-case is handled in `updateAbilities`
  * via `lastAbilityActive` falling-edge detection.
+ *
+ * Skipped on hit-stop frames, like the rest of the sim: it runs after
+ * game.update with the raw dt, so during a freeze the saw kept adding
+ * +90 u/s per frame to a victim that couldn't move (up to ~600 u/s)
+ * and Cone Pulse kept counting pulses.
  */
 interface ConePulseState { acc: number; count: number; lastActive: boolean; }
 const _pulseStates = new WeakMap<Critter, ConePulseState>();
+const lTickFrozen = createFrozenFrameGate();
+
+/** Contact hits (Saw Shell, Stampede ram, Toxic Touch) land once per
+ *  FEEL.abilities.contactRehitCooldown per caster→victim pair, not every
+ *  frame the victim stays in reach. Remaining cooldown per victim, aged
+ *  by tickLOffline. Server mirror: same helpers in sim/abilities.ts. */
+const _contactRehit = new WeakMap<Critter, Map<Critter, number>>();
+
+function ageContactRehit(c: Critter, dt: number): void {
+  const left = _contactRehit.get(c);
+  if (!left) return;
+  for (const [victim, t] of left) {
+    if (t <= dt) left.delete(victim);
+    else left.set(victim, t - dt);
+  }
+}
+
+/** True when `c` may contact-hit `victim` now; arms the pair's cooldown. */
+function takeContactHit(c: Critter, victim: Critter): boolean {
+  let left = _contactRehit.get(c);
+  if (!left) {
+    left = new Map();
+    _contactRehit.set(c, left);
+  }
+  if (left.has(victim)) return false;
+  left.set(victim, FEEL.abilities.contactRehitCooldown);
+  return true;
+}
+
 export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scene): void {
+  if (lTickFrozen()) return;
   for (const c of critters) {
-    if (!c.alive || c.falling) continue;
+    if (!c.alive || c.falling) {
+      // A fall ends any Cone Pulse channel: its edge detector must not
+      // carry across the respawn and fire a leftover pulse there.
+      _pulseStates.delete(c);
+      continue;
+    }
+    ageContactRehit(c, dt);
     const lState = c.abilityStates[2];
 
     // 2026-05-01 microfix — Cone Pulse must update its rising-edge
@@ -455,17 +587,24 @@ export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scen
         state.acc = 0;
         state.count = 0;
       }
+      // updateAbilities drains the L's duration before this tick, so on
+      // the frame it expires the L is already inactive here, yet that
+      // frame's time was channel time: with duration = pulseCount ×
+      // pulseInterval the last pulse is due exactly then. Counting it
+      // (and capping at pulseCount) gives the same pulses at any dt.
+      const channeling = isActive || state.lastActive;
       state.lastActive = isActive;
-      if (isActive) {
+      if (channeling) {
         state.acc += dt;
         const def = lState.def;
         const interval = def.pulseInterval ?? 0.30;
+        const maxPulses = def.pulseCount ?? Infinity;
         const halfCone = ((def.pulseAngleDeg ?? 45) * Math.PI) / 180;
         const cosCone = Math.cos(halfCone);
         const baseForce = def.pulseForce ?? 28;
         const facingX = Math.sin(c.mesh.rotation.y);
         const facingZ = Math.cos(c.mesh.rotation.y);
-        while (state.acc >= interval) {
+        while (state.acc >= interval && state.count < maxPulses) {
           state.acc -= interval;
           state.count++;
           // 2026-05-01 final block (Rafa: "semicírculo / cono frontal,
@@ -541,9 +680,10 @@ export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scen
         const dz = other.z - c.z;
         const d2 = dx * dx + dz * dz;
         if (d2 > reach * reach || d2 < 0.0001) continue;
+        if (!takeContactHit(c, other)) continue;
         const d = Math.sqrt(d2);
-        other.vx += (dx / d) * impulse;
-        other.vz += (dz / d) * impulse;
+        other.vx = (dx / d) * impulse;
+        other.vz = (dz / d) * impulse;
       }
     }
 
@@ -557,9 +697,12 @@ export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scen
         const dz = other.z - c.z;
         const d2 = dx * dx + dz * dz;
         if (d2 > reach * reach || d2 < 0.0001) continue;
+        if (!takeContactHit(c, other)) continue;
+        // SET the launch velocity instead of adding it: the hit is the
+        // same whatever the victim was doing, and nothing stacks.
         const d = Math.sqrt(d2);
-        other.vx += (dx / d) * impulse;
-        other.vz += (dz / d) * impulse;
+        other.vx = (dx / d) * impulse;
+        other.vz = (dz / d) * impulse;
       }
     }
 
@@ -573,15 +716,16 @@ export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scen
         const dz = other.z - c.z;
         const d2 = dx * dx + dz * dz;
         if (d2 > reach * reach || d2 < 0.0001) continue;
+        if (!takeContactHit(c, other)) continue;
         other.confusedTimer = Math.max(other.confusedTimer, dur);
       }
     }
   }
 
   // Sinkhole pull — affects every critter inside any sinkhole zone
-  // they don't own.
+  // they don't own. Immune critters aren't pulled (server: same).
   for (const c of critters) {
-    if (!c.alive || c.falling) continue;
+    if (!c.alive || c.falling || c.isImmune) continue;
     forEachSinkhole((zone) => {
       const dx = zone.x - c.x;
       const dz = zone.z - c.z;
@@ -594,9 +738,13 @@ export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scen
   }
 }
 
+const zoneTickFrozen = createFrozenFrameGate();
+
 /** Tick all live zones forward, removing expired entries. Called from
- *  the offline gameplay loop after physics update. */
+ *  the offline gameplay loop after physics update. Zones don't age on
+ *  hit-stop frames: they last their duration in game time. */
 export function tickAbilityZones(dt: number): void {
+  if (zoneTickFrozen()) return;
   for (let i = activeZones.length - 1; i >= 0; i--) {
     activeZones[i].ttl -= dt;
     if (activeZones[i].ttl <= 0) activeZones.splice(i, 1);
@@ -615,17 +763,29 @@ export function pushNetworkZone(z: ActiveZone): void {
   activeZones.push({ ...z });
 }
 
-/** True if the given critter is currently standing inside a
- *  slippery zone (Kowalski Frozen Floor) they don't own. */
-export function isOnSlipperyZone(x: number, z: number, ownerKey?: string): boolean {
+/** What a slippery zone (Kowalski Frozen Floor) does to a critter
+ *  standing on it. Written from the L def (`floorFrictionMult`,
+ *  `floorAccelMult`) when the zone spawns. */
+export interface SlipperyEffect {
+  /** Multiplies the friction half-life (critter.ts friction loop). */
+  frictionMult: number;
+  /** Multiplies the movement acceleration (player.ts, bot.ts). */
+  accelMult: number;
+}
+
+/** The ice under the given critter, if it stands inside a slippery
+ *  zone (Kowalski Frozen Floor) it doesn't own. Overlapping ice
+ *  doesn't stack: the first zone found wins. Mirror:
+ *  server/src/sim/physics.ts getSlipperyZone. */
+export function getSlipperyZone(x: number, z: number, ownerKey?: string): SlipperyEffect | undefined {
   for (const zone of activeZones) {
     if (!zone.slippery) continue;
     if (ownerKey !== undefined && zone.ownerKey === ownerKey) continue;
     const dx = x - zone.x;
     const dz = z - zone.z;
-    if (dx * dx + dz * dz <= zone.radius * zone.radius) return true;
+    if (dx * dx + dz * dz <= zone.radius * zone.radius) return zone.slippery;
   }
-  return false;
+  return undefined;
 }
 
 /** Iterate over every active sinkhole zone that the given owner
@@ -635,17 +795,21 @@ export function forEachSinkhole(cb: (zone: { x: number; z: number; radius: numbe
   for (const zone of activeZones) {
     if (!zone.sinkhole) continue;
     if (ownerKey !== undefined && zone.ownerKey === ownerKey) continue;
-    cb({ x: zone.x, z: zone.z, radius: zone.radius, pullForce: zone.pullForce ?? 14 });
+    cb({ x: zone.x, z: zone.z, radius: zone.radius, pullForce: zone.pullForce ?? 19.25 }); // default = Sihans' holeForce since the 2026-09-21 speed-up
   }
 }
 
 /** True if the given world point is inside any active zone of the
- *  given vfxKind. Used by game.ts each frame to drive the local
+ *  given vfxKind. Used by main.ts each frame to drive the local
  *  Kermit Poison Cloud screen-space overlay (`vfxKind: 'poison'`).
+ *  `ownerKey`: skip zones owned by that critter name, as in
+ *  getZoneSlowMultiplier (Critter.updateVisuals: the caster in its own
+ *  sand isn't tinted as trapped).
  *  Cheap O(zones) — typically <= 4 zones alive at once. */
-export function isInsideZoneOfKind(x: number, z: number, kind: ZoneVfxKind): boolean {
+export function isInsideZoneOfKind(x: number, z: number, kind: ZoneVfxKind, ownerKey?: string): boolean {
   for (const zone of activeZones) {
     if (zone.vfxKind !== kind) continue;
+    if (ownerKey !== undefined && zone.ownerKey === ownerKey) continue;
     const dx = x - zone.x;
     const dz = z - zone.z;
     if (dx * dx + dz * dz <= zone.radius * zone.radius) return true;
@@ -672,9 +836,34 @@ export function getZoneSlowMultiplier(x: number, z: number, ownerKey?: string): 
 }
 
 /** Arena radius — kept in sync with `Arena.radius` (12 u). The 0.4 u
- *  margin keeps blink targets clear of the platform edge so the
- *  destination never lands on a fragment that's about to collapse. */
+ *  margin keeps blink targets clear of the platform rim. It knows
+ *  nothing of collapsed fragments: `pickSafeLanding` does. */
 const ARENA_BLINK_RADIUS = 11.6;
+
+/**
+ * Where a teleport from (ox, oz) to (tx, tz) lands: the first point on
+ * that line, at each of `fractions` of its length (best first), that
+ * stands on live floor, or the origin itself when none does. The disc
+ * clamp alone used to drop Sand Trap into collapsed sectors and let
+ * Mirror Trick walk the void while immune. Server mirror: pickSafeLanding
+ * in server/src/sim/abilities.ts.
+ */
+function pickSafeLanding(ox: number, oz: number, tx: number, tz: number, fractions: readonly number[]): [number, number] {
+  for (const f of fractions) {
+    const x = ox + (tx - ox) * f;
+    const z = oz + (tz - oz) * f;
+    if (isOnLiveFloor(x, z)) return [x, z];
+  }
+  return [ox, oz];
+}
+
+/** Fractions of a line `len` long that step back from its end toward
+ *  its start in `step` increments: 1, 1 − step/len, … while above 0. */
+function stepBackFractions(len: number, step: number): number[] {
+  const out: number[] = [];
+  for (let d = len; d > 0; d -= step) out.push(d / len);
+  return out;
+}
 
 function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
   const angle = critter.mesh.rotation.y;
@@ -718,12 +907,17 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
     targetX = critter.x + Math.sin(angle) * dist;
     targetZ = critter.z + Math.cos(angle) * dist;
   }
-  // Clamp to arena disc — never land outside or in the void band.
+  // Clamp to the arena disc, then make sure the landing is live floor:
+  // step back toward the origin until it is, or stay put (the zone of a
+  // zoneAtOrigin blink still drops).
   const r = Math.sqrt(targetX * targetX + targetZ * targetZ);
   if (r > ARENA_BLINK_RADIUS) {
     targetX = (targetX / r) * ARENA_BLINK_RADIUS;
     targetZ = (targetZ / r) * ARENA_BLINK_RADIUS;
   }
+  const len = Math.hypot(targetX - originX, targetZ - originZ);
+  [targetX, targetZ] = pickSafeLanding(originX, originZ, targetX, targetZ,
+    stepBackFractions(len, FEEL.blink.landingProbeStep));
   const palette = CRITTER_VFX_PALETTE[critter.config.name]?.pound;
   spawnShockwaveRing(scene, originX, originZ, 1.2, palette);
   // Teleport
@@ -740,7 +934,8 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
   // push (he's the one teleporting in).
   if (def.blinkImpactRadius && def.blinkImpactForce) {
     for (const other of allCritters) {
-      if (other === critter || !other.alive) continue;
+      // Same filter as the server: immune and falling critters are skipped.
+      if (other === critter || !other.alive || other.falling || other.isImmune) continue;
       const dx = other.x - targetX;
       const dz = other.z - targetZ;
       const d = Math.sqrt(dx * dx + dz * dz);
@@ -749,7 +944,7 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
         const f = def.blinkImpactForce * fall;
         other.vx += (dx / d) * f;
         other.vz += (dz / d) * f;
-        applyImpactFeedback(other);
+        applyImpactFeedback(other, dx, dz);
       }
     }
     triggerCameraShake(FEEL.shake.headbutt * 0.7);
@@ -761,7 +956,7 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
     const zx = def.zoneAtOrigin ? originX : targetX;
     const zz = def.zoneAtOrigin ? originZ : targetZ;
     const kind = deriveZoneVfxKind(critter.config.name);
-    activeZones.push({
+    const age = pushOfflineZone({
       x: zx, z: zz,
       radius: def.zone.radius,
       slowMultiplier: def.zone.slowMultiplier,
@@ -769,14 +964,14 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
       vfxKind: kind,
       ownerKey: critter.config.name,
     });
-    spawnZoneRing(scene, zx, zz, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary, kind);
+    spawnZoneRing(scene, zx, zz, def.zone.radius, def.zone.duration, def.zone.color, def.zone.secondary, kind, age);
   }
   // 2026-04-29 K-session — Burrow visual (Sihans). When the blink
   // is configured with `zoneAtOrigin: true` we treat it as the
   // Burrow Rush K (only Sihans uses that flag) and:
   //   · ghost the critter for 0.30 s (handled in critter.updateVisuals,
   //     where Sihans' invisibilityTimer collapses opacity to 0 instead
-  //     of the 0.25 ghost used by Kurama Mirror Trick),
+  //     of the FEEL.decoy.ghostAlpha ghost used by Kurama Mirror Trick),
   //   · spawn an extra ring of dust-puffs at both origin and
   //     destination so the read is "tierra explota, desaparece,
   //     reaparece en una nube de arena".
@@ -814,63 +1009,27 @@ function fireFrenzy(def: AbilityDef, critter: Critter, _all: Critter[], scene: T
   triggerCameraShake(FEEL.shake.groundPound * 0.55);
   playSound('abilityFire');
 
-  // 2026-04-30 final-L — Copycat dispatch (Kurama). Look up
-  // the lastHitTargetCritter and copy that critter's L FLAGS
-  // into Kurama's def in place. Subsequent flag branches run
-  // exactly like the original critter's L.
-  if (def.copycatL) {
-    const targetName = critter.lastHitTargetCritter;
-    if (targetName) {
-      const targetDef = CRITTER_ABILITIES[targetName]?.[2];
-      if (targetDef) {
-        Object.assign(def, {
-          sawL: targetDef.sawL,
-          sawContactImpulse: targetDef.sawContactImpulse,
-          sawSpinSpeed: targetDef.sawSpinSpeed,
-          conePulseL: targetDef.conePulseL,
-          pulseInterval: targetDef.pulseInterval,
-          pulseRadius: targetDef.pulseRadius,
-          pulseAngleDeg: targetDef.pulseAngleDeg,
-          pulseForce: targetDef.pulseForce,
-          toxicTouchL: targetDef.toxicTouchL,
-          confusedDuration: targetDef.confusedDuration,
-          allInL: targetDef.allInL,
-          allInDashSpeed: targetDef.allInDashSpeed,
-          allInDashRange: targetDef.allInDashRange,
-          allInHitForce: targetDef.allInHitForce,
-          allInMissSelfForce: targetDef.allInMissSelfForce,
-          frozenFloorL: targetDef.frozenFloorL,
-          floorRadius: targetDef.floorRadius,
-          floorDuration: targetDef.floorDuration,
-          sinkholeL: targetDef.sinkholeL,
-          holeRadius: targetDef.holeRadius,
-          holeDuration: targetDef.holeDuration,
-          holeForce: targetDef.holeForce,
-          holeCastOffset: targetDef.holeCastOffset,
-        });
-      }
-      critter.lastHitTargetCritter = '';
-    }
-    // Fall through to the spawn branches so the copied flags
-    // (frozenFloorL, sinkholeL) still spawn their zones.
-  }
-
   // 2026-04-30 final-L — flag-driven L spawns (offline mirror of
   // server abilities.ts/fireEffect). Server is authoritative for
-  // online; this branch covers the offline gameplay path.
+  // online; this branch covers the offline gameplay path. A Copycat
+  // cast arrives here with its copy already in `def` (fireEffect), so
+  // a copied Frozen Floor or Sinkhole spawns through the same code.
   if (def.frozenFloorL) {
-    activeZones.push({
+    const age = pushOfflineZone({
       x: critter.x, z: critter.z,
       radius: def.floorRadius ?? 6.0,
       slowMultiplier: 1.0,
       ttl: def.floorDuration ?? 5.0,
       vfxKind: 'ice',
       ownerKey: critter.config.name,
-      slippery: true,
+      slippery: {
+        frictionMult: def.floorFrictionMult ?? 1,
+        accelMult: def.floorAccelMult ?? 1,
+      },
     });
     spawnZoneRing(scene, critter.x, critter.z,
       def.floorRadius ?? 6.0, def.floorDuration ?? 5.0,
-      0x6cc9ff, 0xffffff, 'ice');
+      0x6cc9ff, 0xffffff, 'ice', age);
   }
   // 2026-05-01 last-minute — Sebastian All-in trajectory preview.
   // Ground line from Sebastian to the chosen lateral edge endpoint.
@@ -892,7 +1051,7 @@ function fireFrenzy(def: AbilityDef, critter: Critter, _all: Critter[], scene: T
       cz = (cz / Math.max(r, 0.01)) * 4.0;
     }
     const holeR = def.holeRadius ?? 3.0;
-    activeZones.push({
+    const age = pushOfflineZone({
       x: cx, z: cz,
       radius: holeR,
       slowMultiplier: 0.55,
@@ -900,17 +1059,23 @@ function fireFrenzy(def: AbilityDef, critter: Critter, _all: Critter[], scene: T
       vfxKind: 'sand',
       ownerKey: critter.config.name,
       sinkhole: true,
-      pullForce: def.holeForce ?? 14,
+      pullForce: def.holeForce ?? 19.25, // default = Sihans' holeForce since the 2026-09-21 speed-up
     });
     spawnZoneRing(scene, cx, cz,
       holeR, def.holeDuration ?? 5.0,
-      0x4a3a26, 0x8b6914, 'sand');
+      0x4a3a26, 0x8b6914, 'sand', age);
     // 2026-04-30 final-polish (Rafa: "agujero real, los enemigos
     // pueden caer"): knock out arena fragments under the hole disc.
     // Immune centre is filtered server-side and inside Arena.
     // killFragmentIndices, so this never breaks the safe zone.
+    // The fragment the caster stands on is spared: the disc test goes
+    // by centroid, and a wide tile can reach 3 u under a hole cast 4 u
+    // ahead — Sihans used to drop through her own hole (16.7 % of casts).
+    // An enemy on that same tile keeps its floor too.
     if (_arenaRef) {
-      const indices = _arenaRef.getAliveFragmentsInDisc(cx, cz, holeR);
+      const fragments = _arenaRef.getLayout()?.fragments ?? [];
+      const indices = _arenaRef.getAliveFragmentsInDisc(cx, cz, holeR)
+        .filter((i) => !pointInFragment(critter.x, critter.z, fragments[i]));
       if (indices.length > 0) {
         _arenaRef.killFragmentIndices(indices);
       }
@@ -947,7 +1112,52 @@ const EFFECT_MAP: Record<AbilityType, (def: AbilityDef, critter: Critter, all: C
 };
 
 function fireEffect(state: AbilityState, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
+  // Here and not in activateAbility: the lab's forceAbility starts an
+  // ability without it, and a dash's contact beat must still land again.
+  if (state.def.type === 'charge_rush') state.rammed.clear();
+  if (state.def.copycatL) applyCopycat(state, critter);
   EFFECT_MAP[state.def.type](state.def, critter, allCritters, scene);
+}
+
+// ---------------------------------------------------------------------------
+// Copycat (Kurama L)
+// ---------------------------------------------------------------------------
+
+function copyKey<K extends keyof AbilityDef>(to: AbilityDef, from: AbilityDef, k: K): void {
+  if (from[k] !== undefined) to[k] = from[k];
+}
+
+/**
+ * Copycat fire: the L state's def becomes a copy of Kurama's own L with
+ * the COPYCAT_KEYS of the last critter she headbutted, for this cast
+ * only; with no target it's her plain L (the buff). The target is
+ * consumed either way. The shared kit def is never written: it used to
+ * be, so a copy stuck to every Kurama for the rest of the session.
+ * Server mirror: `fireCopycat` in server/src/sim/abilities.ts.
+ */
+function applyCopycat(state: AbilityState, critter: Critter): void {
+  const base = CRITTER_ABILITIES[critter.config.name]?.[2] ?? state.def;
+  const src = critter.lastHitTargetCritter ? CRITTER_ABILITIES[critter.lastHitTargetCritter]?.[2] : undefined;
+  critter.lastHitTargetCritter = '';
+  if (!src) {
+    state.def = base;
+    return;
+  }
+  const copy: AbilityDef = { ...base };
+  for (const k of COPYCAT_KEYS) copyKey(copy, src, k);
+  state.def = copy;
+}
+
+/**
+ * A Copycat copy lasts one cast. It goes back to the kit def on the first
+ * tick the L is no longer active, not on the tick it ends, so the passes
+ * that run after updateAbilities that frame (tickLOffline: Cone Pulse's
+ * last pulse and its edge detector) still read the copy.
+ */
+function restoreCopycat(state: AbilityState, critter: Critter): void {
+  if (state.active || !state.def.copycatL) return;
+  const base = CRITTER_ABILITIES[critter.config.name]?.[2];
+  if (base) state.def = base;
 }
 
 // ---------------------------------------------------------------------------
@@ -962,6 +1172,7 @@ export function updateAbilities(
   dt: number,
 ): void {
   for (const s of states) {
+    restoreCopycat(s, critter);
     if (s.active) {
       // Wind-up phase (visible charge-up before the effect fires)
       if (s.windUpLeft > 0) {
@@ -1030,14 +1241,60 @@ export function updateAbilities(
 }
 
 /**
+ * Who the All-in would catch if it resolved now from the caster's facing,
+ * and where along the dash line (`t`). Shared by the resolution and the
+ * bot AI (src/bot.ts), so the bot reads the real hit geometry. `inset`
+ * narrows the lane's reach; the resolution uses 0.
+ *
+ * The sweep samples the dash path and returns the FIRST hit, whose
+ * distance the resolution uses to teleport Sebastian into the strike.
+ * 2026-05-01 last-minute (Rafa: "muy difícil acertar"): SAMPLES 12 → 18
+ * + reach widened with a margin (FEEL.allIn.hitMargin) so a target
+ * dancing just outside the perfect dash line still gets caught.
+ * Only targets ahead of Sebastian count: the first sample's reach used
+ * to cover 1.15 u BEHIND him, so a tap erased whoever was touching his
+ * back.
+ */
+export function findAllInTarget(
+  def: AbilityDef,
+  critter: Critter,
+  allCritters: readonly Critter[],
+  inset = 0,
+): { target: Critter; t: number } | null {
+  const range = def.allInDashRange ?? 5.5;
+  const ry = critter.mesh.rotation.y;
+  const dirX = Math.sin(ry);
+  const dirZ = Math.cos(ry);
+  const SAMPLES = 18;
+  for (let i = 1; i <= SAMPLES; i++) {
+    const t = (i / SAMPLES) * range;
+    const sx = critter.x + dirX * t;
+    const sz = critter.z + dirZ * t;
+    for (const other of allCritters) {
+      if (other === critter || !other.alive || other.falling) continue;
+      if (other.isImmune) continue;
+      if ((other.x - critter.x) * dirX + (other.z - critter.z) * dirZ < 0) continue;
+      const odx = other.x - sx;
+      const odz = other.z - sz;
+      const reach = critter.radius + other.radius + FEEL.allIn.hitMargin - inset;
+      if (odx * odx + odz * odz <= reach * reach) return { target: other, t };
+    }
+  }
+  return null;
+}
+
+/**
  * 2026-04-30 final-L — Sebastian All-in offline resolution.
  * Mirror of the server `simulatePlaying` step 2.g resolution
  * branch: lateral dash from the caster's current position +
- * orientation, sweep for any enemy capsule, on hit huge
- * knockback to target / on miss self-knockback toward the
- * dash direction.
+ * orientation, sweep for any enemy capsule ahead, on hit huge
+ * knockback to target / on miss Sebastian falls at the first
+ * point of the dash line off the arena.
  */
 function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Critter[], scene: THREE.Scene): void {
+  // Safety net: startFalling already cancels the charge and the windup,
+  // but nothing resolves from the void.
+  if (critter.falling) return;
   // BLOQUE FINAL micropass — All-in commits FORWARD (facing actual).
   // The previous version auto-picked a lateral edge which read
   // confusingly: same press, different side trip-by-trip. Now the
@@ -1049,37 +1306,9 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
   const dirX = Math.sin(ry);
   const dirZ = Math.cos(ry);
 
-  // Sweep along the dash path and find the FIRST hit point + its
-  // distance along the line. The previous version only flagged "hit
-  // yes/no" — Sebastian never actually moved. Now we use the hitT
-  // distance to TELEPORT him into the resolution, so the slash reads
-  // as a real lateral commit instead of a magic effect-from-afar.
-  // 2026-05-01 last-minute (Rafa: "muy difícil acertar"): SAMPLES
-  // 12 → 18 + reach widened with a `+ 0.55` margin so a target
-  // dancing just outside the perfect dash line still gets caught.
-  // Combined with the trajectory preview painted at activation, the
-  // L is now readable AND hittable while keeping the miss = void
-  // punishment.
-  let hit: Critter | null = null;
-  let hitT = 0;
-  const SAMPLES = 18;
-  for (let i = 1; i <= SAMPLES && !hit; i++) {
-    const t = (i / SAMPLES) * range;
-    const sx = critter.x + dirX * t;
-    const sz = critter.z + dirZ * t;
-    for (const other of allCritters) {
-      if (other === critter || !other.alive || other.falling) continue;
-      if (other.isImmune) continue;
-      const odx = other.x - sx;
-      const odz = other.z - sz;
-      const reach = critter.radius + other.radius + 0.55;
-      if (odx * odx + odz * odz <= reach * reach) {
-        hit = other;
-        hitT = t;
-        break;
-      }
-    }
-  }
+  const found = findAllInTarget(def, critter, allCritters);
+  const hit = found?.target ?? null;
+  const hitT = found?.t ?? 0;
   const palette = CRITTER_VFX_PALETTE[critter.config.name]?.frenzy;
   if (hit) {
     // HIT — teleport Sebastian to just-before the victim along the
@@ -1109,7 +1338,7 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     hit.mesh.position.x = hit.x;
     hit.mesh.position.z = hit.z;
     if (!hit.falling && hit.alive) hit.startFalling();
-    applyImpactFeedback(hit);
+    applyImpactFeedback(hit, dirX, dirZ);
     triggerHitStop(FEEL.hitStop.headbutt);
     // Crimson side-slash burst at the contact point.
     spawnShockwaveRing(scene, hit.x, hit.z, 1.8, palette);
@@ -1117,25 +1346,33 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     triggerCameraShake(FEEL.shake.headbutt * 1.6);
     playSound('headbuttHit');
   } else {
-    // MISS — Sebastian commits all the way past the rim. Teleport
-    // him to the dash endpoint (which is already chosen to be the
-    // far side of arena radius) and set a high outward velocity so
-    // physics carries him further still. `checkFalloff` next frame
-    // sees him outside any alive fragment → `startFalling` fires →
-    // void.
-    // 1.5× ensures the endpoint clears the arena maxRadius (12)
-    // even if Sebastian started somewhere inside the inner half.
-    critter.x += dirX * range * 1.5;
-    critter.z += dirZ * range * 1.5;
-    critter.mesh.position.x = critter.x;
-    critter.mesh.position.z = critter.z;
-    const sf = def.allInMissSelfForce ?? 130;
-    critter.vx = dirX * sf;
-    critter.vz = dirZ * sf;
+    // MISS — Sebastian commits along the line to the first point off
+    // the arena and falls there, always (CHARACTER_DESIGN: miss = void).
+    // The fall is explicit because checkFalloff skips immune critters:
+    // a freshly respawned Sebastian used to float over the void. The
+    // old fixed jump (range × 1.5) also landed back on the arena when
+    // he fired from the rim towards the centre — a free escape.
+    const [fx, fz] = firstPointOffArena(critter.x, critter.z, dirX, dirZ);
+    critter.x = fx;
+    critter.z = fz;
+    critter.startFalling();
     spawnShockwaveRing(scene, critter.x, critter.z, 1.4, palette);
     triggerCameraShake(FEEL.shake.headbutt * 0.9);
     playSound('abilityFire');
   }
+}
+
+/** First point along the line from (x, z), in FEEL.allIn.missProbeStep
+ *  steps, that isn't on the arena (live fragments; the whole disc when no
+ *  arena is wired, as in the lab). Server mirror: BrawlRoom's All-in miss. */
+function firstPointOffArena(x: number, z: number, dirX: number, dirZ: number): [number, number] {
+  const step = FEEL.allIn.missProbeStep;
+  // No line from (x, z) stays on the disc longer than this; the bound
+  // only guards the loop.
+  const maxT = Math.hypot(x, z) + FRAG.maxRadius + step;
+  let t = step;
+  while (t < maxT && isOnLiveFloor(x + dirX * t, z + dirZ * t)) t += step;
+  return [x + dirX * t, z + dirZ * t];
 }
 
 // ---------------------------------------------------------------------------
@@ -1207,26 +1444,38 @@ function spawnAllInPreview(scene: THREE.Scene, critter: Critter, range: number, 
 }
 
 /**
- * Local-player Sebastian started holding the L. Roots the caster,
- * spawns the trajectory preview, and starts the auto-release timer.
+ * Sebastian started holding the L (the local player, or a bot in
+ * src/bot.ts). Roots the caster, spawns the trajectory preview, and
+ * starts the auto-release timer. The preview lasts `previewSec`: the
+ * player's whole hold window by default, a bot's decision time.
  * Idempotent: calling while already charging is a no-op.
  */
-export function startSebastianAllInCharge(critter: Critter, scene: THREE.Scene): void {
+export function startSebastianAllInCharge(critter: Critter, scene: THREE.Scene, previewSec?: number): void {
   if (critter.lHoldCharging) return;
   const lState = critter.abilityStates[2];
   if (!lState || lState.cooldownLeft > 0 || lState.active) return;
   if (!lState.def.allInL || !lState.def.holdToFireL) return;
   critter.lHoldCharging = true;
   critter.lHoldChargeTime = 0;
-  spawnAllInPreview(scene, critter, lState.def.allInDashRange ?? 9, (lState.def.holdToFireMaxMs ?? 3000) / 1000);
+  spawnAllInPreview(scene, critter, lState.def.allInDashRange ?? 9,
+    previewSec ?? (lState.def.holdToFireMaxMs ?? 3000) / 1000);
   applyImpactFeedback(critter); // small "charging" pulse
   triggerCameraShake(FEEL.shake.groundPound * 0.15);
 }
 
 /**
- * Local-player Sebastian released the L (or auto-release timer
- * fired). Clears the charging flag, runs the dash resolution at
- * the current facing, and starts the cooldown.
+ * Drop an All-in charge without resolving it: no dash, no cooldown.
+ * The bot AI's way out when its lane emptied while it held.
+ */
+export function cancelSebastianAllInCharge(critter: Critter): void {
+  critter.lHoldCharging = false;
+  critter.lHoldChargeTime = 0;
+}
+
+/**
+ * Sebastian released the L (or the auto-release timer fired).
+ * Clears the charging flag, runs the dash resolution at the current
+ * facing, and starts the cooldown.
  */
 export function releaseSebastianAllInCharge(
   critter: Critter,

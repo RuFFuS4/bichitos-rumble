@@ -94,6 +94,49 @@ is a view on top). Current agent surface is catalogued in DEV_TOOLS.md
 Known gaps (tracked in docs/AFILADO_PLAN.md): ability-tuner applier,
 headless recording dump, headless match runner.
 
+## Test instances must be SILENT (directiva de Rafa, 2026-09-07)
+
+Every browser instance launched for testing — screenshots, batch runner,
+Playwright campaigns, ad-hoc scripts — MUST start muted. A tanda opens
+many at once and each one used to start its own music and SFX.
+
+Use `scripts/lib/headless-browser.mjs`:
+
+```js
+import { launchMutedBrowser, muteGameAudio } from './lib/headless-browser.mjs';
+const browser = await launchMutedBrowser();      // --mute-audio
+const page = await browser.newPage();
+await muteGameAudio(page);                        // + flags del juego
+```
+
+Two layers on purpose: `--mute-audio` kills the audio even in headed mode
+or if the game changes, and the localStorage flags stop the game from
+creating audio nodes at all (and the HUD shows muted in screenshots).
+`playwright.config.ts` already passes `--mute-audio` for `npm run test:smoke`.
+
+## Sessions are split by lane (directiva de Rafa, 2026-09-16)
+
+Work is split across separate sessions — one per area — so each context
+stays small and cheap. **Read [`docs/SESIONES.md`](docs/SESIONES.md) before
+touching anything**: it says which files belong to your lane (arena ·
+personajes · interfaz · distribución), which are shared ground that needs
+explicit permission (`src/game.ts`, `src/tools/dev-api.ts`, the trunk
+docs), and which lane holds the golden token. Your lane's checklist is
+`docs/carriles/<carril>.md`.
+
+Two rules that are not conventions but physics:
+
+- **One active session at a time on this folder.** Every session opened
+  here shares the same checkout and the same files on disk; two at once
+  means one switching branches while the other edits. Real parallelism
+  needs a git worktree (costs: its own `npm install`, and no `resources/`
+  nor `.tmp/`, which are gitignored).
+- **Never leave an unmerged branch or a dirty tree between sessions.**
+  The next lane starts blind and will trip over it.
+
+Cross-lane work: don't edit what isn't yours — leave the note in
+`docs/carriles/<the-other>.md` §Buzón and carry on.
+
 ## Coding rules
 - Keep code modular and typed
 - Prefer simple architecture

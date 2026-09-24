@@ -294,6 +294,44 @@ Cuarto entry de Vite, dedicado a animaciones. Estructura paralela a
   así que este script es redundante. No borrar por si vuelve a
   aparecer un sheet con labels; marcado como histórico.
 
+### Capa visual de la arena — terreno v2 (2026-09-07)
+
+Toda esta capa es **decorado**: no colisiona, no entra en `isOnArena`, no
+toca el layout ni el colapso. Se puede borrar entera y el juego funciona.
+Por eso los golden de partida pasan 3/3 sin regenerar en todos estos
+cambios.
+
+- **`src/arena-look.ts`** — SoT de la pinta del suelo (`ARENA_LOOK`:
+  tile, tintes por banda, acantilado con estratos, jitter), rampas de
+  acantilado y `BACKDROP_LOOK`. Superficie programática:
+  `getArenaLook`/`setArenaLook` en la dev-api + `npm run arena` +
+  `scripts/arena-shots.mjs`.
+- **`src/arena-backdrop.ts`** — el mar sobre el que flota la isla, con la
+  rampa del bioma horneada en los vértices. 0 bytes de payload, 1 draw
+  call. Sustituye a la panorámica recortada.
+- **`src/arena-scatter*.ts`** — la capa densa del diorama:
+  `-types` (contrato + `SCATTER_LIMITS` + `SCATTER_DENSITY`),
+  `-geometry` (7 primitivas generadas por código, 0 bytes),
+  `-recipes` (5 biomas × 8 capas, la hoja de números) y el motor
+  (`InstancedMesh` por capa, primer uso de instancing del proyecto).
+  Cada instancia sabe qué fragmento la hospeda y cae con él.
+- **`src/blob-shadows.ts`** — sombras de contacto instanciadas de los
+  critters (y de los elementos con volumen del scatter).
+- **`PackDef.groundTile`** en `arena-decorations.ts` — u de mundo por
+  repetición de la textura, **por bioma** (kitsune 26 … coral 9). Las
+  texturas traen el detalle pintado; una escala global las convertía en
+  rejilla.
+- **Determinismo**: cada sistema visual usa su propio stream
+  `mulberry32(seed ^ SALT_<feature>)` (`SALT_VISUAL`, `SALT_SCATTER`).
+  **Nunca** el mulberry32 del generador de layout: ése es gameplay y está
+  protegido por golden.
+- **Espejos del sim**: `src/arena-fragments.ts` ↔
+  `server/src/sim/arena-fragments.ts` deben ser idénticos salvo la
+  cabecera; lo verifica `scripts/check-sim-parity.mjs` dentro de
+  `npm run check`.
+- **Pruebas mudas**: cualquier navegador que se lance para medir esto va
+  por `scripts/lib/headless-browser.mjs` (directiva de Rafa, 2026-09-07).
+
 ## Key Decisions (latest at top)
 
 ### 2026-08-17 — Post-jam kickoff (H0 saneamiento) + jam result
@@ -588,7 +626,12 @@ feeds the character-select info pane.
 ## Current phase (post-jam H0-H5)
 
 Jam shipped 2026-05-01 (`v1.0-vibejam-submit`) — result **#209/943**.
-Current phase: post-jam hitos **H0-H5** (H0 saneamiento in progress).
+
+Estado al **2026-09-07**: H0-H4 cerrados (último tag en producción
+`v1.7-h4-social`). En curso **H4.5 "arreglar antes de crecer"** (terreno
+v2 + dioramas + feeling de los personajes), y después H5 (monetización) y
+H6 (juego más grande: 8 jugadores, Steam). `dev` lleva el trabajo de
+H4.5 sin desplegar.
 
 - Plan: `ROADMAP.md`
 - Real state / findings: `docs/POST_JAM_AUDIT.md`

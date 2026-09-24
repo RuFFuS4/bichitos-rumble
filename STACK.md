@@ -2,31 +2,52 @@
 
 ## Client runtime
 - **TypeScript** — strict mode, ES2020 target
-- **Three.js** v0.172 — 3D rendering (scene, meshes, lighting, camera,
+- **Three.js** 0.185 — 3D rendering (scene, meshes, lighting, camera,
   GLTF loader for critter models)
+- **@colyseus/sdk** 0.17 — online client
 - **Web Audio API** — native, no Howler. Synthesized SFX +
   crossfaded MP3 music buses
+- **Sentry** (browser SDK, EU region) — error reporting, async chunk,
+  release = build commit
 
 ## Server runtime
-- **Node.js** — production on Railway
-- **Colyseus** 0.16 — authoritative rooms + binary state sync over
+- **Node.js 22** — production on Railway (`server/Dockerfile`,
+  multi-stage `node:22-alpine`)
+- **Colyseus** 0.17 — authoritative rooms + binary state sync over
   WebSocket
-- **@colyseus/schema** v3 — typed schemas synced to clients
+- **@colyseus/schema** v4 — typed schemas synced to clients
+- **better-sqlite3** — players / online belts on the Railway volume
 
 ## Build
-- **Vite** v6.2 — multi-entry bundler (`index.html` = game,
-  `tools.html` = internal dev lab). Static assets from `public/`
-  served before the SPA rewrite so `/tools.html` resolves.
-- **tsc** — type checking (noEmit) for both client and server targets.
-- **`mesh2motion/` subpackage** — separate Vite 8 build that lands its
-  output in `public/animations/`, so the main game's build copies it
-  straight into `dist/animations/`. See `mesh2motion/README-INTEGRATION.md`.
+- **Vite** 8 (Rolldown) — ships only `index.html` (+ `privacy.html` /
+  `terms.html` from `public/`). The internal labs (`tools.html`,
+  `calibrate.html`, `anim-lab.html`, `decor-editor.html`) build only
+  with `VITE_BUILD_TOOLS=1` (`vite.config.ts`); in production `/tools.html`
+  falls through the SPA rewrite to the game.
+- **tsc** (TypeScript 7) — type checking (noEmit) for both client and
+  server targets.
+- **`npm run build`** = `tsc` + `vite build` + `clean-dist-raw` (drops
+  every `_raw/` master from `dist/`) + `check-payload-budget` (ratchet
+  30 MB total / 3 MB per file). Measured 2026-09-24: **27.4 MB**, of
+  which the 9 critter GLBs are ~4 MB (they were 46 MB before the F2
+  diet). `npm run check` (the CI gate) runs the same plus the parity
+  scripts and the critter-GLB version/RUN_GAIT checks.
+- The animation pipeline (mesh2motion) is **not** part of this build:
+  it lives in the sibling repo `bichitos-mesh2motion` since 2026-08-18.
 
 ## Deployment
-- **Vercel** — client CI/CD and hosting (autodeploy from `main`)
-- **Railway** — server CI/CD and hosting (autodeploy from `main`)
+- **Vercel** — client hosting, autodeploy from `main` (`dev` → preview).
+  Build = `npm run build`.
+- **Railway** — server hosting, autodeploy from `main` with
+  `server/Dockerfile`. Client and server go out together but not at the
+  same instant; there is no client↔server version handshake yet (see
+  `ONLINE.md` → Limitaciones).
+- **GitHub Actions** (`.github/workflows/ci.yml`) — on push/PR to `dev`
+  and `main`: client `check` + `test:sim`, server `tsc`, server docker
+  build, Playwright smoke.
 - **Hostinger** — custom domain `bichitosrumble.com`
-- **GitHub** — source control. Dev branch `dev`; main branch `main`.
+- **GitHub** — source control. Dev branch `dev`; main branch `main`;
+  every merge to `main` is a tagged milestone.
 
 ## Content generation (AI-assisted)
 - **Suno** — background music. Three MP3 tracks shipped in

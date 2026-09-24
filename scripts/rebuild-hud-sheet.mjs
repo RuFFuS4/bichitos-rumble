@@ -24,6 +24,9 @@
 // from the earlier trim script for emergency rollback).
 //
 // Usage: `node scripts/rebuild-hud-sheet.mjs`.
+// Then `node scripts/compress-images.mjs` (PNG → WebP, master to _raw/) and
+// `node scripts/recolor-hud-tiles.mjs`: HUD_mejorado.png still has the
+// jam-era palette, and Sergei/Shelly are recoloured to the 2026-09-24 one.
 // Idempotent: re-runs always read from `HUD_mejorado.png`, so running
 // twice produces the same output.
 // ---------------------------------------------------------------------------

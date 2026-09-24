@@ -30,8 +30,30 @@ Arcade / chibi arena brawler. Toy-like, punchy, instantly readable.
 ## Materials
 
 - `MeshStandardMaterial` with flat color.
-- Emissive used only for gameplay feedback (ability glow, immunity blink).
-- `transparent: true` on all critter materials (required for immunity blink).
+- **Outline (2026-09-24, Rafa: «contorno» over the current shading, no
+  toon).** Every critter wears a dark contour like the HUD icons:
+  - an inverted hull (back faces pushed out along the skinned normal, see
+    `src/critter-look.ts`);
+  - ONE colour for the whole roster, `#1a0820`;
+  - a width relative to the critter's size on screen (`FEEL.look`: ~4.5 %
+    of its height), clamped to 1-5 px (the floor was 2 until Rafa saw
+    it on a phone, where critters are 20-25 px tall and a 2 px contour
+    ate the silhouette) so it reads in the arena and never
+    turns into a thick border in the close-ups.
+
+  It hides whenever the critter goes translucent (immunity blink,
+  invisibility, fog fade). The arena fog tints it like it tints the
+  body. It is not a post-process and touches nothing else in the scene.
+  Toon ramps are out of scope for now.
+- Emissive used only for gameplay feedback (hit flash, ability glow,
+  immunity blink), as a flat tint: **no emissive map**. Meshy exports
+  ship the albedo as emissive map; the game strips it.
+- Opaque by default; the critter turns `transparent` on only for the
+  frames of immunity blink or invisibility (always-on transparency made
+  skinned multi-mesh models see-through in patches).
+- All of the above is applied by `normalizeCritterMaterials`
+  (`src/critter-look.ts`). Anything that draws a critter model calls it:
+  the Critter and the slot thumbnails.
 - No reflections, no environment maps, no normal maps.
 
 ## Accessories
@@ -83,14 +105,28 @@ Arcade / chibi arena brawler. Toy-like, punchy, instantly readable.
 
 ## Roster Visual Reference
 
-| Character | Animal | Dominant Idea | Key Visual |
-|-----------|--------|--------------|------------|
-| Trunk | Elephant | Strong, armored | Big ears, subtle trunk, mini armor |
-| Kurama | Fox | Agile, tricky | 9 large fan tails |
-| Sergei | Gorilla | Dominant, territorial | Enormous arms, small bracelet |
-| Shelly | Turtle | Heavy, wise | Large shell, stable stance |
-| Kermit | Frog | Venomous controller | Green body, purple/yellow accents |
-| Sihans | Mole | Underground trapper | Sunglasses, big claws |
-| Kowalski | Penguin | Smart, analytical | Yellow crest |
-| Cheeto | Tiger | Fast assassin | Marked claws, simplified stripes |
-| Sebastian | Crab | Asymmetric brawler | One giant pincer, one tiny |
+| Character | Animal | Dominant Idea | Key Visual | Palette (dominant · accent · detail) |
+|-----------|--------|--------------|------------|--------------------------------------|
+| Trunk | Elephant | Strong, armored | Big ears, subtle trunk, mini armor | grey (not on the sketch sheet) |
+| Kurama | Fox | Agile, tricky | 9 large fan tails | `#f47c24` · `#fadeae` · `#3f3f3e` |
+| Sergei | Gorilla | Dominant, territorial | Enormous arms, small bracelet | `#3f3f40` · `#8e8d8a` · `#dbc6ac` |
+| Shelly | Turtle | Heavy, wise | Large shell, stable stance | `#68784c` · `#bca27d` · `#f9bb25` |
+| Kermit | Frog | Venomous controller | Green body, purple/yellow accents | `#99bb28` · `#9259ba` · `#fcc736` |
+| Sihans | Mole | Underground trapper | Sunglasses, big claws | `#845834` · `#bda586` · `#3f3f3e` |
+| Kowalski | Penguin | Smart, analytical | Yellow crest | `#2f3647` · `#f3efe6` · `#f9ba27` |
+| Cheeto | Tiger | Fast assassin | Marked claws, simplified stripes | `#f47f1d` · `#f0d6a1` · `#d9d9db` |
+| Sebastian | Crab | Asymmetric brawler | One giant pincer, one tiny | red · cream · dark (swatches cut off on the sheet) |
+
+**Palette (2026-09-23).** The swatches come from Rafa's roster sheet in
+`resources/Bocetos/`, which is local and not in git. They are the
+*look on screen*, not texture values: the arena and select-screen lights
+brighten the albedo. The textures are brought towards them by colour
+family in each critter's recipe (`textures.grade`,
+`scripts/critter-grade.mjs`). The shapes of the models are not touched
+(Rafa: «solo los colores»).
+
+Done for Sergei, Kowalski, Kermit, Shelly, Cheeto and Sihans. Kurama and
+Sebastian were already on palette, and Trunk has no swatches.
+
+A new or re-imported critter should be checked against its row: render
+it next to the sketch, not the swatch.

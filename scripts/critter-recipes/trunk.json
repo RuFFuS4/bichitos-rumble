@@ -1,0 +1,46 @@
+{
+  "base": {
+    "ref": "a745b84",
+    "note": "trunk.glb de Tripo tras compress-critter-glbs (meshopt)"
+  },
+  "repack": true,
+  "textures": {
+    "why": "JPEG 512² de Tripo a WebP.",
+    "webp": 82
+  },
+  "clips": [
+    {
+      "clip": "Run",
+      "why": "El Run de Tripo (el mismo en Trunk, Shelly, Kermit y Cheeto) no cierra el bucle (brazo derecho 19,5°, piernas 7-12°) y en Trunk pisa como un galope asimétrico (pies en fase 0,52 y 0,88). Cerrar el bucle en esas piernas desordenaba la pisada, así que lleva el mismo tratamiento que los demás. Pelvis como en el Idle e IK simétrico con apoyo corto (d = 0,2), que lo deja en ~2,3 ciclos/s como pidió Rafa (decisión 7: Trunk ~2). Suelo y pie del Idle.",
+      "blender": {
+        "hold": [
+          {
+            "bone": "Pelvis",
+            "fromClip": "Idle",
+            "frame": 0
+          }
+        ],
+        "ik": {
+          "d": 0.2,
+          "L": 0.22,
+          "H": 0.04,
+          "D": 0.05,
+          "A": 0.015,
+          "phaseL": 0.52,
+          "x0": -0.025,
+          "footFlat": true,
+          "swingFlat": 0.9,
+          "groundFrom": {
+            "clip": "Idle",
+            "frame": 0
+          }
+        },
+        "loop": {
+          "minDeg": 1
+        }
+      },
+      "nodes": "all"
+    }
+  ],
+  "output": "9f9c98ab"
+}

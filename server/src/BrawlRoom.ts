@@ -21,12 +21,15 @@
 //     all_humans_left — no room ever disposes mid-match unrecorded.
 // ---------------------------------------------------------------------------
 
-import { Room, type Client } from 'colyseus';
+import { Room, type Client, type AuthContext } from 'colyseus';
 import { GameState } from './state/GameState.js';
+import {
+  clientProtocolOf, judgeProtocol, isGuardEnabled, rejectMessage, countRejection,
+} from './net-protocol-guard.js';
 import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
 import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed, isOnSlipperyZone, type ActiveZoneSnapshot } from './sim/physics.js';
-import { createAbilityStates, tickPlayerAbilities, getAbilityKit } from './sim/abilities.js';
+import { createAbilityStates, tickPlayerAbilities, getLDef } from './sim/abilities.js';
 import { ArenaSim } from './sim/arena.js';
 import { computeBotInput } from './sim/bot.js';
 import {
@@ -61,6 +64,8 @@ interface JoinOptions {
    *  it comes from the BD once the identity verifies. */
   playerId?: string;
   playerToken?: string;
+  /** NET_PROTOCOL del cliente (server/src/protocol.ts). Ausente = v1.7. */
+  protocol?: unknown;
 }
 
 /**
@@ -82,6 +87,14 @@ interface InternalPlayerData {
   anticipationTimer: number;
   headbuttTimer: number;
   hasInput: boolean;
+  /** Direction the input pushed this tick (after the confusion flip). The
+   *  facing follows the velocity only while it goes this way. */
+  moveX: number;
+  moveZ: number;
+  /** |aceleración de empuje| de este tick (u/s²): input × accel. Espejo de
+   *  Critter.moveAccel — la zona muerta lo usa para distinguir un empuje
+   *  real de un stick con deriva o un bicho enraizado. */
+  moveAccel: number;
   // Online-belt identity (only set for human players who registered a
   // nickname via the REST API and passed verifyPlayer on join). Null for
   // bots and for humans who skipped the nickname modal.
@@ -132,6 +145,7 @@ function newInternal(): InternalPlayerData {
     inputMoveX: 0, inputMoveZ: 0,
     inputHeadbutt: false, inputAbility1: false, inputAbility2: false, inputUltimate: false,
     respawnTimer: 0, anticipationTimer: 0, headbuttTimer: 0, hasInput: false,
+    moveX: 0, moveZ: 0, moveAccel: 0,
     onlinePlayerId: null,
     killsVsHumansThisMatch: 0,
   };
@@ -186,6 +200,25 @@ export class BrawlRoom extends Room {
     ttl: number; radius: number; impulse: number; slowDuration: number;
   }> = [];
   private projectileCounter = 0;
+
+  /**
+   * Guard de versión (2026-09-21, ONLINE.md → "Versión de protocolo").
+   * ESTÁTICO a propósito: Colyseus 0.17 lo llama (MatchMaker.callOnAuth) en
+   * joinOrCreate, create y join ANTES de buscar o crear sala, y en joinById
+   * después de encontrar la sala y ver que no está cerrada; en todos, antes
+   * de reservar asiento. Un cliente de otra versión no llega a sentarse en
+   * ninguna sala ni a crear una. Las reconexiones no pasan por aquí, y está
+   * bien: las salas mueren con cada despliegue.
+   */
+  static async onAuth(_token: string | undefined, options: JoinOptions = {}, context?: AuthContext) {
+    if (!isGuardEnabled()) return true;
+    const clientProtocol = clientProtocolOf(options.protocol);
+    const verdict = judgeProtocol(clientProtocol);
+    if (verdict === 'ok') return true;
+    countRejection();
+    console.log(`[BrawlRoom] rejected join: ${verdict} (client ${clientProtocol})`);
+    throw new Error(rejectMessage(verdict, clientProtocol, context?.headers?.get?.('accept-language')));
+  }
 
   onCreate(_options: unknown) {
     this.tickInterval = 1000 / SIM.tickRate;
@@ -871,6 +904,11 @@ export class BrawlRoom extends Room {
   }
 
   private simulatePlaying(dt: number) {
+    // matchTimer es también el RELOJ del cliente (src/net-smoothing.ts): baja
+    // exactamente un dt fijo por tick y solo en 'playing', y el cliente saca
+    // de ahí la edad de cada estado para predecir dónde pintar a los bichos.
+    // Si algún día se pausa, se ralentiza o cambia de ritmo, avisa al carril
+    // DISTRIBUCIÓN: el suavizado online dejaría de cuadrar (solo visual).
     this.state.matchTimer -= dt;
     const players = [...this.state.players.values()];
 
@@ -947,6 +985,8 @@ export class BrawlRoom extends Room {
       // here makes sure bots also experience the inversion since
       // bot input is computed independently of cliente.
       if (p.confusedTimer > 0) { mx = -mx; mz = -mz; }
+      data.moveX = mx;
+      data.moveZ = mz;
 
       // 2026-04-30 final-L — slippery acceleration penalty.
       const slipperyHere = isOnSlipperyZone(p, this.activeZones);
@@ -955,6 +995,7 @@ export class BrawlRoom extends Room {
       // 2026-05-01 final block — Sebastian holding the L is rooted.
       if (data.lHoldCharging) speed = 0;
       const accel = speed * SIM.movement.accelerationScale * accelMul;
+      data.moveAccel = Math.hypot(mx, mz) * accel;
       p.vx += mx * accel * dt;
       p.vz += mz * accel * dt;
     }
@@ -967,8 +1008,9 @@ export class BrawlRoom extends Room {
       if (!p.alive || p.falling) continue;
       const data = this.internal.get(p.sessionId);
       if (!data) continue;
-      const kit = getAbilityKit(p.critterName);
-      const lDef = kit[2];
+      // Una sola vía de lectura de la L (getLDef, Copycat por jugador). Hoy
+      // Copycat no copia holdToFireL (COPYCAT_KEYS), así que no cambia nada.
+      const lDef = getLDef(p);
       const lState = p.abilities[2];
       if (!lDef || !lState || !lDef.holdToFireL) {
         data.lHoldPrevInput = !!data.inputUltimate;
@@ -1154,10 +1196,13 @@ export class BrawlRoom extends Room {
         consumed = true;
       } else {
         // Out-of-arena clamp: snowball flies past the lethal radius
-        // → expire silently. Uses arenaRadius approximation; not
-        // perfect for irregular fragments but cheap enough.
+        // → expire silently.
+        // 2026-09-06 (fase 0.5): el margen se mide contra el radio vivo de
+        // la DIRECCIÓN del proyectil (ArenaSim.radiusAt). Con el máximo
+        // global, uno que volara sobre la mitad ya caída seguía vivo hasta
+        // r > 16 aunque bajo él no quedara suelo.
         const r = Math.sqrt(pr.x * pr.x + pr.z * pr.z);
-        if (r > this.arenaSim.currentRadius + 4) {
+        if (r > this.arenaSim.radiusAt(Math.atan2(pr.z, pr.x)) + 4) {
           this.broadcast('projectileExpired', { id: pr.id, x: pr.x, z: pr.z });
           consumed = true;
         }
@@ -1175,8 +1220,9 @@ export class BrawlRoom extends Room {
     // the kit and branch on flags.
     for (const p of players) {
       if (!p.alive || p.falling) continue;
-      const kit = getAbilityKit(p.critterName);
-      const lDef = kit[2];
+      // Por jugador: Copycat guarda la L copiada fuera del kit compartido
+      // (server/src/sim/abilities.ts, docs/REPASO_HABILIDADES.md).
+      const lDef = getLDef(p);
       const lState = p.abilities[2];
       if (!lDef || !lState) continue;
       // Decrement confused/stun timers up here so they expire
@@ -1363,9 +1409,8 @@ export class BrawlRoom extends Room {
       if (!data || !data.allInActive) continue;
       const lState = p.abilities[2];
       if (lState && lState.active) continue; // still windup
-      // Resolution time.
-      const kit = getAbilityKit(p.critterName);
-      const lDef = kit[2];
+      // Resolution time. L por jugador (Copycat), como en 2.e.
+      const lDef = getLDef(p);
       if (!lDef || !lDef.allInL) {
         data.allInActive = false;
         continue;
@@ -1469,8 +1514,16 @@ export class BrawlRoom extends Room {
       p.vx *= friction;
       p.vz *= friction;
 
+      // Zona muerta solo en inercia — espejo de src/critter.ts
+      // (docs/FEELING.md §7.4 y §7.7). Con input, anular la velocidad por
+      // debajo del umbral se comía justo la que el bicho estaba ganando
+      // (a 30 Hz, Shelly ralentizada o en el hielo). "Inercia" incluye un
+      // empuje que ni a velocidad terminal supera el umbral (stick con
+      // deriva, bicho enraizado).
       const speed = Math.sqrt(p.vx * p.vx + p.vz * p.vz);
-      if (speed < SIM.movement.velocityDeadZone) {
+      const pushTerminal = (data.moveAccel * halfLife) / Math.LN2;
+      const coasting = !data.hasInput || pushTerminal < SIM.movement.velocityDeadZone;
+      if (coasting && speed < SIM.movement.velocityDeadZone) {
         p.vx = 0;
         p.vz = 0;
       } else if (speed > SIM.movement.maxSpeed) {
@@ -1478,7 +1531,10 @@ export class BrawlRoom extends Room {
         p.vz = (p.vz / speed) * SIM.movement.maxSpeed;
       }
 
-      if (Math.abs(p.vx) > 0.1 || Math.abs(p.vz) > 0.1) {
+      // Facing follows the player's OWN movement: a shove never turns it
+      // round (mirror of Critter.update, FEELING §7.10).
+      if ((Math.abs(p.vx) > 0.1 || Math.abs(p.vz) > 0.1) &&
+          data.hasInput && p.vx * data.moveX + p.vz * data.moveZ > 0) {
         p.rotationY = Math.atan2(p.vx, p.vz);
       }
     }

@@ -249,6 +249,11 @@ let slotEls: {
    *  sheet (early dev / sprite still loading) — in that case the slot
    *  has no icon-based cooldown indicator. */
   iconEl: HTMLElement | null;
+  /** Matching touch button (index.html #touch-actions) and the medallion
+   *  injected into it — same cooldown/state as the bar slot. Null on
+   *  entries without touch controls (tools.html). */
+  touchBtn: HTMLElement | null;
+  touchIcon: HTMLElement | null;
   unavailable: boolean;
 }[] = [];
 
@@ -276,10 +281,12 @@ export function initAbilityHUD(
   if (!abilityContainer) return;
   abilityContainer.innerHTML = '';
   slotEls = [];
+  resetTouchAbilityButtons();
 
   for (let i = 0; i < states.length; i++) {
     const s = states[i];
     const isUnavailable = unavailable?.has(i) ?? false;
+    const slotSuffix = ABILITY_SLOT_SUFFIX[i] ?? 'j';
     const slot = document.createElement('div');
     slot.className = 'ability-slot' + (isUnavailable ? ' unavailable' : '');
 
@@ -288,10 +295,23 @@ export function initAbilityHUD(
     // keeps its original key+name+bar layout clean.
     let iconEl: HTMLElement | null = null;
     if (critterSlug) {
-      const slotSuffix = ABILITY_SLOT_SUFFIX[i] ?? 'j';
       iconEl = document.createElement('span');
       iconEl.className = `sprite-ability sprite-ability-${critterSlug}-${slotSuffix} ability-slot-icon`;
       slot.appendChild(iconEl);
+    }
+
+    // Touch button for this slot: same medallion, so touch players get the
+    // icon and the cooldown sweep (the bar is hidden on phones and the
+    // buttons used to show only the J/K/L letter — measured 2026-09-24).
+    const touchBtn = document.querySelector<HTMLElement>(`.touch-btn-${slotSuffix}`);
+    let touchIcon: HTMLElement | null = null;
+    if (touchBtn) {
+      touchBtn.classList.toggle('unavailable', isUnavailable);
+      if (critterSlug) {
+        touchIcon = document.createElement('span');
+        touchIcon.className = `sprite-ability sprite-ability-${critterSlug}-${slotSuffix} ability-slot-icon touch-btn-icon`;
+        touchBtn.prepend(touchIcon);
+      }
     }
 
     const keyLabel = document.createElement('div');
@@ -324,11 +344,22 @@ export function initAbilityHUD(
     }
 
     abilityContainer.appendChild(slot);
-    slotEls.push({ root: slot, fill, iconEl, unavailable: isUnavailable });
+    slotEls.push({ root: slot, fill, iconEl, touchBtn, touchIcon, unavailable: isUnavailable });
   }
   // Reset edge-detector state — a fresh roster build means there is
   // nothing to "remember" about the previous match's slots.
   prevCooldown.length = 0;
+}
+
+/** Strip the previous critter's medallion and states from the J/K/L touch
+ *  buttons (a critter with fewer abilities must not inherit them). */
+function resetTouchAbilityButtons(): void {
+  for (const suffix of ABILITY_SLOT_SUFFIX) {
+    const btn = document.querySelector<HTMLElement>(`.touch-btn-${suffix}`);
+    if (!btn) continue;
+    btn.querySelector('.touch-btn-icon')?.remove();
+    btn.classList.remove('active', 'on-cooldown', 'unavailable');
+  }
 }
 
 export function updateAbilityHUD(states: AbilityState[]): void {
@@ -347,6 +378,8 @@ export function updateAbilityHUD(states: AbilityState[]): void {
     // by a className reassignment on the next frame.
     el.root.classList.toggle('active', s.active);
     el.root.classList.toggle('on-cooldown', isCooldown);
+    el.touchBtn?.classList.toggle('active', s.active);
+    el.touchBtn?.classList.toggle('on-cooldown', isCooldown);
 
     // Conic-gradient cooldown overlay drives off `--cd-progress` on
     // the icon (or the slot itself as fallback). 1 = full dim arc,
@@ -354,17 +387,20 @@ export function updateAbilityHUD(states: AbilityState[]): void {
     const progress = isCooldown ? s.cooldownLeft / s.def.cooldown : 0;
     const overlayHost = el.iconEl ?? el.root;
     overlayHost.style.setProperty('--cd-progress', String(progress));
+    el.touchIcon?.style.setProperty('--cd-progress', String(progress));
 
     // Edge: cooldown finished THIS frame (and we're not in active
     // dash) → fire the pop animation on the icon. Listener removes
     // the class on animationend so the next cooldown finish can
     // re-trigger it cleanly.
-    if (wasCool && !isCooldown && !s.active && el.iconEl) {
-      const icon = el.iconEl;
-      icon.classList.add('ready-flash');
-      icon.addEventListener('animationend', () => {
-        icon.classList.remove('ready-flash');
-      }, { once: true });
+    if (wasCool && !isCooldown && !s.active) {
+      for (const icon of [el.iconEl, el.touchIcon]) {
+        if (!icon) continue;
+        icon.classList.add('ready-flash');
+        icon.addEventListener('animationend', () => {
+          icon.classList.remove('ready-flash');
+        }, { once: true });
+      }
     }
 
     // Legacy fill-bar width — kept up to date even though the bar is

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind, isOnSlipperyZone } from './abilities-runtime';
+import { cancelAbility, createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind, getSlipperyZone } from './abilities-runtime';
 import type { AbilityState } from './abilities';
 import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
@@ -7,8 +7,11 @@ import { getRosterEntry, type RosterEntry } from './roster';
 import { loadModelWithAnimations } from './model-loader';
 import { SkeletalAnimator, type SkeletalState } from './critter-skeletal';
 import { createCritterParts } from './critter-parts';
-import { deriveAnimationPersonality, tickProceduralAnimation, type AnimationPersonality } from './critter-animation';
+import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, runShare, type AnimationPersonality } from './critter-animation';
 import { deriveCritterStats } from './pws-stats';
+import { measurePosedBox } from './posed-bounds';
+import { attachOutline, normalizeCritterMaterials, setOutlineVisible, type CritterOutline } from './critter-look';
+import { removeDecoy, tickDecoy } from './abilities-vfx';
 
 /**
  * Behaviour tag used ONLY by the /tools.html dev lab to isolate bot
@@ -180,12 +183,53 @@ export class Critter {
   vz = 0;
   alive = true;
   hasInput = false;
+  /** Acceleration (u/s²) the controller pushed this frame — written by
+   *  player.ts / bot.ts. The dead zone uses it to tell a real push from
+   *  stick drift or a rooted critter (see update()). */
+  moveAccel = 0;
+  /** Direction the controller pushed this frame (any length; 0,0 = none)
+   *  — written by player.ts / bot.ts. The facing follows the velocity only
+   *  while it goes this way (see update()). */
+  moveX = 0;
+  moveZ = 0;
+  /** Fraction of a player's acceleration this critter's controller uses:
+   *  1 for a player, FEEL.bots.moveAccelFactor for an offline bot
+   *  (written by bot.ts). Presentation only — the run pose normalises by
+   *  the critter's REAL top speed, and a bot's is lower. */
+  pace = 1;
+  /** Ground speed actually covered (u/s) — what the legs should match.
+   *  Measured from position deltas, so it is right offline (where the
+   *  position moves BEFORE friction, ×1.155 the stored |v| at 60 Hz) and
+   *  online (where the position arrives in server patches, and is smoothed
+   *  to absorb their jumps). */
+  groundSpeed = 0;
+  /** Ground velocity (u/s) behind `groundSpeed`. */
+  groundVX = 0;
+  groundVZ = 0;
+  /** Run share of the locomotion pose (0 idle … 1 run), eased. */
+  private locoShare = 0;
+  private groundX = NaN;
+  private groundZ = NaN;
+  /** Visual-only pivot between `mesh` (gameplay facing) and `glbMesh`.
+   *  Its yaw lags the facing so the model turns over ~80 ms instead of
+   *  snapping 180° in one frame (see critter-animation tickTurn). */
+  visualPivot: THREE.Group | null = null;
+  /** Visual-only rig between `mesh` and `visualPivot`: whole-model
+   *  reactions (the knockback lean, gamefeel updateKnockbackTilt) turn it
+   *  about the feet without fighting the clips, the procedural layer or
+   *  the turn lag, which own the transforms below it. */
+  reactionRig: THREE.Group | null = null;
+  /** Yaw (rad) the model still trails the gameplay facing by. */
+  visualYawLag = 0;
+  /** Facing seen last frame, to catch the jumps the lag absorbs. NaN =
+   *  not seen yet (the next frame adopts the facing without lag). */
+  lastFacingY = NaN;
   lives = FEEL.lives.default;
   immunityTimer = 0;
   /** v0.11 — Kurama Mirror Trick: while > 0 the GLB mesh is
-   *  rendered at alpha 0.25 ("ghost"). Independent of immunityTimer
-   *  so the immunity blink and the invisibility don't collide
-   *  visually. Decremented per update(dt). */
+   *  rendered at FEEL.decoy.ghostAlpha ("ghost"; Sihans' burrow: 0).
+   *  Independent of immunityTimer, and drawn over the immunity blink
+   *  in updateVisuals. Decremented per update(dt). */
   invisibilityTimer = 0;
   /** v0.11 — Shelly Steel Shell: while > 0 the GLB materials get
    *  emissive tinted to `selfTintHex`. Provides a "metallic mode"
@@ -343,12 +387,28 @@ export class Critter {
    */
   parts: ReturnType<typeof import('./critter-parts').createCritterParts> | null = null;
 
+  /** Cartoon outline hulls (critter-look.ts), children of each GLB mesh —
+   *  so hiding or scaling a part (Shelly's shell, Trunk's nose) takes its
+   *  outline along. Null until the GLB attaches. */
+  private outline: CritterOutline | null = null;
+
   /** Height of the GLB in BIND POSE world space, measured once at
    *  attach. Used by the character-select preview to apply a uniform
    *  scale synchronously (no pop), independent of idle-clip wiggle.
    *  Null until the async GLB load completes; 0 for procedural-only
    *  critters that have no GLB. */
   bindPoseHeight: number | null = null;
+
+  /**
+   * Uniform factor that makes the GLB's idle silhouette exactly
+   * `IN_GAME_TARGET_HEIGHT` tall — the same height for the nine (Rafa,
+   * 2026-09-21). Measured once at attach; `tickProceduralAnimation`
+   * multiplies the roster (or lab-override) scale by it every frame.
+   * Until then the procedural layer wrote the bare roster scale and
+   * undid the fit at "GO!" (Trunk +64 %, Sebastian −21 %). 1 until the
+   * GLB attaches.
+   */
+  glbFitFactor = 1;
 
   constructor(config: CritterConfig, scene: THREE.Scene) {
     this.config = config;
@@ -473,16 +533,8 @@ export class Critter {
       this.tickSkeletal(dt);
       tickProceduralAnimation(this, dt);
       this.updateVisuals();
-      const flashT = tickHitFlash(this, dt);
-      if (flashT > 0) {
-        for (const mat of this.getActiveMaterials()) {
-          mat.emissive.setHex(0xffffff);
-          mat.emissiveIntensity = flashT * 1.2;
-        }
-      }
-      updateScaleFeedback(this, dt);
-      updateKnockbackTilt(this, dt);
-      updateHeadbuttRecovery(this, dt);
+      this.tickFeedback(dt);
+      tickDecoy(this, dt);
       return;
     }
 
@@ -569,17 +621,28 @@ export class Critter {
 
     // Friction: faster decay when no input (stops drift), normal decay
     // with input. 2026-04-30 final-L — slippery zones (Kowalski Frozen
-    // Floor) push the half-life ~5× higher, so velocity decays slower
-    // and the critter slides.
+    // Floor) multiply the half-life by the ice's `frictionMult`, so
+    // velocity decays slower and the critter slides.
     let halfLife = this.hasInput ? FEEL.movement.frictionHalfLife : FEEL.movement.idleFrictionHalfLife;
-    if (isOnSlipperyZone(this.x, this.z, this.config.name)) halfLife *= 5;
+    const ice = getSlipperyZone(this.x, this.z, this.config.name);
+    if (ice) halfLife *= ice.frictionMult;
     const friction = Math.pow(0.5, dt / halfLife);
     this.vx *= friction;
     this.vz *= friction;
 
     // Dead zone: kill micro-drift (exponential decay never reaches true zero)
+    // — only when coasting. With input held it zeroed the very velocity
+    // the critter was building: at high refresh rates one frame's
+    // acceleration stays under the threshold, so Shelly could not start
+    // moving at ≥120 Hz, Sergei at ≥144 Hz, and the Shelly bot not even
+    // at 60 Hz (docs/FEELING.md §7.4). "Coasting" also covers a push too
+    // weak to ever clear the dead zone even at terminal velocity (a
+    // gamepad stick drifting just past its own dead zone, a rooted or
+    // stunned critter) — frame-rate independent, unlike the old test.
     const speed = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
-    if (speed < FEEL.movement.velocityDeadZone) {
+    const pushTerminal = (this.moveAccel * halfLife) / Math.LN2;
+    const coasting = !this.hasInput || pushTerminal < FEEL.movement.velocityDeadZone;
+    if (coasting && speed < FEEL.movement.velocityDeadZone) {
       this.vx = 0;
       this.vz = 0;
     } else if (speed > FEEL.movement.maxSpeed) {
@@ -588,8 +651,14 @@ export class Critter {
       this.vz = (this.vz / speed) * FEEL.movement.maxSpeed;
     }
 
-    // Face direction of movement
-    if (Math.abs(this.vx) > 0.1 || Math.abs(this.vz) > 0.1) {
+    // Face the way the critter is moving ITSELF: the velocity, while it
+    // goes where the controller pushes. A shove (knockback, the recoil of
+    // its own headbutt, a pull) never turns it round — it used to spin
+    // 180° in mid-flight, turn its back on whoever hit it and fire its next
+    // headbutt the wrong way (FEELING §7.10). Coasting keeps the facing.
+    // Mirror: BrawlRoom's integrate step.
+    if ((Math.abs(this.vx) > 0.1 || Math.abs(this.vz) > 0.1) &&
+        this.hasInput && this.vx * this.moveX + this.vz * this.moveZ > 0) {
       this.mesh.rotation.y = Math.atan2(this.vx, this.vz);
     }
 
@@ -609,8 +678,14 @@ export class Critter {
 
     // Visual feedback for ability states (emissive, body scale, head offset)
     this.updateVisuals();
+    this.tickFeedback(dt);
+    // Mirror Trick decoy: its life is game time, like everything here.
+    tickDecoy(this, dt);
+  }
 
-    // Hit flash overrides the state emissive briefly (applied AFTER updateVisuals)
+  /** Game feel visual systems (visual-only, no gameplay logic). Runs AFTER
+   *  updateVisuals: the hit flash overrides the state emissive briefly. */
+  private tickFeedback(dt: number): void {
     const flashT = tickHitFlash(this, dt);
     if (flashT > 0) {
       for (const mat of this.getActiveMaterials()) {
@@ -618,11 +693,17 @@ export class Critter {
         mat.emissiveIntensity = flashT * 1.2;
       }
     }
-
-    // Game feel visual systems (all visual-only, no gameplay logic)
     updateScaleFeedback(this, dt);
     updateKnockbackTilt(this, dt);
     updateHeadbuttRecovery(this, dt);
+  }
+
+  /** Put the first frame of a just-applied impact on screen now. The hit
+   *  stop freezes the game on the frame the blow lands, before any update
+   *  runs, so without this the freeze shows the victim untouched and the
+   *  squash, flash and lean only start once time resumes. */
+  showImpactFrame(): void {
+    this.tickFeedback(0);
   }
 
   /** Visual-only: updates emissive, posture, and opacity based on current state. No gameplay logic. */
@@ -655,7 +736,9 @@ export class Critter {
           headOffsetY = FEEL.groundPound.windUpHeadDrop;
           glowColor = 0xffff00;
           glowIntensity = 0.5;
-        } else {
+        } else if (!s.def.selfBuffOnly) {
+          // A self-buff K (Steel Shell, Mirror Trick) slams nothing: its
+          // look is the tint or the ghost below, not the slam's red.
           glowColor = 0xff2200;
           glowIntensity = 0.7;
         }
@@ -714,9 +797,41 @@ export class Critter {
     // actual blink window avoids the sort entirely the rest of the
     // time and costs nothing — the blink path still flips it back to
     // transparent for as long as opacity < 1.
-    if (this.immunityTimer > 0) {
+    // The outline hides whenever the critter goes see-through (dim blink
+    // frame, invisibility, fog fade): a solid contour around a ghost reads
+    // as a hole.
+    let translucent = this.fadeAlpha !== null;
+    // Immunity a self-buff K grants (Steel Shell, Mirror Trick) is a
+    // stance the critter chose, not a respawn: it keeps its own look
+    // (tint, ghost). The respawn blink made the steel shell read as
+    // intangible — the opposite of a wall you bounce off.
+    const selfBuff = this.abilityStates.some((s) => s.active && s.windUpLeft <= 0 && s.def.selfBuffOnly);
+    if (this.invisibilityTimer > 0) {
+      // v0.11 — Kurama Mirror Trick. Mesh ghosted while the decoy
+      // tricks bots and other players.
+      // 2026-04-29 K-session — Sihans Burrow Rush reuses the same
+      // timer but collapses to alpha 0 (totally underground) for
+      // its short 0.30 s window.
+      // 2026-05-01 microfix (Rafa: "Kurama original debe estar
+      // invisible o casi invisible mientras dura el clon"): alpha
+      // dropped 0.25 → 0.08 (FEEL.decoy.ghostAlpha). Still leaves a
+      // faint silhouette so a very attentive player can spot her if
+      // they really look, but at glance the decoy is the only Kurama
+      // on screen.
+      // Checked BEFORE the immunity blink: Mirror Trick writes both
+      // timers, and until 2026-09-24 the blink won, so the ghost was
+      // never drawn (Kurama blinked white and opaque instead).
+      const ghostAlpha = this.config.name === 'Sihans' ? 0.0 : FEEL.decoy.ghostAlpha;
+      translucent = true;
+      for (const mat of mats) {
+        mat.transparent = true;
+        mat.opacity = ghostAlpha;
+        mat.depthWrite = false;
+      }
+    } else if (this.immunityTimer > 0 && !selfBuff) {
       const phase = (Date.now() * 0.001 * FEEL.lives.blinkRate) % 1;
       const visible = phase < 0.5;
+      if (!visible) translucent = true;
       const opacity = visible ? 1.0 : 0.15;
       for (const mat of mats) {
         mat.transparent = !visible;     // opaque on the bright frame, transparent on the dim frame
@@ -726,23 +841,6 @@ export class Critter {
           mat.emissive.setHex(0xffffff);
           mat.emissiveIntensity = 0.8;
         }
-      }
-    } else if (this.invisibilityTimer > 0) {
-      // v0.11 — Kurama Mirror Trick. Mesh ghosted while the decoy
-      // tricks bots and other players.
-      // 2026-04-29 K-session — Sihans Burrow Rush reuses the same
-      // timer but collapses to alpha 0 (totally underground) for
-      // its short 0.30 s window.
-      // 2026-05-01 microfix (Rafa: "Kurama original debe estar
-      // invisible o casi invisible mientras dura el clon"): alpha
-      // dropped 0.25 → 0.08. Still leaves a faint silhouette so a
-      // very attentive player can spot her if they really look,
-      // but at glance the decoy is the only Kurama on screen.
-      const ghostAlpha = this.config.name === 'Sihans' ? 0.0 : 0.08;
-      for (const mat of mats) {
-        mat.transparent = true;
-        mat.opacity = ghostAlpha;
-        mat.depthWrite = false;
       }
     } else {
       for (const mat of mats) {
@@ -783,15 +881,16 @@ export class Critter {
     // on enemies standing inside a sand zone. Subtle warm-brown
     // emissive pulse so a critter caught in the swirl reads as
     // "ralentizado por arena" without competing with the snowball
-    // freeze (cyan) or shells. Self-skip: Sihans inside her own
-    // quicksand keeps her normal look so the caster stays
+    // freeze (cyan) or shells. Self-skip by zone owner, as the slow
+    // itself does: the caster inside its own sand (Sihans, or a Kurama
+    // that copied the Sinkhole) keeps its normal look and stays
     // distinguishable. Snowball freeze takes priority because slow
     // is more severe (50 %) than the quicksand 50 %, but both
     // happen rarely enough simultaneously that the cyan-over-amber
     // collision is acceptable.
-    if (this.slowTimer === 0 && this.config.name !== 'Sihans' &&
-        getZoneSlowMultiplier(this.x, this.z) < 1 &&
-        isInsideZoneOfKind(this.x, this.z, 'sand')) {
+    if (this.slowTimer === 0 &&
+        getZoneSlowMultiplier(this.x, this.z, this.config.name) < 1 &&
+        isInsideZoneOfKind(this.x, this.z, 'sand', this.config.name)) {
       const pulse = 0.50 + 0.30 * Math.sin(Date.now() * 0.006);
       for (const mat of mats) {
         mat.emissive.setHex(0xb98c54);
@@ -811,6 +910,7 @@ export class Critter {
         mat.depthWrite = false;
       }
     }
+    setOutlineVisible(this.outline, !translucent);
   }
 
   // ---------------------------------------------------------------------------
@@ -839,48 +939,21 @@ export class Critter {
     }
     // Apply roster visual config
     group.scale.setScalar(entry.scale);
+    // XZY: the roster yaw is applied FIRST (innermost), then roll (z) and
+    // pitch (x) about the critter's own axes. With the default XYZ, the
+    // procedural sway on a rig turned -90° (the Tripo ones) rolled about
+    // the model's z — which after the yaw is the lateral axis, so the
+    // "side sway" was really a forward nod.
+    group.rotation.order = 'XZY';
     group.rotation.y = entry.rotation;
     this.baseGlbRotationY = entry.rotation;
     group.position.set(...entry.offset);
     group.position.y += entry.pivotY;
 
-    // Normalise GLB materials for our shading pipeline:
-    //   - transparent: FALSE at attach time (was `true` until 2026-04-29) —
-    //     keeping it `true` permanently kept the alpha-sort path active for
-    //     every skinned submesh forever, which on multi-mesh GLBs (Sergei
-    //     is the worst case: gorilla body + arms + face split across
-    //     submeshes) produced "patches becoming see-through" because alpha
-    //     sort can't reliably order intersecting skinned-mesh triangles.
-    //     `updateVisuals` flips `transparent: true` ONLY for the few frames
-    //     of immunity blink / invisibility — outside those windows the
-    //     material stays fully opaque with depth-write enabled, so the
-    //     skinned mesh sorts via the depth buffer like every other solid
-    //     mesh.
-    //   - metalness/roughness neutralised when the source exported a
-    //     full-PBR rig (Meshy does `metalness: 1`), which reads as dark
-    //     matte without an envMap and kills the saturated colours the
-    //     base map actually contains. Forcing metalness=0 + roughness=0.7
-    //     lets the diffuse map drive the look, matching the flat cartoon
-    //     look from the source visor. Tripo exports already low-metal,
-    //     so we only touch materials that came in with > 0.5.
-    group.traverse((node) => {
-      const m = node as THREE.Mesh;
-      if (!m.isMesh) return;
-      const raw = m.material;
-      const mats = Array.isArray(raw) ? raw : [raw];
-      for (const mat of mats) {
-        const std = mat as THREE.MeshStandardMaterial;
-        if (!std.isMeshStandardMaterial) continue;
-        std.transparent = false;
-        std.opacity = 1.0;
-        std.depthWrite = true;
-        if (std.metalness > 0.5) {
-          std.metalness = 0;
-          std.roughness = 0.7;
-          std.needsUpdate = true;
-        }
-      }
-    });
+    // Opaque, non-metallic, no emissive map (critter-look, shared with the
+    // slot thumbnails). updateVisuals owns emissive and transparency from
+    // here on.
+    normalizeCritterMaterials(group);
 
     // Hide procedural geometry (keep body/head alive for harmless code paths)
     this.body.visible = false;
@@ -903,19 +976,27 @@ export class Critter {
       }
     });
 
-    this.mesh.add(group);
+    // The GLB hangs from a visual pivot so its yaw can trail the gameplay
+    // facing (mesh.rotation.y, which headbutts and abilities fire along)
+    // without touching it. World transforms of glbMesh include the pivot,
+    // so anything that snapshots them (Kurama's decoy) copies what is seen.
+    // Above the pivot sits the reaction rig (mesh → rig → pivot → GLB).
+    const rig = new THREE.Group();
+    const pivot = new THREE.Group();
+    this.mesh.add(rig);
+    rig.add(pivot);
+    pivot.add(group);
+    this.reactionRig = rig;
+    this.visualPivot = pivot;
+    this.visualYawLag = 0;
+    this.lastFacingY = NaN;
     this.glbMesh = group;
 
     // Measure bind-pose silhouette FIRST, before the mixer touches the
     // skeleton. Used as the baseline for the sync auto-fit in the
     // preview (so swaps are pop-free — we don't wait for the idle clip
     // to tick before we know how big the critter is).
-    let measuredHeight = 0;
-    {
-      group.updateMatrixWorld(true);
-      const bbox = new THREE.Box3().setFromObject(group);
-      if (!bbox.isEmpty()) measuredHeight = bbox.max.y - bbox.min.y;
-    }
+    let measuredHeight = measurePosedHeight(group);
     this.bindPoseHeight = measuredHeight > 0.1 ? measuredHeight : null;
 
     // Skeletal animation setup — only if the GLB shipped clips. The mixer
@@ -938,12 +1019,8 @@ export class Critter {
       // same APPARENT height in both the selector and the arena, not the
       // same "bind" height (which can be wildly off).
       this.skeletal.update(0.033); // ~1 frame at 30fps
-      group.updateMatrixWorld(true);
-      const idleBbox = new THREE.Box3().setFromObject(group);
-      if (!idleBbox.isEmpty()) {
-        const idleHeight = idleBbox.max.y - idleBbox.min.y;
-        if (idleHeight > 0.1) measuredHeight = idleHeight;
-      }
+      const idleHeight = measurePosedHeight(group);
+      if (idleHeight > 0.1) measuredHeight = idleHeight;
       this.bindPoseHeight = measuredHeight > 0.1 ? measuredHeight : null;
     }
 
@@ -960,6 +1037,7 @@ export class Critter {
     if (measuredHeight > 0.1) {
       const k = IN_GAME_TARGET_HEIGHT / measuredHeight;
       group.scale.multiplyScalar(k);
+      this.glbFitFactor = k;
       this.bindPoseHeight = IN_GAME_TARGET_HEIGHT;
     }
 
@@ -985,6 +1063,10 @@ export class Critter {
       }
     });
     this.parts = createCritterParts(group, skeleton);
+
+    // Cartoon outline (critter-look.ts). Last on purpose: the height fit
+    // and the parts index above must not see the hulls.
+    this.outline = attachOutline(group);
 
     console.debug(
       '[Critter] GLB attached:',
@@ -1057,6 +1139,7 @@ export class Critter {
   }
 
   private tickSkeletal(dt: number): void {
+    this.trackGroundSpeed(dt);
     if (!this.skeletal) return;
 
     // Ability cast edges — play the corresponding clip exactly once
@@ -1075,10 +1158,16 @@ export class Critter {
       const prev = this.lastAbilityActive[i];
       const slotState: SkeletalState = (['ability_1', 'ability_2', 'ability_3'] as const)[i];
       if (active && !prev) {
+        // Undefined unless the def sets a rate, so the clip's
+        // ANIMATION_OVERRIDES speed (what anim-lab tunes) applies. A
+        // `?? 1` here overrode it from 47728db to 2026-09-24: every
+        // ability clip without clipPlaybackRate ran at 1× in a match.
         this.skeletal.play(slotState, {
-          timeScale: state.def.clipPlaybackRate ?? 1,
+          timeScale: state.def.clipPlaybackRate,
         });
-      } else if (!active && prev && state.def.cancelAnimOnEnd) {
+      } else if (!active && prev && state.def.cancelAnimOnEnd && this.skeletal.getCurrentState() === slotState) {
+        // Only cut this slot's own clip: a J that ends (or is cancelled
+        // by Steel Shell) under the K must not snap the K's pose to idle.
         const vMag = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
         const moving = vMag > FEEL.movement.velocityDeadZone * 2;
         this.skeletal.play(moving ? 'run' : 'idle');
@@ -1095,6 +1184,19 @@ export class Critter {
       const moving = vMag > FEEL.movement.velocityDeadZone * 2;
       this.skeletal.play(moving ? 'run' : 'idle');
     }
+    // Locomotion pose, every frame (also while a heavy clip fades in or
+    // out): the run share and the legs' rate follow the ground covered
+    // forwards, so the feet stay planted as the critter speeds up, brakes
+    // or gets shoved. The share moves no faster than runBlendTime (a burst
+    // of speed would flip the pose in one frame) and holds through the
+    // headbutt pose (the lunge is a strike, not a run). Visual only — see
+    // runShare / runPlaybackRate.
+    const forward = Math.max(0, this.forwardGroundSpeed());
+    if (!inHeadbuttPose) {
+      const maxStep = dt / FEEL.locomotion.runBlendTime;
+      this.locoShare += Math.max(-maxStep, Math.min(maxStep, runShare(forward) - this.locoShare));
+    }
+    this.skeletal.setLocomotion(this.locoShare, runPlaybackRate(this, forward));
 
     this.skeletal.update(dt);
   }
@@ -1126,11 +1228,36 @@ export class Critter {
     this.falling = true;
     this.lives--;
     this.respawnTimer = FEEL.lives.respawnDelay;
+    this.cancelActiveAbilities();
     playSound('fall');
     // Skeletal fall clip — kept until respawn (one-shot with defeat
     // fallback so if there's no fall clip but there is defeat, it still
     // reads as "going down" instead of idle during the drop).
     this.playSkeletal('fall', { fallback: 'defeat' });
+  }
+
+  /**
+   * A fall ends everything in flight: active abilities (cooldown started
+   * as if they had run out), the All-in charge and the buffs' visual
+   * timers. Abilities don't tick while falling, so they used to resume at
+   * the respawn point (Cone Pulse firing at the centre, a K pressed
+   * mid-fall going off there, a bot's All-in resolving from the spawn).
+   * Server mirror: `startFalling` in server/src/sim/physics.ts.
+   */
+  private cancelActiveAbilities(): void {
+    for (const s of this.abilityStates) {
+      if (s.active) cancelAbility(s);
+    }
+    this.lHoldCharging = false;
+    this.lHoldChargeTime = 0;
+    this.invisibilityTimer = 0;
+    this.selfTintTimer = 0;
+    this.selfTintHex = null;
+    // The trick is over: its decoy goes too.
+    removeDecoy(this);
+    // No end edge for the skeletal layer: a cancelled slot must not cut
+    // the respawn clip on the first update after the fall.
+    this.lastAbilityActive.fill(false);
   }
 
   /** Update falling state. Returns true if critter should respawn now. */
@@ -1159,7 +1286,14 @@ export class Critter {
     // critter never looks toward the void.
     this.mesh.rotation.y = Math.atan2(-x, -z);
     this.mesh.position.y = 0;
+    this.resetVisualMotion();
     this.immunityTimer = FEEL.lives.immunityDuration;
+    // Control statuses die with the life they were put on: no stun,
+    // confusion or snowball slow carries over to the respawn (they were
+    // frozen during the fall). Server mirror: BrawlRoom's respawn block.
+    this.stunTimer = 0;
+    this.confusedTimer = 0;
+    this.slowTimer = 0;
     playSound('respawn');
     this.isHeadbutting = false;
     this.headbuttAnticipating = false;
@@ -1193,6 +1327,7 @@ export class Critter {
    */
   dispose(): void {
     if (this.mesh.parent) this.mesh.parent.remove(this.mesh);
+    removeDecoy(this);
     // Skeletal animator: release the mixer's actions first. The
     // underlying AnimationClip objects are SHARED across clones and must
     // not be disposed here — the model-loader cache owns them.
@@ -1215,7 +1350,56 @@ export class Critter {
       }
     });
     this.glbMesh = null;
+    this.visualPivot = null;
+    this.reactionRig = null;
     this.glbMaterials = [];
+  }
+
+  /** A teleport (respawn, new match) is neither a run nor a turn: drop
+   *  the ground-speed history and the turn lag so the model doesn't
+   *  sprint in place or spin on the spot when it reappears. */
+  private resetVisualMotion(): void {
+    this.groundSpeed = 0;
+    this.groundVX = 0;
+    this.groundVZ = 0;
+    this.locoShare = 0;
+    this.groundX = NaN;
+    this.groundZ = NaN;
+    this.visualYawLag = 0;
+    // NaN = "take whatever facing the next frame has" — the caller may set
+    // the spawn facing after this (reset() is followed by game placement).
+    this.lastFacingY = NaN;
+    if (this.visualPivot) this.visualPivot.rotation.y = 0;
+  }
+
+  /** Ground velocity from the position delta of this frame. Jumps faster
+   *  than any run (respawn, blink, a late network patch) are not running
+   *  and are skipped. Smoothed online only: there the position arrives in
+   *  server patches; offline it is exact, and smoothing it only made the
+   *  legs lag the body — the foot slid ~8 cm at every stop (FEELING §7.11).
+   *  Visual only. */
+  private trackGroundSpeed(dt: number): void {
+    if (dt <= 0) return;
+    if (Number.isFinite(this.groundX)) {
+      const vx = (this.x - this.groundX) / dt;
+      const vz = (this.z - this.groundZ) / dt;
+      if (Math.hypot(vx, vz) <= FEEL.movement.maxSpeed * 1.5) {
+        const k = this.skipPhysics ? Math.min(1, dt / FEEL.locomotion.groundSpeedSmoothing) : 1;
+        this.groundVX += (vx - this.groundVX) * k;
+        this.groundVZ += (vz - this.groundVZ) * k;
+        this.groundSpeed = Math.hypot(this.groundVX, this.groundVZ);
+      }
+    }
+    this.groundX = this.x;
+    this.groundZ = this.z;
+  }
+
+  /** Ground speed along the way the MODEL faces (gameplay facing + turn
+   *  lag). What the run pose should show: sliding backwards (a knockback
+   *  while facing the hitter) or sideways is not running. */
+  forwardGroundSpeed(): number {
+    const yaw = this.mesh.rotation.y + (this.visualPivot?.rotation.y ?? 0);
+    return this.groundVX * Math.sin(yaw) + this.groundVZ * Math.cos(yaw);
   }
 
   reset(x: number, z: number): void {
@@ -1245,5 +1429,23 @@ export class Critter {
     this.lastStatsHeadbutting = false;
     this.lastStatsFalling = false;
     this.lastStatsAbilityActive = [false, false, false];
+    this.resetVisualMotion();
   }
+}
+
+/** Vertices sampled per mesh by `measurePosedHeight` — plenty for a
+ *  silhouette height, and cheap on the 100k-vertex Meshy rigs. */
+const POSED_HEIGHT_SAMPLES = 4000;
+const posedBox = new THREE.Box3();
+
+/**
+ * Height of `root`'s visible meshes in their CURRENT pose. Skinned
+ * vertices go through the live bones (see `measurePosedBox`) —
+ * `Box3.setFromObject` reuses a skinned mesh's cached bind-pose box, which
+ * misjudged the idle silhouette by up to ~20 % (Kurama "fitted" to 1.7
+ * stood 2.08 tall).
+ */
+function measurePosedHeight(root: THREE.Object3D): number {
+  if (!measurePosedBox(root, posedBox, POSED_HEIGHT_SAMPLES)) return 0;
+  return posedBox.max.y - posedBox.min.y;
 }

@@ -36,6 +36,7 @@
 // ---------------------------------------------------------------------------
 
 import { parseArgs } from 'node:util';
+import { MUTE_ARGS, muteGameAudio } from './lib/headless-browser.mjs';
 import { readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -87,6 +88,12 @@ Flags:
                          INTENCIONALES; el diff del JSON documenta el cambio).
                          Alias: npm run golden:write.
   --url=URL              Base del dev server (def: http://localhost:5173).
+  --feel=S.K=N[,S.K=N]   Que-pasaria-si: cambia valores de FEEL en la pagina
+                         antes de cada partida (p. ej.
+                         movement.accelerationScale=2.4). Nunca toca el
+                         codigo. Incompatible con el golden.
+  --gpu                  Renderiza con la GPU (ANGLE/D3D11) en vez de
+                         SwiftShader: la misma simulacion, mucho mas rapida.
   --help                 Esta ayuda.
 
 Salida: tabla por consola (winrate por critter, duracion media, distribucion
@@ -109,11 +116,17 @@ function parseCli(argv) {
       'golden-write': { type: 'boolean', default: false },
       'golden-check': { type: 'boolean', default: false },
       url: { type: 'string', default: 'http://localhost:5173' },
+      feel: { type: 'string' },
+      gpu: { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
     },
   });
 
   if (values.help) return { help: true };
+  const feel = parseFeelOverrides(values.feel);
+  if (Object.keys(feel).length > 0 && (values['golden-write'] || values['golden-check'])) {
+    throw new Error('--feel no se combina con el golden: el golden mide SIEMPRE los valores del codigo.');
+  }
 
   const asInt = (name, raw, { min = 1 } = {}) => {
     const n = Number(raw);
@@ -139,7 +152,26 @@ function parseCli(argv) {
     goldenWrite: values['golden-write'],
     goldenCheck: values['golden-check'],
     url: values.url,
+    feel,
+    gpu: values.gpu,
   };
+}
+
+/**
+ * `--feel=movement.accelerationScale=2.4,bots.edgeMargin=1.8` → { path: n }.
+ * Two-segment dot-paths into FEEL (same format as feel-patch), numbers
+ * only. Applied in the page before every match — a what-if, never written
+ * to source.
+ */
+function parseFeelOverrides(raw) {
+  const out = {};
+  if (!raw) return out;
+  for (const part of raw.split(',').map((s) => s.trim()).filter(Boolean)) {
+    const m = /^([A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*)=(-?\d+(?:\.\d+)?)$/.exec(part);
+    if (!m) throw new Error(`--feel: "${part}" no es seccion.clave=numero`);
+    out[m[1]] = Number(m[2]);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +229,7 @@ async function probeServer(labUrl) {
 
 async function openLabPage(browser, labUrl) {
   const page = await browser.newPage();
+  await muteGameAudio(page);
   // Forward page-side errors to the runner's stderr so a broken build is
   // visible instead of silently producing a hung poll.
   page.on('pageerror', (e) => console.error(`[pageerror] ${e.message}`));
@@ -215,7 +248,41 @@ async function openLabPage(browser, labUrl) {
 // One match
 // ---------------------------------------------------------------------------
 
-async function runOneMatch(page, { player, bots, seed, packId, speed, timeoutMs }) {
+/**
+ * page.evaluate with a deadline. A renderer that stops answering (seen
+ * 2026-09-22: one seed froze the page mid-match) made the progress poll
+ * below await forever — the stall/hard-cap checks live INSIDE that loop,
+ * so they never ran and the batch hung for good. On timeout this throws a
+ * "pagina colgada" error, which runBatch treats like a crashed target.
+ */
+const PAGE_HANG_MS = 60_000;
+function evaluateWithDeadline(page, fn, arg) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`pagina colgada: ${PAGE_HANG_MS / 1000} s sin responder`)), PAGE_HANG_MS);
+  });
+  return Promise.race([page.evaluate(fn, arg), deadline]).finally(() => clearTimeout(timer));
+}
+
+async function runOneMatch(page, { player, bots, seed, packId, speed, timeoutMs, feel = {} }) {
+  // --feel what-ifs: mutate the page's live FEEL (same module instance the
+  // game reads every frame) before the match. Every call re-applies them,
+  // so a page recreated after a crash gets them too.
+  if (Object.keys(feel).length > 0) {
+    await page.evaluate((feel) => {
+      // window.__feel is the instance the game reads (src/tools/main.ts).
+      // A page-side import('/src/gamefeel.ts') is a DIFFERENT module once
+      // Vite has hot-reloaded the file (the game imports it as ?t=<stamp>)
+      // and the override silently missed — so no fallback, fail loudly.
+      const FEEL = window.__feel;
+      if (!FEEL) throw new Error('--feel: la pagina no expone window.__feel (¿tools.html antiguo?)');
+      for (const [p, v] of Object.entries(feel)) {
+        const [sec, key] = p.split('.');
+        if (typeof FEEL[sec]?.[key] !== 'number') throw new Error(`--feel: FEEL.${p} no existe o no es numerico`);
+        FEEL[sec][key] = v;
+      }
+    }, feel);
+  }
   // Arm the deterministic surface BEFORE startMatch so the lab actions land
   // outside the new recording (the recording stays a pure gameplay trace;
   // the runner config is captured in the results JSON instead).
@@ -259,7 +326,7 @@ async function runOneMatch(page, { player, bots, seed, packId, speed, timeoutMs 
     let lastPhase = null;
     let lastProgressAt = Date.now();
     for (;;) {
-      const s = await page.evaluate(() => {
+      const s = await evaluateWithDeadline(page, () => {
         const rec = window.__devApi.getRecording();
         const g = window.__game;
         return {
@@ -281,7 +348,7 @@ async function runOneMatch(page, { player, bots, seed, packId, speed, timeoutMs 
     }
   })();
 
-  const payload = await page.evaluate(({ ended }) => {
+  const payload = await evaluateWithDeadline(page, ({ ended }) => {
     const api = window.__devApi;
     const g = window.__game;
     const idx = typeof g.playerIndex === 'number' ? g.playerIndex : 0;
@@ -462,6 +529,7 @@ async function runVerify(browser, labUrl, cfg, participants) {
     packId: cfg.pack,
     speed: cfg.speed,
     timeoutMs: Math.ceil((MATCH_SIM_SEC / cfg.speed) * 1000) + TIMEOUT_MARGIN_MS,
+    feel: cfg.feel,
   };
 
   console.log(`Verify: seed ${cfg.baseSeed}, dos runs con reload entre medias...`);
@@ -645,6 +713,7 @@ async function runBatch(browser, labUrl, cfg, participants) {
         packId: cfg.pack,
         speed: cfg.speed,
         timeoutMs,
+        feel: cfg.feel,
       });
       const summary = summarizeMatch({ index: i, seed, ...raw, participants });
       if (cfg.dumpDir && raw.recording) {
@@ -667,7 +736,7 @@ async function runBatch(browser, labUrl, cfg, participants) {
       // contexto destruido) envenenaba TODAS las partidas restantes —
       // recreamos la página para que el resto del batch corra limpio.
       const msg = String(e.message ?? '');
-      if (/Target (crashed|closed)|context was destroyed|has been closed/i.test(msg)) {
+      if (/Target (crashed|closed)|context was destroyed|has been closed|pagina colgada/i.test(msg)) {
         try { await page.close(); } catch { /* ya muerta */ }
         page = await openLabPage(browser, labUrl);
         console.log('  (página recreada tras el crash)');
@@ -709,6 +778,7 @@ function publicConfig(cfg) {
     pack: cfg.pack,
     speed: cfg.speed,
     dumpRecordings: cfg.dumpDir,
+    feel: cfg.feel,
   };
 }
 
@@ -739,7 +809,14 @@ async function main() {
   await probeServer(labUrl);
 
   const chromium = await loadChromium();
-  const browser = await chromium.launch({ headless: true });
+  // Mudo siempre: una tanda abre decenas de partidas seguidas (directiva
+  // de Rafa 2026-09-07). Ver scripts/lib/headless-browser.mjs.
+  // --gpu: real GPU through ANGLE/D3D11 instead of SwiftShader — same
+  // fixed-step sim, many times faster frames. Still muted.
+  const gpuOpts = cfg.gpu
+    ? { channel: 'chromium', args: [...MUTE_ARGS, '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] }
+    : { args: MUTE_ARGS };
+  const browser = await chromium.launch({ headless: true, ...gpuOpts });
   let exitCode = 0;
   try {
     // Roster comes from the live page (single source of truth) so the

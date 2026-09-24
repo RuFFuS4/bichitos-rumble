@@ -8,12 +8,231 @@
 **H0 Saneamiento: ✅ `v1.2-clean-base`** · **H1 Modernización: ✅
 `v1.3-modern-stack`** · **H2 Dieta de payload + presencia base: ✅
 `v1.4-portal-ready`** (2026-08-19 — dist −59 %, huella inicial ~1,5 MB,
-itch.io publicado con donaciones; detalle en [`ROADMAP.md`](ROADMAP.md)
-y [`BUILD_LOG.md`](BUILD_LOG.md)).
+itch.io publicado con donaciones) · **H3 Bichitos Studio: ✅
+`v1.5-bichitos-studio`** · **Afilado: ✅ `v1.6-afilado`** · **H4 Retención
++ social: ✅ `v1.7-h4-social`** (2026-09-05, Vercel + Railway verificados,
+sala privada real en prod; detalle en [`ROADMAP.md`](ROADMAP.md) y
+[`BUILD_LOG.md`](BUILD_LOG.md)).
+
+> **Desde el 2026-09-16 el trabajo va repartido en cuatro carriles**, cada
+> uno con su sesión y su checklist en [`docs/carriles/`](docs/carriles/):
+> [arena](docs/carriles/arena.md) · [personajes](docs/carriles/personajes.md)
+> · [interfaz](docs/carriles/interfaz.md) ·
+> [distribución](docs/carriles/distribucion.md). El protocolo —qué
+> ficheros son de quién, la tierra de nadie, el testigo del golden— está
+> en [`docs/SESIONES.md`](docs/SESIONES.md). Este documento sigue siendo el
+> estado global y el sitio de las decisiones que esperan a Rafa.
 
 ---
 
-## H3 — Bichitos Studio: tooling unificado (en curso)
+## Cómo retomar — cierre del 2026-09-16
+
+**Antes que nada**: abrir **las cuatro sesiones por carril** y cerrar la
+sesión larga que lo tocaba todo — decidido el 2026-09-16, protocolo y
+encargos en [`docs/SESIONES.md`](docs/SESIONES.md). A partir de ahí, cada
+punto de esta lista lo recoge el carril que lo tiene en su checklist
+([`docs/carriles/`](docs/carriles/)).
+
+Árbol limpio y todo empujado. En producción sigue **`v1.7-h4-social`**:
+todo el terreno v2, el fondo y los dioramas viven solo en `dev`, **sin
+desplegar** (`git log --oneline main..dev` los lista).
+
+**Lo primero de la próxima sesión, por orden:**
+1. ✅ *Hecho el 2026-09-21 por el carril ARENA: decididas las tres (ver
+   «Esperando respuesta» justo abajo).* **Rafa mira capturas y decide.** La ÚNICA hoja de contactos que
+   enseña el estado de hoy es **`.tmp/shots-cierre/`** (los 5 biomas,
+   t=0, tomada al cerrar sobre el `dev` de hoy). Las otras son
+   históricas y **engañan si se miran como estado actual**:
+   `shots-despues/` son las capturas rotas del segundo ~52 (ver
+   ERROR_LOG), `shots-fondo/` es anterior a los dioramas y
+   `shots-dioramas/`/`shots-discmap/` son anteriores a la escala de suelo
+   por bioma. De `shots-cierre/` salen las tres decisiones que hoy
+   bloquean el afinado: techos del scatter (M2), isla como cono, y si el
+   fondo ya vale. Sin ellas, afinar recetas es afinar contra el techo
+   equivocado. Para rehacerla: dev server vivo +
+   `node scripts/arena-shots.mjs --out .tmp/shots-<lo-que-sea>`.
+2. ~~Relanzar el diagnóstico del feeling~~ — hecho el 2026-09-21 con su
+   primer arreglo; espera la decisión de tamaños de Rafa
+   ([`docs/FEELING.md`](docs/FEELING.md) §6).
+3. **Decidir el despliegue**: merge `dev` → `main` con tag cuando las
+   capturas convenzan. Railway autodeploya el servidor desde `main`, así
+   que cliente y servidor salen a la vez.
+
+**Esperando respuesta de Rafa** (bloquean trabajo, no son opinión):
+- ~~Techos del scatter, isla como cono, ¿vale el fondo?~~ **Decididas el
+  2026-09-21** (BUILD_LOG [Arena]): manda el código, la isla ya es un
+  cono en punta y el fondo se rehace como «isla en el cielo»
+  (`docs/carriles/arena.md`). La decisión 2 del fondo v2 también está
+  tomada: jungle con pozo claro, el resto oscuro.
+
+**Estado de la máquina** (comprobado el 2026-09-16): no queda vivo ningún
+navegador de automatización —los ~70 Chrome huérfanos del cierre anterior
+se fueron solos; los que hay ahora son el navegador de Rafa— ni el dev
+server, así que el puerto 5173 está libre. Toda instancia de prueba nace
+muda (`scripts/lib/headless-browser.mjs`).
+
+---
+
+## H4.5 — Arreglar antes de crecer (EN CURSO desde 2026-09-05)
+
+Contexto: Rafa quiere un juego más grande y monetizable (referencias
+smashkarts.io y krunker.io), hasta 8 por partida y Steam — eso es **H6**
+tras H5 (orden acordado: modo por tiempo → progresión → cosméticos →
+Steam; ver ROADMAP). Pero *"antes de ampliar y avanzar hay que arreglar
+cosas… la generación de los terrenos es muy muy pobre"*. Diagnóstico y
+plan completo: [`docs/ARENA_V2.md`](docs/ARENA_V2.md).
+
+**Decisiones de Rafa — TOMADAS el 2026-09-06** ("vamos con los 4 puntos",
+las cuatro por la recomendación; razones en `docs/ARENA_V2.md §6`):
+1. [x] **Micro-slice de gameplay SÍ, ahora** (fase 0.5): medios lotes
+       contiguos del patrón A con rotación por semilla, `layout.pattern`
+       explícito y `radiusAt(angle)`, aprovechando el único
+       `golden:write` de H4.5. Zona hard-stop: bots, respawn y
+       proyectiles; despliegue cliente+servidor a la vez.
+2. [x] **Fuera el void** (cilindro + disco negro de `src/arena.ts`) y a
+       confiar en el skybox del pack; fondo por bioma solo donde no
+       baste (fase 3). Se decide sobre capturas de los 5 packs, y hay
+       que conservar `VOID_FLOOR` y el descarte de fragmentos que caen.
+3. [x] **Dieta de props SÍ** (palmas, bambú, sakura: 112-131k → ≤20k
+       tris con `scripts/optimize-arena-props.mjs`) antes de encender
+       ninguna sombra de props, con galería antes/después para tu ojo.
+4. [x] **Perfil 8P provisional fijado**: r 16 (804 u², ~100 u²/jugador),
+       islote 3,5 u, 4 bandas, 150 s de partida (primer lote a 0,2 y
+       colapso total a 0,8 de la duración), última banda resistente.
+       Solo condiciona la parametrización de la fase 5; se valida con
+       `?arenaView=1&profile=8p` cuando exista el perfil en H6.
+
+**Terreno v2 — fases** (alcance, ficheros y criterios en
+`docs/ARENA_V2.md §3`; cada fase en su rama, hoja de contactos como
+entregable):
+- [x] **Fase 0 — red de seguridad + CLI** (2026-09-06): scraper de
+      paridad de los espejos del sim en `npm run check`, 16 invariantes
+      Vitest del generador, golden de layout por hash (67 semillas, ms),
+      CLI `npm run arena` (ascii/json/timeline/curve/svg/sweep),
+      observabilidad real del colapso offline (el golden de partidas ya
+      registra `collapse_warn`/`collapse_batch`), `test:sim` en CI y
+      docs con las cifras reales. Revisado por 2 agentes adversariales.
+- [x] **Fase 0.5 — micro-slice de gameplay** (2026-09-06): lotes
+      parciales como ARCO CONTIGUO con arranque por semilla (frente
+      legible en el 100 % de las partidas, antes 48,3 %),
+      `layout.pattern` explícito y `radiusAt(angle)` en bots (los dos
+      lados) y expiración de proyectiles. Golden de partidas y de layout
+      regenerados; verificado en pantalla.
+- [x] **Fase 1a — el disco se convierte en un lugar** (2026-09-06):
+      tile de textura a escala real, tinte por banda/pack/semilla,
+      acantilado con material propio, fuera el void y fuera la falda,
+      luz lateral, `ARENA_LOOK` + `arena-shots`. Golden 3/3 SIN
+      regenerar (todo visual). *(Las capturas de `.tmp/shots-despues/`
+      con las que se juzgó esta fase estaban ROTAS —segundo ~52 de
+      partida, ver ERROR_LOG 2026-09-07—; el estado real está en
+      `.tmp/shots-cierre/`.)*
+- [ ] **DIORAMAS — prioridad de Rafa (2026-09-07)**: *"hay que mejorar
+      muy mucho o directamente rehacer la generación de los dioramas,
+      ahora simplemente se ve como un círculo con 4 cosas sueltas e
+      interesa que se vea como algo denso, como un ambiente real, esto es
+      muy importante para darle identidad visual"*. Medido: 11-18 props
+      por bioma, casi todos entre r 7 y 11,5 (solo 1 por pack a r<8,5) y
+      cero instancing en el proyecto *(medido ANTES del slice 1; hoy ya
+      hay dos `InstancedMesh`)*. Diagnóstico y plan en
+      [`docs/DIORAMAS.md`](docs/DIORAMAS.md). Va ANTES que la fase 1b.
+      - [x] **Fase 0 (ojo limpio)** 2026-09-07: capturas honestas, props
+            en paralelo.
+      - [x] **Slice 1** 2026-09-07 (`claude/feature/dioramas-1`): contrato +
+            motor instanciado + 7 primitivas + recetas de los 5 biomas +
+            masa del canto (cuña con estratos por bioma) + sombras de
+            contacto de critters + 6 tests. Referencias: las imágenes de
+            `resources/Terrenos/*/`. **← MIRA `.tmp/shots-cierre/*.png`**
+            (`shots-dioramas/` es anterior a la escala de suelo por bioma).
+      - [x] **Escala del suelo por bioma** 2026-09-07 (idea de Rafa):
+            `PackDef.groundTile`. Las texturas traen el detalle pintado y
+            a 4 u se repetían 6 veces por diámetro. Probado el mapa único
+            del disco: gana en kitsune, pierde en coral → la escala es de
+            cada bioma. Descartado modelar la referencia con IA (no se
+            puede fragmentar para el colapso).
+      - [ ] Slice 2: afinar recetas sobre capturas (grietas de hielo,
+            escala de acentos, `backOnly` para los altos), fleco del borde
+            que se regenera al caer un sector, viento animado barato,
+            recomponer los 73 props autorados (muro caído de sillares,
+            héroes fuera del arco frontal), `SCATTER_DENSITY` en el studio
+            y applier ToolPatch `scatter-patch`.
+      - [x] **Decidido 2026-09-21: manda el código** (DIORAMAS §3
+            corregido). Era: decisión de Rafa (review M2): los techos de altura del scatter
+            (`SCATTER_LIMITS`: interior 0,4 u · arco frontal ±90° 1,2 u ·
+            trasero 2,6 u) son más permisivos que las "reglas duras" de
+            `docs/DIORAMAS.md §3` (combate 0,55 · arco cercano ±55° 0,55 ·
+            fleco ≤0,6 · nada cruza r=12). Hay que cerrar UNA de las dos
+            antes de afinar recetas contra el techo equivocado. Mi
+            recomendación: mantener el contrato actual (lo que se ve en
+            las capturas) y corregir el doc — el fleco que asoma 0,6 u
+            fuera del labio es justo lo que piden tus referencias.
+      - [x] **Hecho 2026-09-21: cono en punta** (`cliffTaper` 0,08, 9 u,
+            10 estratos). Era: decisión de Rafa: ¿la isla como CONO (base que se estrecha
+            mucho más, o cerrada en punta) flotando en mar / aire / hielo
+            según el bioma? El taper de 0,82 ya apunta ahí; subirlo es un
+            número (`ARENA_LOOK.cliffTaper`) y cerrarlo en punta es media
+            tarde. El desprendimiento no se complica: cada sector lleva su
+            cuña y cae con ella.
+- [x] **FONDO — primer slice hecho (2026-09-07)**: la isla flota sobre el
+      mar de su bioma en vez de estar recortada sobre una panorámica.
+      0 bytes, 1 draw call, golden intacto. Plan completo en
+      [`docs/DIORAMAS.md`](docs/DIORAMAS.md) (relieves, cresta de
+      siluetas y luz por bioma quedan para las fases 2-5).
+      **Decidido 2026-09-21: NO vale.** Se rehace como «isla en el
+      cielo», con plan aprobado en `docs/DIORAMAS.md` §«Fondo v2». Va antes
+      que el slice 2 de dioramas.
+- [ ] Fase 1b — bisel de junta, applier ToolPatch `look-patch`, panel
+      del studio y dieta de props. *(Las sombras de contacto de critters
+      salieron adelantadas en el slice 1 de dioramas: `blob-shadows.ts`.)*
+- [ ] Fase 2 — colapso que se lee y se siente.
+- [ ] Fase 3 — cada bioma es un sitio.
+- [ ] Fase 4 — props que pertenecen al suelo (+ higiene: GLB crudo de
+      54 MB versionado en `public/models/arenas/jungle/_raw/`).
+- [ ] Fase 5 — todo lo visual en función del radio.
+
+**Cola de Rafa (2026-09-07, por orden de lo que dijo)**:
+- [ ] **Feeling de los personajes** — *"se sienten pesados en vez de
+      animalillos graciosos andando, corriendo y demás"*. **Diagnóstico
+      medido y corte 1 hechos (2026-09-21, carril PERSONAJES)**: las
+      patas siguen al suelo, la inclinación y el balanceo pasan de 2° a
+      12° y de 0,5° a 4°, golden intacto. Todo en
+      [`docs/FEELING.md`](docs/FEELING.md). Tamaños arreglados (Rafa:
+      1,7 para todos). **Velocidad de suelo hecha el 2026-09-22**
+      (`FEELING.md §7.7`): bug de la zona muerta arreglado,
+      `accelerationScale` 2,2, bots a 0,7 offline y online, giro de
+      ~150 ms. **Condición de despliegue**: el suavizado del bicho local
+      en online (DISTRIBUCIÓN) antes de sacarla a producción.
+- [ ] **Shaders cartoon para los personajes** (Rafa: "más adelante").
+      Ojo al precedente de la fase 1a: activar tone mapping o PMREM toca
+      TODA la escena; un toon shader es lo mismo pero peor. Va tras flag
+      y con comparativa del roster de nueve delante.
+- [ ] **Dioramas, segunda pasada** (Rafa: "no parecen muy cohesionados
+      los elementos"). Cohesión = paleta compartida entre scatter, props
+      GLB y suelo; que los elementos se toquen y se agrupen en vez de
+      flotar sueltos; sombras de contacto también en los props.
+- [x] **Portal del Vibe Jam fuera de itch y Steam** (2026-09-21, carril
+      INTERFAZ; Rafa: fuera en los dos). Se apaga con `?ref=itch` —lo que
+      ya manda el wrapper publicado en itch, así que no hay que resubir
+      nada—, con `?portal=0` o compilando con `VITE_PORTAL=off` (Steam).
+      Detalle en [`docs/carriles/interfaz.md`](docs/carriles/interfaz.md)
+      §Hecho. **Llega a itch con el próximo `dev` → `main`.**
+
+- [x] **Instancias de prueba mudas** (2026-09-07, commit `0bb2044`):
+      *"cuando lances instancias para las pruebas silencia la musica y
+      sonidos"*. `scripts/lib/headless-browser.mjs` con doble capa
+      (`--mute-audio` + banderas de `src/audio.ts` en localStorage antes
+      del primer script), aplicado en `arena-shots.mjs`,
+      `run-match-batch.mjs` y `playwright.config.ts`. Regla escrita en
+      `CLAUDE.md` y `DEV_TOOLS.md`.
+
+**Otros arreglos candidatos de H4.5**: feel pass de Kurama · SFX por
+critter · limpiar nicks `SMOKE*`/`Test*` de la DB de prod
+(`admin:delete-test`) · facturas y generador 2D (licencias) · tabla
+multi-dispositivo de tokens (diferido del review). Lo que solo pueden
+hacer tus manos sigue en §CHECKLIST más abajo.
+
+---
+
+## H3 — Bichitos Studio: tooling unificado (✅ cerrado 2026-08-19, histórico)
 
 **Meta**: las 4-5 herramientas internas (anim-lab, calibrate,
 decor-editor, tools.html, mesh2motion) se convierten en **un solo
@@ -59,7 +278,7 @@ más — unificación completa).
 
 ---
 
-## Fase de afilado (en curso — plan completo en docs/AFILADO_PLAN.md)
+## Fase de afilado (✅ completa 2026-08-20 — plan en docs/AFILADO_PLAN.md)
 
 **Decisiones de Rafa (2026-08-19)**: (1) tuning **offline-first**, el
 server (server/src/sim/*) se sincroniza al FINAL de la fase — el check
@@ -172,7 +391,7 @@ Evidencia en .tmp/checklist/ (report.json + capturas) y BUILD_LOG.
 | 11 | ES en móvil | ✅ cero desbordes landscape+portrait, capturas revisadas |
 | 12 | Pase visual | ✅ 5 arenas + Hall of Belts 16/16 revisados a ojo: sin artefactos |
 | 13 | Revisión networking | ✅ review de 17 agentes → 13 confirmados, 10 arreglados (7b4a4e6) + e2e del zombi |
-| 14 | Merge dev→main + tag | ⏳ **decisión de Rafa** |
+| 14 | Merge dev→main + tag | ✅ hecho el 2026-09-05 (`v1.7-h4-social`). El SIGUIENTE merge, el de H4.5, sigue esperando decisión de Rafa |
 
 **Solo tus manos (lo que no se puede simular):**
 - [ ] Sentir shell-reflect, Claw Wave y el reflect online con sonido.
@@ -182,7 +401,8 @@ Evidencia en .tmp/checklist/ (report.json + capturas) y BUILD_LOG.
       dispositivo" en el PC; entrar por enlace a una sala ya empezada
       (alert legible); que el rival cierre la pestaña en un 1v1 (tú +1
       win, él +1 loss); una privada completa NO debe mover el Hall of Belts.
-- [ ] Merge dev→main + tag cuando te cuadre (deploy a prod).
+- [x] Merge dev→main + tag — hecho 2026-09-05 (`v1.7-h4-social`, Vercel y
+      Railway verificados, sala privada real contra prod OK).
 
 Diferido del review (estructural): tabla multi-dispositivo para tokens
 (hoy recuperar en B invalida el token de A con aviso explícito).
@@ -194,7 +414,7 @@ Diferido del review (estructural): tabla multi-dispositivo para tokens
 - [ ] Pase visual de arenas y belts tras el gltfpack (cuantiza; golden
       no ve píxeles) y del juego en ES en móvil.
 - [ ] Revisión de la zona networking (salas privadas tocan BrawlRoom).
-- [ ] Merge dev→main + tag cuando lo des por bueno (deploy a prod).
+- [x] Merge dev→main + tag — hecho 2026-09-05 (`v1.7-h4-social`).
 
 **Backlog H4 restante (por tamaño):**
 - [ ] Reconnect (allowReconnection) — el más valioso de retención.

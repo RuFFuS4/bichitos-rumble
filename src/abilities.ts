@@ -9,7 +9,8 @@
 // ./abilities-vfx.ts.
 //
 // Import rule (no cycles): this module imports NOTHING from
-// abilities-runtime or abilities-vfx — only FEEL from ./gamefeel.
+// abilities-runtime or abilities-vfx — only FEEL from ./gamefeel (and
+// the Critter type, erased at build).
 //
 // DO NOT move or rename this file, and keep CRITTER_ABILITIES here:
 // the ability-patch applier (scripts/tool-patch-core.mjs, targetByTool)
@@ -20,6 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import { FEEL } from './gamefeel';
+import type { Critter } from './critter';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,9 +34,19 @@ export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy' | 'blink' | 
  * future ability-aware consumer) decides what to do with an ability by
  * inspecting these tags, NOT by its index in the slot array.
  *
- * Tags currently understood by bot.ts:
- *   'mobility'  — dash / reposition / close distance
+ * Tags currently understood by bot.ts (it takes the FIRST ability with a
+ * tag, so two slots of one critter must not share one):
+ *   'mobility'  — dash / reposition / close distance (the J)
  *   'aoe_push'  — area effect that pushes targets away
+ *   'ranged'    — frontal projectile
+ *   'defensive' — reactive shield (Steel Shell)
+ *   'buff'      — the generic L
+ *   'targeted'  — aimed at one enemy (Trunk Grip, Shadow Step)
+ *   'utility'   — trap-and-leave (Sand Trap)
+ *   'risky'     — a miss costs a life (Sebastian's All-in)
+ *
+ * Within a tag, bot.ts still reads the def's shape (gripK,
+ * blinkSeekNearest, zoneAtOrigin...) to choose when to fire.
  *
  * Add more tags as new ability types are introduced. Keep them plain
  * strings — no class hierarchy, no enum, no registry.
@@ -172,8 +184,8 @@ export interface AbilityDef {
    *  Steel Shell glows metallic gray). Default undefined = no
    *  visual override. */
   selfTintHex?: number;
-  /** Seconds the caster becomes semi-transparent (alpha 0.25) and
-   *  knockback-immune. Used by Kurama Mirror Trick. Server treats
+  /** Seconds the caster becomes nearly invisible (FEEL.decoy.ghostAlpha)
+   *  and knockback-immune. Used by Kurama Mirror Trick. Server treats
    *  this as a regular `selfImmunityDuration`; cliente layers an
    *  alpha override on the mesh + spawns a static decoy clone at
    *  the origin position. */
@@ -196,6 +208,10 @@ export interface AbilityDef {
    *  spot. Pairs with `invisibilityDuration` so the engaño reads
    *  as "señuelo se queda, Kurama se va lejos". */
   decoyEscapeDistance?: number;
+  /** Fractions of the (disc-clamped) escape line tried in order until
+   *  one lands on live floor; if none does, the caster stays on the
+   *  decoy's spot. Server mirror in server/src/sim/abilities.ts. */
+  decoyEscapeFallbacks?: readonly number[];
 
   /** 2026-04-29 final-K — Trunk Grip K. When true, the
    *  ground_pound dispatcher takes a single frontal target
@@ -257,19 +273,23 @@ export interface AbilityDef {
   pulseRadius?: number;
   pulseAngleDeg?: number;
   pulseForce?: number;
+  /** Pulses per activation. The channel stops after this many even if
+   *  the L lasts longer (a Copycat Kurama keeps her own 3.5 s), and the
+   *  frame the L expires still counts as channel time so the last pulse
+   *  is never lost to frame timing. Undefined = pulse until it ends. */
+  pulseCount?: number;
 
   /** Sebastian All-in Side Slash: a multi-phase L. The frenzy
    *  duration is the WINDUP only (rooted vibrate); when the
    *  windup ends the dispatcher fires a single fast lateral
    *  dash that hit-checks against enemies in front of Sebastian.
    *  On hit: huge knockback to target, frenzy ends. On miss:
-   *  Sebastian receives a large self-knockback toward the
-   *  arena edge as the "high-risk" punishment. */
+   *  Sebastian carries on along the line and falls at its first
+   *  point off the arena (FEEL.allIn), the "high-risk" punishment. */
   allInL?: boolean;
   allInDashSpeed?: number;
   allInDashRange?: number;
   allInHitForce?: number;
-  allInMissSelfForce?: number;
   /** 2026-05-01 final block — Sebastian hold-to-charge / release-
    *  to-fire flag. When true, the L doesn't activate on press;
    *  instead the player goes into a charging state that paints
@@ -288,13 +308,19 @@ export interface AbilityDef {
 
   /** Kowalski Frozen Floor: at frenzy fire time spawn a large
    *  slippery zone at the caster's position. The zone uses the
-   *  existing zone system but with a `slippery: true` flag —
-   *  critters inside have reduced control + reduced friction
-   *  decay (`effectiveSpeed` and the friction loop both
-   *  branch on the flag). */
+   *  existing zone system and carries the two multipliers below
+   *  (`getSlipperyZone`): the friction loop (critter.ts) scales
+   *  the half-life and the movement controllers (player.ts,
+   *  bot.ts) scale the acceleration of anyone inside it. */
   frozenFloorL?: boolean;
   floorRadius?: number;
   floorDuration?: number;
+  /** Friction half-life multiplier on the ice: velocity decays that
+   *  many times slower, so a critter keeps sliding. */
+  floorFrictionMult?: number;
+  /** Movement acceleration multiplier on the ice: less grip to start,
+   *  steer and stop. */
+  floorAccelMult?: number;
 
   /** Sihans Sinkhole: at frenzy fire time spawn a hazard zone
    *  in front of Sihans. Critters inside are continuously
@@ -310,11 +336,9 @@ export interface AbilityDef {
    *  arena centre (>= 4 u). */
   holeCastOffset?: number;
 
-  /** Kurama Copycat: at frenzy fire time, look up the critter
-   *  most recently hit by Kurama and copy a SAFE version of
-   *  their L (the dispatch table maps each kit to a friendly
-   *  reusable behaviour). If no last-hit target is set, the
-   *  ability fizzles with feedback. */
+  /** Kurama Copycat: at frenzy fire time, take the COPYCAT_KEYS of
+   *  the L of the critter Kurama last headbutted, for that cast only.
+   *  The target is consumed; with no target the L is just her buff. */
   copycatL?: boolean;
 
   // --- 2026-04-29 K-session: projectile additions (Kowalski Snowball) ---
@@ -333,7 +357,28 @@ export interface AbilityDef {
   projectileSlowDuration?: number;
 }
 
+/**
+ * The L fields Kurama's Copycat takes from her target: each flag with
+ * the tuning its branch reads. Her own timings and multipliers stay
+ * (Copycat is "her L + their gimmick"). A new L field the copy must carry
+ * goes here and in the server mirror (server/src/sim/abilities.ts);
+ * tuning that must not follow the copy lives in FEEL, not in the def.
+ * Sebastian's All-in is left out on purpose: copied, it resolved when
+ * Kurama's 3.5 s ran out, from wherever she had wandered, so a miss threw
+ * her off the arena and a hit was a sure kill. Copying him gives the buff.
+ */
+export const COPYCAT_KEYS = [
+  'sawL', 'sawContactImpulse', 'sawSpinSpeed',
+  'conePulseL', 'pulseInterval', 'pulseRadius', 'pulseAngleDeg', 'pulseForce', 'pulseCount',
+  'toxicTouchL', 'confusedDuration',
+  'frozenFloorL', 'floorRadius', 'floorDuration', 'floorFrictionMult', 'floorAccelMult',
+  'sinkholeL', 'holeRadius', 'holeDuration', 'holeForce', 'holeCastOffset',
+] as const satisfies readonly (keyof AbilityDef)[];
+
 export interface AbilityState {
+  /** The shared kit object from CRITTER_ABILITIES (the sidebar tuner
+   *  edits it in place), except during a Copycat cast, when it is that
+   *  cast's own copy (abilities-runtime.ts applyCopycat). */
   def: AbilityDef;
   cooldownLeft: number;
   durationLeft: number;
@@ -345,6 +390,11 @@ export interface AbilityState {
    *  the tick spawns a new one each `DASH_TRAIL_INTERVAL` and resets.
    *  Untouched for non-mobility ability types. */
   trailTimer: number;
+  /** charge_rush: the critters this activation has already run into, so
+   *  the contact feedback (physics.ts rushContactFeedback) lands once per
+   *  victim. Cleared when the dash fires (fireEffect); visual bookkeeping
+   *  only. */
+  rammed: Set<Critter>;
 }
 
 // ---------------------------------------------------------------------------
@@ -402,8 +452,10 @@ function makeGroundPound(overrides: Partial<AbilityDef> = {}): AbilityDef {
  * Server-authoritative: server validates + clamps to arena bounds and
  * broadcasts an `abilityFired` event of type 'blink' so clients can
  * spawn the afterimage VFX. During wind-up + active the critter is
- * fully rooted (slowDuringWindUp/Active = 0). Tag stays `mobility`
- * so the bot AI uses it the same way it uses charge_rush.
+ * fully rooted (slowDuringWindUp/Active = 0). Every blink in the
+ * roster sits next to a `mobility` J, so each one retags itself
+ * (Sand Trap 'utility', Shadow Step 'targeted'): the bot AI takes the
+ * first ability with a tag and would never reach the blink.
  */
 function makeBlink(overrides: Partial<AbilityDef> = {}): AbilityDef {
   return {
@@ -629,6 +681,10 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   //     multipliers bumped (speed 1.3→1.45, mass 1.35→1.5) to keep
   //     the burst-intensity × shorter-window roughly equivalent.
   //     Entry frame now spawns a frenzy burst ring + camera shake.
+  //   (2026-09-24: those were the clips of the time. The kit now plays
+  //   Ability1 1.20 s at 2.3×, Ability2 5.50 s at 1.5× and Ability3
+  //   2.67 s at 2× — the last two from ANIMATION_OVERRIDES, which only
+  //   reach the game since that date; before, K and L ran at 1×.)
   Sergei: [
     makeChargeRush({
       name: 'Gorilla Rush',
@@ -741,6 +797,9 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // finish them off."
       name: 'Trunk Grip',
       key: 'L',
+      // Its own tag: with the factory's 'aoe_push' the bot always found
+      // Trunk Slam first and never cast the grip (0 in 72 recordings).
+      tags: ['targeted'],
       // BLOQUE FINAL micropasses — gripStunDuration:
       //   5.0 → 4.25 (-15 %, micropass 1)
       //   4.25 → 3.80 (-11 %, micropass 2)
@@ -802,15 +861,15 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       selfImmunityDuration: 2.8,
       invisibilityDuration: 2.8,
       decoyEscapeDistance: 7.0,
+      // 2026-09-24: the escape used to land on collapsed sectors and,
+      // immune, walk the void for up to 1.8 s. Full line, 70 %, 40 %.
+      decoyEscapeFallbacks: [1, 0.7, 0.4],
     }),
     makeFrenzy({
-      // 2026-04-30 final-L — Copycat. Kurama's frenzy looks for
-      // the critter she most recently hit and copies a SAFE
-      // version of their L. The dispatch table lives in the
-      // frenzy fire path: each entry maps a critter name to a
-      // partial frenzy override (speed/mass tweaks + matching
-      // L-flag). If no last-hit target exists, the L fizzles
-      // with a soft burst + console feedback.
+      // 2026-04-30 final-L — Copycat. At fire time Kurama's L takes
+      // the COPYCAT_KEYS of the L of the critter she last headbutted,
+      // for that cast only (applyCopycat in abilities-runtime.ts).
+      // With no last-hit target it's just the speed/mass buff.
       name: 'Copycat',
       description: 'Mimics the L of the last enemy you hit',
       duration: 3.5, cooldown: 16.0, windUp: 0.30,
@@ -946,6 +1005,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // a 6.5u sin riesgo de void).
       name: 'Sand Trap',
       description: 'Burrow under, leave quicksand, surface ahead',
+      tags: ['utility'],
       blinkDistance: 6.5,
       cooldown: 7.0,
       windUp: 0.20,
@@ -973,7 +1033,9 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       sinkholeL: true,
       holeRadius: 3.0,
       holeDuration: 5.0,
-      holeForce: 14,
+      // 14 × 1.375 (2026-09-21 speed-up): the pull is an acceleration that
+      // competes with the victim's own — unscaled, the trap stops trapping.
+      holeForce: 19.25,
       holeCastOffset: 4.0,
     }),
   ],
@@ -1024,6 +1086,14 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // el slippery solo escala friction, no crea void.
       floorRadius: 8.0,
       floorDuration: 7.0,
+      // On the ice: friction half-life ×5 (they keep sliding) and
+      // acceleration ×0.35 (little grip to steer or stop). Mirror:
+      // server kit. Offline only had the friction until 2026-09-24.
+      floorFrictionMult: 5,
+      floorAccelMult: 0.35,
+      // Her ability_3 clip loops, so it never 'finishes' back to idle on
+      // its own: without the cut she kept the ulti pose after the L.
+      cancelAnimOnEnd: true,
     }),
   ],
 
@@ -1042,6 +1112,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // facing-blink si no hay target en rango.
       name: 'Shadow Step',
       description: 'Teleport onto the nearest target — knock them out',
+      tags: ['targeted'],
       blinkDistance: 4.5,
       cooldown: 5.5,
       windUp: 0.06,
@@ -1069,6 +1140,9 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       pulseRadius: 6.5,
       pulseAngleDeg: 45,
       pulseForce: 36,
+      // duration / pulseInterval: the sixth (×8) pulse is due on the very
+      // frame the L expires and used to be lost at 75 Hz or with uneven dt.
+      pulseCount: 6,
     }),
   ],
 
@@ -1106,12 +1180,15 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // When duration ticks to ≤ 0 the dispatcher fires a
       // single fast lateral dash that hit-checks against
       // enemies in front of Sebastian. On hit: huge knockback
-      // to target, ability ends. On miss: Sebastian receives
-      // a large self-knockback toward the arena edge as the
-      // high-risk punishment. Implemented as a frenzy because
+      // to target, ability ends. On miss: Sebastian falls at the
+      // first point of the line off the arena, the high-risk
+      // punishment (2026-09-24). Implemented as a frenzy because
       // the `active` flag handles the rooted windup naturally.
       name: 'All-in Side Slash',
       description: 'Charge then strike — devastating on hit, costly on miss',
+      // Not a 'buff': the bot cast it like one (enemy within 3.5 u, any
+      // direction) and 46 of Sebastian's 92 falls were his own misses.
+      tags: ['risky'],
       duration: 1.0, cooldown: 15.0, windUp: 0.0,
       speedMultiplier: 0.0, massMultiplier: 1.20,
       allInL: true,
@@ -1120,9 +1197,9 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // BLOQUE FINAL micropass v2 — hit force bumped 110 → 220 to
       // shake the victim's momentum even when maxSpeed clamps. Combined
       // with the explicit startFalling() in fireAllInResolution, the
-      // contact reads as "yeeted to void". Miss self-force unchanged.
+      // contact reads as "yeeted to void". The miss has no force: it
+      // is an explicit fall at the rim (FEEL.allIn.missProbeStep).
       allInHitForce: 220,
-      allInMissSelfForce: 130,
       // 2026-05-01 final block (Rafa: "PRESS+HOLD muestra preview,
       // RELEASE ejecuta"). The dash no longer fires on activation;
       // it fires on the release of the L input. Auto-release after

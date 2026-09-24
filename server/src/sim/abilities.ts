@@ -17,6 +17,7 @@
 import type { PlayerSchema } from '../state/PlayerSchema.js';
 import { AbilityStateSchema } from '../state/AbilityStateSchema.js';
 import { SIM } from './config.js';
+import { FRAG } from './arena-fragments.js';
 
 export type AbilityType = 'charge_rush' | 'ground_pound' | 'frenzy' | 'blink' | 'projectile';
 
@@ -74,6 +75,10 @@ export interface AbilityDef {
    *  along facing if no enemy. Pairs with `selfImmunityDuration`
    *  so the trick reads as "señuelo se queda, Kurama se va". */
   decoyEscapeDistance?: number;
+  /** Fractions of the (disc-clamped) escape line tried in order until
+   *  one lands on live floor; none = the caster stays put. Mirror of the
+   *  client's `decoyEscapeFallbacks`. */
+  decoyEscapeFallbacks?: readonly number[];
 
   // --- 2026-04-30 final-L flags (mirror of cliente AbilityDef) ---
   sawL?: boolean;
@@ -91,6 +96,10 @@ export interface AbilityDef {
   pulseRadius?: number;
   pulseAngleDeg?: number;
   pulseForce?: number;
+  /** Pulses per activation (mirror of the client field): the channel
+   *  stops after this many, and the tick the L expires still counts as
+   *  channel time so the last pulse can't be lost. */
+  pulseCount?: number;
   allInL?: boolean;
   allInDashSpeed?: number;
   allInDashRange?: number;
@@ -104,6 +113,10 @@ export interface AbilityDef {
   frozenFloorL?: boolean;
   floorRadius?: number;
   floorDuration?: number;
+  /** Frozen Floor: friction half-life and movement acceleration
+   *  multipliers on the ice (mirror of the client fields). */
+  floorFrictionMult?: number;
+  floorAccelMult?: number;
   sinkholeL?: boolean;
   holeRadius?: number;
   holeDuration?: number;
@@ -152,6 +165,19 @@ export interface AbilityDef {
    *  doesn't compound multiplicatively. */
   projectileSlowDuration?: number;
 }
+
+/** Mirror of the client's COPYCAT_KEYS (src/abilities.ts): the L fields
+ *  Kurama's Copycat takes from her target, each flag with the tuning its
+ *  branch reads. Same list and same exclusion: Sebastian's All-in is not
+ *  copied (it resolved when her 3.5 s ran out, wherever she was), so
+ *  copying him gives the buff alone. */
+export const COPYCAT_KEYS = [
+  'sawL', 'sawContactImpulse', 'sawSpinSpeed',
+  'conePulseL', 'pulseInterval', 'pulseRadius', 'pulseAngleDeg', 'pulseForce', 'pulseCount',
+  'toxicTouchL', 'confusedDuration',
+  'frozenFloorL', 'floorRadius', 'floorDuration', 'floorFrictionMult', 'floorAccelMult',
+  'sinkholeL', 'holeRadius', 'holeDuration', 'holeForce', 'holeCastOffset',
+] as const satisfies readonly (keyof AbilityDef)[];
 
 // Per-critter ability kits. MUST stay in sync with client's CRITTER_ABILITIES.
 // Tuning values (impulse/radius/force/multipliers) must match the client's
@@ -213,9 +239,9 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'ground_pound', cooldown: 9.0, duration: 2.8, windUp: 0.10,
       radius: 0, force: 0, ...ROOTED_K,
       selfBuffOnly: true, selfImmunityDuration: 2.8,
-      decoyEscapeDistance: 7.0 },
-    // 2026-04-30 final-L — Copycat. Looks up the lastHitTarget
-    // and dispatches a safe version of their L.
+      decoyEscapeDistance: 7.0, decoyEscapeFallbacks: [1, 0.7, 0.4] },
+    // 2026-04-30 final-L — Copycat. At fire time takes the
+    // COPYCAT_KEYS of the lastHitTarget's L, for that cast only.
     { type: 'frenzy',       cooldown: 16.0, duration: 3.5, windUp: 0.30,
       frenzySpeedMult: 1.50, frenzyMassMult: 1.20,
       copycatL: true },
@@ -269,7 +295,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'frenzy',       cooldown: 20.0, duration: 4.5, windUp: 0.40,
       frenzySpeedMult: 1.15, frenzyMassMult: 1.50,
       sinkholeL: true, holeRadius: 3.0, holeDuration: 5.0,
-      holeForce: 14, holeCastOffset: 4.0 },
+      holeForce: 19.25, holeCastOffset: 4.0 }, // 14 × 1.375 (2026-09-21 speed-up) — mirror of src/abilities.ts
   ],
 
   // Kowalski — Mage: K is now a real frontal SNOWBALL projectile
@@ -293,12 +319,13 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     // 6.0 → 8.0, floorDuration 5.0 → 7.0.
     { type: 'frenzy',       cooldown: 17.0, duration: 3.0, windUp: 0.40,
       frenzySpeedMult: 1.10, frenzyMassMult: 1.10,
-      frozenFloorL: true, floorRadius: 8.0, floorDuration: 7.0 },
+      frozenFloorL: true, floorRadius: 8.0, floorDuration: 7.0,
+      floorFrictionMult: 5, floorAccelMult: 0.35 },
   ],
 
   // Cheeto — Assassin: K is now a real BLINK (4.5 u teleport along
-  // facing) with a brief root window. Tag stays mobility so bot AI
-  // uses it as a "close distance" tool just like charge_rush.
+  // facing) with a brief root window. The bot AI casts it by its shape
+  // (blinkSeekNearest), see ./bot.ts.
   Cheeto: [
     { type: 'charge_rush',  cooldown: 2.8, duration: 0.24, windUp: 0.04,
       impulse: 33, speedMultiplier: 3.0, massMultiplier: 1.2 },
@@ -320,7 +347,8 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'frenzy',       cooldown: 14.0, duration: 1.8, windUp: 0.35,
       frenzySpeedMult: 0.0, frenzyMassMult: 4.0,
       conePulseL: true, pulseInterval: 0.30,
-      pulseRadius: 6.5, pulseAngleDeg: 45, pulseForce: 36 },
+      pulseRadius: 6.5, pulseAngleDeg: 45, pulseForce: 36,
+      pulseCount: 6 },
   ],
 
   Sebastian: [
@@ -354,6 +382,23 @@ export function getAbilityKit(critterName: string): readonly AbilityDef[] {
   return CRITTER_ABILITY_KITS[critterName] ?? DEFAULT_KIT;
 }
 
+/** The Copycat def of the cast in flight, per player: Kurama's kit L plus
+ *  the target's COPYCAT_KEYS. Keyed by the player object (like
+ *  `contactRehit`), so it never crosses rooms and goes with the player.
+ *  The kits are never written: they are module state that every room in
+ *  the process shares. */
+const copycatDefs = new WeakMap<PlayerSchema, AbilityDef>();
+
+/** The L def the room's per-tick L passes must read for `player`: the
+ *  Copycat copy while one is live, else the kit's. Mirror of the client's
+ *  `abilityStates[2].def`. DEPLOY BLOCKER until BrawlRoom's passes 2.e/2.g
+ *  read it instead of `getAbilityKit(...)[2]` (DISTRIBUCIÓN): without
+ *  that, online, a Kurama copying Shelly, Cheeto or Kermit gets the buff
+ *  alone. */
+export function getLDef(player: PlayerSchema): AbilityDef | undefined {
+  return copycatDefs.get(player) ?? getAbilityKit(player.critterName)[2];
+}
+
 /** Create initial ability state array for a new player by critter name. */
 export function createAbilityStates(critterName: string): AbilityStateSchema[] {
   return getAbilityKit(critterName).map((def) => {
@@ -378,6 +423,84 @@ export interface AbilityFiredEvent {
   x: number;
   z: number;
   rotationY: number;
+}
+
+/** Dash and blink are the abilities that move the caster on purpose. */
+function isMovementAbility(type: string): boolean {
+  return type === 'charge_rush' || type === 'blink';
+}
+
+/** Mirror of the client's anchor gate (abilities-runtime.ts): no dash or
+ *  blink can start while another slot holds a self-anchoring buff
+ *  (Shelly Steel Shell), wind-up included. */
+function blockedByAnchor(slot: number, player: PlayerSchema, kit: readonly AbilityDef[]): boolean {
+  if (!isMovementAbility(kit[slot]?.type ?? '')) return false;
+  for (let j = 0; j < player.abilities.length; j++) {
+    if (j !== slot && player.abilities[j].active && kit[j]?.selfAnchorWhileBuffed) return true;
+  }
+  return false;
+}
+
+/** End slot `j` early: whatever it had left doesn't fire, and its
+ *  cooldown starts as if it had run its course. Mirror of the client's
+ *  `cancelAbility`. */
+function cancelSlot(player: PlayerSchema, j: number, kit: readonly AbilityDef[]): void {
+  const s = player.abilities[j];
+  s.active = false;
+  s.windUpLeft = 0;
+  s.durationLeft = 0;
+  s.cooldownLeft = kit[j]?.cooldown ?? 0;
+}
+
+/** Steel Shell anchoring ends a dash or blink still running. Mirror of
+ *  the client. */
+function cancelMovementAbilities(player: PlayerSchema): void {
+  const kit = getAbilityKit(player.critterName);
+  for (let j = 0; j < player.abilities.length; j++) {
+    const s = player.abilities[j];
+    if (s.active && isMovementAbility(s.abilityType)) cancelSlot(player, j, kit);
+  }
+}
+
+/** A fall ends every ability in flight (the ability tick skips fallers,
+ *  so they used to resume at the respawn point). Called by `startFalling`
+ *  in ./physics.ts; mirror of the client's Critter.startFalling. */
+export function cancelActiveAbilities(player: PlayerSchema): void {
+  const kit = getAbilityKit(player.critterName);
+  for (let j = 0; j < player.abilities.length; j++) {
+    if (player.abilities[j].active) cancelSlot(player, j, kit);
+  }
+}
+
+/** Contact hits of the L passes (Saw Shell, Stampede ram, Toxic Touch)
+ *  land once per SIM.abilities.contactRehitCooldown per caster→victim
+ *  pair, not every tick the victim stays in reach. Remaining cooldown per
+ *  victim. Mirror of the client helpers in abilities-runtime.ts: the room
+ *  ages each caster once per tick (`ageContactRehit`) and asks
+ *  `takeContactHit` before applying a contact hit. Callers pending in
+ *  BrawlRoom's contact passes (DISTRIBUCIÓN); until then online still
+ *  hits every tick. */
+const contactRehit = new WeakMap<PlayerSchema, Map<PlayerSchema, number>>();
+
+export function ageContactRehit(caster: PlayerSchema, dt: number): void {
+  const left = contactRehit.get(caster);
+  if (!left) return;
+  for (const [victim, t] of left) {
+    if (t <= dt) left.delete(victim);
+    else left.set(victim, t - dt);
+  }
+}
+
+/** True when `caster` may contact-hit `victim` now; arms the pair's cooldown. */
+export function takeContactHit(caster: PlayerSchema, victim: PlayerSchema): boolean {
+  let left = contactRehit.get(caster);
+  if (!left) {
+    left = new Map();
+    contactRehit.set(caster, left);
+  }
+  if (left.has(victim)) return false;
+  left.set(victim, SIM.abilities.contactRehitCooldown);
+  return true;
 }
 
 /** Try to activate an ability if input is held and it's ready. */
@@ -436,17 +559,28 @@ export interface ProjectileSpawn {
  * Tick all abilities for a player. Handles activation, wind-up,
  * effect firing, and cooldown. Returns the firing events plus any
  * slow zones the abilities just spawned.
+ *
+ * `isOnArena`: live-floor test for teleport landings (blink, Mirror
+ * Trick) — the room passes its ArenaSim's. Without it the whole disc
+ * counts as floor.
  */
 export function tickPlayerAbilities(
   player: PlayerSchema,
   allPlayers: PlayerSchema[],
   dt: number,
   inputs: AbilityInputs,
+  isOnArena: IsOnArena = onWholeDisc,
 ): AbilityTickOutput {
   const events: AbilityFiredEvent[] = [];
   const zoneSpawns: ZoneSpawn[] = [];
   const projectileSpawns: ProjectileSpawn[] = [];
   const kit = getAbilityKit(player.critterName);
+
+  // A Copycat copy lasts one cast. It is dropped on the first tick the L
+  // is no longer active, not on the tick it ends, so the room's L passes
+  // that run after this one still read it then (Cone Pulse's last pulse
+  // and its edge). Mirror of the client's `restoreCopycat`.
+  if (!player.abilities[2]?.active) copycatDefs.delete(player);
 
   // Activation attempts from input (one-shot: input flag consumed by handler)
   // Order must match PlayerSchema.abilities array order.
@@ -461,7 +595,7 @@ export function tickPlayerAbilities(
     const def = kit[i];
     if (!def) continue;
 
-    if (inputFlags[i] && !state.active) {
+    if (inputFlags[i] && !state.active && !blockedByAnchor(i, player, kit)) {
       tryActivate(state, def);
     }
 
@@ -469,7 +603,7 @@ export function tickPlayerAbilities(
       if (state.windUpLeft > 0) {
         state.windUpLeft -= dt;
         if (state.windUpLeft <= 0 && !state.effectFired) {
-          const out = fireEffect(state, def, player, allPlayers);
+          const out = fireEffect(state, def, player, allPlayers, isOnArena);
           state.effectFired = true;
           events.push({
             sessionId: player.sessionId,
@@ -484,7 +618,7 @@ export function tickPlayerAbilities(
         continue;
       }
       if (!state.effectFired) {
-        const out = fireEffect(state, def, player, allPlayers);
+        const out = fireEffect(state, def, player, allPlayers, isOnArena);
         state.effectFired = true;
         events.push({
           sessionId: player.sessionId,
@@ -509,6 +643,17 @@ export function tickPlayerAbilities(
   return { events, zoneSpawns, projectileSpawns };
 }
 
+/** What a slippery zone (Kowalski Frozen Floor) does to a player
+ *  standing on it. Written from the L def (`floorFrictionMult`,
+ *  `floorAccelMult`) when the zone spawns. Mirror of the client's
+ *  SlipperyEffect (src/abilities-runtime.ts). */
+export interface SlipperyEffect {
+  /** Multiplies the friction half-life. */
+  frictionMult: number;
+  /** Multiplies the input acceleration. */
+  accelMult: number;
+}
+
 /**
  * Side-channel return value from `fireEffect` — when the ability is
  * a ground_pound with a `zone` config, the dispatcher computes the
@@ -526,8 +671,9 @@ export interface ZoneSpawn {
   duration: number;
   slowMultiplier: number;
   ownerSid: string;
-  /** 2026-04-30 final-L — Frozen Floor flag (Kowalski). */
-  slippery?: boolean;
+  /** 2026-04-30 final-L — Frozen Floor (Kowalski): present only on
+   *  slippery zones, with what the ice does (`getSlipperyZone`). */
+  slippery?: SlipperyEffect;
   /** 2026-04-30 final-L — Sinkhole flag (Sihans). */
   sinkhole?: boolean;
   pullForce?: number;
@@ -546,13 +692,14 @@ function fireEffect(
   def: AbilityDef,
   player: PlayerSchema,
   allPlayers: PlayerSchema[],
+  isOnArena: IsOnArena,
 ): FireOutput | null {
   switch (state.abilityType) {
     case 'charge_rush':
       fireChargeRush(def, player);
       return null;
     case 'ground_pound': {
-      fireGroundPound(def, player, allPlayers);
+      fireGroundPound(def, player, allPlayers, isOnArena);
       if (def.zone) {
         return {
           zone: {
@@ -567,7 +714,7 @@ function fireEffect(
       return null;
     }
     case 'blink': {
-      const result = fireBlink(def, player, allPlayers);
+      const result = fireBlink(def, player, allPlayers, isOnArena);
       // v0.11 — Sihans Burrow: zone-at-origin. Drop the quicksand
       // where the player WAS, not where they appeared.
       if (def.zone) {
@@ -606,121 +753,27 @@ function fireEffect(
       };
     }
     case 'frenzy': {
-      // 2026-04-30 final-L — Kurama Copycat. At fire time, look up
-      // the lastHitTargetCritter and synthetically copy that
-      // critter's L FLAGS into Kurama's frenzy state. We mutate
-      // the player's frenzy state field in place so the per-tick
-      // L logic (Cone Pulse / Saw / Toxic Touch / Sinkhole / Floor
-      // / All-in) all see the copied behaviour without changing
-      // the dispatch shape. Original Kurama frenzy stats stay so
-      // Copycat is "her L + their gimmick", not a clean overwrite.
-      if (def.copycatL) {
-        const targetName = player.lastHitTargetCritter;
-        if (!targetName) {
-          // No valid target → no-op. The cliente will still see the
-          // frenzy buff (speed/mass) but no overlay gimmick. We
-          // could throw to fizzle, but keeping the buff alive
-          // prevents wasted-input frustration during testing.
-          return null;
-        }
-        const targetKit = CRITTER_ABILITY_KITS[targetName];
-        const targetL = targetKit?.[2];
-        if (targetL) {
-          // Copy flag set onto Kurama's state. Mutating `def` is
-          // fine because every ability state has its own state
-          // record; the kit definition is immutable but we copy
-          // the flags into the live player.abilities[i].def-like
-          // surface via a per-tick check. Easier: bake the flags
-          // onto the AbilityState we have in hand, but
-          // AbilityStateSchema doesn't carry flags. So instead we
-          // mutate the *def* reference (Object.assign) — since
-          // each room has its own kit imported once, this leaks
-          // into other Kuramas in the room, but we're only
-          // mutating Kurama frenzy slot which is unique per
-          // Kurama and we re-derive on every Kurama frenzy fire.
-          // For jam-scope this is acceptable; cleaner factor-out
-          // is a TODO for post-jam.
-          const copyFlags: Partial<AbilityDef> = {
-            sawL: targetL.sawL,
-            sawContactImpulse: targetL.sawContactImpulse,
-            sawSpinSpeed: targetL.sawSpinSpeed,
-            conePulseL: targetL.conePulseL,
-            pulseInterval: targetL.pulseInterval,
-            pulseRadius: targetL.pulseRadius,
-            pulseAngleDeg: targetL.pulseAngleDeg,
-            pulseForce: targetL.pulseForce,
-            toxicTouchL: targetL.toxicTouchL,
-            confusedDuration: targetL.confusedDuration,
-            allInL: targetL.allInL,
-            allInDashSpeed: targetL.allInDashSpeed,
-            allInDashRange: targetL.allInDashRange,
-            allInHitForce: targetL.allInHitForce,
-            allInMissSelfForce: targetL.allInMissSelfForce,
-            frozenFloorL: targetL.frozenFloorL,
-            floorRadius: targetL.floorRadius,
-            floorDuration: targetL.floorDuration,
-            sinkholeL: targetL.sinkholeL,
-            holeRadius: targetL.holeRadius,
-            holeDuration: targetL.holeDuration,
-            holeForce: targetL.holeForce,
-            holeCastOffset: targetL.holeCastOffset,
-          };
-          Object.assign(def as AbilityDef, copyFlags);
-          // Spawn-time zones: re-route through the same path so
-          // a copied Frozen Floor / Sinkhole gets a zone broadcast.
-          if (copyFlags.frozenFloorL) {
-            return {
-              zone: {
-                x: player.x, z: player.z,
-                radius: copyFlags.floorRadius ?? 6.0,
-                duration: copyFlags.floorDuration ?? 5.0,
-                slowMultiplier: 1.0,
-                ownerSid: player.sessionId,
-                slippery: true,
-              },
-            };
-          }
-          if (copyFlags.sinkholeL) {
-            const offset = copyFlags.holeCastOffset ?? 4.0;
-            const cx = player.x + Math.sin(player.rotationY) * offset;
-            const cz = player.z + Math.cos(player.rotationY) * offset;
-            const rr = Math.sqrt(cx * cx + cz * cz);
-            const fx = rr < 4.0 ? (cx / Math.max(rr, 0.01)) * 4.0 : cx;
-            const fz = rr < 4.0 ? (cz / Math.max(rr, 0.01)) * 4.0 : cz;
-            return {
-              zone: {
-                x: fx, z: fz,
-                radius: copyFlags.holeRadius ?? 3.0,
-                duration: copyFlags.holeDuration ?? 5.0,
-                slowMultiplier: 0.55,
-                ownerSid: player.sessionId,
-                sinkhole: true,
-                pullForce: copyFlags.holeForce ?? 14,
-              },
-            };
-          }
-          // Clear lastHit after consuming so the next L without
-          // a fresh hit fizzles (matches the "one-use per chase"
-          // intent — chain-spamming Copycat by repeatedly punching
-          // and L-ing is gated by the 16-s cooldown anyway).
-          player.lastHitTargetCritter = '';
-        }
-        return null;
-      }
-      if (def.frozenFloorL) {
+      // 2026-04-30 final-L — Kurama Copycat: the zone spawns below read
+      // the cast's copy, so a copied Frozen Floor or Sinkhole goes
+      // through the same code as the original.
+      const lDef = def.copycatL ? fireCopycat(def, player) : def;
+      if (lDef.frozenFloorL) {
         return {
           zone: {
             x: player.x, z: player.z,
-            radius: def.floorRadius ?? 6.0,
-            duration: def.floorDuration ?? 5.0,
+            radius: lDef.floorRadius ?? 6.0,
+            duration: lDef.floorDuration ?? 5.0,
             slowMultiplier: 1.0, // no slow — slippery handles its own movement effect
             ownerSid: player.sessionId,
-            slippery: true,
+            slippery: {
+              frictionMult: lDef.floorFrictionMult ?? 1,
+              accelMult: lDef.floorAccelMult ?? 1,
+            },
           },
         };
       }
-      if (def.sinkholeL) {
-        const offset = def.holeCastOffset ?? 4.0;
+      if (lDef.sinkholeL) {
+        const offset = lDef.holeCastOffset ?? 4.0;
         const cx = player.x + Math.sin(player.rotationY) * offset;
         const cz = player.z + Math.cos(player.rotationY) * offset;
         // Centre-clamp: never spawn the hole on the immune islet.
@@ -735,12 +788,12 @@ function fireEffect(
         return {
           zone: {
             x: fx, z: fz,
-            radius: def.holeRadius ?? 3.0,
-            duration: def.holeDuration ?? 5.0,
+            radius: lDef.holeRadius ?? 3.0,
+            duration: lDef.holeDuration ?? 5.0,
             slowMultiplier: 0.55,
             ownerSid: player.sessionId,
             sinkhole: true,
-            pullForce: def.holeForce ?? 14,
+            pullForce: lDef.holeForce ?? 19.25, // default = Sihans' holeForce since the 2026-09-21 speed-up
           },
         };
       }
@@ -748,6 +801,29 @@ function fireEffect(
     }
   }
   return null;
+}
+
+function copyKey<K extends keyof AbilityDef>(to: AbilityDef, from: AbilityDef, k: K): void {
+  if (from[k] !== undefined) to[k] = from[k];
+}
+
+/** Copycat fire: a copy of Kurama's kit L with the COPYCAT_KEYS of the
+ *  last critter she headbutted becomes her L def for this cast
+ *  (`getLDef`); with no target it's her plain L (the buff). The target is
+ *  consumed either way, zone copies included (they used to return before
+ *  clearing it, so online she could copy Frozen Floor or Sinkhole again
+ *  without a fresh hit). Mirror of the client's `applyCopycat`. */
+function fireCopycat(base: AbilityDef, player: PlayerSchema): AbilityDef {
+  const src = player.lastHitTargetCritter ? CRITTER_ABILITY_KITS[player.lastHitTargetCritter]?.[2] : undefined;
+  player.lastHitTargetCritter = '';
+  if (!src) {
+    copycatDefs.delete(player);
+    return base;
+  }
+  const copy: AbilityDef = { ...base };
+  for (const k of COPYCAT_KEYS) copyKey(copy, src, k);
+  copycatDefs.set(player, copy);
+  return copy;
 }
 
 function fireChargeRush(def: AbilityDef, player: PlayerSchema): void {
@@ -759,9 +835,43 @@ function fireChargeRush(def: AbilityDef, player: PlayerSchema): void {
 
 /** Arena radius the blink target gets clamped to. Mirror of the
  *  client-side ARENA_BLINK_RADIUS — keep in sync. The 0.4 u margin
- *  inside the 12 u arena keeps the destination clear of fragments
- *  that are about to collapse during late-match. */
+ *  inside the 12 u arena keeps the destination clear of the rim. It
+ *  knows nothing of collapsed fragments: `pickSafeLanding` does. */
 const BLINK_ARENA_RADIUS = 11.6;
+
+/** Live-floor test for teleport landings (the room's ArenaSim.isOnArena). */
+export type IsOnArena = (x: number, z: number) => boolean;
+
+/** Fallback floor when no arena is passed: the whole disc. */
+function onWholeDisc(x: number, z: number): boolean {
+  return Math.hypot(x, z) <= FRAG.maxRadius;
+}
+
+/**
+ * Where a teleport from (ox, oz) to (tx, tz) lands: the first point on
+ * that line, at each of `fractions` of its length (best first), that
+ * stands on live floor, or the origin itself when none does. Mirror of
+ * the client's pickSafeLanding (src/abilities-runtime.ts).
+ */
+function pickSafeLanding(
+  ox: number, oz: number, tx: number, tz: number,
+  fractions: readonly number[], isOnArena: IsOnArena,
+): [number, number] {
+  for (const f of fractions) {
+    const x = ox + (tx - ox) * f;
+    const z = oz + (tz - oz) * f;
+    if (isOnArena(x, z)) return [x, z];
+  }
+  return [ox, oz];
+}
+
+/** Fractions of a line `len` long that step back from its end toward
+ *  its start in `step` increments: 1, 1 − step/len, … while above 0. */
+function stepBackFractions(len: number, step: number): number[] {
+  const out: number[] = [];
+  for (let d = len; d > 0; d -= step) out.push(d / len);
+  return out;
+}
 
 /**
  * Result of `fireBlink` so the dispatcher can read both the
@@ -775,7 +885,7 @@ interface BlinkResult {
   targetZ: number;
 }
 
-function fireBlink(def: AbilityDef, player: PlayerSchema, allPlayers: PlayerSchema[]): BlinkResult {
+function fireBlink(def: AbilityDef, player: PlayerSchema, allPlayers: PlayerSchema[], isOnArena: IsOnArena): BlinkResult {
   const originX = player.x;
   const originZ = player.z;
   let nx: number;
@@ -819,11 +929,16 @@ function fireBlink(def: AbilityDef, player: PlayerSchema, allPlayers: PlayerSche
     nx = player.x + Math.sin(player.rotationY) * dist;
     nz = player.z + Math.cos(player.rotationY) * dist;
   }
+  // Clamp to the arena disc, then step back toward the origin until the
+  // landing is live floor, or stay put (a zoneAtOrigin zone still drops).
   const r = Math.sqrt(nx * nx + nz * nz);
   if (r > BLINK_ARENA_RADIUS) {
     nx = (nx / r) * BLINK_ARENA_RADIUS;
     nz = (nz / r) * BLINK_ARENA_RADIUS;
   }
+  const len = Math.hypot(nx - originX, nz - originZ);
+  [nx, nz] = pickSafeLanding(originX, originZ, nx, nz,
+    stepBackFractions(len, SIM.blink.landingProbeStep), isOnArena);
   player.x = nx;
   player.z = nz;
   player.vx = 0;
@@ -854,18 +969,20 @@ function fireBlink(def: AbilityDef, player: PlayerSchema, allPlayers: PlayerSche
  * Immune players receive no knockback. Per-kit radius/force override the
  * global SIM defaults so each critter's AoE can feel different online.
  */
-function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: PlayerSchema[]): void {
+function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: PlayerSchema[], isOnArena: IsOnArena): void {
   // v0.11 — self-buff K (Shelly Steel Shell, Kurama Mirror Trick).
   // No outward force; just write the caster's immunity. The cliente
   // adds the visual layer (tint / decoy / alpha).
   if (def.selfBuffOnly) {
+    if (def.selfAnchorWhileBuffed) cancelMovementAbilities(caster);
     if (def.selfImmunityDuration && def.selfImmunityDuration > 0) {
       caster.immunityTimer = Math.max(caster.immunityTimer, def.selfImmunityDuration);
     }
     // 2026-04-29 final-K (Rafa: "Kurama debe desplazarse HACIA
     // ATRÁS, no hacia delante, decoy se queda en posición de
     // activación"). Server moves Kurama by `decoyEscapeDistance`
-    // along the direction OPPOSITE to her facing. Decoy is a
+    // along the direction OPPOSITE to her facing, landing on live
+    // floor (`decoyEscapeFallbacks`, else she stays). Decoy is a
     // pure cliente concept (server doesn't track decoy entity).
     const escDist = def.decoyEscapeDistance ?? 0;
     if (escDist > 0) {
@@ -877,6 +994,7 @@ function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: Play
         nx = (nx / r) * BLINK_ARENA_RADIUS;
         nz = (nz / r) * BLINK_ARENA_RADIUS;
       }
+      [nx, nz] = pickSafeLanding(caster.x, caster.z, nx, nz, def.decoyEscapeFallbacks ?? [1], isOnArena);
       caster.x = nx;
       caster.z = nz;
       caster.vx = 0;

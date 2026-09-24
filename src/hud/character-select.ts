@@ -9,7 +9,7 @@ import type { RosterEntry } from '../roster';
 import { getCritterThumbnail } from '../slot-thumbnail';
 import { setMatchHudVisible } from './dom-shared';
 import { tagGlyph } from '../input-glyphs';
-import { t } from '../i18n';
+import { t, tContent } from '../i18n';
 
 const characterSelect = document.getElementById('character-select')!;
 const critterGrid    = document.getElementById('critter-grid')!;
@@ -183,12 +183,13 @@ function paintInfoPane(roster: RosterEntry[], presets: CritterConfig[], idx: num
   const entry = roster[idx];
   if (!entry) return;
 
-  // Name / role / tagline always come from the roster entry
+  // Name / role / tagline always come from the roster entry (English source,
+  // translated by i18n's tContent; the name is a proper noun and stays)
   infoName.textContent = entry.displayName;
-  infoRole.textContent = entry.role;
+  infoRole.textContent = tContent(entry.role);
   infoTagline.textContent = entry.status === 'wip'
-    ? entry.tagline + ' (coming soon)'
-    : entry.tagline;
+    ? `${tContent(entry.tagline)} (${t('select-coming-soon').toLowerCase()})`
+    : tContent(entry.tagline);
 
   infoStats.innerHTML = '';
   infoAbilities.innerHTML = '';
@@ -215,9 +216,9 @@ function paintInfoPane(roster: RosterEntry[], presets: CritterConfig[], idx: num
     };
 
     const stats: { label: string; level: number }[] = [
-      { label: 'Speed',  level: toLevel(config.speed, speedMin, speedMax) },
-      { label: 'Weight', level: toLevel(config.mass, massMin, massMax) },
-      { label: 'Power',  level: toLevel(config.headbuttForce, powerMin, powerMax) },
+      { label: t('select-stat-speed'),  level: toLevel(config.speed, speedMin, speedMax) },
+      { label: t('select-stat-weight'), level: toLevel(config.mass, massMin, massMax) },
+      { label: t('select-stat-power'),  level: toLevel(config.headbuttForce, powerMin, powerMax) },
     ];
 
     for (const s of stats) {
@@ -295,7 +296,7 @@ function appendAbilityRow(critterSlug: string, slotIdx: number, key: string, nam
 
   const descEl = document.createElement('span');
   descEl.className = 'ability-info-desc';
-  descEl.textContent = '— ' + desc;
+  descEl.textContent = '— ' + tContent(desc);
 
   row.appendChild(keyEl);
   row.appendChild(nameEl);

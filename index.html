@@ -498,6 +498,17 @@
     }
 
     /* ---------- Character Select ---------- */
+    /* Short desktop / tablet windows (2026-09-24): at 1280×720 the title
+       went off the top and the info card off the bottom — 806 px of
+       content, most of it the 440 px preview canvas. The canvas gives up
+       height first (#preview-canvas below); `safe center` keeps a leftover
+       overflow from being split upwards past the title, and the overlay
+       scrolls as a last resort. Tall screens don't change. */
+    #character-select {
+      justify-content: center;
+      justify-content: safe center;
+      overflow-y: auto;
+    }
     #character-select h2 {
       font-size: 26px;
       font-weight: 800;
@@ -672,7 +683,11 @@
     }
     #preview-canvas {
       width: 500px;
-      height: 440px;
+      /* 460 px ≈ everything else on the screen, measured at 1280×720:
+         title 54 + info card 351 + prompt 46. preview.ts refits the
+         camera to whatever box it gets. 190 px keeps a 1366×768 laptop
+         (~650 px inside the browser) on one screen. */
+      height: clamp(190px, calc(100vh - 460px), 440px);
       display: block;
       cursor: grab;
       touch-action: none;
@@ -2159,6 +2174,15 @@
       top: 0;
       left: 0;
     }
+    /* Ability medallion inside J/K/L (hud/runtime.ts). It IS the ability
+       bar's .ability-slot-icon (cooldown sweep, ready flash, state rules
+       in hud.partial.html), sized to the button. Two classes because the
+       partial's CSS wins ties against this <head> CSS. */
+    .touch-button .touch-btn-icon {
+      width: 88%;
+      height: 88%;
+      margin: 0;
+    }
 
     /* ---------- Responsive: narrow viewports (phones in landscape,
          small tablets). Stacks character-select vertically so the 3D
@@ -2248,26 +2272,55 @@
         font-size: 20px;
         margin-bottom: 14px;
       }
-      /* 2026-05-01 — phone landscape (height ≤ 520) was rendering
-         the character select as a 670px-tall column that overflowed
-         off-screen. Compact: side-by-side layout (preview on the
-         left, grid + info on the right), and make the whole overlay
-         scrollable as a fallback in case any internal block still
-         doesn't fit. */
+      /* Phone landscape (height ≤ 520): THREE columns — grid | 3D
+         preview | info card. Until 2026-09-24 the preview and the info
+         shared one column and the card (378 px on its own) ended below
+         the fold on every phone: 682 px of content in 360-430. The
+         preview canvas takes what's left (preview.ts sizes its renderer
+         from the canvas CSS box) and the info card packs tighter type.
+         The overlay still scrolls as a fallback. */
       #character-select .select-body {
         flex-direction: row;
         align-items: flex-start;
-        gap: 12px;
-        padding: 0 12px;
+        justify-content: center;
+        gap: 10px;
+        padding: 0 8px;
+        max-width: 100%;
       }
-      #character-select #preview-pane { width: 280px; }
-      #character-select #preview-canvas { width: 260px; height: 200px; }
-      #character-select #critter-grid { width: 280px; gap: 6px; }
-      #character-select .critter-slot { width: 80px; height: 80px; }
-      #character-select .critter-slot .slot-avatar { width: 56px; height: 56px; }
-      #character-select .critter-slot .slot-name { font-size: 11px; }
+      #character-select #critter-grid { width: 222px; gap: 6px; flex-shrink: 0; }
+      #character-select .critter-slot { width: 70px; height: 70px; }
+      #character-select .critter-slot .slot-avatar { width: 48px; height: 48px; }
+      #character-select .critter-slot .slot-name { font-size: 10px; }
+      #character-select #preview-pane {
+        width: auto;
+        flex: 0 1 auto;
+        min-width: 0;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      #character-select #preview-canvas {
+        width: clamp(150px, 24vw, 240px);
+        height: clamp(190px, 55vh, 240px);
+        flex-shrink: 0;
+      }
+      #character-select #critter-info {
+        margin-top: 0;
+        width: clamp(230px, 36vw, 320px);
+        padding: 8px 10px 10px;
+      }
       #character-select #critter-info-name { font-size: 18px; }
-      #character-select #critter-info-tagline { font-size: 11px; }
+      #character-select #critter-info-tagline { font-size: 11px; margin-top: 6px; min-height: 0; }
+      #character-select #critter-info-stats { margin-top: 8px; gap: 5px; }
+      #character-select .stat-row { grid-template-columns: 70px auto; column-gap: 8px; font-size: 9px; }
+      #character-select .stat-pip { width: 10px; height: 10px; }
+      #character-select #critter-info-abilities { margin-top: 10px; gap: 6px; width: 100%; }
+      /* The info card now starts at the top of the body (y≈49): lift the
+         belts button out of its way (it overlapped 5 px at 667×375). */
+      #character-select .belts-trigger { top: 8px; right: 12px; padding: 5px 10px 5px 8px; }
+      #character-select .ability-info-row { gap: 6px; font-size: 11px; }
+      #character-select .ability-info-icon { --icon-size: 28px; }
+      #character-select .ability-info-desc { font-size: 10px; }
       /* Anchor to top + scroll when content overflows. Default
          `justify-content: center` was pushing the body up by half
          the overflow, so the grid started above y=0. */
@@ -2506,10 +2559,12 @@
       <div class="joystick-handle"></div>
     </div>
     <div id="touch-actions">
-      <button class="touch-button touch-btn-l" data-action="ultimate">L</button>
-      <button class="touch-button touch-btn-j" data-action="ability1">J</button>
+      <!-- J/K/L get their ability icon + cooldown sweep from hud/runtime.ts;
+           the letter is the fallback while the icon sheet isn't loaded. -->
+      <button class="touch-button touch-btn-l" data-action="ultimate"><span class="sprite-fallback-ability">L</span></button>
+      <button class="touch-button touch-btn-j" data-action="ability1"><span class="sprite-fallback-ability">J</span></button>
       <button class="touch-button touch-btn-headbutt" data-action="headbutt">⚡</button>
-      <button class="touch-button touch-btn-k" data-action="ability2">K</button>
+      <button class="touch-button touch-btn-k" data-action="ability2"><span class="sprite-fallback-ability">K</span></button>
     </div>
   </div>
 

@@ -5,25 +5,37 @@ sincronización cliente↔servidor.
 
 ---
 
-## Estado del deploy (2026-08-16)
+## Estado del deploy (comprobado el 2026-09-21)
 
-> **El modo online está CAÍDO en producción.** La app del servidor en
-> Railway ya no existe — `wss://bichitos-rumble-production.up.railway.app`
-> responde "Application not found". Pendiente de redeploy desde el
-> dashboard de Railway (requiere a Rafa). La base de datos SQLite
-> (players / belts online) vivía en el volumen de esa app y **puede
-> haberse perdido** con él; hasta el redeploy no se puede confirmar.
+> **El online está VIVO en producción** con `v1.7-h4-social` (main
+> `f41fb7e`, desplegado el 2026-09-05). Comprobado hoy con GETs de solo
+> lectura: `https://bichitos-rumble-production.up.railway.app/health`
+> responde `ok` con ~16 días de uptime, `/api/leaderboard` devuelve los
+> 5 cinturones (el volumen de la DB está montado) y el bundle de
+> `www.bichitosrumble.com` apunta a ese `wss://`.
 >
-> Para cuando vuelva: los scripts de admin del servidor siguen en el
-> repo (`server/scripts/admin-players.mjs`, vía `npm run admin:*`
-> desde `server/`): `admin:list-players`, `admin:player-stats`,
-> `admin:delete-player` / `admin:delete-pattern` /
-> `admin:delete-before` / `admin:delete-test`, `admin:reset-players`
-> y el nuevo `admin:backup` (snapshot consistente vía la API
-> `.backup()` de better-sqlite3, destino por defecto
-> `$DATA_DIR/backups/br-online-<UTC>.sqlite`). Prioridad tras el
-> redeploy: programar backups periódicos para no volver a depender de
-> un único volumen.
+> - **Cómo se despliega**: Railway construye `server/Dockerfile`
+>   (multi-stage `node:22-alpine`) y Vercel `npm run build`, **los dos
+>   solos desde `main`**. Cliente y servidor salen a la vez, pero no en
+>   el mismo instante — ver "Versiones cliente↔servidor" en
+>   Limitaciones. El runbook del despliegue vive en
+>   [`docs/carriles/distribucion.md`](docs/carriles/distribucion.md).
+> - **Admin de la DB** (`server/scripts/admin-players.mjs`, vía
+>   `npm run admin:*` desde `server/` en local, o
+>   `node scripts/admin-players.mjs <cmd>` dentro del contenedor, donde
+>   el WORKDIR es `/app`): `admin:list-players`, `admin:player-stats`,
+>   `admin:delete-player` / `admin:delete-pattern` /
+>   `admin:delete-before` / `admin:delete-test`, `admin:reset-players`
+>   y `admin:backup` (snapshot consistente vía `.backup()` de
+>   better-sqlite3, destino por defecto
+>   `$DATA_DIR/backups/br-online-<UTC>.sqlite`).
+> - **Pendiente**: la DB vive en un único volumen **sin backups
+>   programados** (`admin:backup` hay que invocarlo a mano), y quedan 2
+>   nicks `SMOKE*` de las campañas de humo por borrar.
+>
+> *(Hasta el 2026-09-21 aquí decía que el online estaba caído — era la
+> foto del 2026-08-16, antes del redeploy de H0. Llevaba un mes siendo
+> falso.)*
 
 ---
 
@@ -52,6 +64,10 @@ sincronización cliente↔servidor.
   hay salas con nombre ni filtros por región. La primera sala abierta
   con sitio libre recoge al jugador. Ninguna nueva sala se crea si hay
   una en `waiting` con hueco.
+- **Salas privadas** (H4, "Play with Friends"): la sala se crea con
+  `{ private: true }` y queda fuera del matchmaking público
+  (`BrawlRoom.isPrivateRoom`); se entra por el enlace `?room=<id>` que
+  enseña la sala de espera (`src/hud/waiting.ts`).
 - **Identidad online (nickname)**: antes de entrar a matchmaking el
   cliente registra/reclama un nickname vía `POST /api/player` y lo
   pasa en el `joinOrCreate`. Ver "Identidad online (v2)" más abajo.
@@ -213,7 +229,8 @@ Implementada en `src/online-identity.ts` + `src/hud/nickname-modal.ts`
 
 Desde 2026-04-23 el servidor tiene base de datos: **SQLite**
 (better-sqlite3) en el volumen de Railway — `server/src/db.ts`.
-(Estado actual del deploy: ver la nota fechada al principio del doc.)
+(Estado del deploy y admin de la DB: ver la nota fechada al principio
+del doc.)
 
 - **Tablas**: `players` (id, nickname_norm / nickname_display,
   token_hash, identity_id, timestamps) y `player_stats` (wins online,
@@ -245,10 +262,21 @@ Desde 2026-04-23 el servidor tiene base de datos: **SQLite**
 
 ## Limitaciones actuales / deuda aceptada
 
-- **No hay reconnect (`allowReconnection`)**. Si un humano pierde
-  conexión durante la partida, su slot pasa a bot-takeover pero el
-  cliente original no puede volver a entrar en esa sala. Post-jam si se
-  hace necesario.
+- **Reconnect con gracia de 30 s** (H4, 2026-08-24):
+  `allowReconnection(client, RECONNECT_GRACE_SEC)` en
+  `BrawlRoom.onLeave` y `room.reconnection.maxRetries = 8` en
+  `src/network.ts`. Pasada la gracia, el slot queda en bot-takeover.
+  **Lo que no sobrevive es un reinicio del servidor** (cada despliegue
+  de Railway): la sala vive en memoria, Colyseus la cierra y las
+  reconexiones se rechazan. Si era una partida pública con humanos
+  verificados, hoy se les apunta derrota (deducido del código,
+  `BrawlRoom.ts` `recordOnlineBeltStats`): **desplegar sin partidas
+  vivas**. Arreglo futuro, zona hard-stop: `onBeforeShutdown` que cierre
+  con un `endReason` propio sin tocar cinturones.
+- **Versiones cliente↔servidor: guard desde v1.8** — ver "Versión de
+  protocolo" abajo. Hasta v1.7 no había ninguno. Lo que sigue sin
+  cubrir: una pestaña vieja no se entera de que hay versión nueva hasta
+  que intenta entrar al online (no hay service worker ni sondeo).
 - **Sin matchmaking por región/latencia**. Un único pool global. El
   servidor está en Railway (región fija); la latencia depende de dónde
   estén los jugadores.
@@ -257,8 +285,7 @@ Desde 2026-04-23 el servidor tiene base de datos: **SQLite**
   historial de partidas ni ranking global tipo ELO: sólo stats
   agregadas por jugador y los 5 cinturones. La DB vive en un único
   volumen de Railway sin backups automáticos programados (existe
-  `npm run admin:backup`, pero hay que invocarlo — ver "Estado del
-  deploy").
+  `admin:backup`, pero hay que invocarlo — ver "Estado del deploy").
 - **Bot AI server-side simple**. Chase + HB + abilities ocasionales.
   Suficiente para relleno, no para "jugar contra bots como experiencia
   principal". El modo local (`/ vs Bots`) sigue usando
@@ -266,6 +293,174 @@ Desde 2026-04-23 el servidor tiene base de datos: **SQLite**
 - **`SIM.match.duration` duplicado**. Cliente usa `FEEL.match.duration`,
   server usa `SIM.match.duration`. Si divergen, el matchTimer no cuadra.
   Tenerlo presente al tocar tuning de duración.
+
+---
+
+## Versión de protocolo (guard cliente↔servidor, desde v1.8)
+
+**El problema.** El servidor solo manda `arenaSeed`, `arenaPackId`,
+nivel y lote del colapso: **cada cliente deriva en local qué fragmentos
+caen**. Si una versión cambia el generador de la arena (H4.5 lo cambia:
+el 54 % de las semillas reparten distinto los lotes), un cliente de una
+versión contra un servidor de otra pinta suelo donde la física ya lo
+tiró. Pasa en la ventana del despliegue (Vercel termina ~20 s tras el
+push, Railway ~70 s) y en cualquier pestaña vieja abierta. **Nunca**
+mandar geometría por la red para taparlo.
+
+**La pieza.** Un entero, `NET_PROTOCOL`, en `server/src/protocol.ts`:
+fuente única, sin imports. El servidor lo compila y el cliente lo
+importa con `../server/src/protocol`. v1.7 no manda nada y cuenta como
+1; v1.8 (H4.5) es la **2**.
+
+| Paso | Dónde | Qué pasa |
+|---|---|---|
+| Sonda | `src/network.ts` | Antes del join, `GET /health` (tope 2 s; cuesta ~1 RTT). Si anuncia otro número, o no trae `protocol` (servidor v1.7), no se entra: `server_outdated`/`client_outdated`. Así nadie ocupa asiento en una sala de otra versión: como 4º humano le arrancaría la cuenta atrás y se llevaría una derrota. Falla **abierta**: si `/health` no responde, decide el eco, y en ese caso raro el hueco del 4º asiento vuelve a existir. `/health` lleva CORS (lo pone el router de Colyseus). |
+| Ida | `src/network.ts` | `protocol: NET_PROTOCOL` en las opciones de `create`, `joinById` y `joinOrCreate` (el único sitio del repo que hace join). |
+| Guard | `BrawlRoom.onAuth` (estático) + `server/src/net-protocol-guard.ts` | Colyseus 0.17 lo llama en `joinOrCreate`, `create` y `join` **antes** de buscar o crear sala; en `joinById`, después de encontrarla y ver que no está cerrada (una sala inexistente da antes un 522 "not found"). En todos, antes de reservar asiento. Si no coincide lanza un `Error` que llega al cliente como `MatchMakeError` **HTTP 523**: texto bilingüe (español primero si la primera etiqueta de `Accept-Language` es `es`) acabado en `(client_outdated 1<2)` o `(server_outdated 3>2)`. Las reconexiones no pasan por aquí. |
+| Eco | `GameState.protocol` (último campo) | El cliente espera el primer estado (tope 8 s, o antes si la sala muere) y, si no trae su mismo número, sale de la sala sin reconexión y lanza `server_outdated`/`client_outdated` (o `no_state_from_server`). Es la red de seguridad contra un servidor **viejo**, que no tiene guard, si la sonda no llegó a saberlo. |
+| UX | `src/game.ts` + `src/i18n.ts` | `client_outdated` → "Hay una versión nueva… ¿Recargar?" y recarga con Aceptar. Lo mismo si el chunk de red ya no existe, porque cada despliegue lo renombra y Vercel da 404 al viejo; sin red, en cambio, no se ofrece recargar. `server_outdated` → "El servidor se está actualizando, prueba en un minuto". `no_state_from_server` → el "no se ha podido conectar" de siempre. |
+
+**Qué ve cada uno:**
+- **Pestaña v1.7 contra servidor v1.8.** Su código no se puede tocar, así
+  que cae en su alert genérico con uno de estos dos textos:
+  - Si ya había cargado el chunk de red (había entrado al online antes):
+    "No se ha podido conectar… El servidor dice: Hay una versión nueva
+    del juego: recarga la página para jugar online. / A new version…".
+  - Si no lo había cargado: "…El servidor dice: Failed to fetch
+    dynamically imported module…". Su chunk ya no existe en Vercel. Es
+    un fallo seguro: tampoco llega a jugar.
+
+  En los dos casos el offline sigue funcionando.
+- **Cliente v1.8 contra servidor v1.7** (la ventana, o si falla el build
+  de Railway): la sonda ve un `/health` sin `protocol` y no llega a
+  entrar: "El servidor se está actualizando". Si la sonda falla, entra
+  un instante, lee el eco (no hay campo) y sale con el mismo aviso.
+
+**Cuándo subir `NET_PROTOCOL`** (y AÑADIR su fila en
+`LAYOUT_BY_PROTOCOL`):
+- **Automático:** `tests/sim/net-protocol.test.ts` (dentro de
+  `npm run test:sim`, que corre en el CI) compara dos huellas:
+  - la del golden de layout: si el reparto del suelo cambia, falla y
+    dice qué número y qué fila poner;
+  - la del código de `server/src/sim/arena-fragments.ts`: si cambia sin
+    mover el golden, obliga a decidir entre subir o actualizar solo
+    `GENERATOR_FINGERPRINT`.
+- **A mano:** quitar o renombrar un campo del estado, cambiar la forma
+  de un mensaje, cambiar el significado de una opción de join, o añadir
+  algo que un cliente viejo no sepa pintar (un bicho nuevo).
+- **No hace falta** por balance y física (manda el servidor), campos
+  nuevos al final del estado, packs (el cliente degrada a `jungle`) ni
+  cambios solo de cliente.
+- **Steam:** un cliente empaquetado no puede recargar, así que cada
+  subida exigirá sacar a la vez la actualización del paquete.
+
+**Superficie programática:**
+- `GET /health` → `protocol`, `protocolGuard` (`on`/`off`) y
+  `rejectedJoins` desde el arranque.
+- `POST /matchmake/joinOrCreate/brawl` con cuerpo `{}` → 523 con
+  `client_outdated`. No crea sala, **pero solo si el guard está vivo**.
+  Contra un servidor v1.7 o con el guard apagado, crea una sala y
+  reserva un asiento. Así que primero `GET /health` y confirmar
+  `protocol: 2` y `protocolGuard: "on"`; solo entonces sirve contra
+  producción.
+- `npx vitest run tests/sim/net-protocol.test.ts` imprime las huellas
+  nuevas cuando algo cambia.
+
+**Emergencia:** `NET_PROTOCOL_GUARD=off` en las variables de Railway
+apaga el rechazo **del servidor** sin revertir `main`. El arranque lo
+avisa en el log y `/health` dice `off`; acepta "off" sin distinguir
+mayúsculas.
+- **Sirve para** un fallo del propio guard (rechaza a todo el mundo con
+  los dos lados en el mismo número) y para dejar jugar a las pestañas
+  v1.7, que vuelven a jugar desincronizadas: solo en un apuro.
+- **No sirve para** un desparejo de versiones: un cliente v1.8 o
+  posterior de otro número se va solo con la sonda o el eco. Eso se
+  arregla con rollback de los dos lados.
+
+---
+
+## Suavizado online (desde v1.8)
+
+**El problema.** El servidor simula a 30 Hz y manda el estado a 20 Hz (un
+parche cada 50 ms, con 1 o 2 ticks). Hasta v1.7, tu bicho se colocaba en
+la última posición recibida: se quedaba quieto en 2 de cada 3 frames a
+60 Hz y avanzaba a saltos de 6-12 px (Sebastian) o hasta 16 (Sihans). Los
+rivales iban con un lerp que los dejaba ~80 ms detrás y pulsando entre
+0,55× y 1,5× de su velocidad. Con la velocidad ×1,375 de PERSONAJES era la
+condición de despliegue de `docs/FEELING.md` §7.6.
+
+**La pieza.** `src/net-smoothing.ts` (módulo puro, sin imports) le da a
+cada bicho online una posición **visual** propia; el enganche son ~15
+líneas en `src/game.ts` (`updateOnline`). Solo visual: el servidor sigue
+siendo la autoridad, y no cambia ni el protocolo ni el golden.
+- **Predicción.** Repite el paso de integración de `BrawlRoom` tick a tick
+  y en su orden (empuje → mover → fricción → zona muerta → tope) hasta la
+  hora de servidor de "ahora". El reloj sale de `matchTimer` (baja 1/30
+  por tick y solo en `playing`) con el mínimo de (llegada − hora de
+  servidor) en una ventana de 1 s. El empuje por tick se deduce de dos
+  estados seguidos.
+- **Corrección suave.** El error se reparte con una constante de 60 ms en
+  vez de pintarse de golpe.
+- **Paradas.** Al local se le sabe el mando: se usa el de hace un RTT
+  (`room.ping` cada segundo), que es el que el servidor ya ha visto. A un
+  rival se le deduce: un empuje contra su marcha es una frenada, con la
+  fricción de parada.
+- **Saltos directos:** al reaparecer; en un teleport (se aleja > 0,75 u
+  de donde el paso lo tenía que llevar y está casi parado: blink, decoy,
+  Grip ponen v = 0); a más de 3,5 u; o con un frame de más de 0,25 s.
+- **Caída al vacío:** la altura baja lisa (12 u/s extrapolados) y x/z se
+  quedan donde se le ve caer.
+
+**Medido** (33 grabaciones, LAN y RTT 80/160 inyectado, re-simuladas con
+el módulo real a 60 y 144 Hz; 2026-09-24):
+
+| | `legacy` (v1.7) | suavizado |
+|---|---|---|
+| Frames parados del local | 60-86 % | 0 % en crucero (solo se para en un hueco de red > 150 ms) |
+| Tirón p95 del local en crucero | 5,5-14,4 px | ≤ 0,77 px (RTT 160) |
+| Retraso del local en LAN | 28-34 ms | 0-1 ms |
+| Ratio de velocidad por frame (p5-p95) | 0-9,6 | 0,94-1,20 |
+| Coherencia local↔rivales p95 | 10-20 px | 2,6-12,5 px menos que `legacy` |
+| Pasada de largo al parar, local (p99) | 0 | ≤ 2,6 px |
+| Pasada de largo al parar, rivales (p99) | ≤ 1,1 px | mediana 1,9, peor 8,3 px |
+
+La pasada de los rivales es el precio conocido: si un parche llega tarde,
+el rival se extrapola a su velocidad durante ≤ 150 ms. Se juzga a ojo en
+el A/B.
+
+**Interruptores** (en la URL, se leen al cargar):
+- `?netsmooth=legacy` → todo como en v1.7.
+- `?netsmooth=localonly` → solo tu bicho; los rivales con el lerp de
+  v1.7. **Ojo:** la coherencia local↔rivales queda PEOR que con
+  `legacy` (19-32 px frente a 11-20), porque tu bicho va al día y los
+  rivales 80 ms detrás. Solo para A/B.
+
+**Superficie programática:**
+- `__game.netSmoother.config.<clave> = valor` en vivo; los parámetros
+  están en `NET_SMOOTHING` (`src/net-smoothing.ts`).
+- `__game.netSmoother.stats()`: desfase del reloj, RTT, edad de los
+  estados (p50/p95), frames con la edad saturada (si suben contra
+  Railway, el reloj no sigue al servidor), tamaño de las correcciones y
+  saltos por motivo.
+- `scripts/net-smoothing-record.mjs`: graba una partida real (navegador
+  mudo, `--rtt`/`--jitter` inyectados, `--netsmooth=`).
+- `scripts/net-smoothing-bench.mjs`: re-simula las grabaciones con el
+  módulo real a otras tasas y con `--set clave=valor`, sin tocar el
+  juego. Imprime los umbrales del plan.
+- `tests/sim/net-smoothing.test.ts`: servidor de mentira que integra como
+  `BrawlRoom`.
+
+**Para probar online en local en Windows**, arranca el servidor con
+`npm run dev` (en `server/`). Carga `server/scripts/precise-timers.mjs`,
+porque el `setInterval` de Node en Windows va a saltos de 15,6 ms y el
+servidor corría a 0,72×; con el shim va a 1,00×. Cuesta ~44 % de un
+núcleo por sala; `PRECISE_TIMERS=off` lo apaga. **Nunca** se juzga el
+suavizado contra un servidor local sin él.
+
+**Si cambias el paso de integración de `BrawlRoom`** (orden, fórmula de
+fricción, zona muerta, tope) o el ritmo de `matchTimer`, la predicción
+empeora sin romper nada: avisa a DISTRIBUCIÓN. Valores de FEEL/SIM los
+sigue sola (se inyectan).
 
 ---
 

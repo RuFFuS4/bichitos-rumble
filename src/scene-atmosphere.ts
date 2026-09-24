@@ -26,12 +26,23 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
+import { ARENA_LOOK } from './arena-look';
+import { setArenaTextureAnisotropy } from './arena-decorations';
+import { applyGameplayCameraPose, type CameraPose } from './camera';
 
 const DEFAULT_FOG_COLOR = 0xb6d1e8;
 const DEFAULT_CLEAR_COLOR = 0x87b0d8;
+/** Hemisferio de siempre (cielo cian, suelo tierra). El fondo v2 cambia el
+ *  suelo por el rebote del cielo de abajo, por pack (`setSceneHemiGround`). */
+const DEFAULT_HEMI_SKY = 0x9cc7ea;
+const DEFAULT_HEMI_GROUND = 0x4a3a26;
+const DEFAULT_HEMI_INTENSITY = 0.55;
 
 let boundScene: THREE.Scene | null = null;
 let boundRenderer: THREE.WebGLRenderer | null = null;
+let hemi: THREE.HemisphereLight | null = null;
+let cameraOverride: CameraPose | null = null;
+let restoreGameplayPose = false;
 
 /**
  * Apply the game's canonical atmosphere to a scene + renderer and bind
@@ -50,11 +61,48 @@ export function initSceneAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRen
   renderer.setClearColor(DEFAULT_CLEAR_COLOR);
   scene.fog = new THREE.FogExp2(DEFAULT_FOG_COLOR, 0.008);
 
-  const hemi = new THREE.HemisphereLight(0x9cc7ea, 0x4a3a26, 0.55);
+  // Terreno v2 fase 1: sombras suaves y anisotropía de las texturas de
+  // suelo. El tone mapping NO se activa aquí: afecta a TODO material
+  // `toneMapped` (los 9 critters, el selector de personaje, el lab) y el
+  // skybox no se tone-mapea, así que cambiaría el contraste de la escena
+  // entera. Vive tras `ARENA_LOOK.toneMapping` para poder compararlo con
+  // el roster delante.
+  // (PCFSoftShadowMap está deprecado en three r185 — el renderer avisa y
+  // cae a PCFShadowMap; el suavizado se pide con `shadow.radius`.)
+  setArenaTextureAnisotropy(renderer.capabilities.getMaxAnisotropy());
+  if (ARENA_LOOK.toneMapping) {
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = ARENA_LOOK.exposure;
+  }
+
+  hemi = new THREE.HemisphereLight(DEFAULT_HEMI_SKY, DEFAULT_HEMI_GROUND, DEFAULT_HEMI_INTENSITY);
   scene.add(hemi);
 
+  // Pose forzada para capturas (`setCameraPoseOverride`). Va en el hook de
+  // la escena, que three llama antes de calcular el frustum, para no tocar
+  // los bucles de main.ts / tools/main.ts. Hace falta updateMatrixWorld:
+  // las matrices del frame ya se calcularon antes de este hook.
+  scene.onBeforeRender = (_r, _s, camera) => {
+    if (!(camera instanceof THREE.PerspectiveCamera)) return;
+    if (cameraOverride) {
+      camera.position.set(...cameraOverride.position);
+      camera.up.set(0, 1, 0);
+      camera.lookAt(...cameraOverride.lookAt);
+      camera.updateMatrixWorld();
+    } else if (restoreGameplayPose) {
+      // El bucle solo reescribe la POSICIÓN cada frame; la orientación del
+      // override se quedaría pegada sin esto.
+      applyGameplayCameraPose(camera);
+      camera.updateMatrixWorld();
+      restoreGameplayPose = false;
+    }
+  };
+
+  // Key con más componente LATERAL que antes (8,25,12 → elevación 60°,
+  // casi cenital: aplastaba el relieve y dejaba las paredes del canto sin
+  // gradiente). Bajarla da sombra larga y separa tapa de acantilado.
   const key = new THREE.DirectionalLight(0xfff1d4, 1.35);
-  key.position.set(8, 25, 12);
+  key.position.set(-11, 17, 13);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
   key.shadow.camera.near = 5;
@@ -64,6 +112,7 @@ export function initSceneAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRen
   key.shadow.camera.top = 18;
   key.shadow.camera.bottom = -18;
   key.shadow.bias = -0.002;
+  key.shadow.radius = 2.5;   // borde suave sin PCFSoft (deprecado en r185)
   scene.add(key);
 
   const rim = new THREE.DirectionalLight(0x9fb4e8, 0.55);
@@ -107,4 +156,36 @@ export function setSceneFogColor(color: number | null): void {
     (boundScene.fog as THREE.FogExp2).color.setHex(target);
   }
   boundRenderer.setClearColor(color ?? DEFAULT_CLEAR_COLOR);
+}
+
+/**
+ * Suelo del hemisferio: el rebote de luz que viene de abajo. En el fondo
+ * v2 debajo hay cielo iluminado, no tierra, y es lo único que ilumina la
+ * panza del cono (mira 51° hacia abajo: ni la key ni la rim la tocan).
+ * `null` vuelve al de siempre. Afecta también a la parte de abajo de los
+ * bichos (nota en el buzón de PERSONAJES).
+ */
+export function setSceneHemiGround(color: number | null, intensity?: number): void {
+  if (!hemi) return;
+  hemi.groundColor.setHex(color ?? DEFAULT_HEMI_GROUND);
+  hemi.intensity = color === null ? DEFAULT_HEMI_INTENSITY : (intensity ?? DEFAULT_HEMI_INTENSITY);
+}
+
+/**
+ * Color de limpiado. El fondo v2 lo pone al del pozo para que un frame sin
+ * fondo nunca salga claro. Llamar DESPUÉS de `setSceneFogColor`, que lo
+ * reescribe con el color de niebla.
+ */
+export function setSceneClearColor(color: number | null): void {
+  boundRenderer?.setClearColor(color ?? DEFAULT_CLEAR_COLOR);
+}
+
+/**
+ * Fuerza una pose de cámara en todos los frames (capturas de las poses de
+ * fin de partida y de la pose baja sin jugar una partida entera). `null`
+ * la suelta y devuelve la cámara a la pose de juego.
+ */
+export function setCameraPoseOverride(pose: CameraPose | null): void {
+  if (!pose && cameraOverride) restoreGameplayPose = true;
+  cameraOverride = pose;
 }
