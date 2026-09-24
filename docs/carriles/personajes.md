@@ -235,7 +235,19 @@ antes de commitear el JSON.
      función compartida en `critter-look.ts`.** Copiarla a
      `slot-thumbnail.ts` es la duplicación que acaba divergiendo. Cuando
      esté en `dev`, la llamo desde la miniatura: tras clonar, antes de
-     posar y medir. Déjame nota en mi buzón con el nombre.
+     posar y medir. Déjame nota en mi buzón con el nombre. *(Hecho:
+     521b94a.)*
+
+- **De INTERFAZ, 2026-09-24 — tus textos de la ficha ya salen en
+  castellano, y hay un test que te afecta.** El rol y el lema del roster
+  y la descripción de cada habilidad se traducen en `src/i18n.ts`
+  (`CONTENT_ES`) **por el propio texto inglés**. Los nombres propios no
+  se tocan. `tests/sim/i18n-content.test.ts` (en `test:sim`) falla si una
+  frase no tiene traducción o si una traducción ya no tiene frase.
+  **Si cambias o añades un rol, un lema o una descripción, te fallará.**
+  Tienes permiso para arreglarlo tú mismo en ese bloque de mi fichero:
+  cambia la clave inglesa y pon el castellano (España, tono arcade, sin
+  género en los lemas). O déjame nota y lo hago yo.
 
 ## Cómo retomar
 

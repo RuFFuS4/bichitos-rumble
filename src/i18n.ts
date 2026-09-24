@@ -348,6 +348,10 @@ const DICT = {
   'select-wip':               { en: 'WIP',                      es: 'EN OBRAS' },
   'select-coming-soon':       { en: 'Coming Soon',              es: 'Muy pronto' },
   'select-planned':           { en: '(planned)',                es: '(en el horno)' },
+  // Etiquetas de las barras de stats del info pane (character-select.ts)
+  'select-stat-speed':        { en: 'Speed',                    es: 'Velocidad' },
+  'select-stat-weight':       { en: 'Weight',                   es: 'Peso' },
+  'select-stat-power':        { en: 'Power',                    es: 'Fuerza' },
 } as const satisfies Record<string, Entry>;
 
 /** Toda clave válida del diccionario — typo en t('...') = error de compilación. */
@@ -400,6 +404,112 @@ export function t(key: I18nKey): string {
 export function tf(key: I18nKey, vars: Record<string, string | number>): string {
   return t(key).replace(/\{(\w+)\}/g, (match, name: string) =>
     name in vars ? String(vars[name]) : match);
+}
+
+// ---------------------------------------------------------------------------
+// Contenido de juego — rol, lema y descripción de habilidad de cada bicho
+// ---------------------------------------------------------------------------
+//
+// Ese texto vive en inglés en el código de PERSONAJES (src/roster.ts,
+// src/abilities.ts), no en index.html. No se copia a DICT: se traduce POR EL
+// PROPIO TEXTO INGLÉS, como un msgid de gettext. Si PERSONAJES cambia una
+// frase, su traducción deja de casar y se ve el inglés nuevo — nunca una
+// traducción que ya no corresponde. tests/sim/i18n-content.test.ts avisa
+// de lo que quede sin traducir.
+// Los nombres propios (bichos, habilidades) no pasan por aquí: no se
+// traducen (contrato de la cabecera). Los lemas en castellano evitan el
+// género: no está fijado para cada bicho.
+
+export const CONTENT_ES: Readonly<Record<string, string>> = {
+  // Roles
+  'Bruiser':      'Matón',
+  'Trickster':    'Pícaro',
+  'Balanced':     'Todoterreno',
+  'Tank':         'Tanque',
+  'Controller':   'Control',
+  'Trapper':      'Trampero',
+  'Mage':         'Mago',
+  'Assassin':     'Asesino',
+  'Glass Cannon': 'Cañón de cristal',
+  // Lemas
+  'Huge and unstoppable.':           'Enorme e imparable.',
+  'Fast, sly, unpredictable.':       'Velocidad, astucia y sorpresa.',
+  'Strong and agile. No weakness.':  'Fuerza y agilidad. Sin puntos débiles.',
+  'Heavy and wise.':                 'Peso y sabiduría.',
+  'Venomous area denial.':           'Niega el terreno a base de veneno.',
+  'Digs in. Controls ground.':       'Excava. Domina el terreno.',
+  'Calculated ranged threat.':       'Peligro a distancia, bien calculado.',
+  'Swift and lethal.':               'Veloz y letal.',
+  'One giant claw. All in.':         'Una pinza gigante. Todo o nada.',
+  // Habilidades — Trunk
+  'Unstoppable forward dash with tusks':
+    'Embestida imparable con los colmillos',
+  'Wide AoE thump — knocks back and stuns':
+    'Pisotón en área — empuja y aturde',
+  'Trunk pulls a target close — they take ×4 from any hit for 3.8 s':
+    'La trompa atrae a un rival — recibe ×4 de cualquier golpe durante 3,8 s',
+  // Kurama
+  'Blink-fast feint forward':
+    'Finta relámpago hacia delante',
+  'Leave a decoy, ghost away from danger for 2.8 s':
+    'Deja un señuelo y se esfuma del peligro durante 2,8 s',
+  'Mimics the L of the last enemy you hit':
+    'Copia la L del último rival al que golpeaste',
+  // Sergei
+  'Heavy palm strike charge':
+    'Carga con un manotazo demoledor',
+  'Slams ground with both fists — heavy radial knockback':
+    'Aporrea el suelo con los dos puños — gran empuje en círculo',
+  'Enters berserk mode: +speed, +power, near-immovable':
+    'Modo furia: +velocidad, +fuerza, casi inamovible',
+  // Shelly
+  'Slow rolling ram':
+    'Embestida rodando, lenta pero firme',
+  'Lock into the shell — invulnerable for 4 s':
+    'Se encierra en el caparazón — invulnerable durante 4 s',
+  'Spin like a saw — every contact launches enemies hard':
+    'Gira como una sierra — cada roce manda lejos al rival',
+  // Kermit
+  'Tongue-propelled lunge':
+    'Salto impulsado por la lengua',
+  'Toxic fog that lingers and slows enemies':
+    'Niebla tóxica que se queda y frena a los rivales',
+  'Touch enemies to invert their controls':
+    'Toca a los rivales para invertirles los controles',
+  // Sihans
+  'Underground charge resurfacing ahead':
+    'Carga bajo tierra que asoma más adelante',
+  'Burrow under, leave quicksand, surface ahead':
+    'Se entierra, deja arenas movedizas y sale más adelante',
+  'Open a hazardous pit ahead — pulls enemies in':
+    'Abre un socavón delante — arrastra dentro a los rivales',
+  // Kowalski
+  'Slides forward on an ice trail':
+    'Se desliza hacia delante sobre un rastro de hielo',
+  'Frontal snowball — knocks back and freezes the target for 5 s':
+    'Bola de nieve frontal — empuja y congela al objetivo durante 5 s',
+  'Coats the ground in ice — enemies slip and slide':
+    'Cubre el suelo de hielo — los rivales patinan sin control',
+  // Cheeto
+  'Lightning-fast predator lunge':
+    'Salto de depredador, rápido como un rayo',
+  'Teleport onto the nearest target — knock them out':
+    'Se teletransporta sobre el rival más cercano — y lo tumba',
+  'Channels a roaring frontal pulse — escalating push':
+    'Canaliza un rugido frontal — empuje cada vez mayor',
+  // Sebastian
+  'Sideways scuttle charge':
+    'Carga de lado, a lo cangrejo',
+  'Frontal claw shockwave — heavy frontal knockback':
+    'Onda de choque con la pinza — fuerte empuje frontal',
+  'Charge then strike — devastating on hit, costly on miss':
+    'Carga y golpea — devastador si acierta, caro si falla',
+};
+
+/** Texto de contenido de juego (ver arriba) en el idioma activo; sin
+ *  traducción, el fuente inglés tal cual. */
+export function tContent(source: string): string {
+  return getLang() === 'es' ? (CONTENT_ES[source] ?? source) : source;
 }
 
 /**

@@ -16,13 +16,11 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
      todos los móviles (el botón L roza el borde derecho en 667×375). No
      hay que ganarle sitio a la arena.
    - Rafa eligió las cuatro cosas (2026-09-24). Hechas: el enfriamiento
-     en los botones táctiles y las cuatro vidas en móvil (ver §Hecho).
-     Quedan, por este orden:
-   - **Selección**: el contenido mide 682 px en 360-430 de alto. Se puede
-     desplazar, pero stats y habilidades quedan bajo el pliegue. Y hay
-     **textos sin traducir** con la interfaz en castellano: el lema del
-     bicho, el rol y las etiquetas de stats («Huge and unstoppable.»,
-     «BRUISER», «SPEED»).
+     en los botones táctiles, las cuatro vidas en móvil y la ficha del
+     bicho en castellano (ver §Hecho). Queda:
+   - **Selección**: el contenido mide 682 px en 360-430 de alto (el panel
+     de info solo, 280×378). Se puede desplazar, pero stats y habilidades
+     quedan bajo el pliegue. En 844-932 px sobra una franja a la derecha.
 2. **Audio**: eres el dueño de `src/audio.ts`. Si cambias las claves
    `bichitos.sfxMuted` / `bichitos.musicMuted`, avisa a todos los
    carriles — las lee `scripts/lib/headless-browser.mjs` y de ellas
@@ -63,6 +61,18 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Hecho
 
+- **2026-09-24 — La ficha del bicho, en castellano.** Con la interfaz en
+  castellano, el rol, el lema, las etiquetas de stats y las descripciones
+  de habilidad salían en inglés. Las etiquetas son claves de DICT
+  (`select-stat-*`). Rol, lema y descripciones viven en inglés en el
+  código de PERSONAJES (`roster.ts`, `abilities.ts`), así que no se
+  copian: `CONTENT_ES` en `i18n.ts` las traduce **por el propio texto
+  inglés** (`tContent`), como un msgid de gettext. Si PERSONAJES cambia
+  una frase, se ve el inglés nuevo y no una traducción que ya no
+  corresponde. `tests/sim/i18n-content.test.ts` caza en las dos
+  direcciones: frases sin traducir y traducciones sin texto fuente. Los
+  nombres propios (bichos, habilidades) no se traducen, por contrato de
+  `i18n.ts`, y los lemas en castellano evitan el género.
 - **2026-09-24 — Las cuatro vidas en móvil.** En el bloque compacto
   (`max-height: 520px`) BL y BR iban ocultas, porque abajo mandan el
   joystick y los botones: de dos rivales no se veían las vidas. Ahora
