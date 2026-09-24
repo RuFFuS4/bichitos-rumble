@@ -74,6 +74,23 @@ for (const query of ['?portal=0', '?ref=itch']) {
   });
 }
 
+// Touch controls on big phones (src/input.ts isLikelyMobile). A Pixel 7 /
+// Galaxy in landscape is 915 px wide: the old `innerWidth < 900` test booted
+// them with no joystick at all. Tablets go the same way (coarse pointer).
+test.describe('big phone in landscape', () => {
+  test.use({ viewport: { width: 915, height: 412 }, isMobile: true, hasTouch: true });
+
+  test('boots in touch mode and the match shows the joystick', async ({ page }) => {
+    await page.goto('/?portal=0');
+    await expect(page.locator('body')).toHaveClass(/\btouch-mode\b/);
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#character-select')).toBeVisible({ timeout: 5_000 });
+    await page.keyboard.press('Space');
+    await expect(page.locator('#touch-joystick')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('#touch-actions')).toBeVisible();
+  });
+});
+
 /** Portal rings in the scene: the only tori of radius 1.2 / tube 0.12
  *  (ability VFX use tori too). Needs the dev-mode `window.__game`. */
 function countPortalRings(page: Page): Promise<number> {

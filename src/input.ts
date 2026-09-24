@@ -153,9 +153,21 @@ function isNarrowViewport(): boolean {
   return window.innerWidth < 900;
 }
 
-/** True if we should treat this session as mobile-leaning. */
+/** Capability probe: is the primary pointer a finger? Phones and tablets
+ *  report `coarse`; touch laptops keep `fine` (trackpad/mouse first). */
+function hasCoarsePointer(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+}
+
+/**
+ * True if we should treat this session as mobile-leaning. Width alone was
+ * not enough: big phones in landscape (Pixel 7 / Galaxy 915 px, iPhone Pro
+ * Max 932 px) and tablets are ≥ 900 px wide and booted with no joystick —
+ * unplayable without a keyboard (measured 2026-09-24). The width check
+ * stays for touch devices that report a fine pointer.
+ */
 export function isLikelyMobile(): boolean {
-  return hasTouchSupport() && isNarrowViewport();
+  return hasTouchSupport() && (hasCoarsePointer() || isNarrowViewport());
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,25 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-24 — [Interfaz] Los móviles grandes arrancaban sin joystick
+
+Salió al medir el HUD en móvil (primer paso de la reestructura: medir
+antes de rediseñar). `isLikelyMobile` exigía `innerWidth < 900` y solo se
+evalúa al arrancar. En apaisado, un Pixel 7 o un Galaxy (915 px), un
+iPhone Pro Max (932 px) y cualquier iPad pasan de 900: el juego abría con
+el HUD de escritorio, sin joystick ni botones. **Injugable sin teclado, y
+lleva así desde el jam.**
+
+- Ahora se decide por el puntero (`pointer: coarse`) además del ancho.
+  Los portátiles táctiles reportan `fine` y siguen como estaban.
+- En tablet caben las cuatro esquinas de vidas, así que las de abajo
+  suben por encima del joystick y de los botones.
+- Test de smoke con 915×412 táctil; comprobado que falla sin el arreglo.
+
+El resto de la medición (sin enfriamiento en los botones táctiles, dos de
+cuatro esquinas de vidas, selección bajo el pliegue, textos sin traducir)
+está en `docs/carriles/interfaz.md` §Pendiente y espera a que Rafa elija
+prioridades.
+
 ## 2026-09-24 — [Interfaz] Los retratos del HUD se ponen al día con la paleta nueva
 
 PERSONAJES cambió los bichos a la paleta de los bocetos de Rafa y les puso

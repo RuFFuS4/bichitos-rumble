@@ -401,6 +401,12 @@
     .player-life-corner.corner-tr { top: 72px;  right: 18px; }
     .player-life-corner.corner-bl { bottom: 24px; left: 18px; }
     .player-life-corner.corner-br { bottom: 62px; right: 18px; }
+    /* Touch screens tall enough for all four corners (tablets): the joystick
+       and the action cluster (index.html: bottom 28 + 200 px) own the
+       bottom corners, so these lives sit just above them. Phones hide
+       both corners in the max-height: 520px block below. */
+    body.touch-mode .player-life-corner.corner-bl,
+    body.touch-mode .player-life-corner.corner-br { bottom: 240px; }
     /* Highlight the LOCAL player's corner so the user finds their own
        lives at a glance. JS adds .is-local to the right corner. */
     .player-life-corner.is-local {

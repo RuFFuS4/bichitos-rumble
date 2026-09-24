@@ -6,11 +6,31 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 ## Pendiente (por orden)
 
 1. **Reestructura del HUD en móvil** (diferido de la era jam: "la versión
-   actual es correcta, no ideal"). Mide antes de rediseñar.
-   Dato ya medido (2026-09-21): con el portal apagado
-   (`body.portal-off`) la esquina de vidas TL sigue a `top: 118px`, que
-   es "debajo de la leyenda del portal" — queda un hueco donde estaba la
-   leyenda. Entra en esta reestructura, no merece parche suelto.
+   actual es correcta, no ideal"). **Medido el 2026-09-24**: 7 viewports
+   (667×375 a 1280×720, móviles en apaisado con toque y DPR 2) × título,
+   selección y partida. Se midió la cobertura del HUD sobre el disco de
+   la arena proyectado con la cámara de juego, y los solapes entre
+   piezas. El medidor está en el scratchpad de la sesión; se promociona a
+   `scripts/` en cuanto haga falta para el antes/después.
+   - **La arena está bien servida**: el HUD tapa 0-1 % del disco en
+     todos los móviles (el botón L roza el borde derecho en 667×375). No
+     hay que ganarle sitio a la arena.
+   - **Sin enfriamiento en móvil**: en táctil + `max-height: 520px` la
+     barra de habilidades se oculta y los botones solo llevan la letra
+     J/K/L. Es el hallazgo más gordo que queda. Propuesta: el icono de la
+     habilidad y el barrido de enfriamiento dentro de cada botón táctil
+     (reutilizar `ability-icons.webp` y el `--cd-progress` de la barra).
+   - **Solo 2 de 4 esquinas de vidas en móvil** (TL y TR; BL y BR van
+     ocultas porque abajo mandan el joystick y los botones). De dos
+     rivales no ves las vidas. Propuesta: las cuatro compactas en la
+     franja superior, dos a cada lado del reloj.
+   - **Selección**: el contenido mide 682 px en 360-430 de alto. Se puede
+     desplazar, pero stats y habilidades quedan bajo el pliegue. Y hay
+     **textos sin traducir** con la interfaz en castellano: el lema del
+     bicho, el rol y las etiquetas de stats («Huge and unstoppable.»,
+     «BRUISER», «SPEED»).
+   - Con el portal apagado, la esquina TL sigue a `top: 118px` ("debajo
+     de la leyenda del portal"): hueco donde estaba la leyenda.
 2. **Audio**: eres el dueño de `src/audio.ts`. Si cambias las claves
    `bichitos.sfxMuted` / `bichitos.musicMuted`, avisa a todos los
    carriles — las lee `scripts/lib/headless-browser.mjs` y de ellas
@@ -51,6 +71,17 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Hecho
 
+- **2026-09-24 — Los móviles grandes y las tablets arrancan con
+  joystick.** `isLikelyMobile` (`src/input.ts`) pedía toque **y**
+  `innerWidth < 900`. En apaisado, un Pixel 7 o un Galaxy (915 px), un
+  iPhone Pro Max (932 px) y un iPad (1024 px) arrancaban **sin joystick
+  ni botones**, injugables sin teclado. Ahora basta con toque + puntero
+  `coarse` (móviles y tablets); los portátiles táctiles siguen en `fine`
+  y no cambian. En tablet caben las cuatro esquinas, así que las de abajo
+  suben por encima de los controles (`bottom: 240px` en
+  `body.touch-mode`, `hud.partial.html`); medido sin solapes. Test en
+  `tests/smoke.spec.ts` (915×412 con toque), comprobado que falla sin el
+  arreglo.
 - **2026-09-24 — Sprites chibi de Sergei y Shelly a la paleta nueva**
   (aprobado por Rafa sobre la hoja antes/después/3D). Con la paleta de sus
   bocetos, el tile de Sergei era un gorila marrón (el bicho es carbón) y
@@ -101,6 +132,6 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 **2026-09-24** — en `dev`: miniaturas con contorno y encuadre, y sprites
 de Sergei y Shelly a la paleta nueva. El portal, cerrado en `dev`, sale
 con el despliegue de H4.5 (lo lleva DISTRIBUCIÓN). Las miniaturas ya
-comparten materiales con `Critter`. Siguiente trabajo propio: la
-reestructura del HUD en móvil; empieza midiendo (capturas a 390×844 y
-1280×720 con `body.touch-mode`) antes de proponer nada.
+comparten materiales con `Critter`. El modo táctil ya se activa en móviles
+grandes y tablets. La medición del HUD en móvil está hecha (punto 1 de
+Pendiente) y espera a que Rafa elija por dónde empezar la reestructura.
