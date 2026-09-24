@@ -379,6 +379,91 @@ mayúsculas.
 
 ---
 
+## Suavizado online (desde v1.8)
+
+**El problema.** El servidor simula a 30 Hz y manda el estado a 20 Hz (un
+parche cada 50 ms, con 1 o 2 ticks). Hasta v1.7, tu bicho se colocaba en
+la última posición recibida: se quedaba quieto en 2 de cada 3 frames a
+60 Hz y avanzaba a saltos de 6-12 px (Sebastian) o hasta 16 (Sihans). Los
+rivales iban con un lerp que los dejaba ~80 ms detrás y pulsando entre
+0,55× y 1,5× de su velocidad. Con la velocidad ×1,375 de PERSONAJES era la
+condición de despliegue de `docs/FEELING.md` §7.6.
+
+**La pieza.** `src/net-smoothing.ts` (módulo puro, sin imports) le da a
+cada bicho online una posición **visual** propia; el enganche son ~15
+líneas en `src/game.ts` (`updateOnline`). Solo visual: el servidor sigue
+siendo la autoridad, y no cambia ni el protocolo ni el golden.
+- **Predicción.** Repite el paso de integración de `BrawlRoom` tick a tick
+  y en su orden (empuje → mover → fricción → zona muerta → tope) hasta la
+  hora de servidor de "ahora". El reloj sale de `matchTimer` (baja 1/30
+  por tick y solo en `playing`) con el mínimo de (llegada − hora de
+  servidor) en una ventana de 1 s. El empuje por tick se deduce de dos
+  estados seguidos.
+- **Corrección suave.** El error se reparte con una constante de 60 ms en
+  vez de pintarse de golpe.
+- **Paradas.** Al local se le sabe el mando: se usa el de hace un RTT
+  (`room.ping` cada segundo), que es el que el servidor ya ha visto. A un
+  rival se le deduce: un empuje contra su marcha es una frenada, con la
+  fricción de parada.
+- **Saltos directos:** al reaparecer; en un teleport (se aleja > 0,75 u
+  de donde el paso lo tenía que llevar y está casi parado: blink, decoy,
+  Grip ponen v = 0); a más de 3,5 u; o con un frame de más de 0,25 s.
+- **Caída al vacío:** la altura baja lisa (12 u/s extrapolados) y x/z se
+  quedan donde se le ve caer.
+
+**Medido** (33 grabaciones, LAN y RTT 80/160 inyectado, re-simuladas con
+el módulo real a 60 y 144 Hz; 2026-09-24):
+
+| | `legacy` (v1.7) | suavizado |
+|---|---|---|
+| Frames parados del local | 60-86 % | 0 % en crucero (solo se para en un hueco de red > 150 ms) |
+| Tirón p95 del local en crucero | 5,5-14,4 px | ≤ 0,77 px (RTT 160) |
+| Retraso del local en LAN | 28-34 ms | 0-1 ms |
+| Ratio de velocidad por frame (p5-p95) | 0-9,6 | 0,94-1,20 |
+| Coherencia local↔rivales p95 | 10-20 px | 2,6-12,5 px menos que `legacy` |
+| Pasada de largo al parar, local (p99) | 0 | ≤ 2,6 px |
+| Pasada de largo al parar, rivales (p99) | ≤ 1,1 px | mediana 1,9, peor 8,3 px |
+
+La pasada de los rivales es el precio conocido: si un parche llega tarde,
+el rival se extrapola a su velocidad durante ≤ 150 ms. Se juzga a ojo en
+el A/B.
+
+**Interruptores** (en la URL, se leen al cargar):
+- `?netsmooth=legacy` → todo como en v1.7.
+- `?netsmooth=localonly` → solo tu bicho; los rivales con el lerp de
+  v1.7. **Ojo:** la coherencia local↔rivales queda PEOR que con
+  `legacy` (19-32 px frente a 11-20), porque tu bicho va al día y los
+  rivales 80 ms detrás. Solo para A/B.
+
+**Superficie programática:**
+- `__game.netSmoother.config.<clave> = valor` en vivo; los parámetros
+  están en `NET_SMOOTHING` (`src/net-smoothing.ts`).
+- `__game.netSmoother.stats()`: desfase del reloj, RTT, edad de los
+  estados (p50/p95), frames con la edad saturada (si suben contra
+  Railway, el reloj no sigue al servidor), tamaño de las correcciones y
+  saltos por motivo.
+- `scripts/net-smoothing-record.mjs`: graba una partida real (navegador
+  mudo, `--rtt`/`--jitter` inyectados, `--netsmooth=`).
+- `scripts/net-smoothing-bench.mjs`: re-simula las grabaciones con el
+  módulo real a otras tasas y con `--set clave=valor`, sin tocar el
+  juego. Imprime los umbrales del plan.
+- `tests/sim/net-smoothing.test.ts`: servidor de mentira que integra como
+  `BrawlRoom`.
+
+**Para probar online en local en Windows**, arranca el servidor con
+`npm run dev` (en `server/`). Carga `server/scripts/precise-timers.mjs`,
+porque el `setInterval` de Node en Windows va a saltos de 15,6 ms y el
+servidor corría a 0,72×; con el shim va a 1,00×. Cuesta ~44 % de un
+núcleo por sala; `PRECISE_TIMERS=off` lo apaga. **Nunca** se juzga el
+suavizado contra un servidor local sin él.
+
+**Si cambias el paso de integración de `BrawlRoom`** (orden, fórmula de
+fricción, zona muerta, tope) o el ritmo de `matchTimer`, la predicción
+empeora sin romper nada: avisa a DISTRIBUCIÓN. Valores de FEEL/SIM los
+sigue sola (se inyectan).
+
+---
+
 ## Parámetros (constantes)
 
 | Constante | Valor | Archivo | Qué hace |

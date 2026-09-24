@@ -15,8 +15,8 @@
 //
 // Qué hace: sustituye los setInterval cortos (10-99 ms) por un periódico con
 // deriva corregida (setTimeout grueso + giro final con setImmediate). El
-// giro cuesta CPU (hasta ~17 ms por intervalo): por eso solo en Windows y
-// solo en dev. PRECISE_TIMERS=off lo apaga.
+// giro cuesta CPU (hasta ~17 ms por intervalo; medido ~44 % de un núcleo por
+// sala): por eso solo en Windows y solo en dev. PRECISE_TIMERS=off lo apaga.
 // ---------------------------------------------------------------------------
 
 const enabled = process.platform === 'win32' && process.env.PRECISE_TIMERS !== 'off';

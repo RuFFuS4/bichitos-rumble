@@ -904,6 +904,11 @@ export class BrawlRoom extends Room {
   }
 
   private simulatePlaying(dt: number) {
+    // matchTimer es también el RELOJ del cliente (src/net-smoothing.ts): baja
+    // exactamente un dt fijo por tick y solo en 'playing', y el cliente saca
+    // de ahí la edad de cada estado para predecir dónde pintar a los bichos.
+    // Si algún día se pausa, se ralentiza o cambia de ritmo, avisa al carril
+    // DISTRIBUCIÓN: el suavizado online dejaría de cuadrar (solo visual).
     this.state.matchTimer -= dt;
     const players = [...this.state.players.values()];
 

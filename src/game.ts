@@ -1276,7 +1276,7 @@ export class Game {
         ability2: isHeld('ability2'),
         ultimate: isHeld('ultimate'),
       });
-      this.netSmoother.noteLocalInput(move.x, move.z);
+      this.netSmoother.noteLocalInput(move.x, move.z, performance.now());
     }
 
     // Apply server state to each critter. Every access is guarded because
@@ -1312,6 +1312,8 @@ export class Game {
       this.arena.tickVisuals(dt);
     }
 
+    const room = this.room;
+    this.netSmoother.maybePing(performance.now(), (cb) => room.ping(cb));
     this.netSmoother.beginFrame(performance.now(), state.matchTimer, state.phase === 'playing');
     const allPlayers: Array<{ sessionId: string; alive: boolean }> = [];
     state.players.forEach((p: any, sid: string) => {

@@ -58,14 +58,16 @@ function truthAt(ticks: Tick[], t: number): [number, number] {
 }
 
 /** Cliente: parches cada 50 ms con el último tick, que llegan `latencyMs`
- *  después; pinta a `hz`. Si `local`, el mando que conoce el cliente es el
- *  que el servidor aplicará `latencyMs` más tarde (ida). Devuelve lo pintado
- *  por frame, en hora de servidor. */
-function play(ticks: Tick[], hz: number, opts: { latencyMs?: number; local?: boolean;
+ *  después (vuelta); pinta a `hz`. Si `local`, el mando que conoce el
+ *  cliente es el que el servidor aplicará `latencyMs` más tarde (ida), y el
+ *  RTT medido es la suma de las dos. Devuelve lo pintado por frame, en hora
+ *  de servidor. */
+function play(ticks: Tick[], hz: number, opts: { latencyMs?: number; local?: boolean; rtt?: boolean;
   mutate?: (p: Tick, tMs: number) => NetPlayerState } = {}) {
   const latencyMs = opts.latencyMs ?? 10;
   const local = opts.local ?? true;
   const sm = new NetSmoother(movement, cfg());
+  if (opts.rtt ?? true) sm.noteRtt(2 * latencyMs);
   const key = {};
   const frames: Array<{ t: number; x: number; z: number; y: number }> = [];
   const endMs = ticks[ticks.length - 1].n * DT * 1000;
@@ -74,11 +76,11 @@ function play(ticks: Tick[], hz: number, opts: { latencyMs?: number; local?: boo
     const n = Math.floor(sendMs / (DT * 1000) + 1e-6);
     if (n < 1) continue;
     const p = ticks[n - 1];
-    sm.beginFrame(tMs, p.mt, true);
     if (local) {
       const nIn = Math.min(ticks.length, Math.max(1, Math.floor((tMs + latencyMs) / (DT * 1000))));
-      sm.noteLocalInput(...ticks[nIn - 1].input);
+      sm.noteLocalInput(...ticks[nIn - 1].input, tMs);
     }
+    sm.beginFrame(tMs, p.mt, true);
     const pos = sm.place(key, opts.mutate ? opts.mutate(p, tMs) : p, local, 1 / hz);
     frames.push({ t: (tMs - latencyMs) / 1000, x: pos.x, z: pos.z, y: pos.y });
   }
@@ -118,25 +120,43 @@ describe('net-smoothing — crucero', () => {
 });
 
 describe('net-smoothing — frenadas, golpes y saltos', () => {
-  // Medido al escribirlo (velocidad 10-18, 10-80 ms): el local, que conoce
-  // su mando, para en seco (0 de pasada, 0 de retroceso); sin usar el mando
-  // se pasaba 0,007-0,018 u. Un remoto, que lo deduce, se pasa ≤ 0,018 u.
+  // Medido al escribirlo (velocidad 14, 10-80 ms): el local, con el mando de
+  // hace un RTT, se pasa 0,005-0,007 u (0,3 px) y su velocidad baja sin
+  // rebotar; frenarlo en el acto daba 0 de pasada pero un diente de sierra
+  // de velocidad de ~200 ms a RTT 160 (4,1 → 1,4 → 4,3 u/s, medido en
+  // navegador). Un remoto, que lo deduce, se pasa ≤ 0,018 u.
   for (const local of [true, false]) {
     for (const latencyMs of [10, 40, 80]) {
-      it(`al soltar el mando no se pasa de largo (${local ? 'local' : 'remoto'}, ${latencyMs} ms)`, () => {
+      it(`al soltar el mando no se pasa de largo ni rebota (${local ? 'local' : 'remoto'}, ${latencyMs} ms)`, () => {
         const ticks = simulate(150, 14, (n) => (n <= 90 ? [1, 0] : [0, 0]));
         const rest = ticks[ticks.length - 1].x;
         const frames = play(ticks, 144, { local, latencyMs });
         const maxX = Math.max(...frames.map((f) => f.x));
-        expect(maxX - rest).toBeLessThan(local ? 0.003 : 0.03);
-        // y nunca retrocede (el rebote que se veía al parar)
+        expect(maxX - rest).toBeLessThan(local ? 0.01 : 0.03);
+        // nunca retrocede (el rebote que se veía al parar)…
         for (let i = 1; i < frames.length; i++) {
           expect(frames[i].x - frames[i - 1].x).toBeGreaterThan(local ? -0.002 : -0.01);
+        }
+        // …y el local no vuelve a acelerar después de empezar a frenar
+        if (local) {
+          const tRelease = 90 * DT;
+          const steps = frames.filter((f) => f.t > tRelease - 0.05).map((f, i, a) => (i ? f.x - a[i - 1].x : 0)).slice(1);
+          const peak = steps.findIndex((d, i) => i > 0 && d < steps[i - 1] * 0.9);   // empieza a frenar
+          for (let i = Math.max(1, peak + 1); i < steps.length && steps[i - 1] > 1e-3; i++) {
+            expect(steps[i]).toBeLessThan(steps[i - 1] * 1.1 + 1e-4);
+          }
         }
         expect(Math.abs(frames[frames.length - 1].x - rest)).toBeLessThan(0.005);
       });
     }
   }
+
+  it('sin RTT medido todavía, el local frena con la regla de los rivales', () => {
+    const ticks = simulate(150, 14, (n) => (n <= 90 ? [1, 0] : [0, 0]));
+    const rest = ticks[ticks.length - 1].x;
+    const frames = play(ticks, 144, { local: true, latencyMs: 40, rtt: false });
+    expect(Math.max(...frames.map((f) => f.x)) - rest).toBeLessThan(0.03);
+  });
 
   it('un rival quieto al que golpean frena con la fricción de parada, sin retroceder', () => {
     // Quieto (sin mando) y un golpe de 10-20 u/s: el servidor lo frena con la
@@ -189,20 +209,42 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
     expect(sm.stats().snaps.respawn).toBe(1);
   });
 
-  it('un blink (> snapDistance) salta; un choque normal no', () => {
+  it('un teleport (blink, decoy, Grip: v = 0), aunque sea corto, salta; un empujón de choque no', () => {
     const sm = new NetSmoother(movement, cfg());
     const key = {};
     const s = { vx: 0, vz: 0, alive: true, falling: false };
     sm.beginFrame(0, 90, true);
-    sm.place(key, { ...s, x: 0, z: 0 }, true, 1 / 60);
+    sm.place(key, { ...s, x: 0, z: 0 }, false, 1 / 60);
+    // Separación de un choque (resolveCollisions): unas décimas → se reparte.
     sm.beginFrame(17, 90 - DT, true);
-    const near = sm.place(key, { ...s, x: 1, z: 0 }, true, 1 / 60);
-    expect(near.x).toBeGreaterThan(0);
-    expect(near.x).toBeLessThan(1);                       // se reparte
-    sm.beginFrame(34, 90 - 2 * DT, true);
-    const far = sm.place(key, { ...s, x: 1 + NET_SMOOTHING.snapDistance + 1, z: 0 }, true, 1 / 60);
-    expect(far.x).toBe(1 + NET_SMOOTHING.snapDistance + 1); // salta
+    const nudge = sm.place(key, { ...s, x: 0.4, z: 0 }, false, 1 / 60);
+    expect(nudge.x).toBeGreaterThan(0);
+    expect(nudge.x).toBeLessThan(0.4);
+    // Blink corto (1,5 u < snapDistance) y parado → salto directo. Antes se
+    // deslizaba ~200 ms a 44-53 u/s.
+    sm.beginFrame(51, 90 - 3 * DT, true);
+    const blink = sm.place(key, { ...s, x: 1.9, z: 0 }, false, 1 / 60);
+    expect(blink.x).toBeCloseTo(1.9, 6);
+    expect(sm.stats().snaps.teleport).toBe(1);
+    // Knockback: mucho recorrido pero con velocidad → no es teleport.
+    sm.beginFrame(85, 90 - 4 * DT, true);
+    sm.place(key, { ...s, x: 2.9, z: 0, vx: 15 }, false, 1 / 60);
+    expect(sm.stats().snaps.teleport).toBe(1);
+    // Más allá de snapDistance, salta siempre (red de seguridad).
+    sm.beginFrame(119, 90 - 5 * DT, true);
+    const far = sm.place(key, { ...s, x: 2.9 + NET_SMOOTHING.snapDistance + 1, z: 0, vx: 15 }, false, 1 / 60);
+    expect(far.x).toBeGreaterThan(2.9 + NET_SMOOTHING.snapDistance);
     expect(sm.stats().snaps.distance).toBe(1);
+  });
+
+  it('un bicho que para (v → 0) no recula: frenar hasta 0 no es un empuje hacia atrás', () => {
+    for (const local of [true, false]) {
+      const ticks = simulate(150, 14, (n) => (n <= 60 ? [1, 0] : [0, 0]));
+      const frames = play(ticks, 60, { local, latencyMs: 40 });
+      const stop = ticks.findIndex((t) => t.n > 60 && t.vx === 0);
+      const after = frames.filter((f) => f.t > ticks[stop].n * DT);
+      for (let i = 1; i < after.length; i++) expect(after[i].x - after[i - 1].x).toBeGreaterThan(-1e-3);
+    }
   });
 
   it('fuera de playing (cuenta atrás, fin) no extrapola aunque v siga puesta', () => {
@@ -231,6 +273,41 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
     // los 710 ms (tick 3, −89 900): desfase 710 + 89 900 = 90 610. El de la
     // cuenta atrás daría 560 + 90 000 = 90 560, 50 ms corto.
     expect(Math.abs(sm.stats().clockOffsetMs - 90610)).toBeLessThan(3);
+  });
+
+  /** Servidor con su propio reloj: `rate` = velocidad de su simulación frente
+   *  al reloj real; `stall` = un tirón (ni manda ni avanza). Parches cada
+   *  50 ms de reloj real con el último tick, que llegan 10 ms después; el
+   *  cliente pinta a 60 Hz. Devuelve los frames con la edad saturada en
+   *  maxExtrapolation a partir de `fromMs`. */
+  function saturatedAfter(rate: number, fromMs: number, stall?: { atMs: number; ms: number }): number {
+    const sm = new NetSmoother(movement, cfg());
+    const key = {};
+    const serverAt = (w: number) => rate * (w - (stall ? Math.min(Math.max(w - stall.atMs, 0), stall.ms) : 0));
+    const patches: Array<{ arrival: number; mt: number }> = [];
+    for (let w = 0; w <= 10000; w += 50) {
+      if (stall && w > stall.atMs && w < stall.atMs + stall.ms) continue;
+      const n = Math.floor(serverAt(w) / (DT * 1000) + 1e-6);
+      patches.push({ arrival: w + 10, mt: 90 - n * DT });
+    }
+    let k = 0, mt = patches[0].mt, before = 0;
+    for (let t = 20; t < 10000; t += 1000 / 60) {
+      while (k < patches.length && patches[k].arrival <= t) { mt = patches[k].mt; sm.notePatch(patches[k].arrival, mt, 'playing'); k++; }
+      if (t < fromMs) before = sm.stats().saturatedFrames;
+      sm.beginFrame(t, mt, true);
+      sm.place(key, { x: 0, z: 0, vx: 0, vz: 0, alive: true, falling: false }, true, 1 / 60);
+    }
+    return sm.stats().saturatedFrames - before;
+  }
+
+  it('el reloj se recupera de un tirón de 200 ms del servidor en ~1 s', () => {
+    // Con el mínimo histórico, la edad se quedaba saturada para siempre
+    // (medido en la verificación: vuelven los saltos a 20 Hz).
+    expect(saturatedAfter(1, 3000 + 200 + 1300, { atMs: 3000, ms: 200 })).toBe(0);
+  });
+
+  it('el reloj sigue a un servidor algo lento (0,966×, setInterval de 34,5 ms en Linux)', () => {
+    expect(saturatedAfter(0.966, 2000)).toBe(0);
   });
 
   it('la secuencia real de fases (espera, cuenta atrás, playing) deja el reloj en su sitio', () => {
@@ -316,6 +393,27 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
 });
 
 describe('net-smoothing — caída al vacío', () => {
+  it('quien cae tras un golpe no recula hacia la arena', () => {
+    // Golpe hacia +x: la predicción lo adelanta; al caer, el servidor lo
+    // deja quieto donde cayó. Corregir hacia ese punto lo hacía retroceder
+    // 10-18 px (medido); ahora se queda donde se le ve caer.
+    const sm = new NetSmoother(movement, cfg());
+    const key = {};
+    const base = { z: 0, vz: 0, alive: true };
+    const xs: number[] = [];
+    const frame = (tMs: number, n: number, p: NetPlayerState) => {
+      sm.beginFrame(tMs, 90 - n * DT, true);
+      xs.push(sm.place(key, p, false, 1 / 60).x);
+    };
+    frame(0, 1, { ...base, x: 0, vx: 0, falling: false });
+    frame(50, 2, { ...base, x: 0.5, vx: 15, falling: false });
+    for (let t = 67; t < 120; t += 1000 / 60) frame(t, 2, { ...base, x: 0.5, vx: 15, falling: false });
+    const ahead = xs[xs.length - 1];
+    for (let t = 120; t < 500; t += 1000 / 60) frame(t, 4, { ...base, x: 0.7, vx: 0, falling: true, fallY: -1 });
+    for (let i = 1; i < xs.length; i++) expect(xs[i]).toBeGreaterThanOrEqual(xs[i - 1] - 1e-9);
+    expect(xs[xs.length - 1]).toBeCloseTo(ahead, 6);
+  });
+
   it('la altura baja lisa entre parches y se corta al reaparecer', () => {
     const fall = FEEL.lives.fallSpeed;
     const sm = new NetSmoother(movement, cfg());

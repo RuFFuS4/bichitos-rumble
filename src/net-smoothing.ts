@@ -26,9 +26,12 @@
 //     siguiente avanza con v + d: en crucero el bicho recorre 1/f ≈ 1,335
 //     veces la v publicada. Extrapolar con la v cruda se queda un 25 % corto.
 //   · Al soltar el mando el servidor frena con la fricción de parada (0,03 s
-//     frente a 0,08). Al local se le sabe el mando; a un remoto se le nota
-//     porque su empuje deducido va CONTRA su marcha. En los dos casos se
-//     predice sin empuje y con esa fricción: si no, se pasa de largo y
+//     frente a 0,08). Al local se le sabe el mando, pero el servidor lo
+//     recibe medio RTT después y el cliente ve el efecto un RTT después: se
+//     usa el mando de hace un RTT (room.ping). Frenar en el acto dejaba un
+//     diente de sierra de velocidad de ~200 ms a RTT 160. A un remoto se le
+//     nota porque su empuje deducido va CONTRA su marcha. En los dos casos
+//     se predice sin empuje y con esa fricción: si no, se pasa de largo y
 //     rebota (8-17 px medidos).
 //   · La edad del estado sale del reloj de simulación que ya viaja en el
 //     estado (`matchTimer` baja exactamente 1/30 por tick y solo en
@@ -63,17 +66,30 @@ export const NET_SMOOTHING = {
    *  con ≤ 67 ms. Tapa parches perdidos o un servidor que se para sin que
    *  el bicho se escape. */
   maxExtrapolation: 0.15,
-  /** u — si la posición visual y la del servidor se separan más, se salta
-   *  (blink 4,5-6,5 u, decoy 7 u). Por encima del peor error de predicción
-   *  razonable: maxSpeed 20 u/s × (2 ticks + margen) ≈ 3,3 u. */
+  /** u — red de seguridad: si la posición visual y la del servidor se
+   *  separan más, se salta sin repartir. Los teleports de verdad (blink,
+   *  decoy, Grip) los caza antes `teleportDistance`, también los cortos. */
   snapDistance: 3.5,
+  /** u — un estado nuevo que cae más lejos que esto de donde el servidor
+   *  tenía que llevar al bicho desde el anterior, con el bicho casi parado
+   *  (blink, decoy y Grip ponen v = 0), es un teleport: salto directo. Sin
+   *  esto, un blink de < snapDistance se deslizaba ~200 ms a 44-53 u/s. */
+  teleportDistance: 0.75,
+  /** u/s — "casi parado" para lo anterior: un tick de empuje tras aterrizar
+   *  deja |v| ≈ 1 u/s; un knockback, mucho más. */
+  teleportMaxSpeed: 2.5,
   /** s — un frame más largo que esto (pestaña en segundo plano) salta a
    *  la posición actual en vez de recorrer el hueco. */
   maxFrameGap: 0.25,
-  /** s/s — lo que puede crecer por segundo la estimación de latencia (la
-   *  mínima observada). Deja seguir a una red que empeora (+50 ms en 2,5 s)
-   *  sin flotar por encima del mínimo con jitter. */
-  clockCreep: 0.02,
+  /** s — ventana del reloj: el desfase cliente↔servidor es el mínimo de
+   *  (llegada − hora de servidor) en esta ventana. Sigue a un servidor que
+   *  va algo lento (Linux dio setInterval de 34,4-35,6 ms en vez de 33,3) y
+   *  se recupera de un tirón del servidor en ~1 s; con el mínimo histórico
+   *  la edad se quedaba saturada en maxExtrapolation y volvían los saltos. */
+  clockWindow: 1.0,
+  /** s — cada cuánto se mide el RTT (room.ping) para saber cuándo le llega
+   *  al servidor que el jugador local soltó el mando. */
+  pingInterval: 1.0,
   /** Hz — tick de simulación del servidor (espejo de SIM.tickRate; lo
    *  amarra tests/sim/net-smoothing.test.ts). */
   serverTickHz: 30,
@@ -119,20 +135,28 @@ interface Track {
   tMs: number;                // hora del último place()
   alive: boolean; falling: boolean;
   n: number;                  // tick del último estado visto de este bicho
+  sx: number; sz: number;     // su posición publicada en ese estado
   vx: number; vz: number;     // su v publicada en ese estado
   dx: number; dz: number;     // empuje de input por tick (NaN = sin historia)
   braking: boolean;           // su empuje deducido va contra su marcha
 }
 
-type SnapReason = 'first' | 'frameGap' | 'respawn' | 'distance';
+type SnapReason = 'first' | 'frameGap' | 'respawn' | 'teleport' | 'distance';
+
+/** Qué trae este frame para un bicho: nada nuevo, un estado nuevo, o un
+ *  estado nuevo que es un teleport. */
+type StateNews = 'none' | 'new' | 'teleport';
 
 const num = (v: number | undefined, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 
-/** Muestras recientes para stats() (ventana fija, sin crecer). */
+/** Muestras recientes para stats() (ventana fija, sin crecer). Sin
+ *  parameter properties: el type stripping de Node 22 no las admite y el
+ *  banco carga este módulo tal cual. */
 class Ring {
   private buf: number[] = [];
   private i = 0;
-  constructor(private readonly size: number) {}
+  private readonly size: number;
+  constructor(size: number) { this.size = size; }
   push(v: number): void {
     if (this.buf.length < this.size) this.buf.push(v);
     else { this.buf[this.i] = v; this.i = (this.i + 1) % this.size; }
@@ -154,20 +178,26 @@ export class NetSmoother {
   /** FEEL.movement + fallSpeed (se inyecta: módulo sin imports). */
   private readonly movement: () => NetMovement;
   private tracks = new WeakMap<object, Track>();
-  // Reloj de servidor: offset = hora cliente − hora servidor (ms), la
-  // mínima observada (≈ entrega sin cola), con permiso de subir despacio.
+  // Reloj de servidor: offset = hora cliente − hora servidor (ms), el mínimo
+  // de (llegada − hora de servidor) en los últimos clockWindow s (≈ entrega
+  // sin cola).
   private offsetMs = NaN;
+  private clockSamples: Array<[arrivalMs: number, offsetMs: number]> = [];
   private stateMs = NaN;     // hora de servidor del último estado (ms)
   private lastMt = NaN;
-  private lastNowMs = NaN;
   private playing = false;
   private nowMs = 0;
-  /** ¿El jugador local está empujando? (undefined = aún no se sabe). */
-  private localHeld: boolean | undefined;
+  // Mando local: cambios [hora, empuja] y RTT (room.ping) para mirar el
+  // mando de hace un RTT, que es el que ya ha visto el servidor.
+  private localInput: Array<[tMs: number, held: boolean]> = [];
+  private rtts: number[] = [];
+  private rttMs = NaN;
+  private lastPingMs = -Infinity;
   // stats()
   private ages = new Ring(240);
   private corrections = new Ring(240);
-  private snaps: Record<SnapReason, number> = { first: 0, frameGap: 0, respawn: 0, distance: 0 };
+  private snaps: Record<SnapReason, number> = { first: 0, frameGap: 0, respawn: 0, teleport: 0, distance: 0 };
+  private saturated = 0;
   private frames = 0;
 
   constructor(movement: () => NetMovement, config: NetSmoothingConfig = NET_SMOOTHING) {
@@ -183,13 +213,14 @@ export class NetSmoother {
     if (phase !== undefined && phase !== 'playing') return;
     if (typeof matchTimer !== 'number' || !Number.isFinite(matchTimer) || matchTimer === this.lastMt) return;
     const s = -matchTimer * 1000;
-    if (Number.isFinite(this.lastNowMs) && Number.isFinite(this.offsetMs)) {
-      this.offsetMs += this.config.clockCreep * Math.max(0, arrivalMs - this.lastNowMs);
-    }
-    this.lastNowMs = Math.max(arrivalMs, Number.isFinite(this.lastNowMs) ? this.lastNowMs : arrivalMs);
     // Primer parche o partida nueva (matchTimer vuelve arriba): rearmar.
-    if (!Number.isFinite(this.offsetMs) || !(s > this.stateMs)) this.offsetMs = arrivalMs - s;
-    else this.offsetMs = Math.min(this.offsetMs, arrivalMs - s);
+    if (!Number.isFinite(this.offsetMs) || !(s > this.stateMs)) this.clockSamples = [];
+    const win = this.clockSamples;
+    win.push([arrivalMs, arrivalMs - s]);
+    while (win.length > 1 && win[0][0] < arrivalMs - this.config.clockWindow * 1000) win.shift();
+    let min = Infinity;
+    for (const [, o] of win) if (o < min) min = o;
+    this.offsetMs = min;
     this.stateMs = s;
     this.lastMt = matchTimer;
   }
@@ -201,21 +232,41 @@ export class NetSmoother {
     this.frames++;
     this.playing = playing && typeof matchTimer === 'number' && Number.isFinite(matchTimer);
     if (!this.playing) {
-      this.offsetMs = NaN; this.lastMt = NaN; this.stateMs = NaN; this.lastNowMs = NaN;
+      this.offsetMs = NaN; this.lastMt = NaN; this.stateMs = NaN; this.clockSamples = [];
       return;
     }
     this.notePatch(nowMs, matchTimer);          // sin hook: llega "ahora"
-    if (Number.isFinite(this.lastNowMs) && Number.isFinite(this.offsetMs) && nowMs > this.lastNowMs) {
-      this.offsetMs += this.config.clockCreep * (nowMs - this.lastNowMs);
-      this.lastNowMs = nowMs;
-    }
-    this.ages.push(this.ageAt(nowMs) * 1000);
+    const age = this.ageAt(nowMs);
+    this.ages.push(age * 1000);
+    if (age >= this.config.maxExtrapolation) this.saturated++;
   }
 
-  /** El mando del jugador local este frame (el mismo que se manda con
-   *  sendInput). Umbral del servidor: |input| > 0,01 cuenta como empuje. */
-  noteLocalInput(mx: number, mz: number): void {
-    this.localHeld = Math.hypot(mx, mz) > 0.01;
+  /** El mando del jugador local (el mismo que se manda con sendInput), con
+   *  la hora a la que se envía. Umbral del servidor: |input| > 0,01. */
+  noteLocalInput(mx: number, mz: number, tMs: number = this.nowMs): void {
+    const held = Math.hypot(mx, mz) > 0.01;
+    const log = this.localInput;
+    if (!log.length || log[log.length - 1][1] !== held) log.push([tMs, held]);
+    // Basta con lo que cabe en un RTT generoso.
+    while (log.length > 2 && log[1][0] < tMs - 2000) log.shift();
+  }
+
+  /** RTT medido (ms): room.ping. Se usa la mediana de los últimos 5. */
+  noteRtt(ms: number): void {
+    if (!Number.isFinite(ms) || ms < 0) return;
+    this.rtts.push(ms);
+    if (this.rtts.length > 5) this.rtts.shift();
+    const s = [...this.rtts].sort((a, b) => a - b);
+    this.rttMs = s[s.length >> 1];
+  }
+
+  /** Pide un ping como mucho cada pingInterval s: `ping` = (cb) =>
+   *  room.ping(cb). Una línea en el bucle online y el módulo sigue sin
+   *  saber nada de Colyseus. */
+  maybePing(nowMs: number, ping: (cb: (ms: number) => void) => void): void {
+    if (nowMs - this.lastPingMs < this.config.pingInterval * 1000) return;
+    this.lastPingMs = nowMs;
+    ping((ms) => this.noteRtt(ms));
   }
 
   /**
@@ -233,7 +284,7 @@ export class NetSmoother {
     if (cfg.mode !== 'dr' || (!isLocal && !cfg.remotes)) {
       // Comportamiento anterior (A/B): snap local, lerp remoto.
       if (!tr || isLocal) {
-        tr = this.fresh(sx, sz, svx, svz, alive, falling);
+        tr = this.fresh(sx, sz, sx, sz, svx, svz, alive, falling);
         this.tracks.set(key, tr);
       } else {
         const a = Math.min(1, dt * cfg.legacyRemoteLerp);
@@ -248,7 +299,8 @@ export class NetSmoother {
     // fuera de eso v puede quedarse con el último valor y no hay que usarla.
     const moving = this.playing && alive && !falling;
     const mv = this.movement();
-    const fresh = tr && moving ? this.estimateDrive(tr, svx, svz, mv) : false;
+    const brakeBefore = this.brakes(tr, isLocal);
+    const news: StateNews = tr && moving ? this.estimateDrive(tr, sx, sz, svx, svz, brakeBefore, mv) : 'none';
     const brake = this.brakes(tr, isLocal);
 
     const [tx, tz] = moving ? this.predict(tr, brake, sx, sz, svx, svz, this.ageAt(this.nowMs), mv) : [sx, sz];
@@ -261,21 +313,29 @@ export class NetSmoother {
     const snap: SnapReason | null = !tr ? 'first'
       : gap > cfg.maxFrameGap ? 'frameGap'
         : (tr.falling && !falling) || (!tr.alive && alive) ? 'respawn'
-          : Math.hypot(tx - tr.x, tz - tr.z) > cfg.snapDistance ? 'distance'
-            : null;
+          : news === 'teleport' ? 'teleport'
+            : Math.hypot(tx - tr.x, tz - tr.z) > cfg.snapDistance ? 'distance'
+              : null;
     if (!tr || snap) {
       this.snaps[snap ?? 'first']++;
-      const fr = this.fresh(tx, tz, svx, svz, alive, falling);
+      const fr = this.fresh(tx, tz, sx, sz, svx, svz, alive, falling);
       if (tr) { fr.n = tr.n; fr.dx = tr.dx; fr.dz = tr.dz; fr.braking = tr.braking; }
       this.tracks.set(key, fr);
       return { x: fr.x, z: fr.z, y };
+    }
+    if (falling) {
+      // Quien cae ya no se mueve en el servidor: se queda donde se le ve
+      // caer. Corregir hacia el punto del servidor lo hacía retroceder
+      // 10-18 px hacia la arena tras un golpe.
+      tr.tMs = this.nowMs; tr.alive = alive; tr.falling = falling;
+      return { x: tr.x, z: tr.z, y };
     }
     if (gap > 0) {
       // E = V − T(frame anterior), con el modelo de AHORA; decae y se suma
       // a la predicción de ahora.
       const [px, pz] = moving ? this.predict(tr, brake, sx, sz, svx, svz, this.ageAt(tr.tMs), mv) : [sx, sz];
       const ex = tr.x - px, ez = tr.z - pz;
-      if (fresh) this.corrections.push(Math.hypot(ex, ez));
+      if (news !== 'none') this.corrections.push(Math.hypot(ex, ez));
       const k = Math.exp(-gap / cfg.correctionTime);
       tr.x = tx + ex * k;
       tr.z = tz + ez * k;
@@ -285,8 +345,10 @@ export class NetSmoother {
   }
 
   /** Para medir contra un servidor real (`__game.netSmoother.stats()`):
-   *  desfase del reloj, edad de los estados que se extrapolan, tamaño de
-   *  las correcciones al llegar un estado nuevo y saltos directos. */
+   *  desfase del reloj, edad de los estados que se extrapolan (y cuántos
+   *  frames la tenían saturada en maxExtrapolation: si sube, el reloj no
+   *  sigue al servidor), RTT, tamaño de las correcciones al llegar un estado
+   *  nuevo y saltos directos por motivo. */
   stats() {
     const r = (v: number) => Math.round(v * 10) / 10;
     return {
@@ -294,7 +356,9 @@ export class NetSmoother {
       remotes: this.config.remotes,
       playing: this.playing,
       clockOffsetMs: r(this.offsetMs),
+      rttMs: r(this.rttMs),
       stateAgeMs: { p50: r(this.ages.pct(0.5)), p95: r(this.ages.pct(0.95)), samples: this.ages.count },
+      saturatedFrames: this.saturated,
       correctionU: { p50: r(this.corrections.pct(0.5) * 100) / 100, p95: r(this.corrections.pct(0.95) * 100) / 100, samples: this.corrections.count },
       snaps: { ...this.snaps },
       frames: this.frames,
@@ -308,14 +372,29 @@ export class NetSmoother {
     return Math.min((tMs - this.offsetMs - this.stateMs) / 1000, this.config.maxExtrapolation);
   }
 
-  private fresh(x: number, z: number, vx: number, vz: number, alive: boolean, falling: boolean): Track {
-    return { x, z, tMs: this.nowMs, alive, falling, n: NaN, vx, vz, dx: NaN, dz: NaN, braking: false };
+  private fresh(x: number, z: number, sx: number, sz: number, vx: number, vz: number, alive: boolean, falling: boolean): Track {
+    return { x, z, tMs: this.nowMs, alive, falling, n: NaN, sx, sz, vx, vz, dx: NaN, dz: NaN, braking: false };
+  }
+
+  /** ¿Empujaba el jugador local a la hora `tMs`? (undefined = no se sabe). */
+  private localHeldAt(tMs: number): boolean | undefined {
+    let held: boolean | undefined;
+    for (const [t, h] of this.localInput) {
+      if (t > tMs) break;
+      held = h;
+    }
+    return held;
   }
 
   /** ¿Predecir frenada (sin empuje, fricción de parada)? Al local se le
-   *  sabe el mando; a un remoto se le deduce. */
+   *  sabe el mando: el de hace un RTT, que es el que ya ha visto el
+   *  servidor del estado que se está extrapolando. Sin RTT todavía, o a un
+   *  remoto, se le deduce. */
   private brakes(tr: Track | undefined, isLocal: boolean): boolean {
-    if (isLocal && this.localHeld !== undefined) return !this.localHeld;
+    if (isLocal && Number.isFinite(this.rttMs)) {
+      const held = this.localHeldAt(this.nowMs - this.rttMs);
+      if (held !== undefined) return !held;
+    }
     return !!tr?.braking;
   }
 
@@ -350,26 +429,37 @@ export class NetSmoother {
     return [x, z];
   }
 
-  /** Empuje de input por tick a partir de dos estados del bicho separados
-   *  m ticks: v_k = v_{k−m}·f^m + d·(f + … + f^m). Devuelve true si este
-   *  frame trae un estado nuevo del bicho.
+  /** Lo que trae este frame para el bicho y, si es un estado nuevo, su
+   *  empuje de input por tick a partir de dos estados separados m ticks:
+   *  v_k = v_{k−m}·f^m + d·(f + … + f^m).
+   *   · Parado (|v| < zona muerta) → sin empuje: si no, frenar hasta 0 se
+   *     leía como un empuje hacia atrás y el bicho reculaba un parche.
    *   · Empuje CONTRA la marcha → frenada (o cambio de sentido): se predice
    *     sin empuje y con fricción de parada. Se mira antes que el tamaño,
    *     porque frenar desde crucero da un "empuje" mayor que el máximo.
    *   · Empuje imposible a favor de la marcha o de lado → golpe (choque,
-   *     cabezazo, knockback): no es mando, se sigue con el de antes. */
-  private estimateDrive(tr: Track, vx: number, vz: number, mv: NetMovement): boolean {
+   *     cabezazo, knockback): no es mando, se sigue con el de antes.
+   *   · Lejos de donde el paso de integración lo tenía que llevar y casi
+   *     parado → teleport (blink, decoy y Grip ponen v = 0). */
+  private estimateDrive(tr: Track, sx: number, sz: number, vx: number, vz: number, brake: boolean, mv: NetMovement): StateNews {
     const hz = this.config.serverTickHz;
     const n = Math.round((this.stateMs / 1000) * hz);
-    if (n === tr.n) return false;
+    if (n === tr.n) return 'none';
     const m = n - tr.n;
+    let news: StateNews = 'new';
     if (m >= 1 && m <= 4) {
+      const [ex, ez] = this.predict(tr, brake, tr.sx, tr.sz, tr.vx, tr.vz, m / hz, mv);
+      if (Math.hypot(sx - ex, sz - ez) > this.config.teleportDistance && Math.hypot(vx, vz) < this.config.teleportMaxSpeed) {
+        news = 'teleport';
+      }
       const f = Math.pow(0.5, 1 / hz / mv.frictionHalfLife);
       const fm = Math.pow(f, m);
       const S = (f * (1 - fm)) / (1 - f);
       const dx = (vx - tr.vx * fm) / S, dz = (vz - tr.vz * fm) / S;
       const plausible = Math.hypot(dx, dz) <= mv.maxSpeed * (1 - f);
-      if (dx * vx + dz * vz < 0) {
+      if (Math.hypot(vx, vz) < mv.velocityDeadZone) {
+        tr.braking = true; tr.dx = 0; tr.dz = 0;
+      } else if (dx * vx + dz * vz < 0) {
         tr.braking = true;
         if (plausible) { tr.dx = dx; tr.dz = dz; }
       } else if (plausible) {
@@ -378,7 +468,7 @@ export class NetSmoother {
     } else {
       tr.dx = NaN; tr.dz = NaN; tr.braking = false;
     }
-    tr.n = n; tr.vx = vx; tr.vz = vz;
-    return true;
+    tr.n = n; tr.sx = sx; tr.sz = sz; tr.vx = vx; tr.vz = vz;
+    return news;
   }
 }
