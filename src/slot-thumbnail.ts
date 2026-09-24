@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import type { RosterEntry } from './roster';
 import { loadModelWithAnimations } from './model-loader';
-import { attachOutline, setOutlineVisible } from './critter-look';
+import { attachOutline, normalizeCritterMaterials, setOutlineVisible } from './critter-look';
 import { measurePosedBox } from './posed-bounds';
 
 const THUMB_SIZE = 128; // px — rendered square, downscaled visually in CSS
@@ -83,6 +83,9 @@ export function getCritterThumbnail(entry: RosterEntry): Promise<string | null> 
       if (!renderer || !scene || !camera || !holder) return null;
 
       const { scene: glb, animations } = await loadModelWithAnimations(entry.glbPath!);
+      // Same materials as the in-match Critter (the Meshy rigs ship their
+      // albedo as emissive and metalness 1 — self-lit without this).
+      normalizeCritterMaterials(glb);
       glb.scale.setScalar(entry.scale);
       glb.rotation.y = entry.rotation;
       glb.position.set(entry.offset[0], entry.offset[1] + entry.pivotY, entry.offset[2]);

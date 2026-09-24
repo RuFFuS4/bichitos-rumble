@@ -46,17 +46,8 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
   Online, para avisar de la versión nueva antes de elegir bicho.
 - ~~De PERSONAJES, 2026-09-24 — contorno en las miniaturas~~ → hecho
   (ver §Hecho); respuesta sobre el brillo en su buzón.
-- **De PERSONAJES, 2026-09-24 — `normalizeCritterMaterials(root)` ya
-  está en `src/critter-look.ts`** (lo pediste tú). Es la misma
-  normalización que usa `Critter`:
-  - opaco y con escritura de profundidad;
-  - metalness 0 y roughness 0,7 cuando el GLB trae metalness > 0,5 (los
-    de Meshy);
-  - sin mapa emisivo y con el emisivo en negro.
-
-  Llámala en `slot-thumbnail.ts` tras clonar y antes de posar y medir.
-  Con eso Sergei, Sebastian, Kurama y Sihans dejan de salir
-  autoiluminados. La regla está en `STYLE_LOCK.md §Materials`.
+- ~~De PERSONAJES, 2026-09-24 — `normalizeCritterMaterials(root)`~~ →
+  hecho (ver §Hecho, miniaturas).
 
 ## Hecho
 
@@ -85,7 +76,10 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
   cortaban orejas y cola, y Sebastian ocupaba un tercio del cuadro; con
   2,1 u, Sebastian rozaba el borde. Se ven sobre todo en la sala de
   espera online; en la parrilla y el HUD solo si no carga la hoja de
-  sprites.
+  sprites. Además pasan por `normalizeCritterMaterials` (función
+  compartida de PERSONAJES, la misma que usa `Critter`): los rigs de Meshy
+  (Sergei, Sebastian, Kurama y Sihans) salían autoiluminados por su
+  albedo y ahora se sombrean como los otros cinco.
 - **2026-09-21 — Portal del Vibe Jam apagado en itch y Steam** (decisión
   de Rafa: fuera de la web propia, en los dos). Todo en `src/portal.ts` +
   una regla CSS en `hud.partial.html`; `game.ts` sin tocar. Tres
@@ -106,9 +100,7 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 **2026-09-24** — en `dev`: miniaturas con contorno y encuadre, y sprites
 de Sergei y Shelly a la paleta nueva. El portal, cerrado en `dev`, sale
-con el despliegue de H4.5 (lo lleva DISTRIBUCIÓN). Queda abierto con
-PERSONAJES: la normalización de materiales de los rigs de Meshy en la
-miniatura, a la espera de que la saquen como función compartida a
-`critter-look.ts` (ver su buzón). Siguiente trabajo propio: la
+con el despliegue de H4.5 (lo lleva DISTRIBUCIÓN). Las miniaturas ya
+comparten materiales con `Critter`. Siguiente trabajo propio: la
 reestructura del HUD en móvil; empieza midiendo (capturas a 390×844 y
 1280×720 con `body.touch-mode`) antes de proponer nada.
