@@ -24,6 +24,7 @@ import {
   type EndResult, type WaitingScreenData,
 } from './hud';
 import { applyHitStop, FEEL } from './gamefeel';
+import { NetSmoother } from './net-smoothing';
 import { showPreview, swapPreviewCritter, hidePreview } from './preview';
 import { play as playSound, playMusic, preloadMusic } from './audio';
 import {
@@ -174,6 +175,9 @@ export class Game {
   // --- Online mode state (null when offline) ---
   private room: Room | null = null;
   private onlineCritters = new Map<string, Critter>(); // sessionId → visual
+  /** Where online critters are drawn between server patches (visual only,
+   *  src/net-smoothing.ts; `__game.netSmoother.config` / `.stats()`). */
+  readonly netSmoother = new NetSmoother(() => ({ ...FEEL.movement, fallSpeed: FEEL.lives.fallSpeed }));
   private lastServerPhase: string = '';                 // for transition detection
   /** When true, confirming the character select connects to server instead
    *  of starting a local match. Set by enterOnlineCharacterSelect(). */
@@ -1170,6 +1174,10 @@ export class Game {
         showOverlay(t('hud-disconnected'), t('hud-disconnected-sub'));
       }
     });
+    // Exact patch arrival for the online smoothing clock (src/net-smoothing.ts).
+    room.onStateChange((s: any) => {
+      if (this.room === room) this.netSmoother.notePatch(performance.now(), s?.matchTimer, s?.phase);
+    });
   }
 
   private spawnOnlineCritter(sessionId: string, playerState: any): void {
@@ -1268,6 +1276,7 @@ export class Game {
         ability2: isHeld('ability2'),
         ultimate: isHeld('ultimate'),
       });
+      this.netSmoother.noteLocalInput(move.x, move.z, performance.now());
     }
 
     // Apply server state to each critter. Every access is guarded because
@@ -1303,22 +1312,20 @@ export class Game {
       this.arena.tickVisuals(dt);
     }
 
+    const room = this.room;
+    this.netSmoother.maybePing(performance.now(), (cb) => room.ping(cb));
+    this.netSmoother.beginFrame(performance.now(), state.matchTimer, state.phase === 'playing');
     const allPlayers: Array<{ sessionId: string; alive: boolean }> = [];
     state.players.forEach((p: any, sid: string) => {
       if (!p) return; // defensive: shouldn't happen but some schema edges do this
       allPlayers.push({ sessionId: sid, alive: !!p.alive });
       const c = this.onlineCritters.get(sid);
       if (!c) return;
-      // Position — snap local, lerp remote
-      const px = p.x ?? c.x;
-      const pz = p.z ?? c.z;
-      if (sid === this.room?.sessionId) {
-        c.x = px;
-        c.z = pz;
-      } else {
-        c.x += (px - c.x) * Math.min(1, dt * 15);
-        c.z += (pz - c.z) * Math.min(1, dt * 15);
-      }
+      // Position — visual only: prediction + soft correction between server
+      // patches (src/net-smoothing.ts; ?netsmooth=legacy = the old snap/lerp)
+      const pos = this.netSmoother.place(c, p, sid === this.room?.sessionId, dt);
+      c.x = pos.x;
+      c.z = pos.z;
       if (typeof p.rotationY === 'number') c.mesh.rotation.y = p.rotationY;
       c.vx = p.vx ?? 0;
       c.vz = p.vz ?? 0;
@@ -1331,7 +1338,7 @@ export class Game {
         c.playSkeletal('defeat', { fallback: 'defeat' });
       }
       c.falling = p.falling ?? false;
-      c.mesh.position.y = p.fallY ?? 0;
+      c.mesh.position.y = pos.y;
       c.mesh.visible = c.alive;
       c.immunityTimer = p.immunityTimer ?? 0;
       // 2026-04-29 — Snowball hit-slow status. Server writes

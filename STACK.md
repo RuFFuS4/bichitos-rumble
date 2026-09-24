@@ -28,9 +28,10 @@
   server targets.
 - **`npm run build`** = `tsc` + `vite build` + `clean-dist-raw` (drops
   every `_raw/` master from `dist/`) + `check-payload-budget` (ratchet
-  75 MB total / 17 MB per file). Measured 2026-09-21: **69.7 MB**, of
-  which critter GLBs are 46 MB. `npm run check` (the CI gate) runs the
-  same plus the parity scripts.
+  30 MB total / 3 MB per file). Measured 2026-09-24: **27.4 MB**, of
+  which the 9 critter GLBs are ~4 MB (they were 46 MB before the F2
+  diet). `npm run check` (the CI gate) runs the same plus the parity
+  scripts and the critter-GLB version/RUN_GAIT checks.
 - The animation pipeline (mesh2motion) is **not** part of this build:
   it lives in the sibling repo `bichitos-mesh2motion` since 2026-08-18.
 

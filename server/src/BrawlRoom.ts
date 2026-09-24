@@ -29,7 +29,7 @@ import {
 import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
 import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed, isOnSlipperyZone, type ActiveZoneSnapshot } from './sim/physics.js';
-import { createAbilityStates, tickPlayerAbilities, getAbilityKit } from './sim/abilities.js';
+import { createAbilityStates, tickPlayerAbilities, getLDef } from './sim/abilities.js';
 import { ArenaSim } from './sim/arena.js';
 import { computeBotInput } from './sim/bot.js';
 import {
@@ -91,6 +91,10 @@ interface InternalPlayerData {
    *  facing follows the velocity only while it goes this way. */
   moveX: number;
   moveZ: number;
+  /** |aceleración de empuje| de este tick (u/s²): input × accel. Espejo de
+   *  Critter.moveAccel — la zona muerta lo usa para distinguir un empuje
+   *  real de un stick con deriva o un bicho enraizado. */
+  moveAccel: number;
   // Online-belt identity (only set for human players who registered a
   // nickname via the REST API and passed verifyPlayer on join). Null for
   // bots and for humans who skipped the nickname modal.
@@ -141,7 +145,7 @@ function newInternal(): InternalPlayerData {
     inputMoveX: 0, inputMoveZ: 0,
     inputHeadbutt: false, inputAbility1: false, inputAbility2: false, inputUltimate: false,
     respawnTimer: 0, anticipationTimer: 0, headbuttTimer: 0, hasInput: false,
-    moveX: 0, moveZ: 0,
+    moveX: 0, moveZ: 0, moveAccel: 0,
     onlinePlayerId: null,
     killsVsHumansThisMatch: 0,
   };
@@ -900,6 +904,11 @@ export class BrawlRoom extends Room {
   }
 
   private simulatePlaying(dt: number) {
+    // matchTimer es también el RELOJ del cliente (src/net-smoothing.ts): baja
+    // exactamente un dt fijo por tick y solo en 'playing', y el cliente saca
+    // de ahí la edad de cada estado para predecir dónde pintar a los bichos.
+    // Si algún día se pausa, se ralentiza o cambia de ritmo, avisa al carril
+    // DISTRIBUCIÓN: el suavizado online dejaría de cuadrar (solo visual).
     this.state.matchTimer -= dt;
     const players = [...this.state.players.values()];
 
@@ -986,6 +995,7 @@ export class BrawlRoom extends Room {
       // 2026-05-01 final block — Sebastian holding the L is rooted.
       if (data.lHoldCharging) speed = 0;
       const accel = speed * SIM.movement.accelerationScale * accelMul;
+      data.moveAccel = Math.hypot(mx, mz) * accel;
       p.vx += mx * accel * dt;
       p.vz += mz * accel * dt;
     }
@@ -998,8 +1008,9 @@ export class BrawlRoom extends Room {
       if (!p.alive || p.falling) continue;
       const data = this.internal.get(p.sessionId);
       if (!data) continue;
-      const kit = getAbilityKit(p.critterName);
-      const lDef = kit[2];
+      // Una sola vía de lectura de la L (getLDef, Copycat por jugador). Hoy
+      // Copycat no copia holdToFireL (COPYCAT_KEYS), así que no cambia nada.
+      const lDef = getLDef(p);
       const lState = p.abilities[2];
       if (!lDef || !lState || !lDef.holdToFireL) {
         data.lHoldPrevInput = !!data.inputUltimate;
@@ -1209,8 +1220,9 @@ export class BrawlRoom extends Room {
     // the kit and branch on flags.
     for (const p of players) {
       if (!p.alive || p.falling) continue;
-      const kit = getAbilityKit(p.critterName);
-      const lDef = kit[2];
+      // Por jugador: Copycat guarda la L copiada fuera del kit compartido
+      // (server/src/sim/abilities.ts, docs/REPASO_HABILIDADES.md).
+      const lDef = getLDef(p);
       const lState = p.abilities[2];
       if (!lDef || !lState) continue;
       // Decrement confused/stun timers up here so they expire
@@ -1397,9 +1409,8 @@ export class BrawlRoom extends Room {
       if (!data || !data.allInActive) continue;
       const lState = p.abilities[2];
       if (lState && lState.active) continue; // still windup
-      // Resolution time.
-      const kit = getAbilityKit(p.critterName);
-      const lDef = kit[2];
+      // Resolution time. L por jugador (Copycat), como en 2.e.
+      const lDef = getLDef(p);
       if (!lDef || !lDef.allInL) {
         data.allInActive = false;
         continue;
@@ -1503,8 +1514,16 @@ export class BrawlRoom extends Room {
       p.vx *= friction;
       p.vz *= friction;
 
+      // Zona muerta solo en inercia — espejo de src/critter.ts
+      // (docs/FEELING.md §7.4 y §7.7). Con input, anular la velocidad por
+      // debajo del umbral se comía justo la que el bicho estaba ganando
+      // (a 30 Hz, Shelly ralentizada o en el hielo). "Inercia" incluye un
+      // empuje que ni a velocidad terminal supera el umbral (stick con
+      // deriva, bicho enraizado).
       const speed = Math.sqrt(p.vx * p.vx + p.vz * p.vz);
-      if (speed < SIM.movement.velocityDeadZone) {
+      const pushTerminal = (data.moveAccel * halfLife) / Math.LN2;
+      const coasting = !data.hasInput || pushTerminal < SIM.movement.velocityDeadZone;
+      if (coasting && speed < SIM.movement.velocityDeadZone) {
         p.vx = 0;
         p.vz = 0;
       } else if (speed > SIM.movement.maxSpeed) {
