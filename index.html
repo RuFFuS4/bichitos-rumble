@@ -2159,6 +2159,15 @@
       top: 0;
       left: 0;
     }
+    /* Ability medallion inside J/K/L (hud/runtime.ts). It IS the ability
+       bar's .ability-slot-icon (cooldown sweep, ready flash, state rules
+       in hud.partial.html), sized to the button. Two classes because the
+       partial's CSS wins ties against this <head> CSS. */
+    .touch-button .touch-btn-icon {
+      width: 88%;
+      height: 88%;
+      margin: 0;
+    }
 
     /* ---------- Responsive: narrow viewports (phones in landscape,
          small tablets). Stacks character-select vertically so the 3D
@@ -2506,10 +2515,12 @@
       <div class="joystick-handle"></div>
     </div>
     <div id="touch-actions">
-      <button class="touch-button touch-btn-l" data-action="ultimate">L</button>
-      <button class="touch-button touch-btn-j" data-action="ability1">J</button>
+      <!-- J/K/L get their ability icon + cooldown sweep from hud/runtime.ts;
+           the letter is the fallback while the icon sheet isn't loaded. -->
+      <button class="touch-button touch-btn-l" data-action="ultimate"><span class="sprite-fallback-ability">L</span></button>
+      <button class="touch-button touch-btn-j" data-action="ability1"><span class="sprite-fallback-ability">J</span></button>
       <button class="touch-button touch-btn-headbutt" data-action="headbutt">⚡</button>
-      <button class="touch-button touch-btn-k" data-action="ability2">K</button>
+      <button class="touch-button touch-btn-k" data-action="ability2"><span class="sprite-fallback-ability">K</span></button>
     </div>
   </div>
 

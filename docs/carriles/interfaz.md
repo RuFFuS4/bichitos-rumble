@@ -15,11 +15,8 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
    - **La arena está bien servida**: el HUD tapa 0-1 % del disco en
      todos los móviles (el botón L roza el borde derecho en 667×375). No
      hay que ganarle sitio a la arena.
-   - **Sin enfriamiento en móvil**: en táctil + `max-height: 520px` la
-     barra de habilidades se oculta y los botones solo llevan la letra
-     J/K/L. Es el hallazgo más gordo que queda. Propuesta: el icono de la
-     habilidad y el barrido de enfriamiento dentro de cada botón táctil
-     (reutilizar `ability-icons.webp` y el `--cd-progress` de la barra).
+   - Rafa eligió las cuatro cosas (2026-09-24). Hecha: el enfriamiento
+     en los botones táctiles (ver §Hecho). Quedan, por este orden:
    - **Solo 2 de 4 esquinas de vidas en móvil** (TL y TR; BL y BR van
      ocultas porque abajo mandan el joystick y los botones). De dos
      rivales no ves las vidas. Propuesta: las cuatro compactas en la
@@ -71,6 +68,20 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Hecho
 
+- **2026-09-24 — Los botones táctiles llevan icono y enfriamiento.** En
+  móvil la barra de habilidades se oculta y los botones solo decían
+  J/K/L: no había ninguna indicación de enfriamiento. Ahora
+  `initAbilityHUD` (`hud/runtime.ts`) mete en cada botón el mismo
+  medallón de la barra (`.ability-slot-icon`: icono del bicho, barrido
+  cónico con `--cd-progress`, destello de «listo»), y `updateAbilityHUD`
+  le pone los mismos estados (`active`, `on-cooldown`, `unavailable`).
+  Las reglas de estado del partial se amplían a `.touch-button`, sin
+  duplicarlas. La letra queda como plan B (`.sprite-fallback-ability`)
+  si no carga la hoja de iconos. Al cambiar de bicho se limpian los tres
+  botones, para que uno con menos habilidades no herede iconos. Nota
+  para probarlo: los botones son estado «mantenido» muestreado por
+  fotograma, así que un toque sintético que suelta en el mismo fotograma
+  no dispara nada; hay que mantenerlo unos 200 ms.
 - **2026-09-24 — Los móviles grandes y las tablets arrancan con
   joystick.** `isLikelyMobile` (`src/input.ts`) pedía toque **y**
   `innerWidth < 900`. En apaisado, un Pixel 7 o un Galaxy (915 px), un

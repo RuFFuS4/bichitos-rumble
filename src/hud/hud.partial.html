@@ -278,17 +278,22 @@
       opacity: 0;
       z-index: -1;
     }
-    .ability-slot.active .ability-slot-icon {
+    /* Same states on the touch buttons (index.html #touch-actions), whose
+       J/K/L carry this medallion too. */
+    .ability-slot.active .ability-slot-icon,
+    .touch-button.active .ability-slot-icon {
       border-color: #ff8800;
       box-shadow:
         0 0 14px #ff8800,
         inset 0 0 0 1px rgba(0, 0, 0, 0.3);
     }
-    .ability-slot.on-cooldown .ability-slot-icon {
+    .ability-slot.on-cooldown .ability-slot-icon,
+    .touch-button.on-cooldown .ability-slot-icon {
       opacity: 0.85;
       filter: saturate(0.7);
     }
-    .ability-slot.unavailable .ability-slot-icon {
+    .ability-slot.unavailable .ability-slot-icon,
+    .touch-button.unavailable .ability-slot-icon {
       filter: grayscale(1) brightness(0.6);
     }
     /* Pop + glow when the cooldown finishes. Class added once on
