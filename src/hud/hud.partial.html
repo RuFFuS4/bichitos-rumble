@@ -404,6 +404,8 @@
        - BL: above the touch joystick / legend baseline */
     .player-life-corner.corner-tl { top: 118px; left: 18px; }
     .player-life-corner.corner-tr { top: 72px;  right: 18px; }
+    /* No portal legend to dodge (portal.ts kill switch): TL lines up with TR. */
+    body.portal-off .player-life-corner.corner-tl { top: 72px; }
     .player-life-corner.corner-bl { bottom: 24px; left: 18px; }
     .player-life-corner.corner-br { bottom: 62px; right: 18px; }
     /* Touch screens tall enough for all four corners (tablets): the joystick
@@ -571,18 +573,27 @@
       #hud-top-center { top: 4px; }
       #hud-top { padding: 6px 12px; font-size: 14px; }
 
-      /* Lives corners — shrink to a 40 px avatar dot, hide the name
-         label, mini hearts. Bottom corners are HIDDEN entirely
-         because the touch joystick (BL) and the action cluster (BR)
-         own that real estate on touch devices. */
+      /* Lives corners — compact cards (36 px avatar, small name, mini
+         hearts), ALL FOUR in the top strip: the joystick and the action
+         cluster own the bottom corners on touch devices. BL sits beside
+         TL under the settings cluster and BR beside TR, so the strip reads
+         as two pairs framing the timer. (Until 2026-09-24 BL/BR were just
+         hidden: two rivals' lives were invisible on phones.) Fixed width
+         so the pairs line up whatever the names. The body.touch-mode
+         selectors out-rank the tablet rule above (bottom: 240px). */
       .player-life-corner {
+        width: 70px;
+        box-sizing: border-box;
         padding: 5px 6px 6px;
         gap: 3px;
       }
-      .player-life-corner.corner-tl { top: 56px; left: 8px; }
-      .player-life-corner.corner-tr { top: 50px; right: 8px; }
+      .player-life-corner.corner-tl,
+      body.portal-off .player-life-corner.corner-tl { top: 56px; left: 8px; }
+      .player-life-corner.corner-tr { top: 56px; right: 8px; }
       .player-life-corner.corner-bl,
-      .player-life-corner.corner-br { display: none; }
+      body.touch-mode .player-life-corner.corner-bl { top: 56px; bottom: auto; left: 84px; }
+      .player-life-corner.corner-br,
+      body.touch-mode .player-life-corner.corner-br { top: 56px; bottom: auto; right: 84px; }
       .lives-dot { width: 36px; height: 36px; border-radius: 8px; }
       .lives-name { font-size: 9px; letter-spacing: 0.8px; }
       .lives-hearts { font-size: 11px; gap: 0; }

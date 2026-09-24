@@ -15,19 +15,14 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
    - **La arena está bien servida**: el HUD tapa 0-1 % del disco en
      todos los móviles (el botón L roza el borde derecho en 667×375). No
      hay que ganarle sitio a la arena.
-   - Rafa eligió las cuatro cosas (2026-09-24). Hecha: el enfriamiento
-     en los botones táctiles (ver §Hecho). Quedan, por este orden:
-   - **Solo 2 de 4 esquinas de vidas en móvil** (TL y TR; BL y BR van
-     ocultas porque abajo mandan el joystick y los botones). De dos
-     rivales no ves las vidas. Propuesta: las cuatro compactas en la
-     franja superior, dos a cada lado del reloj.
+   - Rafa eligió las cuatro cosas (2026-09-24). Hechas: el enfriamiento
+     en los botones táctiles y las cuatro vidas en móvil (ver §Hecho).
+     Quedan, por este orden:
    - **Selección**: el contenido mide 682 px en 360-430 de alto. Se puede
      desplazar, pero stats y habilidades quedan bajo el pliegue. Y hay
      **textos sin traducir** con la interfaz en castellano: el lema del
      bicho, el rol y las etiquetas de stats («Huge and unstoppable.»,
      «BRUISER», «SPEED»).
-   - Con el portal apagado, la esquina TL sigue a `top: 118px` ("debajo
-     de la leyenda del portal"): hueco donde estaba la leyenda.
 2. **Audio**: eres el dueño de `src/audio.ts`. Si cambias las claves
    `bichitos.sfxMuted` / `bichitos.musicMuted`, avisa a todos los
    carriles — las lee `scripts/lib/headless-browser.mjs` y de ellas
@@ -68,6 +63,18 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Hecho
 
+- **2026-09-24 — Las cuatro vidas en móvil.** En el bloque compacto
+  (`max-height: 520px`) BL y BR iban ocultas, porque abajo mandan el
+  joystick y los botones: de dos rivales no se veían las vidas. Ahora
+  las cuatro fichas compactas (70 px de ancho fijo) van en la franja de
+  arriba, en dos parejas alrededor del reloj: TL y BL bajo los botones
+  de sonido, TR y BR a la derecha, todas a 56 px. Medido en los 6
+  viewports táctiles: sin solapes y sin tapar arena. De paso, con el
+  portal apagado la TL de escritorio sube a 72 px, alineada con la TR:
+  era el hueco de la leyenda medido el 2026-09-21. Ojo de especificidad
+  al tocarlo: las reglas compactas llevan también la variante
+  `body.touch-mode` / `body.portal-off` para ganar a la de tablet
+  (`bottom: 240px`) y a la del portal.
 - **2026-09-24 — Los botones táctiles llevan icono y enfriamiento.** En
   móvil la barra de habilidades se oculta y los botones solo decían
   J/K/L: no había ninguna indicación de enfriamiento. Ahora
