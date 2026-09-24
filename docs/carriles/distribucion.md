@@ -169,6 +169,21 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
     - Es física de habilidades online (hard-stop): slice propio **después
       de v1.8**, con plan y verificación online (partidas de 2 clientes
       por habilidad).
+    - **Paso fijo en el servidor** (aprobado por Rafa, aviso de
+      PERSONAJES del 2026-09-25). A 30 Hz, online se empuja más que
+      offline: la K un 29 % más, y Cone Pulse 10,8 u frente a 5,8.
+      - El arreglo: 2 sub-pasos de integración en `simulatePlaying`,
+        bloque 3 (h = dt/2), con su test. No cambia el protocolo ni obliga
+        a desplegar a la vez que el cliente, pero mueve el balance online
+        hacia el offline.
+      - **Me afecta además en el suavizado.** `NetSmoother.predict` y
+        `estimateDrive` repiten el paso del servidor con UNA integración
+        por tick (fricción f por tick). Con sub-pasos hay que cambiarlos
+        en el mismo commit que `BrawlRoom`.
+      - El número de sub-pasos tiene que salir de config (`SIM`, y
+        `FEEL` inyectado al suavizado), no de un literal en cada lado.
+      - Después, re-simular las grabaciones con el banco y ver que la
+        réplica y los umbrales siguen dentro.
     - **Ojo, el hielo:** cambia la fórmula del paso de integración sobre
       una zona resbaladiza (aceleración ×0,35 y fricción ×5 desde la
       zona). El suavizado no modela el hielo (2-3 px de diente de sierra
