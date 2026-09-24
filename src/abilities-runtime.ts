@@ -268,7 +268,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       target.stunTimer = def.gripStunDuration ?? 2.0;
       // Burst at the target so the yank reads.
       spawnShockwaveRing(scene, tx, tz, 1.0, palette);
-      applyImpactFeedback(target);
+      applyImpactFeedback(target, -facingX, -facingZ); // yanked toward Trunk
       triggerHitStop(FEEL.hitStop.groundPound);
     }
     return;
@@ -299,7 +299,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       const falloff = 1 - dist / def.radius;
       other.vx += nx * def.force * falloff;
       other.vz += nz * def.force * falloff;
-      applyImpactFeedback(other);
+      applyImpactFeedback(other, nx, nz);
       // 2026-05-01 final — Trunk Slam K applies a brief stun on
       // every critter inside the AoE via `slamStunDuration`.
       // Stuns from this source compose with the global ×4
@@ -749,7 +749,7 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
         const f = def.blinkImpactForce * fall;
         other.vx += (dx / d) * f;
         other.vz += (dz / d) * f;
-        applyImpactFeedback(other);
+        applyImpactFeedback(other, dx, dz);
       }
     }
     triggerCameraShake(FEEL.shake.headbutt * 0.7);
@@ -1109,7 +1109,7 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     hit.mesh.position.x = hit.x;
     hit.mesh.position.z = hit.z;
     if (!hit.falling && hit.alive) hit.startFalling();
-    applyImpactFeedback(hit);
+    applyImpactFeedback(hit, dirX, dirZ);
     triggerHitStop(FEEL.hitStop.headbutt);
     // Crimson side-slash burst at the contact point.
     spawnShockwaveRing(scene, hit.x, hit.z, 1.8, palette);

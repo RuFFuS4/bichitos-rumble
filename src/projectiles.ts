@@ -217,7 +217,7 @@ export function tickProjectiles(
       hit.vx += (pr.vx / speedMag) * pr.impulse;
       hit.vz += (pr.vz / speedMag) * pr.impulse;
       hit.slowTimer = Math.max(hit.slowTimer, pr.slowDuration);
-      applyImpactFeedback(hit);
+      applyImpactFeedback(hit, pr.vx, pr.vz);
       // Mini snow burst at impact
       for (let k = 0; k < 6; k++) {
         const a = (k / 6) * Math.PI * 2;

@@ -1,5 +1,22 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-24] Cuatro bichos destellaban su propio color al recibir un golpe, no blanco
+- **Where**: `src/critter.ts` `attachGlbMesh`, en la normalización de
+  materiales. Afectaba a producción desde que llegaron los rigs de Meshy.
+- **Symptom**: el destello blanco del golpe dejaba a Sebastian rojo
+  brillante, y a Sergei, Kurama y Sihans con su textura aclarada. Con los
+  brillos de habilidad pasaba lo mismo: el color se mezclaba con su
+  textura.
+- **Cause**: los GLB de Meshy traen el albedo también como
+  `emissiveTexture`, con factor 1. El juego escribe el emisivo como un
+  tinte plano (`emissive = blanco`), y three.js lo multiplica por ese
+  mapa. En reposo no se notaba, porque el emisivo es negro.
+- **Fix**: al montar el GLB se quita el mapa emisivo y se deja el emisivo
+  en negro. Verificado con capturas de golpe: Sebastian y Sergei
+  destellan blanco. El golden 3/3 no cambia. Lección: un canal que el
+  juego usa como tinte no puede llegar con mapa desde el exportador. Se
+  mira el material del GLB, no solo la malla.
+
 ### [2026-09-23] Kermit llegó a `dev` con la textura rota (fallo intermitente de la receta)
 - **Where**: `scripts/critter-recipe.mjs`, sección `textures.webp`. Commit
   cce77f4 (Run más vivos); no llegó a producción.

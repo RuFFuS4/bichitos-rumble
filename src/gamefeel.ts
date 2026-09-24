@@ -205,9 +205,18 @@ export const FEEL = {
   },
 
   // --- Knockback Reaction (visual tilt when hit) ---
+  // The whole model leans ALONG the knockback — the top goes first, the
+  // feet drag — so the critter reads as taking the blow, not just
+  // flashing. Fast attack, then a damped return with one small
+  // counter-swing. The hit-stop frame already shows `impactLean` of the
+  // peak, so the frozen instant reads as the impact pose. The peak lands
+  // as the hit flash fades (≈0.12 s after the freeze): under the white
+  // the lean doesn't read (measured, docs/FEELING.md §7.10).
   knockbackReaction: {
-    tiltAngle: 0.25,          // radians of backward lean when hit
-    duration: 0.3,            // time to return to upright
+    tiltAngle: 0.38,          // rad of peak lean along the knockback
+    duration: 0.5,            // s, lean + return
+    attack: 0.25,             // fraction of the duration spent reaching the peak
+    impactLean: 0.55,         // fraction of the peak already on the hit frame
   },
 
   // --- Accessibility (H4 — prefers-reduced-motion) ---
@@ -276,7 +285,10 @@ interface ScaleEffect {
 
 const activeEffects = new WeakMap<Critter, ScaleEffect>();
 
-export function applyImpactFeedback(critter: Critter): void {
+/** `dirX/dirZ`: world direction the hit pushes the critter (any length).
+ *  Omitted (a self pulse, an attacker whose push we don't know) → squash
+ *  and flash without the lean. */
+export function applyImpactFeedback(critter: Critter, dirX = 0, dirZ = 0): void {
   activeEffects.set(critter, {
     targetX: FEEL.impact.scaleX,
     targetY: FEEL.impact.scaleY,
@@ -285,10 +297,13 @@ export function applyImpactFeedback(critter: Critter): void {
     elapsed: 0,
     overshoot: FEEL.impact.bounceOvershoot,
   });
-  // Knockback tilt: lean backward from hit direction
-  applyKnockbackTilt(critter);
+  // Knockback tilt: lean along the push
+  applyKnockbackTilt(critter, dirX, dirZ);
   // Flash white briefly to clearly read the hit
   applyHitFlash(critter);
+  // The hit stop that usually follows freezes the game before the next
+  // update: show the impact pose now so the freeze is the blow landing.
+  critter.showImpactFrame();
 }
 
 export function applyDashFeedback(critter: Critter): void {
@@ -354,32 +369,68 @@ function bounceEase(t: number, overshoot: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Knockback tilt — critter leans backward when hit
+// Knockback tilt — critter leans along the push when hit
 // ---------------------------------------------------------------------------
 
-const activeTilts = new WeakMap<Critter, { elapsed: number }>();
-
-function applyKnockbackTilt(critter: Critter): void {
-  activeTilts.set(critter, { elapsed: 0 });
+interface KnockbackTilt {
+  elapsed: number;
+  dirX: number;  // unit world direction of the push
+  dirZ: number;
 }
 
-/** Update tilt on the critter's body mesh (visual lean when hit). */
+const activeTilts = new WeakMap<Critter, KnockbackTilt>();
+const _tiltAxis = new THREE.Vector3();
+
+function applyKnockbackTilt(critter: Critter, dirX: number, dirZ: number): void {
+  const len = Math.hypot(dirX, dirZ);
+  if (len < 1e-6) return;
+  activeTilts.set(critter, { elapsed: 0, dirX: dirX / len, dirZ: dirZ / len });
+}
+
+/** True while the knockback lean plays (the turn lag holds meanwhile). */
+export function isKnockbackLeaning(critter: Critter): boolean {
+  return activeTilts.has(critter);
+}
+
+/** 0..1 lean envelope: from `impactLean` up to the peak in `attack`, then
+ *  back to upright through one small counter-swing (≈ −11 %). */
+function knockbackLeanShape(t: number): number {
+  const { attack, impactLean } = FEEL.knockbackReaction;
+  if (t < attack) {
+    return impactLean + (1 - impactLean) * Math.sin((t / attack) * Math.PI * 0.5);
+  }
+  const u = (t - attack) / (1 - attack);
+  return (1 - u) * (1 - u) * Math.cos(u * Math.PI * 1.5);
+}
+
+/** Visual lean when hit. GLB critters tilt their `reactionRig` (the model
+ *  sits under it) toward the push; the procedural placeholder keeps its
+ *  body/head pitch. */
 export function updateKnockbackTilt(critter: Critter, dt: number): void {
   const tilt = activeTilts.get(critter);
   if (!tilt) return;
 
   tilt.elapsed += dt;
   const t = Math.min(tilt.elapsed / FEEL.knockbackReaction.duration, 1);
-  // Quick lean then return
-  const angle = FEEL.knockbackReaction.tiltAngle * Math.sin(t * Math.PI);
+  const angle = t >= 1 ? 0 : FEEL.knockbackReaction.tiltAngle * knockbackLeanShape(t);
   critter.body.rotation.x = angle;
   critter.head.rotation.x = angle * 0.5;
 
-  if (t >= 1) {
-    critter.body.rotation.x = 0;
-    critter.head.rotation.x = 0;
-    activeTilts.delete(critter);
+  const rig = critter.reactionRig;
+  if (rig) {
+    // World push → the rig's frame (mesh.rotation.y is the facing, and it
+    // may turn during the knockback: recomputed every frame so the lean
+    // stays on the push, not on the model).
+    const yaw = critter.mesh.rotation.y;
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    const lx = tilt.dirX * c - tilt.dirZ * s;
+    const lz = tilt.dirX * s + tilt.dirZ * c;
+    // Tip +Y toward (lx, 0, lz): rotate about (lz, 0, −lx).
+    rig.quaternion.setFromAxisAngle(_tiltAxis.set(lz, 0, -lx), angle);
   }
+
+  if (t >= 1) activeTilts.delete(critter);
 }
 
 // ---------------------------------------------------------------------------

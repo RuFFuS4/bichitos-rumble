@@ -1,5 +1,24 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-24 — [PERSONAJES] El bicho encaja el golpe: inclinación visible, fotograma de impacto y destello en los nueve
+
+- `reactionRig` (`mesh → rig → pivot → GLB`): el empujón inclina el
+  modelo entero hacia donde lo empujan (0,38 rad, 0,5 s, contragolpe
+  −11 %). Antes el tilt escribía en las esferas procedurales, que con el
+  GLB están ocultas. Cada golpe pasa ahora su dirección a
+  `applyImpactFeedback`.
+- El hit stop se congelaba antes de la reacción. Ahora
+  `showImpactFrame()` pinta el primer fotograma en el acto, así que la
+  congelación muestra a la víctima blanca, aplastada e inclinada.
+- La víctima ya no da la espalda en pleno vuelo: el giro visual se
+  sujeta mientras dura la inclinación.
+- Los rigs de Meshy (Sergei, Sebastian, Kurama, Sihans) destellan
+  blanco: se les quita al montarlos el mapa emisivo, que era una copia
+  del albedo.
+- Capa visual pura: golden 3/3 sin regenerar, 115 tests, `check`. Queda
+  para Rafa que la orientación de juego no siga a los empujes (física).
+  Detalle en FEELING §7.10.
+
 ## 2026-09-24 — [PERSONAJES] Sebastian escabulle con el pie apoyado; dos puntos del plan descartados con medida
 
 - `FEEL.locomotion.runCadenceMaxHz` 6 → 8. Solo lo tocaban Sebastian

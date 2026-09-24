@@ -11,8 +11,9 @@
 // This layer is PRESENTATION ONLY. It never writes to fields that drive
 // gameplay or networking:
 //   - reads: vx, vz, abilityStates, isHeadbutting, headbuttAnticipating,
-//            skipPhysics, the Run clip's phase, RUN_GAIT (measured stride)
-//            and FEEL.locomotion / FEEL.runCadence (taste)
+//            skipPhysics, the Run clip's phase, RUN_GAIT (measured stride),
+//            FEEL.locomotion / FEEL.runCadence (taste) and whether the
+//            knockback lean is playing (gamefeel isKnockbackLeaning)
 //   - writes: body.position.y, glbMesh.position.y, glbMesh.rotation.x,
 //             glbMesh.rotation.z, glbMesh.scale.{x,y,z},
 //             visualPivot.rotation.y (the model's turn lag)
@@ -31,7 +32,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Critter } from './critter';
-import { FEEL } from './gamefeel';
+import { FEEL, isKnockbackLeaning } from './gamefeel';
 import { PERSONALITY_OVERRIDES } from './animation-personality-overrides';
 import { RUN_GAIT } from './critter-locomotion';
 
@@ -132,6 +133,11 @@ function runTopSpeed(critter: Critter): number {
  * reads as a quick turn instead of a one-frame flip. When a blow starts
  * (headbutt wind-up/lunge, any ability) the lag snaps to 0 so it comes
  * out of the critter's front.
+ *
+ * While the knockback lean lasts the lag does not decay: the push flips
+ * the facing toward where the critter is flung, and turning its back on
+ * the hitter mid-flight made the lean read as a sprint. It keeps facing
+ * the blow and turns once the lean is over (or at once if it strikes).
  */
 function tickTurn(critter: Critter, dt: number): void {
   const pivot = critter.visualPivot;
@@ -148,7 +154,9 @@ function tickTurn(critter: Critter, dt: number): void {
     critter.visualYawLag = 0;
   } else {
     critter.visualYawLag = wrapAngle(critter.visualYawLag - jump);
-    critter.visualYawLag *= Math.pow(0.5, dt / FEEL.locomotion.turnHalfLife);
+    if (!isKnockbackLeaning(critter)) {
+      critter.visualYawLag *= Math.pow(0.5, dt / FEEL.locomotion.turnHalfLife);
+    }
   }
   pivot.rotation.y = critter.visualYawLag;
 }

@@ -202,6 +202,11 @@ export class Critter {
    *  Its yaw lags the facing so the model turns over ~80 ms instead of
    *  snapping 180° in one frame (see critter-animation tickTurn). */
   visualPivot: THREE.Group | null = null;
+  /** Visual-only rig between `mesh` and `visualPivot`: whole-model
+   *  reactions (the knockback lean, gamefeel updateKnockbackTilt) turn it
+   *  about the feet without fighting the clips, the procedural layer or
+   *  the turn lag, which own the transforms below it. */
+  reactionRig: THREE.Group | null = null;
   /** Yaw (rad) the model still trails the gameplay facing by. */
   visualYawLag = 0;
   /** Facing seen last frame, to catch the jumps the lag absorbs. NaN =
@@ -516,16 +521,7 @@ export class Critter {
       this.tickSkeletal(dt);
       tickProceduralAnimation(this, dt);
       this.updateVisuals();
-      const flashT = tickHitFlash(this, dt);
-      if (flashT > 0) {
-        for (const mat of this.getActiveMaterials()) {
-          mat.emissive.setHex(0xffffff);
-          mat.emissiveIntensity = flashT * 1.2;
-        }
-      }
-      updateScaleFeedback(this, dt);
-      updateKnockbackTilt(this, dt);
-      updateHeadbuttRecovery(this, dt);
+      this.tickFeedback(dt);
       return;
     }
 
@@ -662,8 +658,12 @@ export class Critter {
 
     // Visual feedback for ability states (emissive, body scale, head offset)
     this.updateVisuals();
+    this.tickFeedback(dt);
+  }
 
-    // Hit flash overrides the state emissive briefly (applied AFTER updateVisuals)
+  /** Game feel visual systems (visual-only, no gameplay logic). Runs AFTER
+   *  updateVisuals: the hit flash overrides the state emissive briefly. */
+  private tickFeedback(dt: number): void {
     const flashT = tickHitFlash(this, dt);
     if (flashT > 0) {
       for (const mat of this.getActiveMaterials()) {
@@ -671,11 +671,17 @@ export class Critter {
         mat.emissiveIntensity = flashT * 1.2;
       }
     }
-
-    // Game feel visual systems (all visual-only, no gameplay logic)
     updateScaleFeedback(this, dt);
     updateKnockbackTilt(this, dt);
     updateHeadbuttRecovery(this, dt);
+  }
+
+  /** Put the first frame of a just-applied impact on screen now. The hit
+   *  stop freezes the game on the frame the blow lands, before any update
+   *  runs, so without this the freeze shows the victim untouched and the
+   *  squash, flash and lean only start once time resumes. */
+  showImpactFrame(): void {
+    this.tickFeedback(0);
   }
 
   /** Visual-only: updates emissive, posture, and opacity based on current state. No gameplay logic. */
@@ -929,6 +935,12 @@ export class Critter {
     //     lets the diffuse map drive the look, matching the flat cartoon
     //     look from the source visor. Tripo exports already low-metal,
     //     so we only touch materials that came in with > 0.5.
+    //   - emissive map dropped: the Meshy rigs (Sergei, Sebastian, Kurama,
+    //     Sihans) ship their albedo as emissive map too. The game drives
+    //     emissive as a flat tint (hit flash, immunity blink, ability
+    //     glows); through the map the white flash only brightened the
+    //     albedo — Sebastian flashed red. At rest emissive is black, so
+    //     the look doesn't change.
     group.traverse((node) => {
       const m = node as THREE.Mesh;
       if (!m.isMesh) return;
@@ -943,6 +955,11 @@ export class Critter {
         if (std.metalness > 0.5) {
           std.metalness = 0;
           std.roughness = 0.7;
+          std.needsUpdate = true;
+        }
+        if (std.emissiveMap) {
+          std.emissiveMap = null;
+          std.emissive.setHex(0x000000);
           std.needsUpdate = true;
         }
       }
@@ -973,9 +990,13 @@ export class Critter {
     // facing (mesh.rotation.y, which headbutts and abilities fire along)
     // without touching it. World transforms of glbMesh include the pivot,
     // so anything that snapshots them (Kurama's decoy) copies what is seen.
+    // Above the pivot sits the reaction rig (mesh → rig → pivot → GLB).
+    const rig = new THREE.Group();
     const pivot = new THREE.Group();
-    this.mesh.add(pivot);
+    this.mesh.add(rig);
+    rig.add(pivot);
     pivot.add(group);
+    this.reactionRig = rig;
     this.visualPivot = pivot;
     this.visualYawLag = 0;
     this.lastFacingY = NaN;
@@ -1293,6 +1314,7 @@ export class Critter {
     });
     this.glbMesh = null;
     this.visualPivot = null;
+    this.reactionRig = null;
     this.glbMaterials = [];
   }
 

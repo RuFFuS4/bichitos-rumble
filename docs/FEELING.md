@@ -193,7 +193,9 @@ Mismo principio (capa visual, golden quieto), en este orden:
    acelerar, aplastón y pose hacia atrás al frenar (sale de la derivada de
    la velocidad, que ya tenemos).
 3. **Reacciones visibles**: llevar el tilt del golpe, la recuperación del
-   cabezazo y la anticipación al GLB.
+   cabezazo y la anticipación al GLB. **Hecho el 2026-09-24 (§7.10).** La
+   anticipación y la recuperación ya se veían en el GLB (cabeceo y
+   aplastón de `critter-animation`); lo invisible era el tilt.
 4. **Personalidad con el rango del roster actual** (velocidad 8..18, masa
    0,6..1,4).
 
@@ -471,3 +473,67 @@ segundo. Kowalski celebra entre el segundo 2 y el 8: el estudio decía «no
 arranca hasta los 8», y no es así. Recortarlas no aportaría nada.
 
 Vídeo lateral: `.tmp/graficos/_informe/entrega/runs-vivos-lateral.mp4`.
+
+### 7.10 Reacción al golpe visible (2026-09-24, rama `claude/feature/personajes-reaccion-golpe`)
+
+Hay una captura fotograma a fotograma de un cabezazo lateral, en el que
+Sergei golpea a la víctima. Muestra que el bicho no llegaba a encajar el
+golpe, por tres motivos:
+
+1. **El tilt escribía en mallas ocultas.** `updateKnockbackTilt` inclinaba
+   `body` y `head`, las esferas del bicho procedural. Con el GLB cargado,
+   esas esferas están ocultas. La recuperación del cabezazo tenía el
+   mismo problema, pero esa sí se veía por otro camino: el cabeceo y el
+   aplastón de `critter-animation`.
+2. **El hit stop congelaba el fotograma anterior al impacto.** Durante la
+   congelación no corre ningún `update`, así que durante ~0,1 s la
+   víctima seguía intacta: sin aplastón, sin destello y sin inclinación.
+   Todo empezaba al reanudarse el tiempo.
+3. **La víctima daba la espalda al que le pegó.** La orientación de juego
+   sigue a la velocidad, y el empujón la gira 180°. El retraso visual
+   repartía el giro en unos 100 ms, justo durante el vuelo. El resultado:
+   la inclinación hacia atrás acababa pareciendo una carrera hacia
+   delante.
+
+Qué cambia (todo en la capa visual; golden 3/3 sin regenerar):
+
+- **`reactionRig`** es un grupo nuevo entre `mesh` y `visualPivot`
+  (`mesh → rig → pivot → GLB`). El empujón inclina el rig alrededor de
+  los pies, en la dirección del empuje. Esa dirección la pasa cada
+  llamada: `applyImpactFeedback(c, dirX, dirZ)` en el cabezazo, el
+  reflejo del caparazón, el AoE, el blink, el All-In de Sebastian, el
+  tirón de Trunk y la bola de nieve. Sin dirección, el golpe aplasta y
+  destella pero no inclina: es el caso del pulso de carga de Sebastian y
+  del reflejo online.
+- **`showImpactFrame()`** pone en pantalla el primer fotograma de la
+  reacción en cuanto llega el golpe. Así la congelación muestra el golpe
+  entrando: la víctima blanca, aplastada y ya inclinada al 55 %.
+- **El giro se sujeta mientras dura la inclinación.** El bicho sale
+  despedido mirando a quien le pegó, y se gira al terminar. Si ataca
+  antes, el giro se suelta en el acto, como ya pasaba con cualquier
+  golpe propio.
+- **Curva de la inclinación** (`FEEL.knockbackReaction`): pico de
+  0,38 rad (22°) y 0,5 s de duración, con un contragolpe de −11 %. El
+  pico cae a los 0,125 s, cuando se apaga el destello blanco. Con
+  0,3 rad y 0,38 s el pico quedaba bajo el blanco y apenas se leía.
+- **Destello de los rigs de Meshy** (Sergei, Sebastian, Kurama, Sihans).
+  Traían el albedo también como mapa emisivo, así que el destello
+  «blanco» solo aclaraba su color, y Sebastian destellaba rojo. Ahora
+  se quita el mapa al montar el modelo. En reposo el emisivo es negro,
+  así que el aspecto no cambia. Los brillos de habilidad y el parpadeo
+  de inmunidad quedan como tinte plano, igual que en los bichos de Tripo.
+
+**Pendiente, para Rafa (física, zona hard-stop).** El giro de 180° lo
+causa la orientación de juego, que sigue a cualquier velocidad, también
+al empujón ajeno. El atacante tiene el mismo problema: su retroceso le
+hace dar la espalda a quien acaba de golpear. Lo limpio sería que la
+orientación siguiera la intención del bicho (su input o su IA) y no los
+empujes externos. Eso toca la física, el espejo del sim y el golden.
+
+**Online.** Al que recibe un cabezazo en online no se le aplica ningún
+feedback de impacto, porque el servidor no emite un evento de golpe
+(solo `shellReflected`). Arreglarlo toca `game.ts` y el servidor.
+
+Vídeos: `.tmp/graficos/_informe/entrega/reaccion-golpe.mp4` (tiempo real)
+y `reaccion-golpe-lento.mp4` (×4). Muestran a Kowalski, Sebastian y
+Sergei.

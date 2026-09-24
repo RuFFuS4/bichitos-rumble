@@ -33,9 +33,14 @@ antes de commitear el JSON.
          jugar (−13 % en solo-bots), hablarlo con ARENA (colapso) o tocar
          vidas.
    - [ ] **Corte 2** (`§5`): ~~giro con peso~~ (hecho con la velocidad),
-         acentos de arranque y frenada, reacciones al golpe/cabezazo que
-         hoy se pintan en mallas ocultas, y personalidad con el rango real
-         del roster (velocidad 8..18).
+         acentos de arranque y frenada, ~~reacciones al golpe~~ (hecho,
+         `§7.10`: `reactionRig`, fotograma de impacto en el hit stop,
+         mirada sujeta durante el empujón, destello de los Meshy), y
+         personalidad con el rango real del roster (velocidad 8..18).
+   - [ ] **Para Rafa** (`§7.10`, física, hard-stop): que la orientación
+         siga la intención del bicho y no los empujes (hoy víctima y
+         atacante dan la espalda tras el golpe). Y el online no tiene
+         evento de golpe (`game.ts` + servidor).
    - [ ] Vocabulario que sigue faltando después del corte 2: stretch al
          salir despedido, anticipación antes de la habilidad, inercia en
          orejas y cola.

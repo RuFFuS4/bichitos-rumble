@@ -75,7 +75,7 @@ export function resolveCollisions(critters: Critter[]): void {
           attacker.vz += dirZ * rf;
           triggerHitStop(FEEL.hitStop.headbutt);
           triggerCameraShake(FEEL.shake.headbutt);
-          applyImpactFeedback(attacker);
+          applyImpactFeedback(attacker, dirX, dirZ);
           playSound('headbuttHit');
         };
         if (aAnchored && !bAnchored) {
@@ -129,7 +129,7 @@ export function resolveCollisions(critters: Critter[]): void {
           a.vz -= nz * force * FEEL.headbutt.recoilFactor * aVuln;
           triggerHitStop(FEEL.hitStop.headbutt);
           triggerCameraShake(FEEL.shake.headbutt * boost);
-          applyImpactFeedback(b);
+          applyImpactFeedback(b, nx, nz);
           playSound('headbuttHit');
           // Badge aggregation: count the hit on the receiver. Used by
           // Untouchable / Pain Tolerance evaluation via recordWin().
@@ -143,7 +143,7 @@ export function resolveCollisions(critters: Critter[]): void {
           b.vz += nz * force * FEEL.headbutt.recoilFactor * bVuln;
           triggerHitStop(FEEL.hitStop.headbutt);
           triggerCameraShake(FEEL.shake.headbutt * boost);
-          applyImpactFeedback(a);
+          applyImpactFeedback(a, -nx, -nz);
           playSound('headbuttHit');
           a.matchStats.hitsReceived++;
           if (b.config.name === 'Kurama') b.lastHitTargetCritter = a.config.name;
