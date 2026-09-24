@@ -265,6 +265,11 @@ export function spawnDecoyAt(
   void (async () => {
     const SkeletonUtils = await import('three/examples/jsm/utils/SkeletonUtils.js');
     const decoy = SkeletonUtils.clone(critter.glbMesh!);
+    // No cartoon outline on the ghost: a solid contour around a
+    // translucent body reads as a hole (critter-look.ts).
+    const hulls: THREE.Object3D[] = [];
+    decoy.traverse((node) => { if (node.userData.critterOutline) hulls.push(node); });
+    for (const hull of hulls) hull.removeFromParent();
     decoy.position.copy(snapPos);
     decoy.quaternion.copy(snapRot);
     decoy.scale.copy(snapScl);

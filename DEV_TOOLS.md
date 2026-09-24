@@ -128,6 +128,11 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   pone `?v=<hash>` a cada GLB en `roster.ts` para que la caché nunca
   empareje JS nuevo con GLB viejo. Detalle: `ASSET_PIPELINE.md` §«Recetas
   post-import».
+- **Contorno de los bichos** (2026-09-24): `FEEL.look` (activo, ancho en
+  u de mundo, límites en px y empuje en profundidad) sale como deslizador
+  en «Game feel» del match lab y se cambia con `feel-patch`;
+  `__devApi.setCritterLook({ outline: false })` lo apaga en vivo para un
+  A/B, y `?look=plain` en la URL lo apaga en la carga (capturas).
 - **Recolorear un bicho por familias de color** (paleta, 2026-09-24):
   `node scripts/critter-grade.mjs <id> [--ops=ops.json] [--out=x.glb]
   [--png=textura.png]` aplica a la textura actual las ops de color

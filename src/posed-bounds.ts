@@ -32,7 +32,8 @@ export function forEachPosedVertex(
   root.updateMatrixWorld(true);
   root.traverse((node) => {
     const mesh = node as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.visible) return;
+    // Outline hulls (critter-look.ts) repeat their mesh's vertices.
+    if (!mesh.isMesh || !mesh.visible || mesh.userData.critterOutline) return;
     const count = mesh.geometry.attributes.position?.count ?? 0;
     const step = Math.max(1, Math.floor(count / samplesPerMesh));
     for (let i = 0; i < count; i += step) {

@@ -1,5 +1,46 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-24 — [PERSONAJES] Mejora gráfica: contorno de dibujo animado en los bichos
+
+Decisión 5 de Rafa: contorno sobre el sombreado actual, sin toon. Hecho
+con permiso para `dev-api.ts`.
+
+- **`src/critter-look.ts`**: casco invertido. Cada malla del bicho tiene
+  una gemela con su geometría y su esqueleto; las caras traseras se
+  empujan en pantalla a lo largo de la normal con skinning, así que siguen
+  cualquier animación sin coste de CPU.
+  - Ancho en u de mundo (~4,5 % del alto), recortado a 2-5 px CSS: en la
+    arena se lee como el trazo de los iconos del HUD y en los primeros
+    planos no engorda.
+  - Apartado 0,12 u en profundidad, para no manchar los huecos del propio
+    bicho.
+- **Estados**: se oculta cuando el bicho es translúcido (parpadeo de
+  inmunidad, invisibilidad, niebla de Kermit). El señuelo de Kurama sale
+  sin contorno. `posed-bounds` y la selección ignoran los cascos: las
+  medidas no cambian.
+- **Doble superficie**: `FEEL.look` (deslizadores del tuner y
+  `feel-patch`), `DevApi.setCritterLook` y `?look=plain`. Regla en
+  `STYLE_LOCK.md` («art direction changes require updating this document
+  first»).
+- **Coste** con 4 bichos: +15 draw calls y +65 k triángulos (+6 %), sin
+  cambio medible en el fotograma.
+
+**Revisión adversarial** con dos lentes (estados visuales, shader y
+rendimiento), con máscaras de píxeles:
+- El único fallo real: el empuje en profundidad movía el casco en
+  pantalla hacia el punto de fuga. En la pantalla de victoria se perdía
+  entre la mitad y dos tercios del anillo, y fuera del centro salía
+  descentrado. Ahora el empuje solo cambia la profundidad: con y sin él,
+  la máscara del casco es idéntica píxel a píxel.
+- Los cascos comparten la esfera envolvente de su malla, en vez de
+  recalcularla en CPU en el primer fotograma.
+- Sin fugas de GPU en 20 cambios de selección y 6 partidas.
+- El parpadeo va sincronizado en 120 fotogramas y el primer fotograma
+  sale sin contorno gigante.
+
+Golden 3/3 sin regenerar, 115 tests y `npm run check`. Aviso a INTERFAZ:
+sus miniaturas de la sala de espera no pasan por `Critter`.
+
 ## 2026-09-24 — [PERSONAJES] Mejora gráfica: la paleta de los bocetos
 
 Decisión 3 de Rafa: acercar los colores a sus bocetos sin tocar las

@@ -37,6 +37,7 @@ import { BADGE_CATALOG, type BadgeDef } from '../badges';
 import { getStats, addUnlockedBadges, clearRecentlyUnlocked } from '../stats';
 import { maybeShowBadgeToast } from '../badge-toast';
 import { CRITTER_PWS } from '../pws-stats';
+import { FEEL } from '../gamefeel';
 
 export type { BotBehaviourTag } from '../critter';
 
@@ -1221,6 +1222,21 @@ export class DevApi {
     };
     setCameraPoseOverride(clean);
     return clean;
+  }
+
+  /** Critter outline (critter-look.ts, FEEL.look), live: `{ outline: false }`
+   *  for an A/B without it, or tune `outlineWidth` (world u),
+   *  `outlineMinPx` / `outlineMaxPx` (CSS px) and `outlineDepthPush` (u).
+   *  Unknown keys and non-finite numbers are rejected. Returns the look. */
+  setCritterLook(patch: Partial<Record<keyof typeof FEEL.look, number | boolean>>): typeof FEEL.look {
+    const look = FEEL.look as Record<string, number>;
+    for (const [key, raw] of Object.entries(patch)) {
+      if (!(key in look)) throw new Error(`setCritterLook: clave desconocida ${key} (hay: ${Object.keys(look).join(', ')})`);
+      const value = typeof raw === 'boolean' ? Number(raw) : raw;
+      if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`setCritterLook: ${key} no es un número`);
+      look[key] = value;
+    }
+    return { ...FEEL.look };
   }
 }
 

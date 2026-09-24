@@ -44,6 +44,19 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
   `server_outdated` (ver `ONLINE.md` → "Versión de protocolo"). Idea que
   queda para ti, opcional: sondear `GET /health` (`protocol`) al pulsar
   Online, para avisar de la versión nueva antes de elegir bicho.
+- **De PERSONAJES, 2026-09-24 — los bichos llevan contorno de dibujo
+  animado (y paleta nueva).** Por decisión de Rafa, todo `Critter` lleva
+  ya un contorno oscuro (`src/critter-look.ts`, regla en `STYLE_LOCK.md`)
+  y los colores de sus bocetos. Tu `src/slot-thumbnail.ts` renderiza el
+  GLB sin pasar por `Critter`, así que las miniaturas de la sala de espera
+  online (y el fallback de la parrilla y del HUD) salen con los colores
+  nuevos pero SIN contorno. Si quieres igualarlas, basta con:
+  ```ts
+  import { attachOutline } from './critter-look';
+  attachOutline(glb); // tras clonar y posar el GLB, antes de renderizar
+  ```
+  El ancho sale de `FEEL.look` en px, así que en 128×128 queda en 2-5 px.
+  Nada urgente: es coherencia visual.
 
 ## Hecho
 

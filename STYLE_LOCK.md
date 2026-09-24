@@ -30,6 +30,19 @@ Arcade / chibi arena brawler. Toy-like, punchy, instantly readable.
 ## Materials
 
 - `MeshStandardMaterial` with flat color.
+- **Outline (2026-09-24, Rafa: «contorno» over the current shading, no
+  toon).** Every critter wears a dark contour like the HUD icons:
+  - an inverted hull (back faces pushed out along the skinned normal, see
+    `src/critter-look.ts`);
+  - ONE colour for the whole roster, `#1a0820`;
+  - a width relative to the critter's size on screen (`FEEL.look`: ~4.5 %
+    of its height), clamped to 2-5 px so it reads in the arena and never
+    turns into a thick border in the close-ups.
+
+  It hides whenever the critter goes translucent (immunity blink,
+  invisibility, fog fade). The arena fog tints it like it tints the
+  body. It is not a post-process and touches nothing else in the scene.
+  Toon ramps are out of scope for now.
 - Emissive used only for gameplay feedback (ability glow, immunity blink).
 - `transparent: true` on all critter materials (required for immunity blink).
 - No reflections, no environment maps, no normal maps.

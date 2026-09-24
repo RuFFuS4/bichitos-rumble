@@ -224,6 +224,21 @@ export const FEEL = {
   accessibility: {
     motionScale: 1.0,
   } as { motionScale: number },
+
+  // --- Contorno de los bichos (mejora gráfica, 2026-09-24) ---
+  // PRESENTACIÓN: casco invertido alrededor de cada bicho (critter-look.ts,
+  // regla en STYLE_LOCK.md). Rafa: «contorno» sobre el sombreado actual,
+  // sin toon. El ancho va en unidades de MUNDO (~4,5 % del alto de 1,7),
+  // así crece con el tamaño del bicho en pantalla, y se recorta a
+  // [outlineMinPx, outlineMaxPx] px CSS: se lee en la arena y no se vuelve
+  // un marco grueso en los primeros planos. Mutable en vivo (tuner / DevApi).
+  look: {
+    outline: 1,               // 1 = contorno, 0 = sin él (también `?look=plain`)
+    outlineWidth: 0.075,      // u de mundo
+    outlineMinPx: 2,          // px CSS
+    outlineMaxPx: 5,          // px CSS
+    outlineDepthPush: 0.12,   // u: el casco se aparta hacia el fondo (solo en profundidad, sin moverse en pantalla) para no manchar los huecos del propio bicho (brazos de Kermit, patas de Cheeto)
+  } as { outline: number; outlineWidth: number; outlineMinPx: number; outlineMaxPx: number; outlineDepthPush: number },
 } as const;
 
 // ---------------------------------------------------------------------------

@@ -92,10 +92,17 @@ antes de commitear el JSON.
    - [x] Decisión de Rafa (2026-09-24) sobre la postura: «no deben
          correr todos igual». Kowalski erguido porque es un pingüino; los
          otros conservan su inclinación.
-   - [ ] **Contorno** (decisión 5): casco invertido solo en los bichos,
-         detrás de un flag, grosor relativo al tamaño en pantalla.
-         Primero se actualiza `STYLE_LOCK.md`. `slot-thumbnail.ts` es de
-         INTERFAZ (buzón) y `dev-api.ts` necesita permiso.
+   - [x] **Contorno** (decisión 5), hecho el 2026-09-24:
+         - casco invertido solo en los bichos (`src/critter-look.ts`);
+         - un color, `#1a0820`;
+         - ancho relativo al tamaño en pantalla, recortado a 2-5 px;
+         - se oculta cuando el bicho se vuelve translúcido;
+         - regla en `STYLE_LOCK.md`, mandos en `FEEL.look`, más
+           `DevApi.setCritterLook` (permiso de Rafa) y `?look=plain`;
+         - coste con 4 bichos: +15 draw calls y +6 % de triángulos.
+
+         Las miniaturas de la sala de espera online (`slot-thumbnail.ts`,
+         INTERFAZ) salen sin él: aviso en su buzón.
    - [ ] Texturas nuevas de los Tripo: aparcado, Rafa no tiene acceso a
          Tripo ahora mismo.
 3. **Feel pass de Kurama** (heredado de H4; receta en `NEXT_STEPS.md`).

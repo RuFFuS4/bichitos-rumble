@@ -325,7 +325,7 @@ function cylinderDistance(cam: THREE.PerspectiveCamera, height: number, radius: 
 function measureFit(glb: THREE.Object3D, totalSamples: number): boolean {
   let meshes = 0;
   glb.traverse((node) => {
-    if ((node as THREE.Mesh).isMesh && node.visible) meshes++;
+    if ((node as THREE.Mesh).isMesh && node.visible && !node.userData.critterOutline) meshes++;
   });
   if (meshes === 0 || !holder) return false;
   glb.updateWorldMatrix(true, false);

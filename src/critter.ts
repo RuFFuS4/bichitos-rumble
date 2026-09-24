@@ -10,6 +10,7 @@ import { createCritterParts } from './critter-parts';
 import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, type AnimationPersonality } from './critter-animation';
 import { deriveCritterStats } from './pws-stats';
 import { measurePosedBox } from './posed-bounds';
+import { attachOutline, setOutlineVisible, type CritterOutline } from './critter-look';
 
 /**
  * Behaviour tag used ONLY by the /tools.html dev lab to isolate bot
@@ -368,6 +369,11 @@ export class Critter {
    * See `PROCEDURAL_PARTS.md` + `src/critter-parts.ts`.
    */
   parts: ReturnType<typeof import('./critter-parts').createCritterParts> | null = null;
+
+  /** Cartoon outline hulls (critter-look.ts), children of each GLB mesh —
+   *  so hiding or scaling a part (Shelly's shell, Trunk's nose) takes its
+   *  outline along. Null until the GLB attaches. */
+  private outline: CritterOutline | null = null;
 
   /** Height of the GLB in BIND POSE world space, measured once at
    *  attach. Used by the character-select preview to apply a uniform
@@ -761,9 +767,14 @@ export class Critter {
     // actual blink window avoids the sort entirely the rest of the
     // time and costs nothing — the blink path still flips it back to
     // transparent for as long as opacity < 1.
+    // The outline hides whenever the critter goes see-through (dim blink
+    // frame, invisibility, fog fade): a solid contour around a ghost reads
+    // as a hole.
+    let translucent = this.fadeAlpha !== null;
     if (this.immunityTimer > 0) {
       const phase = (Date.now() * 0.001 * FEEL.lives.blinkRate) % 1;
       const visible = phase < 0.5;
+      if (!visible) translucent = true;
       const opacity = visible ? 1.0 : 0.15;
       for (const mat of mats) {
         mat.transparent = !visible;     // opaque on the bright frame, transparent on the dim frame
@@ -786,6 +797,7 @@ export class Critter {
       // very attentive player can spot her if they really look,
       // but at glance the decoy is the only Kurama on screen.
       const ghostAlpha = this.config.name === 'Sihans' ? 0.0 : 0.08;
+      translucent = true;
       for (const mat of mats) {
         mat.transparent = true;
         mat.opacity = ghostAlpha;
@@ -858,6 +870,7 @@ export class Critter {
         mat.depthWrite = false;
       }
     }
+    setOutlineVisible(this.outline, !translucent);
   }
 
   // ---------------------------------------------------------------------------
@@ -1039,6 +1052,10 @@ export class Critter {
       }
     });
     this.parts = createCritterParts(group, skeleton);
+
+    // Cartoon outline (critter-look.ts). Last on purpose: the height fit
+    // and the parts index above must not see the hulls.
+    this.outline = attachOutline(group);
 
     console.debug(
       '[Critter] GLB attached:',
