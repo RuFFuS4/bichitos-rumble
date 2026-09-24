@@ -78,11 +78,20 @@ antes de commitear el JSON.
    - [ ] **Pulido de clips**: bucles que saltan (Victory de Sihans 143°,
          Kurama, Sergei; Fall de Kurama, Kermit, Cheeto), Victory largos,
          el segundo «Fall» de Sebastian.
-   - [ ] **Paleta** (decisión 3, solo color): Sergei de negro a carbón,
-         Kowalski de negro a azul marino con la cresta amarilla, Kermit de
-         oliva a lima con la barriga amarilla, Shelly con el caparazón
-         verde y beige, y blancos de los Tripo a ~0,85. Referencia:
-         `.tmp/graficos/visual/bocetos/01.jpg`.
+   - [x] **Paleta** (decisión 3, solo color), hecha el 2026-09-24:
+         - Sergei: carbón y beige.
+         - Kowalski: marino, crema, cresta amarilla, pico y pies naranjas.
+         - Kermit: lima y barriga amarilla.
+         - Shelly: caparazón verde y placas beige.
+         - Cheeto: naranja vivo y crema.
+         - Sihans: marrón topo.
+
+         Los colores de destino son las muestras de la hoja de bocetos,
+         apuntadas en `STYLE_LOCK.md`. Herramienta:
+         `scripts/critter-grade.mjs`.
+   - [x] Decisión de Rafa (2026-09-24) sobre la postura: «no deben
+         correr todos igual». Kowalski erguido porque es un pingüino; los
+         otros conservan su inclinación.
    - [ ] **Contorno** (decisión 5): casco invertido solo en los bichos,
          detrás de un flag, grosor relativo al tamaño en pantalla.
          Primero se actualiza `STYLE_LOCK.md`. `slot-thumbnail.ts` es de

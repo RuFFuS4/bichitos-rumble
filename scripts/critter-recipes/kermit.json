@@ -17,7 +17,60 @@
   },
   "textures": {
     "why": "JPEG 512² de Tripo a WebP.",
-    "webp": 82
+    "webp": 82,
+    "paletteWhy": "Paleta (Rafa, 2026-09-23): verde oliva → verde lima y barriga → amarillo pálido, como en su boceto (#99bb28 / #fcc736); las verrugas se conservan.",
+    "grade": [
+      {
+        "name": "verde oliva → verde lima",
+        "select": {
+          "h": [
+            60,
+            110
+          ],
+          "s": [
+            0.25,
+            1
+          ],
+          "l": [
+            0.08,
+            0.45
+          ]
+        },
+        "to": "#8cb82a"
+      },
+      {
+        "name": "barriga verdosa → amarillo pálido",
+        "select": {
+          "h": [
+            45,
+            70
+          ],
+          "s": [
+            0.15,
+            0.6
+          ],
+          "l": [
+            0.45,
+            0.75
+          ]
+        },
+        "to": "#ecd978"
+      },
+      {
+        "name": "blanco de los ojos → blanco",
+        "select": {
+          "s": [
+            0,
+            0.15
+          ],
+          "l": [
+            0.65,
+            1
+          ]
+        },
+        "to": "#eeede6"
+      }
+    ]
   },
   "clips": [
     {
@@ -54,5 +107,5 @@
       "nodes": "all"
     }
   ],
-  "output": "0289d307"
+  "output": "3b315de5"
 }

@@ -6,7 +6,46 @@
   "repack": true,
   "textures": {
     "why": "JPEG 512² de Tripo a WebP; a 90 porque sus rayas a 82 caen a 33 dB de PSNR (estudio F2).",
-    "webp": 90
+    "webp": 90,
+    "paletteWhy": "Paleta (Rafa, 2026-09-23): naranja apagado → naranja vivo y crema más claro, como en su boceto (#f47f1d / #f0d6a1).",
+    "grade": [
+      {
+        "name": "naranja apagado → naranja vivo",
+        "select": {
+          "h": [
+            15,
+            40
+          ],
+          "s": [
+            0.3,
+            1
+          ],
+          "l": [
+            0.3,
+            0.58
+          ]
+        },
+        "to": "#e0802a"
+      },
+      {
+        "name": "crema → crema claro",
+        "select": {
+          "h": [
+            15,
+            45
+          ],
+          "s": [
+            0,
+            0.35
+          ],
+          "l": [
+            0.56,
+            0.9
+          ]
+        },
+        "to": "#eddcbf"
+      }
+    ]
   },
   "clips": [
     {
@@ -42,5 +81,5 @@
       "nodes": "all"
     }
   ],
-  "output": "c9bbd243"
+  "output": "cff892ce"
 }

@@ -50,6 +50,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { dedup, simplify, textureCompress, weld } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
+import { gradeImage } from './critter-grade.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const args = process.argv.slice(2);
@@ -318,15 +319,27 @@ function snapUVs(prim, texels) {
 }
 
 /**
- * `textures`: { dedup?, webp? }.
+ * `textures`: { dedup?, grade?, webp? }.
  * - dedup: one image for textures with identical bytes (the Meshy critters
  *   ship the base colour a second time as the emissive map).
+ * - grade: colour-family ops on the base-colour textures (see
+ *   scripts/critter-grade.mjs) — the palette pass towards the roster sketch.
+ *   A graded texture always ships as WebP (quality `webp`, else 90).
  * - webp: re-encode as WebP at this quality (the Tripo 512² JPEGs).
  */
-async function textures(doc, { dedup: shareIdentical = false, webp }) {
+async function textures(doc, { dedup: shareIdentical = false, grade, webp }) {
   const before = doc.getRoot().listTextures().reduce((n, t) => n + (t.getImage()?.byteLength ?? 0), 0);
   if (shareIdentical) await doc.transform(dedup({ propertyTypes: [PropertyType.TEXTURE] }));
-  if (webp) await doc.transform(textureCompress({ encoder: sharp, targetFormat: 'webp', quality: webp }));
+  if (grade?.length) {
+    const graded = new Set(doc.getRoot().listMaterials().map((m) => m.getBaseColorTexture()).filter(Boolean));
+    for (const tex of graded) {
+      const { png, report } = await gradeImage(tex.getImage(), grade);
+      tex.setImage(png).setMimeType('image/png');
+      for (const line of report) console.log(`  paleta: ${line}`);
+    }
+  }
+  const quality = webp ?? (grade?.length ? 90 : null);
+  if (quality) await doc.transform(textureCompress({ encoder: sharp, targetFormat: 'webp', quality }));
   const after = doc.getRoot().listTextures().reduce((n, t) => n + (t.getImage()?.byteLength ?? 0), 0);
   console.log(`  texturas: ${(before / 1024).toFixed(0)} → ${(after / 1024).toFixed(0)} KB`);
 }

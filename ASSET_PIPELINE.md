@@ -231,9 +231,23 @@ limit; `soft` cushions the ends). The Blender script refuses a knee that
 flips (>90° between frames) and warns from 25°; the real check is in
 game: `critter-motion.mjs` (foot slip ≈ 1) and the visor A/B.
 
-Recipes today — every critter but Sihans; for those, **run the recipe,
-never `compress-critter-glbs.mjs`**, which would repack the game GLB
-outside it:
+A third optional part of `textures`, `grade`, is the palette pass
+(2026-09-24, STYLE_LOCK.md §Roster Visual Reference). It is a list of
+colour-family ops (`select` hue/sat/light, `to` a colour, optional
+`contrast`) that move each family towards the sketch while keeping the
+texture's own detail: `scripts/critter-grade.mjs`. A graded texture
+always ships as WebP.
+
+Preview a grade on the current GLB, without Blender:
+
+```bash
+node scripts/critter-grade.mjs <id> --ops=try.json --out=preview.glb
+```
+
+Recipes today — all nine critters; **run the recipe, never
+`compress-critter-glbs.mjs`**, which would repack the game GLB outside
+it. The palette went to kowalski, sergei, kermit, shelly, cheeto and
+sihans; sihans' recipe is the palette only.
 
 | Critter | Recipe |
 |---|---|

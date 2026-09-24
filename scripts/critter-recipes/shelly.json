@@ -6,7 +6,64 @@
   "repack": true,
   "textures": {
     "why": "JPEG 512² de Tripo a WebP.",
-    "webp": 82
+    "webp": 82,
+    "paletteWhy": "Paleta (Rafa, 2026-09-23): caparazón marrón → verde con placas beige y piel verde apagado, como en su boceto (#68784c / #bca27d).",
+    "grade": [
+      {
+        "name": "piel verde oliva → verde apagado",
+        "select": {
+          "h": [
+            55,
+            85
+          ],
+          "s": [
+            0.35,
+            1
+          ],
+          "l": [
+            0.12,
+            0.45
+          ]
+        },
+        "to": "#6a7d46"
+      },
+      {
+        "name": "caparazón marrón → verde",
+        "select": {
+          "h": [
+            18,
+            34
+          ],
+          "s": [
+            0.55,
+            1
+          ],
+          "l": [
+            0.1,
+            0.35
+          ]
+        },
+        "to": "#56713a"
+      },
+      {
+        "name": "placas y tripa → beige",
+        "select": {
+          "h": [
+            30,
+            48
+          ],
+          "s": [
+            0.15,
+            0.55
+          ],
+          "l": [
+            0.35,
+            0.7
+          ]
+        },
+        "to": "#bba079"
+      }
+    ]
   },
   "clips": [
     {
@@ -42,5 +99,5 @@
       "nodes": "all"
     }
   ],
-  "output": "cae13d1e"
+  "output": "d7429e49"
 }

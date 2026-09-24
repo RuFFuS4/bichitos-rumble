@@ -128,6 +128,12 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   pone `?v=<hash>` a cada GLB en `roster.ts` para que la caché nunca
   empareje JS nuevo con GLB viejo. Detalle: `ASSET_PIPELINE.md` §«Recetas
   post-import».
+- **Recolorear un bicho por familias de color** (paleta, 2026-09-24):
+  `node scripts/critter-grade.mjs <id> [--ops=ops.json] [--out=x.glb]
+  [--png=textura.png]` aplica a la textura actual las ops de color
+  (selección por tono/saturación/luz, destino en color) sin Blender, e
+  informa de cuánto ocupa cada familia y a qué color va. Las ops
+  definitivas viven en `textures.grade` de la receta.
   El gusto (ritmo por bicho, techos) vive en `FEEL.locomotion` y
   `FEEL.runCadence`: sliders solos en «Game feel» del match lab y
   `feel-patch` (`"runCadence.kermit": 1.8`).

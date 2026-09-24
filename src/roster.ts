@@ -104,7 +104,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'sergei',
     displayName: 'Sergei',
-    glbPath: './models/critters/sergei.glb?v=8d2e9c41',
+    glbPath: './models/critters/sergei.glb?v=fefa2506',
     baseColor: 0xb5651d,
     // Meshy AI regen landed 2026-04-24, full 8-clip kit (Gorilla Rush /
     // Shockwave / Frenzy / Idle / Run / Victory / Defeat / Fall).
@@ -122,7 +122,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'shelly',
     displayName: 'Shelly',
-    glbPath: './models/critters/shelly.glb?v=cae13d1e',
+    glbPath: './models/critters/shelly.glb?v=d7429e49',
     baseColor: 0x2d8659,
     // Tank turtle (mass 1.5) — second largest silhouette after Trunk.
     // New Tripo Animate rig aligns her forward axis with the others.
@@ -141,7 +141,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'kermit',
     displayName: 'Kermit',
-    glbPath: './models/critters/kermit.glb?v=0289d307',
+    glbPath: './models/critters/kermit.glb?v=3b315de5',
     baseColor: 0x9c3cee,
     // Controller frog (mass 1.0) — medium size. Tripo mesh origin at feet.
     scale: 2.6, rotation: -Math.PI / 2, offset: [0, 0, 0],
@@ -163,7 +163,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'sihans',
     displayName: 'Sihans',
-    glbPath: './models/critters/sihans.glb?v=e7d8187c',
+    glbPath: './models/critters/sihans.glb?v=bd5d99e3',
     baseColor: 0x8b6914,
     // Trapper mole (mass 1.15). Meshy AI mesh imported 2026-04-24.
     // Source bounds Y [0, 1.044], feet-at-origin (Mixamo convention).
@@ -183,7 +183,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'kowalski',
     displayName: 'Kowalski',
-    glbPath: './models/critters/kowalski.glb?v=8d1b4f69',
+    glbPath: './models/critters/kowalski.glb?v=c60c1f6b',
     baseColor: 0x1a1a3e,
     // Mage penguin (mass 0.9) — compact. Tripo mesh origin at feet.
     scale: 2.5, rotation: -Math.PI / 2, offset: [0, 0, 0],
@@ -200,7 +200,7 @@ const ROSTER: RosterEntry[] = [
   {
     id: 'cheeto',
     displayName: 'Cheeto',
-    glbPath: './models/critters/cheeto.glb?v=c9bbd243',
+    glbPath: './models/critters/cheeto.glb?v=cff892ce',
     baseColor: 0xffaa22,
     // Assassin tiger (mass 0.7) — smallest + sleek. Tripo mesh origin at feet.
     scale: 2.3, rotation: -Math.PI / 2, offset: [0, 0, 0],

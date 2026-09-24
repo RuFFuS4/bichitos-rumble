@@ -1,5 +1,31 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-24 — [PERSONAJES] Mejora gráfica: la paleta de los bocetos
+
+Decisión 3 de Rafa: acercar los colores a sus bocetos sin tocar las
+formas.
+
+Las texturas de Tripo son cientos de islas UV, así que no se puede pintar
+por zonas. `scripts/critter-grade.mjs` selecciona familias de color (por
+tono, saturación y luz, con bordes suaves) y desplaza su media al color
+objetivo en CIELAB. El detalle se conserva, incluidas las verrugas de
+Kermit.
+
+Destinos: las muestras de paleta de la hoja de bocetos, ahora en
+`STYLE_LOCK.md`, afinadas renderizando cada bicho junto a su boceto.
+
+- **Sergei**: negro → carbón, y piel melocotón → beige grisáceo.
+- **Kowalski**: negro → marino, gris → crema, cresta caqui → amarilla, y
+  pico y pies → naranja.
+- **Kermit**: oliva → lima, y barriga → amarillo pálido.
+- **Shelly**: caparazón marrón → verde, con piel y placas del boceto.
+- **Cheeto**: naranja apagado → vivo.
+- **Sihans**: rojizo → marrón topo, con receta nueva.
+
+Kurama y Sebastian ya estaban en su paleta, y Trunk no tiene boceto. Todo
+va por receta (`textures.grade`), así que es reproducible. La parrilla de
+selección usa renders en vivo y coge los colores sola.
+
 ## 2026-09-23 — [PERSONAJES] Mejora gráfica: Run más vivos para Cheeto, Kermit, Shelly y Trunk
 
 Decisión 7 de Rafa (pasitos más rápidos). Los cuatro Tripo compartían
