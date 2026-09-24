@@ -87,6 +87,10 @@ interface InternalPlayerData {
   anticipationTimer: number;
   headbuttTimer: number;
   hasInput: boolean;
+  /** Direction the input pushed this tick (after the confusion flip). The
+   *  facing follows the velocity only while it goes this way. */
+  moveX: number;
+  moveZ: number;
   // Online-belt identity (only set for human players who registered a
   // nickname via the REST API and passed verifyPlayer on join). Null for
   // bots and for humans who skipped the nickname modal.
@@ -137,6 +141,7 @@ function newInternal(): InternalPlayerData {
     inputMoveX: 0, inputMoveZ: 0,
     inputHeadbutt: false, inputAbility1: false, inputAbility2: false, inputUltimate: false,
     respawnTimer: 0, anticipationTimer: 0, headbuttTimer: 0, hasInput: false,
+    moveX: 0, moveZ: 0,
     onlinePlayerId: null,
     killsVsHumansThisMatch: 0,
   };
@@ -971,6 +976,8 @@ export class BrawlRoom extends Room {
       // here makes sure bots also experience the inversion since
       // bot input is computed independently of cliente.
       if (p.confusedTimer > 0) { mx = -mx; mz = -mz; }
+      data.moveX = mx;
+      data.moveZ = mz;
 
       // 2026-04-30 final-L — slippery acceleration penalty.
       const slipperyHere = isOnSlipperyZone(p, this.activeZones);
@@ -1505,7 +1512,10 @@ export class BrawlRoom extends Room {
         p.vz = (p.vz / speed) * SIM.movement.maxSpeed;
       }
 
-      if (Math.abs(p.vx) > 0.1 || Math.abs(p.vz) > 0.1) {
+      // Facing follows the player's OWN movement: a shove never turns it
+      // round (mirror of Critter.update, FEELING §7.10).
+      if ((Math.abs(p.vx) > 0.1 || Math.abs(p.vz) > 0.1) &&
+          data.hasInput && p.vx * data.moveX + p.vz * data.moveZ > 0) {
         p.rotationY = Math.atan2(p.vx, p.vz);
       }
     }

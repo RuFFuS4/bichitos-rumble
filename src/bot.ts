@@ -83,6 +83,8 @@ export function updateBot(
   }
 
   bot.hasInput = true;
+  bot.moveX = 0;
+  bot.moveZ = 0;
   const dx = nearest.x - bot.x;
   const dz = nearest.z - bot.z;
   const dist = Math.sqrt(dx * dx + dz * dz);
@@ -145,6 +147,8 @@ export function updateBot(
     if (bot.confusedTimer > 0) { nx = -nx; nz = -nz; }
 
     const accel = bot.effectiveSpeed * FEEL.movement.accelerationScale * FEEL.bots.moveAccelFactor;
+    bot.moveX = nx;
+    bot.moveZ = nz;
     bot.moveAccel = Math.hypot(nx, nz) * accel;
     bot.pace = FEEL.bots.moveAccelFactor;
     bot.vx += nx * accel * dt;

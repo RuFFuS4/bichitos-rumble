@@ -191,7 +191,8 @@ Mismo principio (capa visual, golden quieto), en este orden:
    inclinación hacia dentro del giro y, en la media vuelta, un derrape.
 2. **Acentos de arranque y frenada**: estirón y pose adelantada al
    acelerar, aplastón y pose hacia atrás al frenar (sale de la derivada de
-   la velocidad, que ya tenemos).
+   la velocidad, que ya tenemos). **Hecho el 2026-09-24 (§7.11)**, sin el
+   estirón (resbalaba el pie para un cambio que la cámara apenas ve).
 3. **Reacciones visibles**: llevar el tilt del golpe, la recuperación del
    cabezazo y la anticipación al GLB. **Hecho el 2026-09-24 (§7.10).** La
    anticipación y la recuperación ya se veían en el GLB (cabeceo y
@@ -523,12 +524,21 @@ Qué cambia (todo en la capa visual; golden 3/3 sin regenerar):
   así que el aspecto no cambia. Los brillos de habilidad y el parpadeo
   de inmunidad quedan como tinte plano, igual que en los bichos de Tripo.
 
-**Pendiente, para Rafa (física, zona hard-stop).** El giro de 180° lo
-causa la orientación de juego, que sigue a cualquier velocidad, también
-al empujón ajeno. El atacante tiene el mismo problema: su retroceso le
-hace dar la espalda a quien acaba de golpear. Lo limpio sería que la
-orientación siguiera la intención del bicho (su input o su IA) y no los
-empujes externos. Eso toca la física, el espejo del sim y el golden.
+**Resuelto en la física (2026-09-24).** El giro de 180° lo causaba la
+orientación de juego, que seguía a cualquier velocidad, también a un
+empujón ajeno. El atacante tenía el mismo problema: su retroceso le hacía
+dar la espalda a quien acababa de golpear. Rafa: «no sé si es correcto…
+toca toda la física que necesites». La decisión fue que un empujón no te
+gira.
+
+- La orientación sigue a la velocidad solo mientras esta va hacia donde
+  empuja el propio bicho (`vx·moveX + vz·moveZ > 0`, con la dirección que
+  escriben `player.ts` y `bot.ts`).
+- Sin input conserva la orientación.
+- Espejo en `BrawlRoom` (paso de integración), con `data.moveX/Z`.
+- Consecuencia de juego: el golpeado que contraataca lanza el cabezazo
+  hacia quien le pegó, no hacia el lado contrario.
+- Golden regenerado. Balance comparado con las mismas semillas en §7.11.
 
 **Online.** Al que recibe un cabezazo en online no se le aplica ningún
 feedback de impacto, porque el servidor no emite un evento de golpe
@@ -537,3 +547,91 @@ feedback de impacto, porque el servidor no emite un evento de golpe
 Vídeos: `.tmp/graficos/_informe/entrega/reaccion-golpe.mp4` (tiempo real)
 y `reaccion-golpe-lento.mp4` (×4). Muestran a Kowalski, Sebastian y
 Sergei.
+
+### 7.11 Arrancar y frenar (corte 2, 2026-09-24, rama `claude/feature/personajes-arranque-frenada`)
+
+Se mide con `critter-motion`, que ahora sigue los vértices de los pies
+(DEV_TOOLS). Salieron tres causas de que el pie resbalara:
+
+1. **El fundido entre clips saltaba a mitad de camino.** Tras cada
+   `crossFadeTo`, un «apaño» reponía el peso del clip entrante a 1, y eso
+   cancelaba su fundido. En el primer fotograma los dos clips pesaban lo
+   mismo y la pose saltaba: hasta 25 cm de pie en Sergei, Kurama y Sihans
+   (ERROR_LOG).
+2. **Al frenar, el clip Run se quedaba con su último ritmo** durante el
+   fundido a Idle. Los pies seguían barriendo con el cuerpo ya parado:
+   ~8 cm en Kowalski, 19 cm en Sergei.
+3. **La velocidad de suelo se suavizaba también offline.** Ahí la
+   posición es exacta, y el suavizado de 60 ms solo retrasaba las patas.
+
+Qué cambia (capa visual; la física no se toca en este apartado):
+
+- **El animador lleva su propio fundido.** Cada cambio parte de los pesos
+  que hay en pantalla y la suma se mantiene en 1. Un clip que ha terminado
+  y está en pausa cuenta como visible.
+- **Idle y Run son una sola pose.** Se mezclan por la velocidad de avance
+  del modelo: pleno Run a `runBlendSpeed` = 1,5 u/s, con smoothstep, y la
+  mezcla no cambia más rápido que `runBlendTime` = 0,1 s. Así una
+  estocada, un dash o un empujón no voltean la pose en un fotograma.
+- **Las patas frenan con el suelo hasta pararse.** El suelo mínimo del
+  ritmo (`runRateMin`) solo vale mientras el Run llena la pose.
+- **Se cuenta solo la velocidad hacia donde mira el modelo.** Salir
+  despedido hacia atrás no es correr, y ya no corre en el sitio.
+- **Suavizado solo online.** El de la velocidad de suelo solo actúa en
+  online (`groundSpeedSmoothing`).
+- **Acentos** (`FEEL.locomotion.accent*`). Salen de la aceleración de
+  avance en «velocidades punta por segundo», así que pesan igual en
+  Shelly que en Kurama. Al arrancar, +8° de inclinación de golpe; al
+  frenar, −13° y un aplastón del 12 %. Van encima de la inclinación
+  suavizada, sin suavizarse otra vez: con el suavizado de la carrera, la
+  frenada era una caída lenta de 7°. Se callan durante un cabezazo, una
+  carga o el empujón, y entran y salen en 0,08 s.
+
+**Medido**, ocho bichos (Sebastian aparte: su carrera de cangrejo no
+apoya los huesos de pie):
+
+| | Antes | Después |
+|---|---|---|
+| Pie en el suelo, 6 primeros fotogramas del arranque | 156 cm | 117 cm |
+| Pie en el suelo, 12 fotogramas de frenada | 277 cm | 126 cm |
+| Lo que aún se mueve con el cuerpo parado | 82 cm | 42 cm |
+| Mayor salto de pose en un fotograma | 25,7 cm | 10,1 cm |
+| Media vuelta | 9 fotogramas | 9 fotogramas |
+
+Con los rigs de Meshy el arranque mejora poco. Sus poses de Idle y Run
+apoyan los pies muy distinto, y sin IK en tiempo real el cambio de pose
+mueve el pie igual, de golpe o repartido. Lo siguiente sería elegir la
+fase del Run que mejor case con el Idle al arrancar.
+
+**Saltos de pose al lanzar habilidades.** Es el mayor movimiento de un
+vértice del cuerpo en un fotograma, en el espacio del bicho, medido con
+la misma captura en el código viejo y en el nuevo. Al entrar o salir del
+clip de habilidad:
+
+| Habilidad | Antes | Después |
+|---|---|---|
+| Trunk K | 98 cm | 28 cm |
+| Kermit J | 164 cm | 55 cm, repartidos en el fundido |
+| Sebastian K | 181 cm | 45 cm |
+| Kowalski K | 92 cm | 24 cm |
+| Sihans J | 89 cm | 23 cm |
+
+El paso de la carga a la estocada del cabezazo (~56 cm) ya existía y es
+deliberado. El Steel Shell de Shelly da un salto de 97 cm que no es de
+clip; queda para el repaso de habilidades.
+
+**Balance de la orientación nueva** (§7.10). Tanda de bots con las
+mismas semillas antes y después, 32-48 partidas por bicho:
+
+- Las caídas por minuto bajan un 6 % (2,39 → 2,25).
+- La dispersión del «eliminado» entre bichos baja de 19,7 a 17,9
+  puntos.
+- Sebastian, el más débil, pasa de eliminado en el 91 % a en el 72 %, y
+  de 21,9 a 27,4 cabezazos por minuto.
+
+No hay distorsión. Cada cifra suelta tiene mucho ruido con estas
+muestras.
+
+Vídeos: `.tmp/graficos/_informe/entrega/arranque-frenada.mp4` y
+`arranque-frenada-lento.mp4` (×4), antes y después de Kowalski, Sergei
+y Cheeto.

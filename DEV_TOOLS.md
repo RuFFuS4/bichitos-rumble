@@ -152,6 +152,38 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   en `window.__feel`, el `FEEL` que usa el juego (lo expone
   `src/tools/main.ts`); un `import('/src/gamefeel.ts')` desde la página
   NO sirve tras una recarga en caliente (ERROR_LOG 2026-09-22).
+  **Pies de verdad** (2026-09-24): sigue los vértices de los huesos de pie
+  y dedo (los dos esquemas de rig, Tripo `L_Foot` y Meshy `LeftFoot` +
+  `LeftToeBase`) y suma lo que resbala el pie apoyado. En cada fotograma
+  cuenta el pie más quieto de los que tocan el suelo. Columnas:
+  `startSlideCm` y `stopSlideCm` (arrancar y frenar), `stoppedSlideCm`
+  (lo que aún se mueve con el cuerpo ya parado; debería ser ~0) y `popCm`
+  (el mayor salto de pose en un fotograma). Vuelca además
+  `<label>-<bicho>-frames.json` fotograma a fotograma. La carrera tiene
+  fases de vuelo, así que arrancar y frenar nunca dan 0: se comparan
+  antes contra después. En Sebastian no es fiable, porque su carrera de
+  cangrejo no apoya los huesos de pie.
+- **Cada habilidad, filmada y medida** (2026-09-24): con el dev server
+  vivo, `node scripts/ability-shots.mjs [--critters=A,B] [--slots=J,K,L]
+  [--video] [--json]`.
+  - **Montaje:** pone al bicho mirando a +x frente a tres muñecos quietos
+    (cerca a 1,8 u, lejos a 4,2 u y uno a un lado), lanza la habilidad a
+    paso 1/60 y deja una hoja de fotogramas por habilidad
+    (`<bicho>-<slot>.png`, cada viñeta con los pasos desde que se pulsó).
+  - **Datos** (fila en `ability-shots.json`): ventana de carga y activa,
+    cuánto se desplaza el bicho y, por muñeco, fotograma del golpe,
+    empujón máximo con su dirección, distancia, si cae y qué estados
+    recibe (stun, slow, confused…).
+  - La L de Sebastian, que es de mantener, se mantiene `--hold` pasos.
+  - Sirve para revisar habilidades con pruebas.
+- **Servidor «foto fija» para capturas largas** (2026-09-24):
+  `npx vite --config scripts/vite.snapshot.config.mjs --port 5182
+  --strictPort` levanta un segundo servidor sin vigilancia de ficheros ni
+  HMR, con su propia caché de dependencias. Sirve el código tal como
+  estaba al cargar la página, así que se puede editar `src` en el
+  servidor normal mientras una tanda o una grabación de media hora corre
+  contra este. Es también un «antes» gratis para comparar. Para que
+  coja código nuevo, se reinicia.
 - **Batch runner headless** (afilado slice G — LA herramienta
   Claude-first): con el dev server vivo,
   `npm run batch -- --matches=20 --seed=1 --player=Shelly --bots=Trunk,Sergei,Kurama --speed=8`

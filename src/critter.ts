@@ -7,7 +7,7 @@ import { getRosterEntry, type RosterEntry } from './roster';
 import { loadModelWithAnimations } from './model-loader';
 import { SkeletalAnimator, type SkeletalState } from './critter-skeletal';
 import { createCritterParts } from './critter-parts';
-import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, type AnimationPersonality } from './critter-animation';
+import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, runShare, type AnimationPersonality } from './critter-animation';
 import { deriveCritterStats } from './pws-stats';
 import { measurePosedBox } from './posed-bounds';
 import { attachOutline, normalizeCritterMaterials, setOutlineVisible, type CritterOutline } from './critter-look';
@@ -186,16 +186,27 @@ export class Critter {
    *  player.ts / bot.ts. The dead zone uses it to tell a real push from
    *  stick drift or a rooted critter (see update()). */
   moveAccel = 0;
+  /** Direction the controller pushed this frame (any length; 0,0 = none)
+   *  — written by player.ts / bot.ts. The facing follows the velocity only
+   *  while it goes this way (see update()). */
+  moveX = 0;
+  moveZ = 0;
   /** Fraction of a player's acceleration this critter's controller uses:
    *  1 for a player, FEEL.bots.moveAccelFactor for an offline bot
    *  (written by bot.ts). Presentation only — the run pose normalises by
    *  the critter's REAL top speed, and a bot's is lower. */
   pace = 1;
-  /** Ground speed actually covered (u/s), smoothed — what the legs should
-   *  match. Measured from position deltas, so it is right offline (where
-   *  the position moves BEFORE friction, ×1.155 the stored |v| at 60 Hz)
-   *  and online (where the position arrives in server patches). */
+  /** Ground speed actually covered (u/s) — what the legs should match.
+   *  Measured from position deltas, so it is right offline (where the
+   *  position moves BEFORE friction, ×1.155 the stored |v| at 60 Hz) and
+   *  online (where the position arrives in server patches, and is smoothed
+   *  to absorb their jumps). */
   groundSpeed = 0;
+  /** Ground velocity (u/s) behind `groundSpeed`. */
+  groundVX = 0;
+  groundVZ = 0;
+  /** Run share of the locomotion pose (0 idle … 1 run), eased. */
+  private locoShare = 0;
   private groundX = NaN;
   private groundZ = NaN;
   /** Visual-only pivot between `mesh` (gameplay facing) and `glbMesh`.
@@ -637,8 +648,14 @@ export class Critter {
       this.vz = (this.vz / speed) * FEEL.movement.maxSpeed;
     }
 
-    // Face direction of movement
-    if (Math.abs(this.vx) > 0.1 || Math.abs(this.vz) > 0.1) {
+    // Face the way the critter is moving ITSELF: the velocity, while it
+    // goes where the controller pushes. A shove (knockback, the recoil of
+    // its own headbutt, a pull) never turns it round — it used to spin
+    // 180° in mid-flight, turn its back on whoever hit it and fire its next
+    // headbutt the wrong way (FEELING §7.10). Coasting keeps the facing.
+    // Mirror: BrawlRoom's integrate step.
+    if ((Math.abs(this.vx) > 0.1 || Math.abs(this.vz) > 0.1) &&
+        this.hasInput && this.vx * this.moveX + this.vz * this.moveZ > 0) {
       this.mesh.rotation.y = Math.atan2(this.vx, this.vz);
     }
 
@@ -1143,11 +1160,20 @@ export class Critter {
       const vMag = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
       const moving = vMag > FEEL.movement.velocityDeadZone * 2;
       this.skeletal.play(moving ? 'run' : 'idle');
-      // The legs follow the ground actually covered (visual only — see
-      // runPlaybackRate). Without a measured gait the authored rate stays.
-      const rate = moving ? runPlaybackRate(this, this.groundSpeed) : null;
-      if (rate !== null) this.skeletal.setCurrentTimeScale('run', rate);
     }
+    // Locomotion pose, every frame (also while a heavy clip fades in or
+    // out): the run share and the legs' rate follow the ground covered
+    // forwards, so the feet stay planted as the critter speeds up, brakes
+    // or gets shoved. The share moves no faster than runBlendTime (a burst
+    // of speed would flip the pose in one frame) and holds through the
+    // headbutt pose (the lunge is a strike, not a run). Visual only — see
+    // runShare / runPlaybackRate.
+    const forward = Math.max(0, this.forwardGroundSpeed());
+    if (!inHeadbuttPose) {
+      const maxStep = dt / FEEL.locomotion.runBlendTime;
+      this.locoShare += Math.max(-maxStep, Math.min(maxStep, runShare(forward) - this.locoShare));
+    }
+    this.skeletal.setLocomotion(this.locoShare, runPlaybackRate(this, forward));
 
     this.skeletal.update(dt);
   }
@@ -1279,6 +1305,9 @@ export class Critter {
    *  sprint in place or spin on the spot when it reappears. */
   private resetVisualMotion(): void {
     this.groundSpeed = 0;
+    this.groundVX = 0;
+    this.groundVZ = 0;
+    this.locoShare = 0;
     this.groundX = NaN;
     this.groundZ = NaN;
     this.visualYawLag = 0;
@@ -1288,20 +1317,34 @@ export class Critter {
     if (this.visualPivot) this.visualPivot.rotation.y = 0;
   }
 
-  /** Smoothed ground speed from the position delta of this frame. Jumps
-   *  faster than any run (respawn, blink, a late network patch) are not
-   *  running and are skipped. Visual only. */
+  /** Ground velocity from the position delta of this frame. Jumps faster
+   *  than any run (respawn, blink, a late network patch) are not running
+   *  and are skipped. Smoothed online only: there the position arrives in
+   *  server patches; offline it is exact, and smoothing it only made the
+   *  legs lag the body — the foot slid ~8 cm at every stop (FEELING §7.11).
+   *  Visual only. */
   private trackGroundSpeed(dt: number): void {
     if (dt <= 0) return;
     if (Number.isFinite(this.groundX)) {
-      const inst = Math.hypot(this.x - this.groundX, this.z - this.groundZ) / dt;
-      if (inst <= FEEL.movement.maxSpeed * 1.5) {
-        this.groundSpeed += (inst - this.groundSpeed) *
-          Math.min(1, dt / FEEL.locomotion.groundSpeedSmoothing);
+      const vx = (this.x - this.groundX) / dt;
+      const vz = (this.z - this.groundZ) / dt;
+      if (Math.hypot(vx, vz) <= FEEL.movement.maxSpeed * 1.5) {
+        const k = this.skipPhysics ? Math.min(1, dt / FEEL.locomotion.groundSpeedSmoothing) : 1;
+        this.groundVX += (vx - this.groundVX) * k;
+        this.groundVZ += (vz - this.groundVZ) * k;
+        this.groundSpeed = Math.hypot(this.groundVX, this.groundVZ);
       }
     }
     this.groundX = this.x;
     this.groundZ = this.z;
+  }
+
+  /** Ground speed along the way the MODEL faces (gameplay facing + turn
+   *  lag). What the run pose should show: sliding backwards (a knockback
+   *  while facing the hitter) or sideways is not running. */
+  forwardGroundSpeed(): number {
+    const yaw = this.mesh.rotation.y + (this.visualPivot?.rotation.y ?? 0);
+    return this.groundVX * Math.sin(yaw) + this.groundVZ * Math.cos(yaw);
   }
 
   reset(x: number, z: number): void {

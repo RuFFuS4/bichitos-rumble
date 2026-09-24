@@ -166,11 +166,24 @@ function wrapAngle(a: number): number {
 }
 
 /**
+ * Run share of the locomotion pose at this forward ground speed: 0 when
+ * standing, 1 from `FEEL.locomotion.runBlendSpeed` up, smoothstep in
+ * between. Presentation only.
+ */
+export function runShare(speed: number): number {
+  const t = Math.min(1, Math.max(0, speed / FEEL.locomotion.runBlendSpeed));
+  return t * t * (3 - 2 * t);
+}
+
+/**
  * Playback rate for the Run clip at the critter's current ground speed,
  * or null when there is no measured gait (the caller then keeps the
  * authored rate). `plant` is the rate at which the clip sweeps the feet
  * back exactly as fast as the ground passes under them; the per-critter
- * `FEEL.runCadence` bias and the clamps are taste. Presentation only.
+ * `FEEL.runCadence` bias and the clamps are taste. The floor
+ * (`runRateMin`) only holds while the run fills the pose: as it blends
+ * out towards idle the legs slow down with the ground to a stop, so a
+ * braking foot stays planted instead of sweeping on. Presentation only.
  */
 export function runPlaybackRate(critter: Critter, speed: number): number | null {
   const id = critter.rosterEntry?.id;
@@ -181,7 +194,8 @@ export function runPlaybackRate(critter: Critter, speed: number): number | null 
   const plant = speed / (gait.stride * scale);
   const bias = (FEEL.runCadence as Record<string, number>)[id] ?? 1;
   const loco = FEEL.locomotion;
-  return Math.min(Math.max(plant * bias, loco.runRateMin), loco.runCadenceMaxHz * duration);
+  const floor = loco.runRateMin * runShare(speed);
+  return Math.min(Math.max(plant * bias, floor), loco.runCadenceMaxHz * duration);
 }
 
 // Headbutt motion targets — applied to glbMesh.rotation.x / scale.y / position.y
@@ -192,6 +206,40 @@ const HEADBUTT_LUNGE_PITCH   = +0.38;  // forward pitch during lunge (rad)
 const HEADBUTT_ANTICIP_SQUASH = 0.86;  // vertical squash during wind-up
 const HEADBUTT_LUNGE_STRETCH  = 1.08;  // vertical stretch during lunge
 const HEADBUTT_LUNGE_FORWARD  = 0.14;  // small forward Y drop + Z offset on lunge
+
+/** Per critter, visual state only: the smoothed forward acceleration, and
+ *  the smoothed lean the accents ride on (so they keep their snap instead
+ *  of being eased by the slow run-lean lerp). */
+const accentState = new WeakMap<Critter, { prevForward: number; accel: number; pitch: number; start: number; stop: number }>();
+
+/**
+ * Start / stop accents, 0..1 each: how hard the MODEL is speeding up or
+ * braking along the way it faces, in top speeds per second, against
+ * FEEL.locomotion.accent{Start,Stop}Full. Silent while something else owns
+ * the pose (a strike, a charge, the knockback lean) — being shoved is not
+ * braking — and fading in and out over accentFade, so a strike starting
+ * or ending doesn't snap the lean.
+ */
+function tickAccents(critter: Critter, dt: number, quiet: boolean): { start: number; stop: number; state: { pitch: number } } {
+  const loco = FEEL.locomotion;
+  const forward = critter.forwardGroundSpeed();
+  let s = accentState.get(critter);
+  if (!s) {
+    s = { prevForward: forward, accel: 0, pitch: critter.glbMesh?.rotation.x ?? 0, start: 0, stop: 0 };
+    accentState.set(critter, s);
+  }
+  const raw = dt > 0 ? (forward - s.prevForward) / dt : 0;
+  s.prevForward = forward;
+  s.accel += (raw - s.accel) * Math.min(1, dt / loco.accentSmoothing);
+  const silent = quiet || isKnockbackLeaning(critter);
+  const a = s.accel / Math.max(0.1, runTopSpeed(critter));
+  const start = silent ? 0 : Math.min(1, Math.max(0, a / loco.accentStartFull));
+  const stop = silent ? 0 : Math.min(1, Math.max(0, -a / loco.accentStopFull));
+  const maxStep = dt / loco.accentFade;
+  s.start += Math.max(-maxStep, Math.min(maxStep, start - s.start));
+  s.stop += Math.max(-maxStep, Math.min(maxStep, stop - s.stop));
+  return { start: s.start, stop: s.stop, state: s };
+}
 
 // Lerp speeds (per second). Higher = snappier transitions.
 const LEAN_LERP_RUN = 10;
@@ -297,11 +345,20 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
     0;
   critter.glbMesh.position.y = pivotY + yOffset;
 
+  const accent = tickAccents(critter, dt, headbuttActive || chargeActive > 0 || skeletalHeavy);
+  const loco = FEEL.locomotion;
+
   // --- Forward pitch (lean) ---
-  // Priority: headbutt lunge > headbutt anticipation > run lean.
-  // Skipped when a heavy skeletal clip is active — the clip's pose owns
-  // the root rotation and we don't want to fight it with lerp drift.
-  if (!skeletalHeavy) {
+  // Priority: headbutt lunge > headbutt anticipation > run lean. The start
+  // / stop accents (pushed forward to get going, planted back to brake)
+  // ride on top of the eased lean without being eased themselves — the
+  // acceleration they come from is already smoothed, and easing them again
+  // turned a stop into a slow 7° sag. Skipped when a heavy skeletal clip
+  // is active — the clip's pose owns the root rotation and we don't want
+  // to fight it with lerp drift.
+  if (skeletalHeavy) {
+    accent.state.pitch = critter.glbMesh.rotation.x;
+  } else {
     const headbuttPitchTarget =
       HEADBUTT_ANTICIP_PITCH * antBlend + HEADBUTT_LUNGE_PITCH * lungeBlend;
     const runPitchTarget = runIntensity * p.leanRadians;
@@ -311,8 +368,9 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
       1,
       dt * (headbuttActive ? LEAN_LERP_HEADBUTT : LEAN_LERP_RUN),
     );
-    critter.glbMesh.rotation.x +=
-      (pitchTarget - critter.glbMesh.rotation.x) * pitchLerp;
+    accent.state.pitch += (pitchTarget - accent.state.pitch) * pitchLerp;
+    critter.glbMesh.rotation.x = accent.state.pitch +
+      accent.start * loco.accentStartLean - accent.stop * loco.accentStopLean;
 
     // --- Side-to-side sway while running (rotation.z) ---
     // Body roll over the foot that is on the ground: rides the Run clip's
@@ -353,7 +411,9 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
     (critter.rosterOverride?.scale ?? critter.rosterEntry!.scale) *
     critter.glbFitFactor;
 
-  // Z stretch: charge_rush active envelope
+  // Z stretch: charge_rush active envelope. (No start-accent stretch: it
+  // scaled the stride about the origin and slid the planted foot ~2.6 cm
+  // per start for a change the game camera barely shows — FEELING §7.11.)
   const stretchZ = 1 + chargeActive * 0.22 * p.chargeStretchMult;
 
   // Y squash/stretch: ground_pound windUp crouch + headbutt anticip/lunge.
@@ -368,7 +428,7 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
     1 -
     (1 - HEADBUTT_ANTICIP_SQUASH) * antBlend +
     (HEADBUTT_LUNGE_STRETCH - 1) * lungeBlend;
-  const squashY = gpSquash * headbuttY;
+  const squashY = gpSquash * headbuttY * (1 - accent.stop * loco.accentStopSquash);
 
   critter.glbMesh.scale.x = baseScale;
   // scale.y owns the squash/stretch channel — suppressed under heavy

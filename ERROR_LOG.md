@@ -1,5 +1,25 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-24] El fundido entre clips saltaba a mitad de camino en un fotograma
+- **Where**: `src/critter-skeletal.ts` `play()`, desde su primer commit
+  (aed6695, 2026-04-19). Afectaba a producción, en cada cambio de clip.
+- **Symptom**: al arrancar y al parar, el pie daba un salto de hasta
+  ~25 cm en un solo fotograma (Sergei, Kurama y Sihans; medido con los
+  vértices del pie en `critter-motion`). Se veía como un tirón de pose.
+- **Cause**: tras `prevAction.crossFadeTo(action, 0.15)`, un «apaño»
+  reponía `action.setEffectiveWeight(1)` («crossFadeTo sometimes leaves
+  the incoming action's weight scaled»). Pero `setEffectiveWeight`
+  cancela el fundido de entrada. Durante el primer fotograma, los dos
+  clips pesaban 1 y el mezclador los promediaba, así que la pose saltaba
+  a medio camino. Además, `crossFadeTo` arranca el clip saliente con peso
+  1 aunque viniera a medio fundir.
+- **Fix**: el animador lleva su propio fundido. Parte de los pesos que
+  hay en pantalla, la suma se mantiene en 1 y un clip que ha terminado y
+  está en pausa cuenta como visible. Reposo y carrera pasan a ser una
+  sola pose mezclada por velocidad. Detalle en FEELING §7.11. Lección: un
+  «workaround» sin fallo documentado detrás es una sospecha, no una
+  garantía.
+
 ### [2026-09-24] Cuatro bichos destellaban su propio color al recibir un golpe, no blanco
 - **Where**: `src/critter.ts` `attachGlbMesh`, en la normalización de
   materiales. Afectaba a producción desde que llegaron los rigs de Meshy.

@@ -35,6 +35,8 @@ export function updatePlayer(
 
   // Signal whether player is actively steering (kills drift when idle)
   critter.hasInput = mx !== 0 || mz !== 0;
+  critter.moveX = mx;
+  critter.moveZ = mz;
 
   const accel = critter.effectiveSpeed * FEEL.movement.accelerationScale;
   critter.moveAccel = Math.hypot(mx, mz) * accel;

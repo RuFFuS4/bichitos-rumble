@@ -11,11 +11,19 @@
 //      names via fuzzy keyword matching — so Mixamo's "Breathing Idle",
 //      Tripo's "Animation_01_idle", and a handcrafted "idle" clip all
 //      resolve to the same logical state without per-rig configuration.
-//   3. Crossfades between states with a short 0.15s blend so swaps feel
-//      smooth (not snap-cuts).
-//   4. Plays loop states (idle, run) continuously and one-shot states
-//      (headbutt_lunge, victory, ability_1, …) once, optionally falling
-//      back to idle when the one-shot finishes.
+//   3. Blends between states over a short 0.15 s fade that starts from the
+//      weights on screen, so a switch never jumps — not even when it
+//      interrupts another fade (Three's crossFadeTo restarts the outgoing
+//      clip at full weight, and the old weight re-assert after it killed
+//      the fade-in: the pose jumped halfway in one frame, ~25 cm of foot
+//      on Sergei — docs/FEELING.md §7.11).
+//   4. Idle and run are ONE locomotion pose: both play and the critter
+//      sets the run share from its ground speed every frame
+//      (`setLocomotion`), with the run clip's rate following the ground
+//      down to zero, so starting and stopping blend with the feet planted
+//      instead of cutting between two clips.
+//   5. Plays one-shot states (headbutt_lunge, victory, ability_1, …) once,
+//      optionally falling back to idle when the one-shot finishes.
 //
 // The procedural layer keeps running in parallel and remains responsible
 // for:
@@ -134,6 +142,13 @@ export class SkeletalAnimator {
   private readonly resolveMeta: Partial<Record<SkeletalState, ClipOverrideEntry>> = {};
   /** Which state is currently the "dominant" one being played. */
   private currentState: SkeletalState | null = null;
+  /** Weights on screen when the current state took over, summing to 1.
+   *  They fade out as the current state fades in (`fadeIn` 0 → 1). */
+  private fadeFrom = new Map<THREE.AnimationAction, number>();
+  private fadeIn = 1;
+  private fadeDuration = DEFAULT_CROSSFADE;
+  /** Run share of the locomotion pose (0 = idle, 1 = run). */
+  private locoRun = 0;
   /** If the current state is a one-shot, what to fall back to when it finishes. */
   private fallbackAfterOneShot: SkeletalState | null = null;
   /** Cached list of clip names for debug output. */
@@ -360,14 +375,45 @@ export class SkeletalAnimator {
     if (!opts.force && this.currentState === state && LOOPING_STATES.has(state)) {
       return true;
     }
+    // idle ↔ run is not a switch: both are the locomotion pose, mixed by
+    // setLocomotion. Only the label changes.
+    if (this.isLocomotion(this.currentState) && this.isLocomotion(state)) {
+      this.currentState = state;
+      this.fallbackAfterOneShot = null;
+      return true;
+    }
 
-    const crossfade = opts.crossfade ?? DEFAULT_CROSSFADE;
-    const prevState = this.currentState;
-    const prevAction = prevState ? this.actions[prevState] : undefined;
+    // Snapshot what is on screen: it fades out while the new state fades in.
+    // (Any fade the lab scheduled through Three is taken over here.)
+    const all = this.allActions();
+    this.fadeFrom = new Map();
+    let total = 0;
+    for (const a of all) {
+      a.stopFading();
+      // Scheduled, not running: a one-shot clamped on its last frame is
+      // paused but still on screen.
+      const w = a.isScheduled() && a.enabled ? a.getEffectiveWeight() : 0;
+      if (w > 1e-4) { this.fadeFrom.set(a, w); total += w; }
+    }
 
-    action.reset();
-    action.enabled = true;
-    action.setEffectiveWeight(1);
+    // Incoming clips restart from their first frame — unless they are
+    // still on screen (a quick back-and-forth): restarting those would jump.
+    const incoming = this.isLocomotion(state)
+      ? [this.actions.idle!, this.actions.run!]
+      : [action];
+    for (const a of incoming) {
+      if (!this.fadeFrom.has(a) || !LOOPING_STATES.has(state)) {
+        const w = this.fadeFrom.get(a) ?? 0;
+        if (w > 0) { this.fadeFrom.delete(a); total -= w; }
+        a.reset();
+        a.enabled = true;
+        a.setEffectiveWeight(0);
+        a.play();
+      }
+    }
+    if (total > 1e-4) for (const [a, w] of this.fadeFrom) this.fadeFrom.set(a, w / total);
+    else this.fadeFrom.clear();
+
     // Speed resolution priority (most-specific first):
     //   1. opts.timeScale     — caller-provided per-play override (used by
     //                           ability `clipPlaybackRate` in critter.ts).
@@ -376,28 +422,80 @@ export class SkeletalAnimator {
     // The override's loop flag is applied at action SETUP time (see
     // constructor), not here — re-running setLoop on every play would
     // step on Three.js's internal looping/clamp state mid-action.
-    const meta = this.resolveMeta[state];
-    const speed = opts.timeScale ?? meta?.speed ?? 1;
-    action.setEffectiveTimeScale(speed);
-    action.play();
-
-    if (prevAction && prevAction !== action) {
-      prevAction.crossFadeTo(action, crossfade, false);
-      // Three.js bug workaround: crossFadeTo sometimes leaves the incoming
-      // action's weight scaled — re-assert.
-      action.setEffectiveWeight(1);
+    // (The run rate of the locomotion pose is the critter's, per frame.)
+    if (!this.isLocomotion(state)) {
+      const meta = this.resolveMeta[state];
+      action.setEffectiveTimeScale(opts.timeScale ?? meta?.speed ?? 1);
     }
 
+    const crossfade = opts.crossfade ?? DEFAULT_CROSSFADE;
+    this.fadeDuration = crossfade;
+    this.fadeIn = this.fadeFrom.size > 0 && crossfade > 0 ? 0 : 1;
     this.currentState = state;
     this.fallbackAfterOneShot = LOOPING_STATES.has(state)
       ? null
       : (opts.fallback ?? 'idle');
+    this.applyWeights();
     return true;
   }
 
-  /** Advance the mixer. Call every frame from Critter.update(). */
+  /**
+   * Locomotion mix, every frame: `runShare` 0 = idle … 1 = run, and the
+   * run clip's rate (null keeps it). Applies whether or not locomotion is
+   * the current state, so a run fading out under a heavy clip still
+   * follows the ground instead of sweeping at its last rate.
+   */
+  setLocomotion(runShare: number, runRate: number | null): void {
+    this.locoRun = Math.min(1, Math.max(0, runShare));
+    if (runRate !== null) this.actions.run?.setEffectiveTimeScale(runRate);
+  }
+
+  /** Advance the blend and the mixer. Call every frame from Critter.update(). */
   update(dt: number): void {
+    if (!this.manualClipActive) {
+      if (this.fadeIn < 1) {
+        this.fadeIn = this.fadeDuration > 0 ? Math.min(1, this.fadeIn + dt / this.fadeDuration) : 1;
+      }
+      this.applyWeights();
+      if (this.fadeIn >= 1 && this.fadeFrom.size > 0) {
+        const keep = this.currentActions();
+        for (const a of this.fadeFrom.keys()) if (!keep.includes(a)) a.stop();
+        this.fadeFrom.clear();
+      }
+    }
     this.mixer.update(dt);
+  }
+
+  /** idle and run form the locomotion pose when the rig has both. */
+  private isLocomotion(state: SkeletalState | null): boolean {
+    return (state === 'idle' || state === 'run') && !!this.actions.idle && !!this.actions.run;
+  }
+
+  /** The action(s) the current state owns. */
+  private currentActions(): THREE.AnimationAction[] {
+    if (this.isLocomotion(this.currentState)) return [this.actions.idle!, this.actions.run!];
+    const a = this.currentState ? this.actions[this.currentState] : undefined;
+    return a ? [a] : [];
+  }
+
+  private allActions(): THREE.AnimationAction[] {
+    return [...new Set([...Object.values(this.actions), ...this.clipActionsByName.values()])];
+  }
+
+  /** Weights on screen: what was showing fades out as the current state
+   *  fades in; the sum stays 1, so the bind pose never bleeds through. */
+  private applyWeights(): void {
+    const weights = new Map<THREE.AnimationAction, number>();
+    const add = (a: THREE.AnimationAction, w: number) => weights.set(a, (weights.get(a) ?? 0) + w);
+    for (const [a, w] of this.fadeFrom) add(a, w * (1 - this.fadeIn));
+    if (this.isLocomotion(this.currentState)) {
+      add(this.actions.idle!, this.fadeIn * (1 - this.locoRun));
+      add(this.actions.run!, this.fadeIn * this.locoRun);
+    } else {
+      const a = this.currentState ? this.actions[this.currentState] : undefined;
+      if (a) add(a, this.fadeIn);
+    }
+    for (const [a, w] of weights) a.setEffectiveWeight(w);
   }
 
   /**
@@ -593,6 +691,8 @@ export class SkeletalAnimator {
   /** Stop everything. Used by the lab's "Stop clip" button. */
   stopAll(): void {
     this.mixer.stopAllAction();
+    this.fadeFrom.clear();
+    this.fadeIn = 1;
     this.currentState = null;
     this.fallbackAfterOneShot = null;
     this.manualClipActive = false;

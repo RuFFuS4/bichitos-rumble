@@ -15,6 +15,13 @@
 // critter's real height in the match. With --video it also screenshots
 // every step and assembles an MP4 (60 fps) with ffmpeg.
 //
+// It also tracks the real feet (skinned vertices of the foot/toe bones, both
+// rig naming schemes) and adds up how far the foot on the ground slides, in
+// cm (1 u = 1 m): while starting to run, while braking after letting go, and
+// per second of steady run. Stride ratios can't see the transitions (the
+// clip rate, the smoothing and the run→idle crossfade all play there); the
+// feet can. 0 = planted.
+//
 // Usage (dev server running):
 //   node scripts/critter-motion.mjs                              # 9 critters, table
 //   node scripts/critter-motion.mjs --critters=Kermit,Cheeto --video --label=antes
@@ -43,6 +50,13 @@ const ALL = ['Sergei', 'Trunk', 'Kurama', 'Shelly', 'Kermit', 'Sihans', 'Kowalsk
 const ROUTE = [[0, []], [20, ['KeyW']], [100, []], [125, ['KeyS']], [175, ['KeyD']], [225, []], [260, null]];
 const STEADY = [80, 100];     // steps of steady run towards -z (for speed/lean/rate)
 const REVERSE_AT = 125;       // W released at 100, S pressed here: the 180° reversal
+// Foot-slide windows (steps): standing still (floor reference), the start
+// from rest (W at 20), and the stop after letting go (W up at 100).
+const STAND = [5, 20];
+const START_RUN = [20, 50];
+const STOP = [100, 125];
+const FOOT_BAND = 0.02;       // u: vertices this close to the foot's lowest point bear the weight
+const FOOT_CONTACT = 0.03;    // u above the standing floor: the foot counts as on the ground
 const START = { x: 0, z: 4.5 };
 // Covers the whole route at the 2026-09-21 speed (the fastest critter
 // travels ~6 u on the long leg); the old box cropped Kurama out.
@@ -127,6 +141,24 @@ for (const name of opt.critters.split(',')) {
         v.applyMatrix4(n.matrixWorld); lo = Math.min(lo, v.y); hi = Math.max(hi, v.y);
       }
     });
+    // Foot vertices: those whose heaviest bone is a foot or toe (Tripo
+    // `L_Foot`, Meshy/Mixamo `LeftFoot` + `LeftToeBase`). Outline hulls
+    // share the geometry: skipped.
+    const FOOT = { L: /^(L_Foot|LeftFoot|LeftToeBase)$/, R: /^(R_Foot|RightFoot|RightToeBase)$/ };
+    const feet = { L: [], R: [] };
+    p.glbMesh.traverse((m) => {
+      if (!m.isSkinnedMesh || m.userData.critterOutline) return;
+      const si = m.geometry.attributes.skinIndex, sw = m.geometry.attributes.skinWeight;
+      for (let i = 0; i < si.count; i++) {
+        let best = 0, bw = -1;
+        for (let k = 0; k < 4; k++) { const w = sw.getComponent(i, k); if (w > bw) { bw = w; best = si.getComponent(i, k); } }
+        const bone = m.skeleton.bones[best].name;
+        if (FOOT.L.test(bone)) feet.L.push([m, i]);
+        else if (FOOT.R.test(bone)) feet.R.push([m, i]);
+      }
+    });
+    const thin = (a) => { const s = Math.max(1, Math.floor(a.length / 150)); return a.filter((_, i) => i % s === 0); };
+    window.__motionFeet = { L: thin(feet.L), R: thin(feet.R), prev: null };
     let clip = null;
     if (video) {
       const { createCamera } = await import('/src/camera.ts');
@@ -141,8 +173,9 @@ for (const name of opt.critters.split(',')) {
       }
       clip = { x: Math.round(x0), y: Math.round(y0), width: Math.round((x1 - x0) / 2) * 2, height: Math.round((y1 - y0) / 2) * 2 };
     }
-    return { id: p.rosterEntry.id, height: hi - lo, scale: p.glbMesh.scale.x, runDur: p.skeletal?.getClipDuration('run') ?? null, clip };
+    return { id: p.rosterEntry.id, height: hi - lo, scale: p.glbMesh.scale.x, runDur: p.skeletal?.getClipDuration('run') ?? null, clip, feet: [feet.L.length, feet.R.length] };
   }, { START, FRAME, video: opt.video });
+  if (!setup.feet[0] || !setup.feet[1]) console.error(`${name}: sin vértices de pie (${setup.feet}) — no se mide el deslizamiento`);
 
   const dir = join(OUT, `${opt.label}-${name.toLowerCase()}`);
   if (opt.video) { rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true }); }
@@ -157,12 +190,37 @@ for (const name of opt.critters.split(',')) {
       for (const k of keys) if (!held.has(k)) { await key('keydown', k); held.add(k); }
       ri++;
     }
-    const f = await page.evaluate(() => new Promise((ok) => {
+    const f = await page.evaluate((BAND) => new Promise((ok) => {
       window.__devApi.requestStep(1 / 60);
       requestAnimationFrame(() => requestAnimationFrame(() => {
         const p = window.__game.critters[0];
         const run = p.skeletal?.actions?.run;
+        // Per foot: its lowest point last frame and how far its lowest
+        // vertices travelled horizontally since (median). The caller keeps
+        // the stillest foot on the ground: one planted foot is enough; if
+        // even that one travels, the critter is skating.
+        const F = window.__motionFeet;
+        p.mesh.updateMatrixWorld(true);
+        const v = new p.mesh.position.constructor();
+        const world = (arr) => arr.map(([m, i]) => { v.fromBufferAttribute(m.geometry.attributes.position, i); m.applyBoneTransform(i, v); v.applyMatrix4(m.matrixWorld); return [v.x, v.y, v.z]; });
+        const cur = { L: world(F.L), R: world(F.R) };
+        let foot = null;
+        if (F.prev && cur.L.length && cur.R.length) {
+          foot = {};
+          for (const side of ['L', 'R']) {
+            const minY = Math.min(...F.prev[side].map((q) => q[1]));
+            const d = [];
+            F.prev[side].forEach((q, k) => {
+              if (q[1] > minY + BAND) return;
+              d.push(Math.hypot(cur[side][k][0] - q[0], cur[side][k][2] - q[2]));
+            });
+            d.sort((a, b) => a - b);
+            foot[side] = { minY, slide: d[Math.floor(d.length / 2)] };
+          }
+        }
+        F.prev = cur;
         ok({
+          foot,
           v: Math.hypot(p.vx, p.vz), ground: p.groundSpeed ?? Math.hypot(p.vx, p.vz),
           // what is SEEN: gameplay facing + the model's turn lag
           ry: p.mesh.rotation.y + (p.visualPivot ? p.visualPivot.rotation.y : 0),
@@ -171,7 +229,7 @@ for (const name of opt.critters.split(',')) {
           lean: p.glbMesh.rotation.x, sway: p.glbMesh.rotation.z,
         });
       }));
-    }));
+    }), FOOT_BAND);
     frames.push(f);
     if (opt.video) await page.screenshot({ path: join(dir, `f${String(step).padStart(4, '0')}.png`), clip: setup.clip });
   }
@@ -189,6 +247,16 @@ for (const name of opt.critters.split(',')) {
   const r0 = frames[REVERSE_AT - 1].ry, rEnd = frames[REVERSE_AT + 45].ry;
   const turnStart = frames.findIndex((f, i) => i >= REVERSE_AT && Math.abs(f.ry - r0) > 0.05);
   const turnEnd = frames.findIndex((f, i) => i >= REVERSE_AT && Math.abs(f.ry - rEnd) < 0.05);
+  // Foot slide (cm): per frame, the stillest foot among those on the
+  // ground; frames with both feet in the air don't count.
+  const floor = median(frames.slice(...STAND).filter((f) => f.foot)
+    .map((f) => Math.min(f.foot.L.minY, f.foot.R.minY)));
+  for (const f of frames) {
+    const onGround = f.foot ? [f.foot.L, f.foot.R].filter((s) => s.minY < floor + FOOT_CONTACT) : [];
+    f.slide = onGround.length ? Math.min(...onGround.map((s) => s.slide)) : null;
+  }
+  const slideCm = ([a, b], keep = () => true) => frames.slice(a, b).filter(keep).reduce((s, f) => s + (f.slide ?? 0), 0) * 100;
+  const popCm = ([a, b]) => Math.max(0, ...frames.slice(a, b).map((f) => f.slide ?? 0)) * 100;
   const row = {
     critter: name,
     heightInMatch: +setup.height.toFixed(2),
@@ -201,8 +269,17 @@ for (const name of opt.critters.split(',')) {
     leanDeg: +(median(steady.map((f) => f.lean)) * 180 / Math.PI).toFixed(1),
     swayDeg: +(Math.max(...steady.map((f) => Math.abs(f.sway))) * 180 / Math.PI).toFixed(1),
     reverseFrames: turnEnd >= 0 && turnStart >= 0 ? turnEnd - turnStart + 1 : null,
+    // Feet on the ground while starting / braking (a run has flight
+    // frames, so these are never 0; compare before/after), what the feet
+    // still travel once the body has STOPPED (should be ~0), and the
+    // biggest single-frame jump in either transition (a pose pop).
+    startSlideCm: Number.isFinite(floor) ? +slideCm(START_RUN).toFixed(1) : null,
+    stopSlideCm: Number.isFinite(floor) ? +slideCm(STOP).toFixed(1) : null,
+    stoppedSlideCm: Number.isFinite(floor) ? +slideCm(STOP, (f) => f.v < 0.01).toFixed(1) : null,
+    popCm: Number.isFinite(floor) ? +Math.max(popCm([START_RUN[0], START_RUN[0] + 10]), popCm(STOP)).toFixed(1) : null,
   };
   rows.push(row);
+  writeFileSync(join(OUT, `${opt.label}-${name.toLowerCase()}-frames.json`), JSON.stringify(frames));
   if (opt.video) {
     const mp4 = join(OUT, `${opt.label}-${name.toLowerCase()}.mp4`);
     execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '60', '-i', join(dir, 'f%04d.png'),
@@ -219,5 +296,6 @@ if (opt.json) console.log(JSON.stringify(rows, null, 2));
 else {
   console.table(rows.map(({ video, ...r }) => r));
   console.log('footSlip: 1 = pie apoyado · >1 planea · <1 patas más rápidas que el suelo');
+  console.log('startSlideCm / stopSlideCm: pie en el suelo al arrancar / frenar (cm) · stoppedSlideCm: lo que aún se mueve con el cuerpo parado · popCm: mayor salto en un fotograma');
   console.log('JSON →', join(OUT, `${opt.label}.json`));
 }

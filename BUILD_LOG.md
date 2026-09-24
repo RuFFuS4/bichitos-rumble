@@ -1,5 +1,36 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-24 — [PERSONAJES] Arrancar y frenar con el pie apoyado, y un empujón ya no gira al bicho
+
+- **Animador** (`critter-skeletal.ts`):
+  - un apaño tras `crossFadeTo` cancelaba el fundido y la pose saltaba a
+    mitad de camino (hasta 25 cm de pie); ahora el fundido es propio y
+    parte de los pesos en pantalla;
+  - Idle y Run son una sola pose, mezclada por la velocidad de avance y
+    con las patas frenando con el suelo;
+  - los saltos al entrar y salir de las habilidades bajan de 90-180 cm a
+    25-55 cm.
+- **Acentos**: al arrancar, inclinación hacia delante; al frenar, echarse
+  atrás con un aplastón. Salen de la aceleración y están en
+  `FEEL.locomotion.accent*`.
+- **Medido** en ocho bichos (FEELING §7.11): el pie resbala un 55 % menos
+  al frenar y un 25 % menos al arrancar, y el mayor salto de pose baja de
+  25,7 a 10,1 cm.
+- **Física (permiso de Rafa: «toca toda la física que necesites»)**: la
+  orientación sigue a la velocidad solo mientras va hacia donde empuja el
+  propio bicho, así que un empujón o el retroceso ya no lo giran.
+  - Cliente (`critter.ts`, `player.ts`, `bot.ts`) y servidor
+    (`BrawlRoom`).
+  - Golden regenerado (3/3 detrás).
+  - Tanda con las mismas semillas: caídas −6 %, roster algo más igualado
+    y Sebastian de eliminado en el 91 % a en el 72 %.
+- **Herramientas nuevas**:
+  - `critter-motion` mide los pies de verdad al arrancar y al frenar;
+  - `scripts/ability-shots.mjs` filma y mide cada habilidad contra tres
+    muñecos;
+  - `scripts/vite.snapshot.config.mjs` levanta un servidor «foto fija»
+    para capturas largas mientras se edita.
+
 ## 2026-09-24 — [Interfaz] Los móviles grandes arrancaban sin joystick
 
 Salió al medir el HUD en móvil (primer paso de la reestructura: medir

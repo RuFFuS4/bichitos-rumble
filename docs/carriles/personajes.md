@@ -33,14 +33,16 @@ antes de commitear el JSON.
          jugar (−13 % en solo-bots), hablarlo con ARENA (colapso) o tocar
          vidas.
    - [ ] **Corte 2** (`§5`): ~~giro con peso~~ (hecho con la velocidad),
-         acentos de arranque y frenada, ~~reacciones al golpe~~ (hecho,
-         `§7.10`: `reactionRig`, fotograma de impacto en el hit stop,
-         mirada sujeta durante el empujón, destello de los Meshy), y
+         ~~acentos de arranque y frenada~~ (hecho, `§7.11`: fundido propio
+         en el animador, Idle+Run como una pose, patas que frenan con el
+         suelo, acentos), ~~reacciones al golpe~~ (hecho, `§7.10`), y
          personalidad con el rango real del roster (velocidad 8..18).
-   - [ ] **Para Rafa** (`§7.10`, física, hard-stop): que la orientación
-         siga la intención del bicho y no los empujes (hoy víctima y
-         atacante dan la espalda tras el golpe). Y el online no tiene
-         evento de golpe (`game.ts` + servidor).
+   - [x] Un empujón ya no gira al bicho (`§7.10`, física, con permiso de
+         Rafa; golden regenerado).
+   - [ ] El online no tiene evento de golpe: el golpeado no recibe
+         feedback de impacto (`game.ts` + servidor).
+   - [ ] Arranque de los rigs de Meshy: elegir la fase del Run que mejor
+         case con el Idle (`§7.11`).
    - [ ] Vocabulario que sigue faltando después del corte 2: stretch al
          salir despedido, anticipación antes de la habilidad, inercia en
          orejas y cola.

@@ -29,7 +29,20 @@ export const FEEL = {
     runRateMin: 0.45,         // timeScale mínimo del clip Run: arrancar y frenar no van a cámara lenta
     runCadenceMaxHz: 8,       // techo de ciclos/s: por encima el pie patina antes que girar como un ventilador. 6 → 8 el 2026-09-24: solo lo tocaban Sebastian (pedía 8: pie 1,33 → 1,00, escabullirse de cangrejo) y Kurama (6,24: 1,04 → 1,00); el resto va por debajo de 4
     topSpeedReach: 0.9,       // fracción de la velocidad terminal a la que el cuerpo ya va inclinado del todo
-    groundSpeedSmoothing: 0.06, // s — suavizado de la velocidad de suelo que marca el ritmo de las patas (en online absorbe los saltos de posición entre parches)
+    groundSpeedSmoothing: 0.06, // s — suavizado de la velocidad de suelo, SOLO online (absorbe los saltos de posición entre parches); offline la posición es exacta y suavizarla retrasaba las patas (FEELING §7.11)
+    runBlendSpeed: 1.5,       // u/s de avance a las que la pose ya es 100 % Run; por debajo se funde con el Idle (smoothstep) y las patas frenan con el suelo
+    runBlendTime: 0.1,        // s mínimos para pasar de Idle a Run del todo: un acelerón brusco (estocada, dash, empujón) no cambia la pose en un fotograma
+    // Acentos de arranque y frenada (corte 2, FEELING §7.11): salen de la
+    // aceleración de avance del modelo en «velocidades punta por segundo»
+    // (arrancar ≈ +4, frenar en seco ≈ −8), así pesan igual en Shelly que
+    // en Kurama. Llenos a `accent*Full`; en medio, proporcionales.
+    accentStartFull: 4,       // aceleración a la que el acento de arranque es pleno
+    accentStopFull: 6,        // deceleración a la que el de frenada es pleno
+    accentStartLean: 0.14,    // rad extra hacia delante al arrancar
+    accentStopLean: 0.22,     // rad hacia atrás al frenar: se planta sobre los talones
+    accentStopSquash: 0.12,   // aplastón vertical al frenar
+    accentSmoothing: 0.05,    // s — suavizado de la aceleración (online llega a saltos)
+    accentFade: 0.08,         // s mínimos para que un acento entre o salga del todo (al empezar o acabar un cabezazo no salta)
     turnHalfLife: 0.025,      // s — el MODELO tarda esto en recorrer la mitad de un giro (≈90 % en 80 ms); la orientación de juego sigue siendo instantánea
   },
 
