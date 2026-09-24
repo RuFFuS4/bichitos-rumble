@@ -344,9 +344,12 @@ corren riesgo: no hay migraciones.
     ~27).
   - Opcional 1: con la versión en la URL, `/models/critters/` podría
     servirse `immutable` y con un año de caché. Es tu `vercel.json`.
-  - Opcional 2: meter `stamp-critter-glbs.mjs --check` e
-    `inspect-stride.mjs --check` en `npm run check`. `package.json` es
-    tierra de nadie; se lo he pedido a Rafa.
+  - ~~Opcional 2~~ hecho el 2026-09-24 con permiso de Rafa:
+    `npm run check` (y con él tu CI) ejecuta ya `stamp-critter-glbs.mjs
+    --check` e `inspect-stride.mjs --check`. Si un GLB de bicho cambia sin
+    su versión o sin regenerar `RUN_GAIT`, el CI falla. El comentario de
+    `ci.yml:36` que enumera lo que hace `check` es tuyo, por si quieres
+    añadirlo.
   - **F2 hecha (2026-09-23)**: con la dieta de Kurama, Sebastian y
     Kermit, `check-payload-budget` mide **27,3 MB de dist** (antes 69,7;
     el límite sigue en 75). Si quieres, baja el ratchet a ~30 para que
