@@ -267,6 +267,15 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-24 — la orientación cambia en cliente Y
+  servidor: se despliegan juntos.** Un empujón ya no gira al bicho. La
+  orientación sigue a la velocidad solo mientras va hacia donde empuja
+  el propio bicho: `Critter.update` y el paso de integración de
+  `server/src/BrawlRoom.ts` (`data.moveX/Z`). Con un servidor viejo y un
+  cliente nuevo, online seguiría girando (manda el servidor, que es
+  autoritativo), pero no se rompe nada. Viaja con el despliegue de H4.5,
+  junto al suavizado online pendiente. Detalle: `docs/FEELING.md` §7.10.
+
 - **De INTERFAZ, 2026-09-21 — tu punto 6 (portal en Steam) ya solo es
   empaquetado.** `src/portal.ts` lee `import.meta.env.VITE_PORTAL`: si vale
   `off`, no hay portales ni leyenda. Solo tienes que compilar el paquete de
