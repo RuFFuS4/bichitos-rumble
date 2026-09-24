@@ -20,6 +20,7 @@ import * as THREE from 'three';
 import { createCamera, handleResize, syncSize } from '../camera';
 import { initSceneAtmosphere } from '../scene-atmosphere';
 import { tickSharedGameplay } from '../frame-ticks';
+import { setArenaForAbilities } from '../abilities-runtime';
 import { Game } from '../game';
 import { updateCameraShake, FEEL } from '../gamefeel';
 import { initPreview, tickPreview } from '../preview';
@@ -76,6 +77,7 @@ loadMutedState();
 
 // --- Game instance ---------------------------------------------------------
 const game = new Game(scene);
+setArenaForAbilities(game.arena); // as main.ts: Sinkhole holes and landing checks use the live arena
 
 // DevApi centralises every lab-only capability. The sidebar only talks to
 // this layer — no direct game.debug* calls from UI code anymore. Keeps Game

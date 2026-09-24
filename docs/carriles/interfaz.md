@@ -42,6 +42,21 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-24 — el repaso de habilidades deja tres cosas
+  en tus ficheros.**
+  - **Textos de estado.** `status-vulnerable-desc` dice que los golpes
+    empujan «el doble» y son ×4 (`FEEL.collision.stunnedVulnerability`).
+    `status-frozen-desc` debe cubrir también el hielo de Kowalski, no solo
+    la bola.
+  - **Opcional.** Mientras Shelly está anclada (Steel Shell activo o
+    cargando), su J ya no se puede lanzar. Se puede pintar bloqueada
+    cuando `critter.abilityStates.some(s => s.active &&
+    s.def.selfAnchorWhileBuffed)` y la J es charge_rush o blink.
+  - **Contorno** (tu aviso de Rafa): `FEEL.look.outlineMinPx` baja de 2 a
+    1. Tus miniaturas lo reciben solas.
+
+  Detalle en [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md).
+
 - **De DISTRIBUCIÓN, 2026-09-21 — he tocado tu `src/i18n.ts`, con
   permiso de Rafa.** Son dos claves nuevas al final del bloque
   `connect-*`: `connect-client-outdated` (confirm "Hay una versión

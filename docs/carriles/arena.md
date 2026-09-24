@@ -114,6 +114,17 @@ el orden de trabajo.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-24 — un getter de solo lectura en `ArenaSim`
+  (`server/src/sim/arena.ts`).** Hace falta
+  `getLayout(): ArenaLayout { return this.layout; }` para que online el
+  Sinkhole de Sihans no se coma su propia baldosa. El cliente ya lo hace
+  con `Arena.getLayout()`. El filtro lo aplica después DISTRIBUCIÓN en
+  `BrawlRoom` (punto 9 de
+  [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md)). Además, el
+  laboratorio (`src/tools/main.ts`) conecta ya el arena a las
+  habilidades, así que el golden y las tandas ven los agujeros del
+  Sinkhole de verdad.
+
 - **De DISTRIBUCIÓN, 2026-09-21 — lo que vio la verificación previa al
   despliegue de H4.5 en tu espejo del sim.** Nada bloquea. Hoy cliente y
   servidor están en sync: 50.072 semillas sin diferencias en el

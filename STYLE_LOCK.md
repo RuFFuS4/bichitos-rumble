@@ -36,7 +36,9 @@ Arcade / chibi arena brawler. Toy-like, punchy, instantly readable.
     `src/critter-look.ts`);
   - ONE colour for the whole roster, `#1a0820`;
   - a width relative to the critter's size on screen (`FEEL.look`: ~4.5 %
-    of its height), clamped to 2-5 px so it reads in the arena and never
+    of its height), clamped to 1-5 px (the floor was 2 until Rafa saw
+    it on a phone, where critters are 20-25 px tall and a 2 px contour
+    ate the silhouette) so it reads in the arena and never
     turns into a thick border in the close-ups.
 
   It hides whenever the critter goes translucent (immunity blink,

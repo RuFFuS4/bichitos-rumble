@@ -38,8 +38,9 @@ const ZERO: BotInput = {
  * Decisions:
  *   - Chase the nearest ALIVE non-self critter (human or bot).
  *   - Headbutt when within 2.0 units of the target.
- *   - Fire ability1 (mobility / charge rush) at mid-range (3..6 units).
- *   - Fire ability2 (AoE / ground pound) when ≥2 enemies are within 4u.
+ *   - Fire ability1 (mobility / charge rush) at mid-range (3..6 units),
+ *     unless the dash along the facing runs off the arena.
+ *   - Fire ability2 by the SHAPE of its def (see the branches below).
  *   - Small per-tick probability so it doesn't spam — scales with tickRate.
  *
  * Kurama Mirror Trick (v0.11 authorial K, 2026-04-29): while a critter
@@ -69,15 +70,49 @@ const TICK_DT = 1 / 30;
 const rollAt = (ratePerSec: number): boolean =>
   Math.random() < 1 - Math.pow(1 - ratePerSec, TICK_DT);
 
+interface BotArenaView {
+  currentRadius: number;
+  /** Radio vivo en UNA dirección (fase 0.5) — ver ArenaSim.radiusAt. */
+  radiusAt(angle: number): number;
+  isOnArena(x: number, z: number): boolean;
+}
+
+/** A J leaves along the facing: its near and far probe points must both
+ *  be live floor. No arena view, no probe. Mirror of src/bot.ts. */
+function dashStaysOnArena(bot: PlayerSchema, arena?: BotArenaView): boolean {
+  if (!arena) return true;
+  const fx = Math.sin(bot.rotationY);
+  const fz = Math.cos(bot.rotationY);
+  const near = SIM.bots.dashProbeNear;
+  const far = SIM.bots.dashProbeFar;
+  return arena.isOnArena(bot.x + fx * near, bot.z + fz * near) &&
+    arena.isOnArena(bot.x + fx * far, bot.z + fz * far);
+}
+
+/** True while a dash or blink of the bot is active. Mirror of src/bot.ts. */
+function movementActive(bot: PlayerSchema, kit: ReturnType<typeof getAbilityKit>): boolean {
+  for (let i = 0; i < bot.abilities.length; i++) {
+    const t = kit[i]?.type;
+    if ((t === 'charge_rush' || t === 'blink') && bot.abilities[i].active) return true;
+  }
+  return false;
+}
+
+/** Enemies a push would move (alive, not falling, not immune) within
+ *  `radius` of the bot. Mirror of src/bot.ts countEnemiesWithin. */
+function countPushableWithin(bot: PlayerSchema, allPlayers: PlayerSchema[], radius: number): number {
+  let n = 0;
+  for (const p of allPlayers) {
+    if (p === bot || !p.alive || p.falling || p.immunityTimer > 0) continue;
+    if (Math.hypot(p.x - bot.x, p.z - bot.z) < radius) n++;
+  }
+  return n;
+}
+
 export function computeBotInput(
   bot: PlayerSchema,
   allPlayers: PlayerSchema[],
-  arena?: {
-    currentRadius: number;
-    /** Radio vivo en UNA dirección (fase 0.5) — ver ArenaSim.radiusAt. */
-    radiusAt(angle: number): number;
-    isOnArena(x: number, z: number): boolean;
-  },
+  arena?: BotArenaView,
 ): BotInput {
   if (!bot.alive || bot.falling) return ZERO;
 
@@ -102,7 +137,7 @@ export function computeBotInput(
       nearestDist = d;
       nearest = p;
     }
-    if (d < 4.0) nearbyCount++;
+    if (d < SIM.bots.nearbyRadius) nearbyCount++;
   }
 
   if (!nearest) return ZERO;
@@ -143,17 +178,34 @@ export function computeBotInput(
   // --- Abilities (probabilistic, per-tick at 30 Hz) ---
   // Same constants as the offline bot in src/bot.ts so online feels similar.
   // 0.02 per frame ≈ ~40% chance/sec to actually fire while in the window.
+  // The J leaves along the FACING: skip it if that runs off the arena.
+  // Dashes and blinks never overlap: the second would fire from wherever
+  // the first leaves the bot, not from where these checks looked.
+  const kit = getAbilityKit(bot.critterName);
+  const moving = movementActive(bot, kit);
   const ability1 =
-    nearestDist > 3.0 && nearestDist < 6.0 && rollAt(FIRE_RATES.mobility);
+    nearestDist > 3.0 && nearestDist < 6.0 && !moving && dashStaysOnArena(bot, arena) && rollAt(FIRE_RATES.mobility);
   // 2026-08-24 paridad con src/bot.ts (hallazgo del review adversarial:
   // el cañón de Sebastian era solo-cliente y online nunca salía en
   // 1v1). El slot 2 dispara según la FORMA del def, resuelta del kit
   // — def-driven, sin special-cases por nombre:
-  //   · projectile (Kowalski Snowball): banda 4..14 u frontal.
+  //   · projectile (Kowalski Snowball): banda 4..14 u, within
+  //     ±rangedAimDeg of the facing (it flies along it).
   //   · cono direccional (coneAngleDeg — Claw Wave de Sebastian): UNA
-  //     víctima delante dentro del radio ×0.9, doble de probabilidad.
-  //   · radial: "estoy rodeado" — nearbyCount >= 2, como siempre.
-  const def2 = getAbilityKit(bot.critterName)[1];
+  //     víctima delante dentro del radio ×0.9 y dentro del cono.
+  //   · blink that seeks (Shadow Step): nearest enemy past headbutt
+  //     range, in seek range, not immune, and the landing push
+  //     (caster → target) pointing outward at the target.
+  //   · blink that leaves a zone behind (Sand Trap): nearest enemy
+  //     inside zone.radius × trapRadiusFrac, landing on live floor.
+  //   · radial that pushes: two pushable (non-immune) enemies within
+  //     min(radius, nearbyRadius), or one within radialSoloFrac of it.
+  //   · anything else (Mirror Trick): "estoy rodeado" — nearbyCount >= 2.
+  const def2 = kit[1];
+  const facingX = Math.sin(bot.rotationY);
+  const facingZ = Math.cos(bot.rotationY);
+  const inFacingCone = (halfAngleDeg: number): boolean =>
+    dx * facingX + dz * facingZ >= d * Math.cos((halfAngleDeg * Math.PI) / 180);
   let ability2: boolean;
   if (def2?.selfBuffOnly && (def2.selfImmunityDuration ?? 0) > 0 && !def2.decoyEscapeDistance) {
     // Defensiva pura (Steel Shell): reflejo DETERMINISTA como en el
@@ -181,13 +233,34 @@ export function computeBotInput(
       const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
       edgePressure = rd > arena.radiusAt(Math.atan2(bot.z, bot.x)) - EDGE_MARGIN && nearestDist < SIM.bots.defendRange;
     }
-    ability2 = chargeIncoming || edgePressure;
+    // With its own L active (Saw Shell, wind-up included), shelling up only
+    // for the rim. Online bots cast no L, but a bot taking over a human can
+    // inherit one.
+    const ownLRunning = kit[2]?.type === 'frenzy' && !!bot.abilities[2]?.active;
+    ability2 = (chargeIncoming && !ownLRunning) || edgePressure;
   } else if (def2?.type === 'projectile') {
-    ability2 = nearestDist > 4.0 && nearestDist < 14.0 && rollAt(FIRE_RATES.ranged);
+    ability2 = nearestDist > 4.0 && nearestDist < 14.0 && inFacingCone(SIM.bots.rangedAimDeg) &&
+      rollAt(FIRE_RATES.ranged);
   } else if (typeof def2?.coneAngleDeg === 'number') {
-    ability2 = nearestDist < (def2.radius ?? 3.5) * 0.9 && rollAt(FIRE_RATES.cone);
+    ability2 = nearestDist < (def2.radius ?? 3.5) * 0.9 && inFacingCone(def2.coneAngleDeg) && rollAt(FIRE_RATES.cone);
+  } else if (def2?.type === 'blink' && def2.blinkSeekNearest) {
+    ability2 = !ability1 && !moving && nearest.immunityTimer <= 0 &&
+      nearestDist > SIM.bots.targetedMinRange && nearestDist < (def2.blinkSeekRange ?? 9.0) &&
+      dx * nearest.x + dz * nearest.z > 0 &&
+      rollAt(FIRE_RATES.blinkSeek);
+  } else if (def2?.type === 'blink' && def2.zoneAtOrigin && def2.zone) {
+    const reach = def2.blinkDistance ?? 4.0;
+    ability2 = !ability1 && !moving && nearestDist < def2.zone.radius * SIM.bots.trapRadiusFrac &&
+      (!arena || arena.isOnArena(bot.x + facingX * reach, bot.z + facingZ * reach)) &&
+      rollAt(FIRE_RATES.trap);
   } else {
-    ability2 = nearbyCount >= 2 && rollAt(FIRE_RATES.radial);
+    const r = Math.min(def2?.radius ?? SIM.groundPound.radius, SIM.bots.nearbyRadius);
+    const pushes = r > 0 && (def2?.force ?? SIM.groundPound.force) > 0 && !def2?.selfBuffOnly;
+    const fires = pushes
+      ? countPushableWithin(bot, allPlayers, r) >= 2 ||
+        (nearestDist < r * SIM.bots.radialSoloFrac && nearest.immunityTimer <= 0)
+      : nearbyCount >= 2;
+    ability2 = fires && rollAt(FIRE_RATES.radial);
   }
   const ultimate = false; // conservative: let bots not spam ultimates online
 

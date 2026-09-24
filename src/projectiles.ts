@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import type { Critter } from './critter';
 import { spawnDustPuff } from './dust-puff';
-import { triggerCameraShake, applyImpactFeedback, FEEL } from './gamefeel';
+import { triggerCameraShake, applyImpactFeedback, createFrozenFrameGate, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
 
 interface ActiveProjectile {
@@ -170,12 +170,15 @@ export function clearProjectiles(): void {
  *   · OFFLINE only: sweep against each alive non-owner critter, apply
  *     knockback + critter.slowTimer on hit, despawn with impact VFX
  *   · expire on ttl ≤ 0 with a soft puff
- * Called from main.ts after physics.
+ * Called from main.ts after physics. Skipped on hit-stop frames: a
+ * snowball doesn't fly on while the world is frozen.
  */
+const projectilesFrozen = createFrozenFrameGate();
 export function tickProjectiles(
   dt: number,
   allCritters: Critter[],
 ): void {
+  if (projectilesFrozen()) return;
   for (let i = activeProjectiles.length - 1; i >= 0; i--) {
     const pr = activeProjectiles[i];
     pr.x += pr.vx * dt;

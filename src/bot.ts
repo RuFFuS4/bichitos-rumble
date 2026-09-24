@@ -1,7 +1,20 @@
+import * as THREE from 'three';
 import { Critter } from './critter';
-import { activateAbility, canActivateAbility, findAbilityByTag } from './abilities-runtime';
+import type { AbilityDef } from './abilities';
+import {
+  activateAbility, canActivateAbility, cancelSebastianAllInCharge, findAbilityByTag, findAllInTarget,
+  findGripTarget, getSlipperyZone, releaseSebastianAllInCharge, startSebastianAllInCharge,
+} from './abilities-runtime';
 import { FEEL } from './gamefeel';
 import { matchRng } from './match-rng';
+
+/** Minimal arena view for edge awareness (balance v2). */
+interface BotArenaView {
+  currentRadius: number;
+  /** Radio vivo en UNA dirección (fase 0.5) — ver Arena.radiusAt. */
+  radiusAt(angle: number): number;
+  isOnArena(x: number, z: number): boolean;
+}
 
 /**
  * Placeholder bot AI: chase the nearest alive critter, headbutt when close,
@@ -26,14 +39,8 @@ export function updateBot(
   bot: Critter,
   allCritters: Critter[],
   dt: number,
-  // Minimal arena view for edge awareness (balance v2). Optional so
-  // headless/unit contexts without an arena keep working.
-  arena?: {
-    currentRadius: number;
-    /** Radio vivo en UNA dirección (fase 0.5) — ver Arena.radiusAt. */
-    radiusAt(angle: number): number;
-    isOnArena(x: number, z: number): boolean;
-  },
+  // Optional so headless/unit contexts without an arena keep working.
+  arena?: BotArenaView,
 ): void {
   // Review 2026-08-24: guard de falling en paridad con el server (que
   // devuelve ZERO) — un bot cayendo seguía persiguiendo/casteando en
@@ -48,7 +55,15 @@ export function updateBot(
     return;
   }
 
-  // Find nearest alive enemy + count enemies within 4 units.
+  // Holding Sebastian's All-in: rooted like the player's charge, and the
+  // bot does nothing else until it resolves or drops it.
+  if (bot.lHoldCharging) {
+    bot.hasInput = false;
+    tickAllInCharge(bot, allCritters, dt);
+    return;
+  }
+
+  // Find nearest alive enemy + count enemies within FEEL.bots.nearbyRadius.
   //
   // Kurama Mirror Trick (v0.11 authorial K, 2026-04-29): bots skip a
   // Kurama target who is currently in an immunity window. The trick
@@ -74,7 +89,7 @@ export function updateBot(
       nearestDist = dist;
       nearest = other;
     }
-    if (dist < 4.0) nearbyCount++;
+    if (dist < FEEL.bots.nearbyRadius) nearbyCount++;
   }
 
   if (!nearest) {
@@ -146,7 +161,10 @@ export function updateBot(
     // 2026-04-30 final-L — Toxic Touch confused inversion (offline bot).
     if (bot.confusedTimer > 0) { nx = -nx; nz = -nz; }
 
-    const accel = bot.effectiveSpeed * FEEL.movement.accelerationScale * FEEL.bots.moveAccelFactor;
+    // Less grip on someone else's ice (Kowalski Frozen Floor), applied
+    // before moveAccel like player.ts.
+    const ice = getSlipperyZone(bot.x, bot.z, bot.config.name);
+    const accel = bot.effectiveSpeed * FEEL.movement.accelerationScale * FEEL.bots.moveAccelFactor * (ice?.accelMult ?? 1);
     bot.moveX = nx;
     bot.moveZ = nz;
     bot.moveAccel = Math.hypot(nx, nz) * accel;
@@ -193,7 +211,10 @@ export function updateBot(
           rd > arena.radiusAt(Math.atan2(bot.z, bot.x)) - FEEL.bots.edgeMargin &&
           nearestDist < FEEL.bots.defendRange;
       }
-      if (chargeIncoming || edgePressure) {
+      // With its own L running (Saw Shell), shelling up only for the rim:
+      // anchored, the saw stands still (26 % of shelled saws landed,
+      // 58 % of free ones).
+      if ((chargeIncoming && !ownLRunning(bot)) || edgePressure) {
         activateAbility(defensive, bot);
       }
     }
@@ -209,32 +230,50 @@ export function updateBot(
   const roll = (ratePerSec: number): boolean =>
     matchRng() < (1 - Math.pow(1 - ratePerSec, dt)) * aggroMul;
 
-  // --- Mobility ability: use at mid-range to close the gap
+  // --- Mobility ability: use at mid-range to close the gap, and only if
+  // the dash doesn't run off the arena: it leaves along the FACING, which
+  // the edge steering may not have turned yet.
   const mobilityAbility = findAbilityByTag(bot.abilityStates, 'mobility');
   if (
     mobilityAbility &&
     canActivateAbility(mobilityAbility) &&
     nearestDist > 3.0 &&
-    nearestDist < 6.0
+    nearestDist < 6.0 &&
+    !movementActive(bot) &&
+    dashStaysOnArena(bot, arena)
   ) {
     if (roll(FEEL.bots.fireRatesPerSec.mobility)) {
       activateAbility(mobilityAbility, bot);
     }
   }
 
-  // --- AoE push ability: two firing conditions by SHAPE of the def
+  // --- AoE push ability: firing conditions by SHAPE of the def
   // (2026-08-24 balance v2 — cañón de Sebastian, cola de BALANCE.md):
-  //   · Radial (sin coneAngleDeg): "estoy rodeado" — nearbyCount >= 2.
   //   · Direccional (coneAngleDeg): es un cañón frontal, UNA víctima
   //     delante dentro del radio basta. Con la condición radial, la
   //     Claw Wave de Sebastian (force 76, su mejor arma) solo salía
   //     cuando ya estaba rodeado y perdido — el audit lo midió en 0/6.
+  //     And ahead for real: inside the facing's cone.
+  //   · Radial that pushes (radius and force, not a self-buff): two
+  //     pushable enemies within min(radius, nearbyRadius), or a single
+  //     pushable one within radialSoloFrac of it (no push moves the
+  //     immune). Counting at 4 u for a 3.5 u Shockwave cast
+  //     it with at most one enemy inside in 48 % of uses, and never in 1v1.
+  //   · Anything else (Mirror Trick): "estoy rodeado" — nearbyCount >= 2.
   const aoeAbility = findAbilityByTag(bot.abilityStates, 'aoe_push');
   if (aoeAbility && canActivateAbility(aoeAbility)) {
-    const isCone = typeof aoeAbility.def.coneAngleDeg === 'number';
-    const fires = isCone
-      ? nearestDist < (aoeAbility.def.radius ?? 3.5) * 0.9
-      : nearbyCount >= 2;
+    const def = aoeAbility.def;
+    const isCone = typeof def.coneAngleDeg === 'number';
+    let fires: boolean;
+    if (isCone) {
+      fires = nearestDist < (def.radius ?? 3.5) * 0.9 && inFacingCone(bot, dx, dz, dist, def.coneAngleDeg!);
+    } else if (def.radius > 0 && def.force > 0 && !def.selfBuffOnly) {
+      const r = Math.min(def.radius, FEEL.bots.nearbyRadius);
+      fires = countEnemiesWithin(bot, allCritters, r, true) >= 2 ||
+        (nearestDist < r * FEEL.bots.radialSoloFrac && !nearest.isImmune);
+    } else {
+      fires = nearbyCount >= 2;
+    }
     if (fires && roll(isCone ? FEEL.bots.fireRatesPerSec.cone : FEEL.bots.fireRatesPerSec.radial)) {
       activateAbility(aoeAbility, bot);
     }
@@ -245,22 +284,182 @@ export function updateBot(
   //     travels ~21.6 u (1.2 s × 18 u/s) so a 4..14 u target band
   //     covers the realistic hit window. The bot doesn't lead the
   //     target — server clamp is short enough that a moving target
-  //     can dodge anyway.
+  //     can dodge anyway. It flies along the facing, so the target
+  //     must sit within ±rangedAimDeg of it.
   const rangedAbility = findAbilityByTag(bot.abilityStates, 'ranged');
-  if (rangedAbility && canActivateAbility(rangedAbility) && nearestDist > 4 && nearestDist < 14) {
-    // Cone gate: only fire if the target is roughly in front of us
-    // (within ±35° of our movement vector). nx,nz already point at
-    // the target, so we just need to face it before firing.
+  if (
+    rangedAbility && canActivateAbility(rangedAbility) && nearestDist > 4 && nearestDist < 14 &&
+    inFacingCone(bot, dx, dz, dist, FEEL.bots.rangedAimDeg)
+  ) {
     if (roll(FEEL.bots.fireRatesPerSec.ranged)) {
       activateAbility(rangedAbility, bot);
     }
   }
 
-  // --- Buff ability (e.g. Frenzy): activate when close to an enemy
-  const buffAbility = findAbilityByTag(bot.abilityStates, 'buff');
-  if (buffAbility && canActivateAbility(buffAbility) && nearestDist < 3.5) {
-    if (roll(FEEL.bots.fireRatesPerSec.buff)) {
-      activateAbility(buffAbility, bot);
+  // --- Targeted ability, by shape of the def. Not on someone already
+  // at headbutt range.
+  //   · Trunk Grip (gripK): someone the grip would take right now, no
+  //     farther than gripMaxRange.
+  //   · Shadow Step (blinkSeekNearest): lands next to the nearest enemy
+  //     and shoves it along caster → target, so only when that push
+  //     points outward at the target (toward the rim). Not mid-dash: the
+  //     checks read where the bot stands now.
+  const targeted = findAbilityByTag(bot.abilityStates, 'targeted');
+  if (targeted && canActivateAbility(targeted)) {
+    const def = targeted.def;
+    if (def.gripK) {
+      const grip = findGripTarget(def, bot, allCritters);
+      if (
+        grip && grip.dist > FEEL.bots.targetedMinRange && grip.dist < FEEL.bots.gripMaxRange &&
+        roll(FEEL.bots.fireRatesPerSec.grip)
+      ) {
+        activateAbility(targeted, bot);
+      }
+    } else if (def.blinkSeekNearest) {
+      if (
+        !movementActive(bot) &&
+        !nearest.isImmune &&
+        nearestDist > FEEL.bots.targetedMinRange && nearestDist < (def.blinkSeekRange ?? 9.0) &&
+        dx * nearest.x + dz * nearest.z > 0 &&
+        roll(FEEL.bots.fireRatesPerSec.blinkSeek)
+      ) {
+        activateAbility(targeted, bot);
+      }
     }
   }
+
+  // --- Utility ability (Sand Trap, zoneAtOrigin blink): burrow away while
+  // the nearest enemy stands where the quicksand will be left, if the
+  // landing along the facing is live floor. Not mid-dash, like Shadow Step.
+  const utility = findAbilityByTag(bot.abilityStates, 'utility');
+  if (
+    utility && canActivateAbility(utility) && utility.def.zoneAtOrigin && utility.def.zone &&
+    !movementActive(bot)
+  ) {
+    const reach = utility.def.blinkDistance ?? 4.0;
+    const ry = bot.mesh.rotation.y;
+    if (
+      nearestDist < utility.def.zone.radius * FEEL.bots.trapRadiusFrac &&
+      (!arena || arena.isOnArena(bot.x + Math.sin(ry) * reach, bot.z + Math.cos(ry) * reach)) &&
+      roll(FEEL.bots.fireRatesPerSec.trap)
+    ) {
+      activateAbility(utility, bot);
+    }
+  }
+
+  // --- Buff ability (e.g. Frenzy): activate when close to an enemy
+  const buffAbility = findAbilityByTag(bot.abilityStates, 'buff');
+  if (
+    buffAbility && canActivateAbility(buffAbility) &&
+    buffFires(buffAbility.def, bot, allCritters, dx, dz, dist) &&
+    roll(FEEL.bots.fireRatesPerSec.buff)
+  ) {
+    activateAbility(buffAbility, bot);
+  }
+
+  // --- Risky ability (Sebastian's All-in): a miss falls into the void.
+  // Same hold-and-release path as the player: charge only with someone
+  // in the real hit lane (narrowed by allInLaneInset), and never on top of
+  // another ability. tickAllInCharge re-checks on release.
+  const risky = findAbilityByTag(bot.abilityStates, 'risky');
+  if (
+    risky?.def.allInL && risky.def.holdToFireL && canActivateAbility(risky) &&
+    !bot.abilityStates.some((s) => s.active) &&
+    findAllInTarget(risky.def, bot, allCritters, FEEL.bots.allInLaneInset) &&
+    roll(FEEL.bots.fireRatesPerSec.risky)
+  ) {
+    const scene = sceneOf(bot);
+    if (scene) startSebastianAllInCharge(bot, scene, FEEL.bots.allInReactionSec);
+  }
+}
+
+/**
+ * The bot's side of the All-in hold: after allInReactionSec it releases if
+ * the full hit lane still holds someone, and otherwise drops the charge
+ * without spending the cooldown (the old blind release was half of
+ * Sebastian's falls).
+ */
+function tickAllInCharge(bot: Critter, allCritters: Critter[], dt: number): void {
+  bot.lHoldChargeTime += dt;
+  if (bot.lHoldChargeTime < FEEL.bots.allInReactionSec) return;
+  const risky = findAbilityByTag(bot.abilityStates, 'risky');
+  const scene = sceneOf(bot);
+  if (risky && scene && findAllInTarget(risky.def, bot, allCritters)) {
+    releaseSebastianAllInCharge(bot, allCritters, scene);
+  } else {
+    cancelSebastianAllInCharge(bot);
+  }
+}
+
+/** The scene the bot's mesh was added to (Critter's constructor adds it
+ *  to the game scene); the All-in helpers need it for their VFX. */
+function sceneOf(bot: Critter): THREE.Scene | null {
+  const parent = bot.mesh.parent;
+  return parent instanceof THREE.Scene ? parent : null;
+}
+
+/** (dx, dz) → the target, `dist` its length: inside ±halfAngleDeg of the
+ *  bot's gameplay facing (mesh.rotation.y; the turn lag lives on a child
+ *  pivot). */
+function inFacingCone(bot: Critter, dx: number, dz: number, dist: number, halfAngleDeg: number): boolean {
+  const ry = bot.mesh.rotation.y;
+  return dx * Math.sin(ry) + dz * Math.cos(ry) >= dist * Math.cos((halfAngleDeg * Math.PI) / 180);
+}
+
+/** A J leaves along the facing: its near and far probe points must both
+ *  be live floor. No arena view, no probe. */
+function dashStaysOnArena(bot: Critter, arena?: BotArenaView): boolean {
+  if (!arena) return true;
+  const fx = Math.sin(bot.mesh.rotation.y);
+  const fz = Math.cos(bot.mesh.rotation.y);
+  const near = FEEL.bots.dashProbeNear;
+  const far = FEEL.bots.dashProbeFar;
+  return arena.isOnArena(bot.x + fx * near, bot.z + fz * near) &&
+    arena.isOnArena(bot.x + fx * far, bot.z + fz * far);
+}
+
+/** Enemies on the ground (alive, not falling) within `radius` of the bot;
+ *  `pushableOnly` also skips the immune, whom no push moves. */
+function countEnemiesWithin(bot: Critter, allCritters: Critter[], radius: number, pushableOnly: boolean): number {
+  let n = 0;
+  for (const other of allCritters) {
+    if (other === bot || !other.alive || other.falling) continue;
+    if (pushableOnly && other.isImmune) continue;
+    if (Math.hypot(other.x - bot.x, other.z - bot.z) < radius) n++;
+  }
+  return n;
+}
+
+/** True while a frenzy-type ability (the L) of the bot is active, wind-up
+ *  included: the cast is already committed. */
+function ownLRunning(bot: Critter): boolean {
+  return bot.abilityStates.some((s) => s.def.type === 'frenzy' && s.active);
+}
+
+/** True while a dash or blink of the bot is active: another one started now
+ *  would fire from wherever the first leaves it, not from where the bot's
+ *  checks looked. */
+function movementActive(bot: Critter): boolean {
+  return bot.abilityStates.some((s) => s.active && (s.def.type === 'charge_rush' || s.def.type === 'blink'));
+}
+
+/**
+ * When a 'buff' L is worth casting. Never while anchored or charging the
+ * anchor (Shelly shelled up: the saw would stand still). By shape:
+ *   · Frozen Floor: min(2, enemies alive) within floorRadius ×
+ *     floorCastRadiusFrac — it's a zone, not a duel buff.
+ *   · Cone Pulse: the nearest enemy inside the pulse cone (Cheeto can't
+ *     turn during the L).
+ *   · Anything else: an enemy within 3.5 u.
+ */
+function buffFires(def: AbilityDef, bot: Critter, allCritters: Critter[], dx: number, dz: number, dist: number): boolean {
+  if (bot.abilityStates.some((s) => s.active && s.def.selfAnchorWhileBuffed)) return false;
+  if (def.frozenFloorL) {
+    let alive = 0;
+    for (const other of allCritters) if (other !== bot && other.alive) alive++;
+    const r = (def.floorRadius ?? 6.0) * FEEL.bots.floorCastRadiusFrac;
+    return countEnemiesWithin(bot, allCritters, r, false) >= Math.min(2, alive);
+  }
+  if (dist >= 3.5) return false;
+  return def.conePulseL ? inFacingCone(bot, dx, dz, dist, def.pulseAngleDeg ?? 45) : true;
 }

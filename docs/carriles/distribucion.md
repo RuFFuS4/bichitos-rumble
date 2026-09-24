@@ -267,6 +267,23 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-24 — repaso de habilidades: 12 cambios en
+  `BrawlRoom.ts`, uno de ellos BLOQUEA el despliegue.**
+  - **El bloqueo:** `server/src/sim` ya no escribe la copia de Copycat en
+    el kit compartido, que era un bug entre salas. Por eso `BrawlRoom`
+    tiene que leer la L con `getLDef(p)` en 2.e y 2.g, **en el mismo
+    despliegue**. Si no, online la Kurama que copia a Shelly, Cheeto o
+    Kermit se queda solo con el buff.
+  - **El resto** (reaparición limpia, All-in solo hacia delante y fallo =
+    caída, contacto de sierra y toque, Cone Pulse, aterrizajes seguros,
+    Sinkhole, hielo y golpe de las J) no rompe nada si llega después:
+    online queda como hoy. Lista exacta con el código de cada cambio en
+    [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md) §«Pendiente
+    para DISTRIBUCIÓN».
+  - **Tu predicción del paso de integración:** el hielo pasa a leer
+    `frictionMult` y `accelMult` de la zona. Hoy los valores coinciden
+    con los tuyos (5 y 0,35).
+
 - **De PERSONAJES, 2026-09-24 — la orientación cambia en cliente Y
   servidor: se despliegan juntos.** Un empujón ya no gira al bicho. La
   orientación sigue a la velocidad solo mientras va hacia donde empuja

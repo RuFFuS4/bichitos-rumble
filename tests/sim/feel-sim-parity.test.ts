@@ -44,6 +44,15 @@ const PAIRS: Array<[string, number, number]> = [
   ['bots.fireRatesPerSec.radial', FEEL.bots.fireRatesPerSec.radial, SIM.bots.fireRatesPerSec.radial],
   ['bots.fireRatesPerSec.cone', FEEL.bots.fireRatesPerSec.cone, SIM.bots.fireRatesPerSec.cone],
   ['bots.fireRatesPerSec.ranged', FEEL.bots.fireRatesPerSec.ranged, SIM.bots.fireRatesPerSec.ranged],
+  ['bots.fireRatesPerSec.blinkSeek', FEEL.bots.fireRatesPerSec.blinkSeek, SIM.bots.fireRatesPerSec.blinkSeek],
+  ['bots.fireRatesPerSec.trap', FEEL.bots.fireRatesPerSec.trap, SIM.bots.fireRatesPerSec.trap],
+  ['bots.nearbyRadius', FEEL.bots.nearbyRadius, SIM.bots.nearbyRadius],
+  ['bots.radialSoloFrac', FEEL.bots.radialSoloFrac, SIM.bots.radialSoloFrac],
+  ['bots.dashProbeNear', FEEL.bots.dashProbeNear, SIM.bots.dashProbeNear],
+  ['bots.dashProbeFar', FEEL.bots.dashProbeFar, SIM.bots.dashProbeFar],
+  ['bots.rangedAimDeg', FEEL.bots.rangedAimDeg, SIM.bots.rangedAimDeg],
+  ['bots.targetedMinRange', FEEL.bots.targetedMinRange, SIM.bots.targetedMinRange],
+  ['bots.trapRadiusFrac', FEEL.bots.trapRadiusFrac, SIM.bots.trapRadiusFrac],
   ['groundPound.windUp', FEEL.groundPound.windUp, SIM.groundPound.windUp],
   ['groundPound.slowDuringWindUp', FEEL.groundPound.slowDuringWindUp, SIM.groundPound.slowDuringWindUp],
   ['groundPound.radius', FEEL.groundPound.radius, SIM.groundPound.radius],
@@ -68,6 +77,10 @@ const PAIRS: Array<[string, number, number]> = [
   ['chargeRush.duration', FEEL.chargeRush.duration, SIM.chargeRush.duration],
   ['chargeRush.cooldown', FEEL.chargeRush.cooldown, SIM.chargeRush.cooldown],
   ['chargeRush.windUp', FEEL.chargeRush.windUp, SIM.chargeRush.windUp],
+  ['allIn.hitMargin', FEEL.allIn.hitMargin, SIM.allIn.hitMargin],
+  ['allIn.missProbeStep', FEEL.allIn.missProbeStep, SIM.allIn.missProbeStep],
+  ['blink.landingProbeStep', FEEL.blink.landingProbeStep, SIM.blink.landingProbeStep],
+  ['abilities.contactRehitCooldown', FEEL.abilities.contactRehitCooldown, SIM.abilities.contactRehitCooldown],
 ];
 
 describe('FEEL ↔ SIM parity (client and server simulate with the same numbers)', () => {

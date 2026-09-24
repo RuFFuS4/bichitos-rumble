@@ -88,7 +88,50 @@ export const FEEL = {
       cone: 0.839,
       ranged: 0.737,
       buff: 0.382,
+      // 2026-09-24 (repaso de habilidades §5): the K and L the bot never
+      // cast because another slot took their tag first.
+      blinkSeek: 0.702,   // Shadow Step (Cheeto K), same rate as the dash
+      trap: 0.596,        // Sand Trap (Sihans K), what the server rolled for it as a radial
+      grip: 0.5,          // Trunk Grip (Trunk L)
+      risky: 0.382,       // All-in (Sebastian L), the rate it had as a buff
     },
+    // Enemies counted as "nearby" (surrounded) and the cap on a radial K's
+    // radius when the bot judges it (Trunk Slam reaches 7 u; with the cap
+    // it is judged like today). Mirror: SIM.bots.nearbyRadius.
+    nearbyRadius: 4.0,
+    // A pushing radial K also fires on a single enemy this close, as a
+    // fraction of min(radius, nearbyRadius): Sergei's Shockwave never came
+    // out in a 1v1 (0 of 81). Mirror: SIM.bots.radialSoloFrac.
+    radialSoloFrac: 0.7,
+    // Void probe along the FACING before a J (the dash leaves by the
+    // facing, not toward the target): both points must be live floor.
+    // Sihans fell 0.01-0.14 s after 12 of her 16 falls following a J.
+    // Mirror: SIM.bots.dashProbeNear/Far.
+    dashProbeNear: 1.0,
+    dashProbeFar: 3.0,
+    // Snowball only within ±this of the facing: it flies along it, and
+    // 17 of 51 audited throws started with the target 150°+ off.
+    // Mirror: SIM.bots.rangedAimDeg.
+    rangedAimDeg: 35,
+    // Grip and Shadow Step aren't spent on someone already at headbutt
+    // range. Mirror: SIM.bots.targetedMinRange (Shadow Step).
+    targetedMinRange: 3.0,
+    // Trunk Grip reaches 28 u, more than the arena's diameter: the bot
+    // doesn't yank from the far side. Offline only (online bots cast no L).
+    gripMaxRange: 10,
+    // Sand Trap when the nearest enemy stands within zone.radius × this of
+    // the bot, so the quicksand left behind catches them.
+    // Mirror: SIM.bots.trapRadiusFrac.
+    trapRadiusFrac: 0.8,
+    // Frozen Floor needs min(2, enemies alive) within floorRadius × this.
+    floorCastRadiusFrac: 0.6,
+    // Sebastian's All-in: a miss falls into the void. The bot charges only
+    // with someone inside the real hit lane narrowed by this inset (u),
+    // holds for allInReactionSec like a player would, then re-checks the
+    // full lane: a hit resolves, an empty lane drops the charge without
+    // spending the cooldown.
+    allInLaneInset: 0.4,
+    allInReactionSec: 0.5,
   },
 
   // --- Headbutt ---
@@ -149,6 +192,33 @@ export const FEEL = {
     cooldown: 18.0,           // ultimate-tier cooldown
   },
 
+  // --- All-in (Sebastian L) resolution. Mirror: SIM.allIn ---
+  allIn: {
+    hitMargin: 0.55,          // lane half-width = caster radius + target radius + this; only targets ahead count
+    missProbeStep: 0.5,       // a miss walks the dash line in these steps to the first point off the arena and falls there
+  },
+
+  // --- Blink landing (Sand Trap, Shadow Step). Mirror: SIM.blink ---
+  blink: {
+    landingProbeStep: 0.5,    // a target off live floor steps back toward the origin in these steps; none on floor = stay put
+  },
+
+  // --- Mirror Trick (Kurama K) look. Visual only, no SIM mirror ---
+  decoy: {
+    ghostAlpha: 0.08,         // Kurama's own opacity while the trick lasts: the decoy is the Kurama on screen (Rafa 2026-05-01: «invisible o casi invisible»)
+    fadeFrom: 0.7,            // share of the decoy's life it stays solid, outline included; it fades out over the rest
+    arrivalPuffs: 2,          // dust puffs where she reappears: a hint for whoever looks, not a beacon
+  },
+
+  // --- L contact passes (Saw Shell, Stampede ram, Toxic Touch). Mirror: SIM.abilities ---
+  // Here and not in the ability defs: a def field that a copied L must
+  // carry has to join COPYCAT_KEYS on both sides (src/abilities.ts and
+  // server/src/sim/abilities.ts); this cooldown belongs to every contact
+  // pass, copied or not.
+  abilities: {
+    contactRehitCooldown: 0.3, // s before the same caster can contact-hit the same victim again (it used to land every frame)
+  },
+
   // --- Match ---
   match: {
     duration: 120,            // seconds total (raised from 90 for 3-life matches)
@@ -177,7 +247,7 @@ export const FEEL = {
   shake: {
     headbutt: 0.22,           // amplitude when a headbutt connects
     groundPound: 0.45,        // stronger, it's a slam
-    chargeRush: 0.15,         // online dash broadcast only — offline fireChargeRush has no shake today (known drift)
+    chargeRush: 0.15,         // online dash broadcast; offline, a dash's first contact with each victim (physics.ts rushContactFeedback) — fireChargeRush itself has no shake (known drift)
     frenzyFactor: 0.55,       // × groundPound on frenzy activation; abilities.ts fireFrenzy still inlines the same 0.55 — unify when touching that file
     decay: 0.18,              // how fast the shake fades (seconds)
   },
@@ -257,7 +327,7 @@ export const FEEL = {
   look: {
     outline: 1,               // 1 = contorno, 0 = sin él (también `?look=plain`)
     outlineWidth: 0.075,      // u de mundo
-    outlineMinPx: 2,          // px CSS
+    outlineMinPx: 1,          // px CSS. 2 → 1 el 2026-09-24 (Rafa, viendo móvil: «¿quizás es muy grueso?»): en un móvil apaisado los bichos miden 20-25 px y el suelo de 2 px por lado se comía la silueta; en escritorio queda ~1,5 px (lo decide el ancho de mundo)
     outlineMaxPx: 5,          // px CSS
     outlineDepthPush: 0.12,   // u: el casco se aparta hacia el fondo (solo en profundidad, sin moverse en pantalla) para no manchar los huecos del propio bicho (brazos de Kermit, patas de Cheeto)
   } as { outline: number; outlineWidth: number; outlineMinPx: number; outlineMaxPx: number; outlineDepthPush: number },
@@ -275,12 +345,37 @@ export function triggerHitStop(duration: number): void {
   hitStopTimer = Math.max(hitStopTimer, duration * FEEL.accessibility.motionScale);
 }
 
+// The gameplay ticks that run outside game.update (ability zones, offline
+// L mechanics, projectiles) must freeze with it. applyHitStop runs once
+// per offline 'playing' step: `simStep` counts those calls and
+// `frozenStep` marks the last one that froze.
+let simStep = 0;
+let frozenStep = -1;
+
 export function applyHitStop(dt: number): number {
+  simStep++;
   if (hitStopTimer > 0) {
     hitStopTimer -= dt;
+    frozenStep = simStep;
     return 0;
   }
   return dt;
+}
+
+/**
+ * A reader of the hit-stop freeze for one of those ticks: call the
+ * returned function once at the top of the tick and skip the tick when it
+ * says true. It is true only when a step ran since the previous call AND
+ * that step froze, so a freeze can't go stale once applyHitStop stops
+ * running (pause menu, title, online — where the ticks must keep going).
+ */
+export function createFrozenFrameGate(): () => boolean {
+  let seen = simStep;
+  return () => {
+    const frozen = simStep !== seen && frozenStep === simStep;
+    seen = simStep;
+    return frozen;
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind, isOnSlipperyZone } from './abilities-runtime';
+import { cancelAbility, createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind, getSlipperyZone } from './abilities-runtime';
 import type { AbilityState } from './abilities';
 import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
@@ -11,6 +11,7 @@ import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, r
 import { deriveCritterStats } from './pws-stats';
 import { measurePosedBox } from './posed-bounds';
 import { attachOutline, normalizeCritterMaterials, setOutlineVisible, type CritterOutline } from './critter-look';
+import { removeDecoy, tickDecoy } from './abilities-vfx';
 
 /**
  * Behaviour tag used ONLY by the /tools.html dev lab to isolate bot
@@ -226,9 +227,9 @@ export class Critter {
   lives = FEEL.lives.default;
   immunityTimer = 0;
   /** v0.11 — Kurama Mirror Trick: while > 0 the GLB mesh is
-   *  rendered at alpha 0.25 ("ghost"). Independent of immunityTimer
-   *  so the immunity blink and the invisibility don't collide
-   *  visually. Decremented per update(dt). */
+   *  rendered at FEEL.decoy.ghostAlpha ("ghost"; Sihans' burrow: 0).
+   *  Independent of immunityTimer, and drawn over the immunity blink
+   *  in updateVisuals. Decremented per update(dt). */
   invisibilityTimer = 0;
   /** v0.11 — Shelly Steel Shell: while > 0 the GLB materials get
    *  emissive tinted to `selfTintHex`. Provides a "metallic mode"
@@ -533,6 +534,7 @@ export class Critter {
       tickProceduralAnimation(this, dt);
       this.updateVisuals();
       this.tickFeedback(dt);
+      tickDecoy(this, dt);
       return;
     }
 
@@ -619,10 +621,11 @@ export class Critter {
 
     // Friction: faster decay when no input (stops drift), normal decay
     // with input. 2026-04-30 final-L — slippery zones (Kowalski Frozen
-    // Floor) push the half-life ~5× higher, so velocity decays slower
-    // and the critter slides.
+    // Floor) multiply the half-life by the ice's `frictionMult`, so
+    // velocity decays slower and the critter slides.
     let halfLife = this.hasInput ? FEEL.movement.frictionHalfLife : FEEL.movement.idleFrictionHalfLife;
-    if (isOnSlipperyZone(this.x, this.z, this.config.name)) halfLife *= 5;
+    const ice = getSlipperyZone(this.x, this.z, this.config.name);
+    if (ice) halfLife *= ice.frictionMult;
     const friction = Math.pow(0.5, dt / halfLife);
     this.vx *= friction;
     this.vz *= friction;
@@ -676,6 +679,8 @@ export class Critter {
     // Visual feedback for ability states (emissive, body scale, head offset)
     this.updateVisuals();
     this.tickFeedback(dt);
+    // Mirror Trick decoy: its life is game time, like everything here.
+    tickDecoy(this, dt);
   }
 
   /** Game feel visual systems (visual-only, no gameplay logic). Runs AFTER
@@ -731,7 +736,9 @@ export class Critter {
           headOffsetY = FEEL.groundPound.windUpHeadDrop;
           glowColor = 0xffff00;
           glowIntensity = 0.5;
-        } else {
+        } else if (!s.def.selfBuffOnly) {
+          // A self-buff K (Steel Shell, Mirror Trick) slams nothing: its
+          // look is the tint or the ghost below, not the slam's red.
           glowColor = 0xff2200;
           glowIntensity = 0.7;
         }
@@ -794,7 +801,34 @@ export class Critter {
     // frame, invisibility, fog fade): a solid contour around a ghost reads
     // as a hole.
     let translucent = this.fadeAlpha !== null;
-    if (this.immunityTimer > 0) {
+    // Immunity a self-buff K grants (Steel Shell, Mirror Trick) is a
+    // stance the critter chose, not a respawn: it keeps its own look
+    // (tint, ghost). The respawn blink made the steel shell read as
+    // intangible — the opposite of a wall you bounce off.
+    const selfBuff = this.abilityStates.some((s) => s.active && s.windUpLeft <= 0 && s.def.selfBuffOnly);
+    if (this.invisibilityTimer > 0) {
+      // v0.11 — Kurama Mirror Trick. Mesh ghosted while the decoy
+      // tricks bots and other players.
+      // 2026-04-29 K-session — Sihans Burrow Rush reuses the same
+      // timer but collapses to alpha 0 (totally underground) for
+      // its short 0.30 s window.
+      // 2026-05-01 microfix (Rafa: "Kurama original debe estar
+      // invisible o casi invisible mientras dura el clon"): alpha
+      // dropped 0.25 → 0.08 (FEEL.decoy.ghostAlpha). Still leaves a
+      // faint silhouette so a very attentive player can spot her if
+      // they really look, but at glance the decoy is the only Kurama
+      // on screen.
+      // Checked BEFORE the immunity blink: Mirror Trick writes both
+      // timers, and until 2026-09-24 the blink won, so the ghost was
+      // never drawn (Kurama blinked white and opaque instead).
+      const ghostAlpha = this.config.name === 'Sihans' ? 0.0 : FEEL.decoy.ghostAlpha;
+      translucent = true;
+      for (const mat of mats) {
+        mat.transparent = true;
+        mat.opacity = ghostAlpha;
+        mat.depthWrite = false;
+      }
+    } else if (this.immunityTimer > 0 && !selfBuff) {
       const phase = (Date.now() * 0.001 * FEEL.lives.blinkRate) % 1;
       const visible = phase < 0.5;
       if (!visible) translucent = true;
@@ -807,24 +841,6 @@ export class Critter {
           mat.emissive.setHex(0xffffff);
           mat.emissiveIntensity = 0.8;
         }
-      }
-    } else if (this.invisibilityTimer > 0) {
-      // v0.11 — Kurama Mirror Trick. Mesh ghosted while the decoy
-      // tricks bots and other players.
-      // 2026-04-29 K-session — Sihans Burrow Rush reuses the same
-      // timer but collapses to alpha 0 (totally underground) for
-      // its short 0.30 s window.
-      // 2026-05-01 microfix (Rafa: "Kurama original debe estar
-      // invisible o casi invisible mientras dura el clon"): alpha
-      // dropped 0.25 → 0.08. Still leaves a faint silhouette so a
-      // very attentive player can spot her if they really look,
-      // but at glance the decoy is the only Kurama on screen.
-      const ghostAlpha = this.config.name === 'Sihans' ? 0.0 : 0.08;
-      translucent = true;
-      for (const mat of mats) {
-        mat.transparent = true;
-        mat.opacity = ghostAlpha;
-        mat.depthWrite = false;
       }
     } else {
       for (const mat of mats) {
@@ -865,15 +881,16 @@ export class Critter {
     // on enemies standing inside a sand zone. Subtle warm-brown
     // emissive pulse so a critter caught in the swirl reads as
     // "ralentizado por arena" without competing with the snowball
-    // freeze (cyan) or shells. Self-skip: Sihans inside her own
-    // quicksand keeps her normal look so the caster stays
+    // freeze (cyan) or shells. Self-skip by zone owner, as the slow
+    // itself does: the caster inside its own sand (Sihans, or a Kurama
+    // that copied the Sinkhole) keeps its normal look and stays
     // distinguishable. Snowball freeze takes priority because slow
     // is more severe (50 %) than the quicksand 50 %, but both
     // happen rarely enough simultaneously that the cyan-over-amber
     // collision is acceptable.
-    if (this.slowTimer === 0 && this.config.name !== 'Sihans' &&
-        getZoneSlowMultiplier(this.x, this.z) < 1 &&
-        isInsideZoneOfKind(this.x, this.z, 'sand')) {
+    if (this.slowTimer === 0 &&
+        getZoneSlowMultiplier(this.x, this.z, this.config.name) < 1 &&
+        isInsideZoneOfKind(this.x, this.z, 'sand', this.config.name)) {
       const pulse = 0.50 + 0.30 * Math.sin(Date.now() * 0.006);
       for (const mat of mats) {
         mat.emissive.setHex(0xb98c54);
@@ -1141,10 +1158,16 @@ export class Critter {
       const prev = this.lastAbilityActive[i];
       const slotState: SkeletalState = (['ability_1', 'ability_2', 'ability_3'] as const)[i];
       if (active && !prev) {
+        // Undefined unless the def sets a rate, so the clip's
+        // ANIMATION_OVERRIDES speed (what anim-lab tunes) applies. A
+        // `?? 1` here overrode it from 47728db to 2026-09-24: every
+        // ability clip without clipPlaybackRate ran at 1× in a match.
         this.skeletal.play(slotState, {
-          timeScale: state.def.clipPlaybackRate ?? 1,
+          timeScale: state.def.clipPlaybackRate,
         });
-      } else if (!active && prev && state.def.cancelAnimOnEnd) {
+      } else if (!active && prev && state.def.cancelAnimOnEnd && this.skeletal.getCurrentState() === slotState) {
+        // Only cut this slot's own clip: a J that ends (or is cancelled
+        // by Steel Shell) under the K must not snap the K's pose to idle.
         const vMag = Math.sqrt(this.vx * this.vx + this.vz * this.vz);
         const moving = vMag > FEEL.movement.velocityDeadZone * 2;
         this.skeletal.play(moving ? 'run' : 'idle');
@@ -1205,11 +1228,36 @@ export class Critter {
     this.falling = true;
     this.lives--;
     this.respawnTimer = FEEL.lives.respawnDelay;
+    this.cancelActiveAbilities();
     playSound('fall');
     // Skeletal fall clip — kept until respawn (one-shot with defeat
     // fallback so if there's no fall clip but there is defeat, it still
     // reads as "going down" instead of idle during the drop).
     this.playSkeletal('fall', { fallback: 'defeat' });
+  }
+
+  /**
+   * A fall ends everything in flight: active abilities (cooldown started
+   * as if they had run out), the All-in charge and the buffs' visual
+   * timers. Abilities don't tick while falling, so they used to resume at
+   * the respawn point (Cone Pulse firing at the centre, a K pressed
+   * mid-fall going off there, a bot's All-in resolving from the spawn).
+   * Server mirror: `startFalling` in server/src/sim/physics.ts.
+   */
+  private cancelActiveAbilities(): void {
+    for (const s of this.abilityStates) {
+      if (s.active) cancelAbility(s);
+    }
+    this.lHoldCharging = false;
+    this.lHoldChargeTime = 0;
+    this.invisibilityTimer = 0;
+    this.selfTintTimer = 0;
+    this.selfTintHex = null;
+    // The trick is over: its decoy goes too.
+    removeDecoy(this);
+    // No end edge for the skeletal layer: a cancelled slot must not cut
+    // the respawn clip on the first update after the fall.
+    this.lastAbilityActive.fill(false);
   }
 
   /** Update falling state. Returns true if critter should respawn now. */
@@ -1240,6 +1288,12 @@ export class Critter {
     this.mesh.position.y = 0;
     this.resetVisualMotion();
     this.immunityTimer = FEEL.lives.immunityDuration;
+    // Control statuses die with the life they were put on: no stun,
+    // confusion or snowball slow carries over to the respawn (they were
+    // frozen during the fall). Server mirror: BrawlRoom's respawn block.
+    this.stunTimer = 0;
+    this.confusedTimer = 0;
+    this.slowTimer = 0;
     playSound('respawn');
     this.isHeadbutting = false;
     this.headbuttAnticipating = false;
@@ -1273,6 +1327,7 @@ export class Critter {
    */
   dispose(): void {
     if (this.mesh.parent) this.mesh.parent.remove(this.mesh);
+    removeDecoy(this);
     // Skeletal animator: release the mixer's actions first. The
     // underlying AnimationClip objects are SHARED across clones and must
     // not be disposed here — the model-loader cache owns them.

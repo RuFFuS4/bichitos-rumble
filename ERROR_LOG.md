@@ -1,5 +1,40 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-24] El repaso de habilidades destapa bugs de producción de hace meses
+- **Where**: `src/abilities-runtime.ts`, `src/critter.ts` y
+  `server/src/sim/abilities.ts`. Detalle en `docs/REPASO_HABILIDADES.md`.
+- **Symptom / Cause**, de más a menos grave:
+  - **Copycat escribía su copia en la definición compartida.** En el
+    servidor ese objeto lo comparten todas las salas, así que una Kurama
+    podía cambiar la L de otra partida. Además, copiar a Sebastian
+    mataba a Kurama al fallar.
+  - **Offline, las habilidades ignoraban la inmunidad.** El servidor sí la
+    respeta. Trunk Slam lanzaba a Shelly anclada en Steel Shell a 20 u/s,
+    y como `checkFalloff` no deja caer a un inmune, el empujado quedaba
+    flotando sobre el vacío.
+  - **Mirror Trick nunca se vio como se diseñó** (desde 69e7609). En
+    `updateVisuals` la rama de inmunidad iba antes que la de
+    invisibilidad, y el truco escribe los dos temporizadores: Kurama
+    parpadeaba blanca y opaca, y el alfa 0,08 que pidió Rafa no se pintó
+    nunca. El checklist lo daba por «confirmado».
+  - **Las velocidades de clip de `ANIMATION_OVERRIDES` no llegaban a las
+    habilidades** (desde 47728db). `clipPlaybackRate ?? 1` siempre tenía
+    valor y ganaba al ajuste del laboratorio.
+  - **La sierra de Shelly seguía empujando durante el hit stop**, que no
+    congelaba los ticks de fuera de `game.update`: llegaba a 600-1260
+    u/s.
+  - **El Sinkhole se comía la baldosa de Sihans** en el 15,5 % de los
+    lanzamientos.
+  - **Al caer no se limpiaba nada.** El All-in podía lanzarse desde el
+    vacío.
+- **Fix**: rama `claude/fix/personajes-repaso-habilidades`. Cada arreglo
+  se verificó antes y después contra un servidor «foto fija».
+- **Lección**:
+  - Un «confirmado» en un checklist no vale si no hay una captura que lo
+    enseñe: filmar las habilidades (`ability-shots.mjs`) destapó en una
+    tarde lo que meses de QA a ojo no vieron.
+  - Una definición compartida no se muta nunca.
+
 ### [2026-09-24] El fundido entre clips saltaba a mitad de camino en un fotograma
 - **Where**: `src/critter-skeletal.ts` `play()`, desde su primer commit
   (aed6695, 2026-04-19). Afectaba a producción, en cada cambio de clip.

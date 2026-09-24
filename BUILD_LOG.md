@@ -1,5 +1,47 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-24 — [PERSONAJES] Repaso de las 27 habilidades: bugs de producción, IA de los bots y contorno más fino
+
+- **Método**: las 27 habilidades filmadas y medidas
+  (`scripts/ability-shots.mjs`), más una tanda de bots. Repaso con un
+  revisor y un escéptico por bicho, y arreglos en ocho grupos verificados
+  antes y después, con revisión adversarial del diff. Todo en
+  `docs/REPASO_HABILIDADES.md`, con el informe completo en
+  `REPASO_HABILIDADES_INFORME.md`.
+- **Bugs de producción arreglados**:
+  - la inmunidad se ignoraba offline;
+  - al caer no se limpiaba nada;
+  - el All-in eliminaba por detrás y fallar no garantizaba la caída;
+  - el hit stop no congelaba la sierra de Shelly (600-1260 u/s);
+  - Copycat mutaba la definición compartida (en el servidor, entre
+    salas);
+  - el Sinkhole se comía la baldosa de Sihans;
+  - los aterrizajes caían al vacío;
+  - el hielo de Kowalski no frenaba la aceleración offline;
+  - Mirror Trick no se veía como se diseñó;
+  - las velocidades de clip del laboratorio no llegaban a las
+    habilidades.
+- **IA**:
+  - Trunk Grip, Sand Trap y Shadow Step se usan por fin (antes, 0 veces);
+  - el All-in de los bots ya no se suicida (13 → 0);
+  - sonda del dash, puertas de puntería y radiales con criterio.
+- **Medido**: roster más igualado (dispersión del «eliminado» 17,9 → 13,0
+  puntos) y Sebastian de eliminado en el 72 % a en el 53 %.
+- **Golden** regenerado: las K ya no empujan a inmunes, Shelly no embiste
+  anclada, los bots usan las habilidades nuevas y el laboratorio conecta
+  el arena. 3/3 detrás.
+- **Fuera de carril, dicho aquí**:
+  - `src/tools/main.ts` (+2 líneas: el laboratorio conecta el arena a
+    las habilidades, como ya hace `main.ts`);
+  - `tests/sim/server-bot.test.ts` y `feel-sim-parity.test.ts`, que
+    prueban mis módulos;
+  - un test nuevo de paridad de kits.
+- **Contorno** (Rafa vía INTERFAZ, «¿quizás es muy grueso?»):
+  `outlineMinPx` 2 → 1. En móvil queda a la mitad; en escritorio, ~1,5 px.
+- **BLOQUEO DE DESPLIEGUE**: `BrawlRoom` tiene que leer la L con
+  `getLDef(p)` en el mismo despliegue que este `server/src/sim`. Aviso y
+  lista completa en el buzón de DISTRIBUCIÓN.
+
 ## 2026-09-24 — [Interfaz] El HUD en móvil, reestructurado (lo que le faltaba al jugador)
 
 La medición (`scripts/hud-shots.mjs`, que queda como herramienta) dijo que

@@ -55,7 +55,17 @@ export const SIM = {
     edgeSteer: 1.6,
     lookAhead: 1.1,
     defendRange: 2.8,
-    fireRatesPerSec: { mobility: 0.702, radial: 0.596, cone: 0.839, ranged: 0.737 },
+    // blinkSeek: Shadow Step, trap: Sand Trap. The L rates (buff, grip,
+    // risky) stay client-only while online bots cast no L.
+    fireRatesPerSec: { mobility: 0.702, radial: 0.596, cone: 0.839, ranged: 0.737, blinkSeek: 0.702, trap: 0.596 },
+    // Slot-2 aim and the J's void probe (2026-09-24). Mirrors of FEEL.bots.
+    nearbyRadius: 4.0,
+    radialSoloFrac: 0.7,
+    dashProbeNear: 1.0,
+    dashProbeFar: 3.0,
+    rangedAimDeg: 35,
+    targetedMinRange: 3.0,
+    trapRadiusFrac: 0.8,
   },
 
   chargeRush: {
@@ -83,6 +93,22 @@ export const SIM = {
     windUp: 0.4,
     slowDuringWindUp: 0.1,
     cooldown: 18.0,
+  },
+  // Sebastian's All-in resolution. Mirror of FEEL.allIn. Reader pending:
+  // BrawlRoom's All-in pass (DISTRIBUCIÓN) still resolves with its own
+  // numbers.
+  allIn: {
+    hitMargin: 0.55,
+    missProbeStep: 0.5,
+  },
+  // Blink landing (Sand Trap, Shadow Step). Mirror of FEEL.blink.
+  blink: {
+    landingProbeStep: 0.5,
+  },
+  // L contact passes (Saw Shell, Stampede ram, Toxic Touch). Mirror of
+  // FEEL.abilities; read by takeContactHit in ./abilities.ts.
+  abilities: {
+    contactRehitCooldown: 0.3,
   },
 
   match: {

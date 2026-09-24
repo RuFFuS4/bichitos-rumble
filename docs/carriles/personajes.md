@@ -104,7 +104,9 @@ antes de commitear el JSON.
    - [x] **Contorno** (decisión 5), hecho el 2026-09-24:
          - casco invertido solo en los bichos (`src/critter-look.ts`);
          - un color, `#1a0820`;
-         - ancho relativo al tamaño en pantalla, recortado a 2-5 px;
+         - ancho relativo al tamaño en pantalla, recortado a 1-5 px (el
+           mínimo bajó de 2 a 1 el mismo día: en móvil se comía la
+           silueta, Rafa vía INTERFAZ);
          - se oculta cuando el bicho se vuelve translúcido;
          - regla en `STYLE_LOCK.md`, mandos en `FEEL.look`, más
            `DevApi.setCritterLook` (permiso de Rafa) y `?look=plain`;
@@ -114,13 +116,35 @@ antes de commitear el JSON.
          INTERFAZ) salen sin él: aviso en su buzón.
    - [ ] Texturas nuevas de los Tripo: aparcado, Rafa no tiene acceso a
          Tripo ahora mismo.
-3. **Feel pass de Kurama** (heredado de H4; receta en `NEXT_STEPS.md`).
-4. **Shaders cartoon**: Rafa eligió el 2026-09-23 contorno sobre el
+3. **Repaso de las 27 habilidades** (Rafa, 2026-09-24: *«repasa también
+   las habilidades de cada uno»*). Todo en
+   [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md) y el informe
+   completo en `REPASO_HABILIDADES_INFORME.md`.
+   - [x] Bugs de producción e IA de los bots, arreglados y medidos (rama
+         `claude/fix/personajes-repaso-habilidades`).
+   - [ ] **Segunda tanda, decisiones de Rafa (2026-09-24)**:
+         - paso fijo de simulación, con permiso para `main.ts`;
+         - golpe en los dashes (Kurama los atraviesa);
+         - el aturdido no actúa, con Grip 2,5 s;
+         - frenesí de Sergei ×0,4 de empuje recibido;
+         - All-in con carga mínima de 0,35 s y apuntando;
+         - Mirror Trick alejándose del perseguidor más cercano;
+         - Shelly frena en seco con el escudo, cae si se hunde la baldosa
+           y su embestida golpea;
+         - Kowalski: Ice Slide que desliza, bola lanzada a mano a tiempo
+           con su clip y buff a mi criterio;
+         - L de los bots online.
+         - **No** se toca Toxic Touch: que se inviertan todos los
+           controles es la intención.
+   - [ ] Lo que falta en `BrawlRoom` (DISTRIBUCIÓN), en tierra de nadie,
+         INTERFAZ y ARENA: listado en el documento.
+4. **Feel pass de Kurama** (heredado de H4; receta en `NEXT_STEPS.md`).
+5. **Shaders cartoon**: Rafa eligió el 2026-09-23 contorno sobre el
    sombreado actual, no toon (punto 2). Si vuelve el toon, el precedente
    sigue en pie: en la fase 1a se vio que tone mapping y PMREM tocan
    **toda** la escena. Un toon shader sería lo mismo pero peor, así que iría
    detrás de un flag y con el roster de nueve delante para comparar.
-5. **SFX por critter**: el diseño es tuyo (identidad del bicho), pero el
+6. **SFX por critter**: el diseño es tuyo (identidad del bicho), pero el
    motor de audio (`src/audio.ts`) es del carril INTERFAZ → deja la nota
    en su buzón en vez de editarlo.
 
