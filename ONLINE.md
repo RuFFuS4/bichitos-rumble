@@ -419,9 +419,9 @@ el módulo real a 60 y 144 Hz; 2026-09-24):
 | Frames parados del local | 60-86 % | 0 % en crucero (solo se para en un hueco de red > 150 ms) |
 | Tirón p95 del local en crucero | 5,5-14,4 px | ≤ 0,77 px (RTT 160) |
 | Retraso del local en LAN | 28-34 ms | 0-1 ms |
-| Ratio de velocidad por frame (p5-p95) | 0-9,6 | 0,94-1,20 |
+| Ratio de velocidad por frame del local (p5-p95) | 0-9,6 | 0,94-1,20 (los bots rivales con habilidades y RTT salen de ese rango sin que se note: tirón ≤ 0,7 px) |
 | Coherencia local↔rivales p95 | 10-20 px | 2,6-12,5 px menos que `legacy` |
-| Pasada de largo al parar, local (p99) | 0 | ≤ 2,6 px |
+| Pasada de largo al parar, local (p99) | 0 | ≤ 2,6 px en las 33 grabaciones de la verificación; en 2 de las 4 de `bf7b3ee`, 3,6-6,9 px, siempre por una sola frenada |
 | Pasada de largo al parar, rivales (p99) | ≤ 1,1 px | mediana 1,9, peor 8,3 px |
 
 La pasada de los rivales es el precio conocido: si un parche llega tarde,

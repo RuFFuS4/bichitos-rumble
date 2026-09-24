@@ -1,5 +1,70 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [DISTRIBUCIÓN] v1.8-terreno-v2 en producción: H4.5 entero, con guard de versión y suavizado online
+
+- **Despliegue**: merge `--no-ff` de `bf7b3ee` (el SHA verificado, no
+  `dev` a secas) → `main` `784779f`, tag `v1.8-terreno-v2`. Push a las
+  21:59:43 UTC del 2026-09-24.
+  - **Vercel** sirvió la build nueva a los ~38 s.
+  - **Railway**, el proceso nuevo a los ~2 min. En BUILD_LOG estaba
+    anotado ~30 s; la verificación del 2026-09-21 midió ~69 s.
+  - En la ventana (~1:24, cliente nuevo contra servidor viejo) había 0
+    partidas.
+  - Rollback, si hiciera falta: Vercel `dpl_9LKsaf69bRibyTWN8AkTgnngh5dH`
+    (f41fb7e) y Railway, el despliegue de f41fb7e. Siempre los dos lados.
+- **Qué salió** (~55 commits desde v1.7):
+  - ARENA: terreno v2, fondo v2 F0 (la isla en el cielo) y cono.
+  - PERSONAJES: feeling, velocidad ×1,375, mejora gráfica y repaso de las
+    27 habilidades.
+  - INTERFAZ: portal apagado en itch y Steam, HUD en móvil.
+  - DISTRIBUCIÓN:
+    - guard de versión (`NET_PROTOCOL` 2);
+    - suavizado online;
+    - zona muerta espejada y Copycat por jugador en `BrawlRoom`;
+    - ws 8.21.3;
+    - payload 27,4 MB con ratchet a 30;
+    - GLB de bicho `immutable` con `?v=`.
+- **Verificado antes** (`bf7b3ee`, 6 frentes):
+  - check, `test:sim` 171/171, golden 3/3, smoke 4/4, Docker;
+  - partida online real de 2 clientes con el suavizado, y Copycat online;
+  - cruce con un cliente v1.7 REAL (el caso del 4º asiento cerrado);
+  - 5 biomas y compatibilidad (solo se añade `GameState.protocol`, sin
+    migraciones);
+  - capturas aprobadas por Rafa.
+- **Comprobado después** (producción, sin crear datos):
+  - `/health` → `protocol: 2`, `protocolGuard: "on"`;
+  - `/api/leaderboard` 200;
+  - `POST /matchmake/joinOrCreate/brawl {}` → **523 `client_outdated`
+    a través del edge de Railway** (primera vez que se prueba fuera de
+    local);
+  - `/` con `max-age=0`; `/assets` y los GLB con `?v=` `immutable`, sin
+    `?v=` un día;
+  - release de Sentry `784779f`;
+  - navegador mudo en www: 0 errores, 0 respuestas 4xx, el portal en la
+    web y apagado con `?ref=itch`, y `?netsmooth=legacy|localonly`
+    funcionan.
+- **Suavizado online** (`src/net-smoothing.ts`, ONLINE.md «Suavizado
+  online»):
+  - Decisión: 3 diseños + 3 jueces; ganó extrapolar (24 frente a 20 y
+    19,5). Descartadas la interpolación con retardo (+22-42 ms de
+    latencia de mando) y la predicción completa (rivales desplazados
+    52-66 px a RTT 80-160).
+  - Verificación en el juego real: 33 grabaciones a LAN y RTT 80/160.
+    Sacó 3 fallos, arreglados: el reloj pasa a ventana de 1 s, el local
+    frena un RTT después y los teleports cortos saltan.
+  - Resultado en local: frames parados 60-86 % → 0 en crucero; retraso
+    28-34 → 0-1 ms; tirón p95 hasta 14 px → ≤ 0,8 px.
+  - Pendiente: el A/B de Rafa contra Railway (la pasada al frenar).
+- **Lecciones**:
+  1. **Mergear el SHA verificado.** `dev` se movió dos veces durante la
+     preparación: INTERFAZ y un bloqueo de Copycat de PERSONAJES que
+     había que meter.
+  2. **Nada de probar el online de producción con navegador.** Crea
+     nicks y filas en la base real. Para el guard basta `curl`: el
+     rechazo no crea sala.
+  3. **Un servidor local en Windows sin temporizadores precisos va a
+     0,72×.** Todo lo online se juzga con `npm run dev` (precise-timers).
+
 ## 2026-09-24 — [PERSONAJES] Repaso de las 27 habilidades: bugs de producción, IA de los bots y contorno más fino
 
 - **Método**: las 27 habilidades filmadas y medidas

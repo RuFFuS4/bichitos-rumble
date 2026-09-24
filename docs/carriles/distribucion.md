@@ -6,8 +6,16 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Pendiente (por orden)
 
-1. **El despliegue de v1.8 (H4.5) — Rafa pidió prepararlo (2026-09-24).**
-   En producción sigue `v1.7-h4-social` (main `f41fb7e`).
+1. **v1.8 (H4.5) — ✅ EN PRODUCCIÓN desde el 2026-09-24 a las 22:00 UTC**
+   (main `784779f` = `bf7b3ee`, tag `v1.8-terreno-v2`). Comprobaciones de
+   después y lecciones en BUILD_LOG (2026-09-25, DISTRIBUCIÓN).
+   - **Queda de Rafa, a mano:**
+     - el A/B del suavizado contra Railway (`?netsmooth=legacy` frente a
+       normal, con `__game.netSmoother.stats()`);
+     - 2 pestañas en una sala privada hasta el primer colapso;
+     - Sentry sin issues nuevos.
+
+   Lo de abajo es cómo se preparó, para el próximo despliegue.
    - **Qué viaja** (lo que hay en `dev`, ~55 commits):
      - ARENA: terreno v2, cono y fondo v2 F0, la isla en el cielo, con
        las hojas aprobadas por Rafa el 2026-09-21;
@@ -231,13 +239,13 @@ git push origin main          # dispara Vercel y Railway a la vez
 ```
 
 **2. La ventana (unos 2 min)**
-- Vercel termina antes (~20 s): en el log tiene que salir
-  `[payload-budget] OK`.
-- Railway tarda ~70 s (estimado por el uptime de `/health`; la vez
-  anterior BUILD_LOG anotó ~30 s). En el log, `[server] listening`.
-- El orden por defecto es el bueno: las partidas de un cliente nuevo
-  contra el servidor viejo mueren con el reinicio antes del primer
-  colapso (s. 28). No lo inviertas.
+- Vercel termina antes: en el log tiene que salir `[payload-budget] OK`.
+- Railway tarda más: en el log, `[server] listening`.
+- Medido en v1.8 (2026-09-24): Vercel sirvió la build nueva a los ~38 s
+  del push y Railway, el proceso nuevo, a los ~2 min. Se ve con un bucle
+  de `curl` a `/health` (uptime y `protocol`) y al `index-*.js` de www.
+- Con el guard, en esa ventana el cliente nuevo ve «el servidor se está
+  actualizando» y no llega a sentarse.
 - **Si un lado falla y el otro no**, la desincronización pasa a ser
   permanente: arregla el que falla o haz rollback del otro ya.
 
@@ -456,12 +464,16 @@ corren riesgo: no hay migraciones.
   `scripts/net-smoothing-bench.mjs`. Las grabaciones y el banco de esta
   sesión están en el scratchpad de la sesión (se pierden): repítelas con
   los comandos de la cabecera de cada script.
-- **Lo siguiente:** el punto 1, la verificación completa de v1.8 sobre el
-  SHA congelado, las capturas a Rafa y el runbook. Después, el punto 11.
-- **Aún sin catalogar** en `DEV_TOOLS.md` §«Superficie programática»:
-  `__game.netSmoother` y las dos herramientas. Tampoco hay entrada en
-  `BUILD_LOG.md`: los dos son troncales y hoy ya los tocaron otros
-  carriles. Van el día del despliegue.
+- **Desplegado:** v1.8 salió el mismo día (punto 1). `BUILD_LOG`,
+  `DEV_TOOLS` (superficie programática) y `NEXT_STEPS` al día el
+  2026-09-25.
+- **Lo siguiente:**
+  - el A/B de Rafa y lo que diga de la pasada de los rivales al parar;
+  - el punto 11, el slice de `BrawlRoom` del repaso de habilidades, que
+    irá con su propio despliegue;
+  - el 8 (huecos del pipeline), que ahora incluye un arreglo pequeño:
+    añadir `stamp-critter-glbs --check` al script `build`, para que
+    Vercel también vigile los `?v=` de los GLB immutable.
 
 **2026-09-21** — primera sesión del carril.
 
