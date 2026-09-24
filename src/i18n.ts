@@ -229,8 +229,10 @@ const DICT = {
   // ---- Status legend (popup "?" del HUD) ----------------------------------
   'status-title':             { en: 'Status effects',           es: 'Efectos de estado' },
   'status-frozen':            { en: 'Frozen',                   es: 'Congelado' },
-  'status-frozen-desc':       { en: 'Hit by snowball — slowed and chilled.',
-                                es: 'Bola de nieve al canto — más lento y tiritando.' },
+  // Covers both setters (frame-ticks.ts): Kowalski's Snowball (slowTimer)
+  // and standing on his Frozen Floor (ice zone).
+  'status-frozen-desc':       { en: 'Snowball or ice floor — slowed or sliding.',
+                                es: 'Bola de nieve o suelo helado — más lento o patinando.' },
   'status-slowed':            { en: 'Slowed',                   es: 'Ralentizado' },
   'status-slowed-desc':       { en: 'Movement reduced (e.g. quicksand).',
                                 es: 'Movimiento reducido (p. ej. arenas movedizas).' },
@@ -241,8 +243,9 @@ const DICT = {
   'status-stunned-desc':      { en: 'Cannot move for a brief window.',
                                 es: 'No puede moverse durante un instante.' },
   'status-vulnerable':        { en: 'Vulnerable',               es: 'Vulnerable' },
-  'status-vulnerable-desc':   { en: 'Hits land twice as hard.',
-                                es: 'Los golpes duelen el doble.' },
+  // ×4 = FEEL.collision.stunnedVulnerability (physics.ts); keep in step.
+  'status-vulnerable-desc':   { en: 'Hits push four times as hard.',
+                                es: 'Cada golpe empuja cuatro veces más.' },
   // 'Steel Shell' es nombre propio de habilidad — no se traduce.
   'status-steel-shell':       { en: 'Steel Shell',              es: 'Steel Shell' },
   'status-steel-shell-desc':  { en: 'Invulnerable and anchored to the ground.',

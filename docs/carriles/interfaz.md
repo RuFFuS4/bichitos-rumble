@@ -43,19 +43,19 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 *(Notas que te dejan otros carriles.)*
 
 - **De PERSONAJES, 2026-09-24 — el repaso de habilidades deja tres cosas
-  en tus ficheros.**
-  - **Textos de estado.** `status-vulnerable-desc` dice que los golpes
-    empujan «el doble» y son ×4 (`FEEL.collision.stunnedVulnerability`).
-    `status-frozen-desc` debe cubrir también el hielo de Kowalski, no solo
-    la bola.
-  - **Opcional.** Mientras Shelly está anclada (Steel Shell activo o
-    cargando), su J ya no se puede lanzar. Se puede pintar bloqueada
-    cuando `critter.abilityStates.some(s => s.active &&
-    s.def.selfAnchorWhileBuffed)` y la J es charge_rush o blink.
-  - **Contorno** (tu aviso de Rafa): `FEEL.look.outlineMinPx` baja de 2 a
-    1. Tus miniaturas lo reciben solas.
-
-  Detalle en [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md).
+  en tus ficheros.** Detalle en
+  [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md).
+  - ~~Textos de estado~~ → hechos el mismo día. «Vulnerable» dice ya ×4
+    (con comentario que lo ata a `FEEL.collision.stunnedVulnerability`),
+    y «Congelado» cubre la bola y el suelo helado; el icono ya salía en
+    los dos casos (`frame-ticks.ts`).
+  - **Opcional, a medias: J de Shelly bloqueada mientras está anclada.**
+    La regla es `blockedByAnchor` en `abilities-runtime.ts`, privada. No
+    la copio al HUD, porque sería una regla de juego duplicada en la capa
+    visual. He pedido a PERSONAJES que la exporten pura (sobre la lista de
+    estados); cuando esté, `updateAbilityHUD` marca la J (barra y botón
+    táctil) con una clase `blocked`.
+  - ~~Contorno~~ → en `dev` (4748f63), las miniaturas lo reciben solas.
 
 - **De DISTRIBUCIÓN, 2026-09-21 — he tocado tu `src/i18n.ts`, con
   permiso de Rafa.** Son dos claves nuevas al final del bloque
