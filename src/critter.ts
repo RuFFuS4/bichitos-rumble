@@ -10,7 +10,7 @@ import { createCritterParts } from './critter-parts';
 import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, type AnimationPersonality } from './critter-animation';
 import { deriveCritterStats } from './pws-stats';
 import { measurePosedBox } from './posed-bounds';
-import { attachOutline, setOutlineVisible, type CritterOutline } from './critter-look';
+import { attachOutline, normalizeCritterMaterials, setOutlineVisible, type CritterOutline } from './critter-look';
 
 /**
  * Behaviour tag used ONLY by the /tools.html dev lab to isolate bot
@@ -916,54 +916,10 @@ export class Critter {
     group.position.set(...entry.offset);
     group.position.y += entry.pivotY;
 
-    // Normalise GLB materials for our shading pipeline:
-    //   - transparent: FALSE at attach time (was `true` until 2026-04-29) —
-    //     keeping it `true` permanently kept the alpha-sort path active for
-    //     every skinned submesh forever, which on multi-mesh GLBs (Sergei
-    //     is the worst case: gorilla body + arms + face split across
-    //     submeshes) produced "patches becoming see-through" because alpha
-    //     sort can't reliably order intersecting skinned-mesh triangles.
-    //     `updateVisuals` flips `transparent: true` ONLY for the few frames
-    //     of immunity blink / invisibility — outside those windows the
-    //     material stays fully opaque with depth-write enabled, so the
-    //     skinned mesh sorts via the depth buffer like every other solid
-    //     mesh.
-    //   - metalness/roughness neutralised when the source exported a
-    //     full-PBR rig (Meshy does `metalness: 1`), which reads as dark
-    //     matte without an envMap and kills the saturated colours the
-    //     base map actually contains. Forcing metalness=0 + roughness=0.7
-    //     lets the diffuse map drive the look, matching the flat cartoon
-    //     look from the source visor. Tripo exports already low-metal,
-    //     so we only touch materials that came in with > 0.5.
-    //   - emissive map dropped: the Meshy rigs (Sergei, Sebastian, Kurama,
-    //     Sihans) ship their albedo as emissive map too. The game drives
-    //     emissive as a flat tint (hit flash, immunity blink, ability
-    //     glows); through the map the white flash only brightened the
-    //     albedo — Sebastian flashed red. At rest emissive is black, so
-    //     the look doesn't change.
-    group.traverse((node) => {
-      const m = node as THREE.Mesh;
-      if (!m.isMesh) return;
-      const raw = m.material;
-      const mats = Array.isArray(raw) ? raw : [raw];
-      for (const mat of mats) {
-        const std = mat as THREE.MeshStandardMaterial;
-        if (!std.isMeshStandardMaterial) continue;
-        std.transparent = false;
-        std.opacity = 1.0;
-        std.depthWrite = true;
-        if (std.metalness > 0.5) {
-          std.metalness = 0;
-          std.roughness = 0.7;
-          std.needsUpdate = true;
-        }
-        if (std.emissiveMap) {
-          std.emissiveMap = null;
-          std.emissive.setHex(0x000000);
-          std.needsUpdate = true;
-        }
-      }
-    });
+    // Opaque, non-metallic, no emissive map (critter-look, shared with the
+    // slot thumbnails). updateVisuals owns emissive and transparency from
+    // here on.
+    normalizeCritterMaterials(group);
 
     // Hide procedural geometry (keep body/head alive for harmless code paths)
     this.body.visible = false;

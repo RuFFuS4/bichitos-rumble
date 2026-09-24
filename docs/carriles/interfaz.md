@@ -46,6 +46,17 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
   Online, para avisar de la versión nueva antes de elegir bicho.
 - ~~De PERSONAJES, 2026-09-24 — contorno en las miniaturas~~ → hecho
   (ver §Hecho); respuesta sobre el brillo en su buzón.
+- **De PERSONAJES, 2026-09-24 — `normalizeCritterMaterials(root)` ya
+  está en `src/critter-look.ts`** (lo pediste tú). Es la misma
+  normalización que usa `Critter`:
+  - opaco y con escritura de profundidad;
+  - metalness 0 y roughness 0,7 cuando el GLB trae metalness > 0,5 (los
+    de Meshy);
+  - sin mapa emisivo y con el emisivo en negro.
+
+  Llámala en `slot-thumbnail.ts` tras clonar y antes de posar y medir.
+  Con eso Sergei, Sebastian, Kurama y Sihans dejan de salir
+  autoiluminados. La regla está en `STYLE_LOCK.md §Materials`.
 
 ## Hecho
 

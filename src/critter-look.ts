@@ -2,8 +2,13 @@ import * as THREE from 'three';
 import { FEEL } from './gamefeel';
 
 // ---------------------------------------------------------------------------
-// Critter look — the cartoon outline around every critter
+// Critter look — how a critter GLB is drawn: its materials as the game
+// shows them, and the cartoon outline around it
 // ---------------------------------------------------------------------------
+//
+// Every place that draws a critter model (the Critter itself, the online
+// slot thumbnails) goes through normalizeCritterMaterials, so a model looks
+// the same wherever it appears.
 //
 // Rafa, 2026-09-23: «contorno» on top of the current shading (no toon).
 // Rule in STYLE_LOCK.md §Materials; knobs in FEEL.look.
@@ -37,6 +42,51 @@ export interface CritterOutline {
 // real viewport instead of a placeholder (one frame of giant outline).
 const lastViewport = new THREE.Vector2(1920, 1080);
 let lastDpr = 1;
+
+/**
+ * Normalise a critter GLB's materials for our shading pipeline. Call on a
+ * fresh clone (model-loader gives each clone its own materials), before
+ * anything reads or tints them.
+ *   - Opaque with depth writes: keeping `transparent` on for good kept the
+ *     alpha-sort path active on every skinned submesh, and on multi-mesh
+ *     GLBs (Sergei: body + arms + face) patches went see-through because
+ *     alpha sort can't order intersecting skinned triangles. The Critter
+ *     flips `transparent` only for the frames of immunity blink or
+ *     invisibility.
+ *   - Metalness neutralised when the source exported full PBR (Meshy does
+ *     `metalness: 1`), which reads as dark matte without an envMap and
+ *     kills the saturated colours of the base map. Tripo exports are
+ *     already low-metal, so only materials above 0.5 are touched.
+ *   - Emissive map dropped: the Meshy rigs (Sergei, Sebastian, Kurama,
+ *     Sihans) ship their albedo as emissive map too, with factor 1. Left
+ *     alone they glow with their own colour (self-lit in a thumbnail), and
+ *     the game's flat emissive tints (hit flash, immunity blink, ability
+ *     glows) only brightened the albedo — Sebastian flashed red.
+ */
+export function normalizeCritterMaterials(root: THREE.Object3D): void {
+  root.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const mat of mats) {
+      const std = mat as THREE.MeshStandardMaterial;
+      if (!std.isMeshStandardMaterial) continue;
+      std.transparent = false;
+      std.opacity = 1.0;
+      std.depthWrite = true;
+      if (std.metalness > 0.5) {
+        std.metalness = 0;
+        std.roughness = 0.7;
+        std.needsUpdate = true;
+      }
+      if (std.emissiveMap) {
+        std.emissiveMap = null;
+        std.emissive.setHex(0x000000);
+        std.needsUpdate = true;
+      }
+    }
+  });
+}
 
 /** Is the outline on right now (FEEL.look.outline, unless `?look=plain`)? */
 export function outlineEnabled(): boolean {

@@ -43,8 +43,15 @@ Arcade / chibi arena brawler. Toy-like, punchy, instantly readable.
   invisibility, fog fade). The arena fog tints it like it tints the
   body. It is not a post-process and touches nothing else in the scene.
   Toon ramps are out of scope for now.
-- Emissive used only for gameplay feedback (ability glow, immunity blink).
-- `transparent: true` on all critter materials (required for immunity blink).
+- Emissive used only for gameplay feedback (hit flash, ability glow,
+  immunity blink), as a flat tint: **no emissive map**. Meshy exports
+  ship the albedo as emissive map; the game strips it.
+- Opaque by default; the critter turns `transparent` on only for the
+  frames of immunity blink or invisibility (always-on transparency made
+  skinned multi-mesh models see-through in patches).
+- All of the above is applied by `normalizeCritterMaterials`
+  (`src/critter-look.ts`). Anything that draws a critter model calls it:
+  the Critter and the slot thumbnails.
 - No reflections, no environment maps, no normal maps.
 
 ## Accessories
