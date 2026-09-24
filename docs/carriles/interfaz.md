@@ -10,17 +10,23 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
    (667×375 a 1280×720, móviles en apaisado con toque y DPR 2) × título,
    selección y partida. Se midió la cobertura del HUD sobre el disco de
    la arena proyectado con la cámara de juego, y los solapes entre
-   piezas. El medidor está en el scratchpad de la sesión; se promociona a
-   `scripts/` en cuanto haga falta para el antes/después.
+   piezas. Medidor: `scripts/hud-shots.mjs` (DEV_TOOLS §Superficie
+   programática).
    - **La arena está bien servida**: el HUD tapa 0-1 % del disco en
      todos los móviles (el botón L roza el borde derecho en 667×375). No
      hay que ganarle sitio a la arena.
-   - Rafa eligió las cuatro cosas (2026-09-24). Hechas: el enfriamiento
-     en los botones táctiles, las cuatro vidas en móvil y la ficha del
-     bicho en castellano (ver §Hecho). Queda:
-   - **Selección**: el contenido mide 682 px en 360-430 de alto (el panel
-     de info solo, 280×378). Se puede desplazar, pero stats y habilidades
-     quedan bajo el pliegue. En 844-932 px sobra una franja a la derecha.
+   - **Las cuatro cosas que eligió Rafa están hechas** (2026-09-24, ver
+     §Hecho): enfriamiento en los botones táctiles, las cuatro vidas, la
+     ficha en castellano y la selección compacta en móvil.
+   - **Abierto — la selección en escritorio y en iPad también desborda**
+     (lo destapó `hud-shots` al cerrar la de móvil): 806 px en 1280×720 y
+     827 en 1024×768. A 1280×720 el título «ELIGE TU BICHITO» se sale por
+     arriba (`justify-content: center` reparte el sobrante hacia arriba) y
+     la ficha se corta por abajo; en un portátil 1366×768 (~650 px útiles)
+     será peor. Lo pesa el lienzo 3D de 440 px. Es cambio de aspecto en
+     escritorio: **espera a Rafa**. Opciones: las tres columnas del móvil
+     también por debajo de ~900 px de alto, o conservar el diseño y
+     encoger el lienzo con el alto (`clamp` sobre `vh`), anclando arriba.
 2. **Audio**: eres el dueño de `src/audio.ts`. Si cambias las claves
    `bichitos.sfxMuted` / `bichitos.musicMuted`, avisa a todos los
    carriles — las lee `scripts/lib/headless-browser.mjs` y de ellas
@@ -61,6 +67,14 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Hecho
 
+- **2026-09-24 — La selección cabe entera en móvil.** En apaisado
+  (`max-height: 520px`) la ficha iba debajo de la vista 3D y se quedaba
+  bajo el pliegue: 682 px de contenido en 360-430. Ahora hay tres
+  columnas, parrilla | vista 3D | ficha. El lienzo toma lo que sobra
+  (`preview.ts` dimensiona su renderer por la caja CSS del lienzo) y la
+  ficha se compacta. «Cinturones» sube para no montar sobre la ficha.
+  Medido: el contenido mide exactamente el alto de pantalla en 667×375,
+  740×360, 844×390, 915×412 y 932×430, aviso de abajo incluido.
 - **2026-09-24 — La ficha del bicho, en castellano.** Con la interfaz en
   castellano, el rol, el lema, las etiquetas de stats y las descripciones
   de habilidad salían en inglés. Las etiquetas son claves de DICT
@@ -160,6 +174,9 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 **2026-09-24** — en `dev`: miniaturas con contorno y encuadre, y sprites
 de Sergei y Shelly a la paleta nueva. El portal, cerrado en `dev`, sale
 con el despliegue de H4.5 (lo lleva DISTRIBUCIÓN). Las miniaturas ya
-comparten materiales con `Critter`. El modo táctil ya se activa en móviles
-grandes y tablets. La medición del HUD en móvil está hecha (punto 1 de
-Pendiente) y espera a que Rafa elija por dónde empezar la reestructura.
+comparten materiales con `Critter`. La reestructura del HUD en móvil está
+hecha entera: modo táctil en móviles grandes y tablets, enfriamiento en
+los botones, cuatro vidas, ficha en castellano y selección compacta.
+Abierto y esperando a Rafa: la selección desborda también en escritorio y
+en iPad (punto 1 de Pendiente, con opciones). Para medir cualquier cambio
+de HUD: `node scripts/hud-shots.mjs`.

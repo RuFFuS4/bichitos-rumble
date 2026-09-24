@@ -1,5 +1,32 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-24 — [Interfaz] El HUD en móvil, reestructurado (lo que le faltaba al jugador)
+
+La medición (`scripts/hud-shots.mjs`, que queda como herramienta) dijo que
+la arena estaba bien servida: el HUD tapa 0-1 % del disco en cualquier
+móvil. El problema no era el espacio, sino lo que le faltaba al jugador.
+Rafa eligió los cuatro arreglos:
+
+- **Enfriamiento en los botones táctiles.** En móvil la barra de
+  habilidades se oculta y los botones decían J/K/L: no había ninguna
+  indicación de enfriamiento. Ahora cada botón lleva el medallón de la
+  barra (icono del bicho, barrido cónico y destello de listo), con los
+  mismos estados.
+- **Las cuatro vidas.** Solo se veían TL y TR. Ahora las cuatro fichas
+  compactas van en la franja de arriba, en parejas alrededor del reloj.
+- **La ficha en castellano.** Rol, lema y descripciones se traducen por
+  el propio texto inglés (`CONTENT_ES`), con un test en las dos
+  direcciones. Los nombres propios, no.
+- **La selección cabe entera**, en tres columnas: parrilla | 3D | ficha.
+
+Queda abierto, y es de Rafa: `hud-shots` destapó que la selección
+**también desborda en escritorio** (806 px en 1280×720: el título se sale
+por arriba y la ficha se corta) y en iPad. Opciones en
+`docs/carriles/interfaz.md`.
+
+Rafa pidió además un contorno más fino en los bichos. Es de PERSONAJES,
+que ya lo tiene: el mínimo en px era lo que pesaba en pantallas pequeñas.
+
 ## 2026-09-24 — [PERSONAJES] Arrancar y frenar con el pie apoyado, y un empujón ya no gira al bicho
 
 - **Animador** (`critter-skeletal.ts`):

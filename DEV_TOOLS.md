@@ -133,6 +133,18 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   en «Game feel» del match lab y se cambia con `feel-patch`;
   `__devApi.setCritterLook({ outline: false })` lo apaga en vivo para un
   A/B, y `?look=plain` en la URL lo apaga en la carga (capturas).
+- **Medir el HUD por pantalla** (INTERFAZ, 2026-09-24): con el dev server
+  vivo, `node scripts/hud-shots.mjs [--out .tmp/hud-shots]
+  [--viewports 667x375,844x390,1280x720]` captura título, selección y
+  partida en cada viewport (móviles en apaisado con toque y DPR 2) y
+  escribe `report.json`: si arrancó en modo táctil, qué % del disco de la
+  arena tapa el HUD (proyectado con la cámara de juego), los solapes entre
+  piezas y el alto de la selección frente a la pantalla. Navegador mudo y
+  con GPU.
+- **Sprites chibi del HUD a la paleta de los bichos** (2026-09-24):
+  `node scripts/recolor-hud-tiles.mjs` recolorea los tiles de Sergei y
+  Shelly en el máster `_raw/hud-icons.png` y regenera el `.webp`; es
+  idempotente. Va después de `rebuild-hud-sheet` y `compress-images`.
 - **Recolorear un bicho por familias de color** (paleta, 2026-09-24):
   `node scripts/critter-grade.mjs <id> [--ops=ops.json] [--out=x.glb]
   [--png=textura.png]` aplica a la textura actual las ops de color
