@@ -5,8 +5,9 @@
 // branches are pinned by stubbing Math.random (never by sampling).
 // ---------------------------------------------------------------------------
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlayerSchema } from '../../server/src/state/PlayerSchema.js';
+import { getAbilityKit } from '../../server/src/sim/abilities.js';
 import { computeBotInput } from '../../server/src/sim/bot.js';
 import { SIM } from '../../server/src/sim/config.js';
 
@@ -19,6 +20,12 @@ interface AbilityLike {
   abilityType: string;
   active: boolean;
   windUpLeft: number;
+  cooldownLeft?: number;
+}
+
+/** Every slot of the critter's server kit, idle and off cooldown. */
+function readyKit(critterName: string): AbilityLike[] {
+  return getAbilityKit(critterName).map((d) => ({ abilityType: d.type, active: false, windUpLeft: 0, cooldownLeft: 0 }));
 }
 
 function makePlayer(overrides: {
@@ -29,6 +36,7 @@ function makePlayer(overrides: {
   rotationY?: number;
   falling?: boolean;
   immunityTimer?: number;
+  stunTimer?: number;
   isHeadbutting?: boolean;
   abilities?: AbilityLike[];
 }): PlayerSchema {
@@ -41,6 +49,7 @@ function makePlayer(overrides: {
     alive: true,
     falling: overrides.falling ?? false,
     immunityTimer: overrides.immunityTimer ?? 0,
+    stunTimer: overrides.stunTimer ?? 0,
     isHeadbutting: overrides.isHeadbutting ?? false,
     abilities: overrides.abilities ?? [],
   } as unknown as PlayerSchema;
@@ -248,6 +257,21 @@ describe('server bot — computeBotInput', () => {
     expect(computeBotInput(rim, [rim, enemy2], arenaDisc(12)).ability1).toBe(false);
   });
 
+  it("a gliding J (Ice Slide) probes as far as it carries: 3 u × its glide factor", () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    // Facing +X at x = 7: Sergei's probes (x = 8 and 10) are floor.
+    const sergei = makePlayer({ sessionId: 'bot', x: 7, z: 0, rotationY: Math.PI / 2 });
+    const enemy = makePlayer({ sessionId: 'e', x: 7, z: 4.5 });
+    expect(computeBotInput(sergei, [sergei, enemy], arenaDisc(12)).ability1).toBe(true);
+    // Kowalski glides 2.16× as far: her probe lands at x ≈ 13.5, void.
+    const kowalski = makePlayer({ sessionId: 'bot', critterName: 'Kowalski', x: 7, z: 0, rotationY: Math.PI / 2 });
+    expect(computeBotInput(kowalski, [kowalski, enemy], arenaDisc(12)).ability1).toBe(false);
+    // From x = 4 it lands at ≈ 10.5, floor.
+    const inside = makePlayer({ sessionId: 'bot', critterName: 'Kowalski', x: 4, z: 0, rotationY: Math.PI / 2 });
+    const enemy2 = makePlayer({ sessionId: 'e', x: 4, z: 4.5 });
+    expect(computeBotInput(inside, [inside, enemy2], arenaDisc(12)).ability1).toBe(true);
+  });
+
   it("Steel Shell doesn't come up for an incoming charge while the own L runs, but still does for the rim", () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.9999);
     const sawing = [
@@ -261,6 +285,21 @@ describe('server bot — computeBotInput', () => {
     const pinned = makePlayer({ sessionId: 'bot', critterName: 'Shelly', x: 11.2, z: 0, abilities: sawing });
     const presser = makePlayer({ sessionId: 'e', x: 13, z: 0 });
     expect(computeBotInput(pinned, [pinned, presser], arenaDisc(12)).ability2).toBe(true);
+  });
+
+  it('a stunned bot presses nothing (Trunk Grip / Slam), even with every die rigged to succeed', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const enemy = makePlayer({ sessionId: 'e', x: 1.5, z: 0, isHeadbutting: true });
+    const free = makePlayer({ sessionId: 'bot', critterName: 'Shelly', x: 0, z: 0 });
+    const freeInput = computeBotInput(free, [free, enemy]);
+    expect(freeInput.headbutt).toBe(true);
+    expect(freeInput.ability2).toBe(true); // Steel Shell against the incoming headbutt
+    const stunned = makePlayer({ sessionId: 'bot', critterName: 'Shelly', x: 0, z: 0, stunTimer: 0.5 });
+    const input = computeBotInput(stunned, [stunned, enemy]);
+    expect([input.headbutt, input.ability1, input.ability2, input.ultimate]).toEqual([false, false, false, false]);
+    // It still steers toward the target (rooted anyway: effectiveSpeed is 0).
+    expect(input.moveX).toBeCloseTo(PACE, 6);
+    expect(input.moveZ).toBeCloseTo(0, 6);
   });
 
   it('per-tick rate conversion at 30 Hz: fires iff roll < 1-(1-ratePerSec)^(1/30)', () => {
@@ -278,5 +317,126 @@ describe('server bot — computeBotInput', () => {
     };
     expect(run(threshold - 1e-12)).toBe(true);
     expect(run(threshold + 1e-12)).toBe(false);
+  });
+});
+
+describe('server bot — the L gate (SIM.bots.ultimateOnline)', () => {
+  it('stays shut until BrawlRoom runs the L like the sim: no bot presses its L', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    expect(SIM.bots.ultimateOnline).toBe(false);
+    const sergei = makePlayer({ sessionId: 'bot', x: 0, z: 0, abilities: readyKit('Sergei') });
+    const enemy = makePlayer({ sessionId: 'e', x: 3, z: 0 });
+    expect(computeBotInput(sergei, [sergei, enemy]).ultimate).toBe(false);
+  });
+});
+
+describe('server bot — the L (online bots cast it since 2026-09-24, mirror of src/bot.ts)', () => {
+  // The rules below, with the deploy gate open (it opens in the BrawlRoom
+  // slice; see SIM.bots.ultimateOnline).
+  const gate = SIM.bots as { ultimateOnline: boolean };
+  beforeAll(() => { gate.ultimateOnline = true; });
+  afterAll(() => { gate.ultimateOnline = false; });
+
+  it('a buff L (Sergei Frenzy) fires with the nearest enemy within buffRange, any direction, and only when ready', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const sergei = makePlayer({ sessionId: 'bot', x: 0, z: 0, abilities: readyKit('Sergei') });
+    const enemyAt = (x: number, z: number) => makePlayer({ sessionId: 'e', x, z });
+    expect(computeBotInput(sergei, [sergei, enemyAt(3, 0)]).ultimate).toBe(true);
+    expect(computeBotInput(sergei, [sergei, enemyAt(0, -3)]).ultimate).toBe(true); // behind him too
+    expect(computeBotInput(sergei, [sergei, enemyAt(3.6, 0)]).ultimate).toBe(false); // buffRange 3.5
+    const cooling = readyKit('Sergei');
+    cooling[2].cooldownLeft = 4;
+    const onCooldown = makePlayer({ sessionId: 'bot', x: 0, z: 0, abilities: cooling });
+    expect(computeBotInput(onCooldown, [onCooldown, enemyAt(3, 0)]).ultimate).toBe(false);
+    const running = readyKit('Sergei');
+    running[2].active = true;
+    const inFrenzy = makePlayer({ sessionId: 'bot', x: 0, z: 0, abilities: running });
+    expect(computeBotInput(inFrenzy, [inFrenzy, enemyAt(3, 0)]).ultimate).toBe(false);
+    const stunned = makePlayer({ sessionId: 'bot', x: 0, z: 0, stunTimer: 1, abilities: readyKit('Sergei') });
+    expect(computeBotInput(stunned, [stunned, enemyAt(3, 0)]).ultimate).toBe(false);
+  });
+
+  it('the L roll is the buff rate per second converted at 30 Hz', () => {
+    const threshold = 1 - Math.pow(1 - SIM.bots.fireRatesPerSec.buff, 1 / 30);
+    const run = (roll: number) => {
+      vi.spyOn(Math, 'random').mockReturnValue(roll);
+      // 3 u: outside the J's band (> 3) and short of both radial K gates.
+      const bot = makePlayer({ sessionId: 'bot', x: 0, z: 0, abilities: readyKit('Sergei') });
+      const enemy = makePlayer({ sessionId: 'e', x: 3, z: 0 });
+      const input = computeBotInput(bot, [bot, enemy]);
+      vi.restoreAllMocks();
+      return input.ultimate;
+    };
+    expect(run(threshold - 1e-12)).toBe(true);
+    expect(run(threshold + 1e-12)).toBe(false);
+  });
+
+  it('Trunk Grip fires on whom the grip would take, past headbutt range and short of gripMaxRange', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const trunk = makePlayer({ sessionId: 'bot', critterName: 'Trunk', x: 0, z: 0, abilities: readyKit('Trunk') }); // facing +Z
+    const enemyAt = (x: number, z: number, immunityTimer = 0) => makePlayer({ sessionId: 'e', x, z, immunityTimer });
+    expect(computeBotInput(trunk, [trunk, enemyAt(0, 6)]).ultimate).toBe(true);
+    expect(computeBotInput(trunk, [trunk, enemyAt(0, 2.5)]).ultimate).toBe(false); // < targetedMinRange 3
+    expect(computeBotInput(trunk, [trunk, enemyAt(0, 11)]).ultimate).toBe(false); // > gripMaxRange 10 (the grip reaches 28)
+    expect(computeBotInput(trunk, [trunk, enemyAt(6, 0)]).ultimate).toBe(false); // 90° off: outside its ±35°
+    expect(computeBotInput(trunk, [trunk, enemyAt(0, 6, 1)]).ultimate).toBe(false); // the grip skips the immune
+    // It judges the grip's own target, not the nearest enemy: one at 2 u to
+    // the side doesn't stop it from taking the one 6 u ahead.
+    const side = makePlayer({ sessionId: 's', x: 2, z: 0 });
+    expect(computeBotInput(trunk, [trunk, side, enemyAt(0, 6)]).ultimate).toBe(true);
+  });
+
+  it('Frozen Floor needs min(2, enemies alive) within floorRadius × floorCastRadiusFrac (4.8 u), not buffRange', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const kowalski = makePlayer({ sessionId: 'bot', critterName: 'Kowalski', x: 0, z: 0, abilities: readyKit('Kowalski') });
+    const a = makePlayer({ sessionId: 'a', x: 4, z: 0 });
+    const b = makePlayer({ sessionId: 'b', x: 0, z: 4.5 });
+    const far = makePlayer({ sessionId: 'c', x: 0, z: -8 });
+    expect(computeBotInput(kowalski, [kowalski, a, b]).ultimate).toBe(true); // 2 of 2 on the ice
+    expect(computeBotInput(kowalski, [kowalski, a, far]).ultimate).toBe(false); // 1 of 2
+    expect(computeBotInput(kowalski, [kowalski, a]).ultimate).toBe(true); // 1v1: the one left is enough, at 4 u
+    const out = makePlayer({ sessionId: 'a', x: 5, z: 0 });
+    expect(computeBotInput(kowalski, [kowalski, out]).ultimate).toBe(false); // 5 > 4.8
+  });
+
+  it('Cone Pulse fires with the nearest enemy within buffRange and inside its ±45° cone', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const cheeto = makePlayer({ sessionId: 'bot', critterName: 'Cheeto', x: 0, z: 0, abilities: readyKit('Cheeto') }); // facing +Z
+    const enemyAt = (x: number, z: number) => makePlayer({ sessionId: 'e', x, z });
+    expect(computeBotInput(cheeto, [cheeto, enemyAt(0, 3)]).ultimate).toBe(true);
+    const off = (60 * Math.PI) / 180;
+    expect(computeBotInput(cheeto, [cheeto, enemyAt(3 * Math.sin(off), 3 * Math.cos(off))]).ultimate).toBe(false);
+    expect(computeBotInput(cheeto, [cheeto, enemyAt(0, 4)]).ultimate).toBe(false); // ahead but past 3.5 u
+  });
+
+  it("Shelly's Saw Shell: never shelled up, nor on the tick the shell comes up", () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const calm = makePlayer({ sessionId: 'e', x: 2, z: 0 });
+    const free = makePlayer({ sessionId: 'bot', critterName: 'Shelly', x: 0, z: 0, abilities: readyKit('Shelly') });
+    expect(computeBotInput(free, [free, calm]).ultimate).toBe(true);
+    // Anchored: the saw would stand still.
+    const shelledKit = readyKit('Shelly');
+    shelledKit[1].active = true;
+    const shelled = makePlayer({ sessionId: 'bot', critterName: 'Shelly', x: 0, z: 0, abilities: shelledKit });
+    expect(computeBotInput(shelled, [shelled, calm]).ultimate).toBe(false);
+    // An incoming headbutt raises the shell this tick: the L waits.
+    const butting = makePlayer({ sessionId: 'e', x: 2, z: 0, isHeadbutting: true });
+    const raising = computeBotInput(free, [free, butting]);
+    expect(raising.ability2).toBe(true);
+    expect(raising.ultimate).toBe(false);
+    // With the K cooling down the reflex press does nothing, so the L goes.
+    const coolingKit = readyKit('Shelly');
+    coolingKit[1].cooldownLeft = 5;
+    const cooling = makePlayer({ sessionId: 'bot', critterName: 'Shelly', x: 0, z: 0, abilities: coolingKit });
+    expect(computeBotInput(cooling, [cooling, butting]).ultimate).toBe(true);
+  });
+
+  it("Sebastian's All-in is never pressed: BrawlRoom's hold loop has no bot path to drop a charge", () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const sebastian = makePlayer({ sessionId: 'bot', critterName: 'Sebastian', x: 0, z: 0, abilities: readyKit('Sebastian') });
+    for (const z of [1.5, 3, 6]) {
+      const ahead = makePlayer({ sessionId: 'e', x: 0, z });
+      expect(computeBotInput(sebastian, [sebastian, ahead]).ultimate).toBe(false);
+    }
   });
 });

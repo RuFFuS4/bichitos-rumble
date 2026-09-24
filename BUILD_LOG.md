@@ -65,6 +65,51 @@
   3. **Un servidor local en Windows sin temporizadores precisos va a
      0,72×.** Todo lo online se juzga con `npm run dev` (precise-timers).
 
+## 2026-09-25 — [PERSONAJES] Segunda tanda del repaso: las decisiones de Rafa sobre las habilidades
+
+- **Qué pidió Rafa** (sobre las propuestas del repaso, 2026-09-24):
+  - las J golpean y Kurama atraviesa;
+  - el aturdido no actúa, con el Grip a 2,5 s;
+  - el frenesí de Sergei recibe ×0,4 de los empujes;
+  - el All-in, con carga mínima de 0,35 s y apuntado;
+  - Mirror Trick salta lejos del perseguidor;
+  - Shelly frena en seco con el escudo, cae si se hunde la baldosa, y su
+    embestida golpea;
+  - el Ice Slide desliza de verdad y la bola sale de la mano;
+  - bots online con L.
+
+  Toxic Touch no se toca. Todo con cifras en
+  `docs/REPASO_HABILIDADES.md` §«Segunda tanda».
+- **Método**: nueve grupos en secuencia, cada uno medido antes y después
+  contra la foto fija de `dev`, y revisión adversarial del diff.
+- **L de los bots online**, en `server/src/sim/bot.ts` pero **apagada**
+  (`SIM.bots.ultimateOnline = false`). Con la sala actual, los bots con
+  L acortaban las partidas online un 27 %. La enciende DISTRIBUCIÓN
+  cuando `BrawlRoom` ejecute las L como el sim.
+- **Medido** (dos juegos de semillas, 40-80 apariciones por bicho):
+  - Sebastian, Cheeto y Kurama ganan, porque sus dashes golpean.
+  - **Kowalski pierde** (eliminado 49 → 65 %): se sale él solo
+    deslizando. Es el siguiente paso del carril.
+  - Sergei queda el peor con bots (78 %).
+  - La dispersión sube de 11,5 a 13,0 puntos.
+- **Golden** regenerado: las J golpean, los aturdidos no lanzan y los
+  bots siguen las reglas nuevas. 3/3 detrás.
+- **Tests**: 254/254, con 5 ficheros nuevos del sim del servidor (31
+  casos).
+- **Fuera de carril, dicho aquí**:
+  - tres frases de `CONTENT_ES`, con permiso de INTERFAZ para ese bloque;
+  - el centinela del Grip en `verify-ability-parity.mjs`.
+- **Pendiente de otros carriles**:
+  - DISTRIBUCIÓN: S2-1 a S2-5 en `BrawlRoom`. Ninguno bloquea.
+  - Tierra de nadie: manejadores de `dashHit` y `lChargeEnd`.
+  - INTERFAZ: «Aturdido» también impide actuar, y la J de Shelly
+    bloqueada con `isBlockedByAnchor`.
+
+  Aviso en cada buzón.
+- **Despliegue**: el golpe de dash, el aturdido, el frenesí, Mirror Trick
+  y Shelly cambian online solo con desplegar `server/src/sim`. Cliente y
+  servidor, juntos.
+
 ## 2026-09-24 — [PERSONAJES] Repaso de las 27 habilidades: bugs de producción, IA de los bots y contorno más fino
 
 - **Método**: las 27 habilidades filmadas y medidas

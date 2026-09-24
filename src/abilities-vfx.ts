@@ -2,9 +2,9 @@
 // abilities-vfx.ts — VFX (visual-only) layer of the abilities system.
 // 2026-08-24 ROADMAP H4 split: "Split de abilities.ts (config/runtime/vfx)".
 //
-// THREE-only spawners: frenzy entry burst, Sebastian All-in trajectory
-// preview, Kurama decoy clone, persistent zone rings and the shockwave
-// ring. Every function here writes NO gameplay state, and all but one are
+// THREE-only spawners: frenzy entry burst, Cone Pulse wedge, Sebastian
+// All-in trajectory preview, Kurama decoy clone, persistent zone rings and
+// the shockwave ring. Every function here writes NO gameplay state, and all but one are
 // fire-and-forget (self-animating via requestAnimationFrame, self-
 // disposing). The exception is the decoy, whose life runs on the game
 // clock: its owner's Critter.update advances it (tickDecoy).
@@ -109,20 +109,96 @@ export function spawnFrenzyBurst(scene: THREE.Scene, x: number, z: number, opts?
 }
 
 // ---------------------------------------------------------------------------
-// VFX: Sebastian All-in trajectory preview
+// VFX: cone wedge (Cone Pulse entry)
 // ---------------------------------------------------------------------------
 
 /**
+ * A flat wedge on the ground from (x, z) along `yaw`, ±`halfAngle` wide and
+ * `reach` deep: the L entry of a frontal channel (Cheeto Cone Pulse), in
+ * place of the round frenzy burst. The fill (palette colour) sweeps out
+ * to full reach in the first ~40 % with its rim (secondary) on the front,
+ * then both fade. Same palette fallbacks and life as `spawnFrenzyBurst`.
+ */
+export function spawnConeWedge(
+  scene: THREE.Scene,
+  x: number,
+  z: number,
+  yaw: number,
+  halfAngle: number,
+  reach: number,
+  opts?: FrenzyBurstOpts,
+): void {
+  const duration = 600; // ms
+  const sweepShare = 0.4;
+  const startTime = performance.now();
+  // Unit sector around the group's +Z. Laid flat (rotation.x = −π/2) the
+  // geometry's angle θ points to (cos θ, 0, −sin θ): +Z is θ = −π/2.
+  const thetaStart = -Math.PI / 2 - halfAngle;
+  const thetaLength = halfAngle * 2;
+  const group = new THREE.Group();
+  group.position.set(x, 0.03, z); // a hair above the floor, like the All-in line
+  group.rotation.y = yaw;
+  function layer(geo: THREE.BufferGeometry, color: number): THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> {
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }));
+    mesh.rotation.x = -Math.PI / 2;
+    group.add(mesh);
+    return mesh;
+  }
+  const fill = layer(new THREE.CircleGeometry(1, 32, thetaStart, thetaLength), opts?.color ?? 0xffaa22);
+  const rim = layer(new THREE.RingGeometry(0.9, 1, 32, 1, thetaStart, thetaLength), opts?.secondary ?? 0xff2200);
+  scene.add(group);
+
+  function animate(): void {
+    const t = Math.min((performance.now() - startTime) / duration, 1);
+    const sweep = 1 - Math.pow(1 - Math.min(t / sweepShare, 1), 3);
+    const r = Math.max(0.01, reach * sweep);
+    fill.scale.set(r, r, 1);
+    rim.scale.set(r, r, 1);
+    fill.material.opacity = 0.35 * (1 - t);
+    rim.material.opacity = 0.9 * (1 - t);
+    if (t < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      scene.remove(group);
+      for (const m of [fill, rim]) {
+        m.geometry.dispose();
+        m.material.dispose();
+      }
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+// ---------------------------------------------------------------------------
+// VFX: Sebastian All-in trajectory preview
+// ---------------------------------------------------------------------------
+
+/** A live All-in trajectory line (spawnAllInTrajectoryPreview). */
+export interface AllInPreview {
+  /** Re-lay the line from (originX, originZ) along (dirX, dirZ): the
+   *  caster aims while charging, and a shove moves the origin. */
+  aim(originX: number, originZ: number, dirX: number, dirZ: number): void;
+  /** Fade it out now (released, dropped, fell). Idempotent. */
+  end(): void;
+}
+
+/**
  * 2026-05-01 last-minute — Sebastian All-in trajectory preview. A
- * crimson ground line drawn from Sebastian's origin to the chosen
- * lateral edge endpoint, used during the 1 s rooted windup so the
- * player can SEE which way the slash will commit before pressing
- * any input. Fades in fast (~120 ms), holds for the bulk of the
- * windup, fades out at resolution.
+ * crimson ground line drawn from Sebastian's origin along the way the
+ * slash will commit, shown while he holds the L so everyone can SEE
+ * where it goes before it fires. Fades in fast (~120 ms) and out over
+ * 200 ms once `end()` is called or, at the latest, when `ttl` seconds
+ * are up.
  *
- * Pure visual — pulled into `fireFrenzy` when `def.allInL` is true.
- * Cleans up after `ttl` seconds; no per-frame state hung off
- * Critter.
+ * Pure visual. Offline, abilities-runtime keeps the handle and re-aims
+ * it every frame of the charge; online, game.ts paints it from the
+ * server's `lChargeStart`.
  */
 export function spawnAllInTrajectoryPreview(
   scene: THREE.Scene,
@@ -132,77 +208,68 @@ export function spawnAllInTrajectoryPreview(
   dirZ: number,
   range: number,
   ttl: number,
-): void {
+): AllInPreview {
   // Plane sized to the dash. Width is ~0.7 u so it reads as a
   // committed strip, not a hairline. Depth (range) is the literal
   // dash length so the player can read distance.
   const width = 0.75;
   const length = range;
-  const geo = new THREE.PlaneGeometry(width, length);
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0xcc3333,
-    transparent: true,
-    opacity: 0.0,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.x = -Math.PI / 2; // lay on the ground
-  // The plane's local +Y direction (after the -π/2 X-rotation) lines
-  // up with WORLD +Z. We need it pointing along (dirX, dirZ), so
-  // rotate around Z by the angle between (0, 1) and (dirX, dirZ).
-  const angleZ = Math.atan2(dirX, dirZ);
-  mesh.rotation.z = angleZ;
-  mesh.position.set(
-    originX + dirX * length * 0.5,
-    0.02, // a hair above the ground to avoid z-fight
-    originZ + dirZ * length * 0.5,
-  );
-  scene.add(mesh);
-
+  // Both strips lie along the group's +Z from its origin, so aiming the
+  // line is just the group's position and yaw.
+  const group = new THREE.Group();
+  function strip(stripWidth: number, color: number, y: number): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(stripWidth, length),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    mesh.rotation.x = -Math.PI / 2; // lay on the ground
+    mesh.position.set(0, y, length * 0.5);
+    group.add(mesh);
+    return mesh;
+  }
+  const outer = strip(width, 0xcc3333, 0.02); // a hair above the ground to avoid z-fight
   // Inner accent — narrower bright stripe down the middle so the line
   // reads even against busy decor.
-  const innerGeo = new THREE.PlaneGeometry(width * 0.35, length);
-  const innerMat = new THREE.MeshBasicMaterial({
-    color: 0xffe066,
-    transparent: true,
-    opacity: 0.0,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const innerMesh = new THREE.Mesh(innerGeo, innerMat);
-  innerMesh.rotation.x = -Math.PI / 2;
-  innerMesh.rotation.z = angleZ;
-  innerMesh.position.set(
-    originX + dirX * length * 0.5,
-    0.025,
-    originZ + dirZ * length * 0.5,
-  );
-  scene.add(innerMesh);
+  const inner = strip(width * 0.35, 0xffe066, 0.025);
+  function aim(x: number, z: number, dx: number, dz: number): void {
+    group.position.set(x, 0, z);
+    group.rotation.y = Math.atan2(dx, dz);
+  }
+  aim(originX, originZ, dirX, dirZ);
+  scene.add(group);
 
   const startTime = performance.now();
-  const totalMs = ttl * 1000;
+  let endMs = ttl * 1000;
   const fadeInMs = 120;
   const fadeOutMs = 200;
   function animate(): void {
     const elapsed = performance.now() - startTime;
-    if (elapsed >= totalMs) {
-      scene.remove(mesh);
-      scene.remove(innerMesh);
-      geo.dispose();
-      mat.dispose();
-      innerGeo.dispose();
-      innerMat.dispose();
+    if (elapsed >= endMs) {
+      scene.remove(group);
+      for (const m of [outer, inner]) {
+        m.geometry.dispose();
+        m.material.dispose();
+      }
       return;
     }
-    let alpha = 1.0;
-    if (elapsed < fadeInMs) alpha = elapsed / fadeInMs;
-    else if (elapsed > totalMs - fadeOutMs) alpha = (totalMs - elapsed) / fadeOutMs;
-    mat.opacity = 0.55 * alpha;
-    innerMat.opacity = 0.85 * alpha;
+    const alpha = Math.min(1, elapsed / fadeInMs, (endMs - elapsed) / fadeOutMs);
+    outer.material.opacity = 0.55 * alpha;
+    inner.material.opacity = 0.85 * alpha;
     requestAnimationFrame(animate);
   }
   requestAnimationFrame(animate);
+  return {
+    aim,
+    end(): void {
+      endMs = Math.min(endMs, performance.now() - startTime + fadeOutMs);
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

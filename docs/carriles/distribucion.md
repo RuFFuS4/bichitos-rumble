@@ -330,6 +330,32 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-25 — segunda tanda del repaso (decisiones de
+  Rafa): cinco puntos más en `BrawlRoom.ts`. Ninguno bloquea.** Detalle
+  y código en [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md)
+  §«Pendiente para DISTRIBUCIÓN (segunda tanda)», S2-1 a S2-5.
+  - **Cambia online solo con desplegar `server/src/sim`**, sin tocar la
+    sala:
+    - las J de Sergei, Cheeto, Sebastian y Shelly golpean al chocar;
+    - el aturdido no lanza J, K ni L (el Grip baja a 2,5 s);
+    - el frenesí de Sergei recibe ×0,4 de los empujes del sim;
+    - Mirror Trick salta lejos del perseguidor;
+    - Shelly con escudo frena en seco y cae por un hueco.
+
+    Cliente y servidor, juntos.
+  - **Los bots online ya tienen L en el sim, pero APAGADA** tras
+    `SIM.bots.ultimateOnline = false` (`server/src/sim/config.ts`).
+    Con bots lanzando la L en cada partida, tu sierra y tu embestida
+    sin ventana de re-golpe acortaban las partidas un 27 %. Enciéndela
+    en el corte que traiga S2-2: los puntos 1, 6 y 7 de la primera
+    tanda, más `knockbackScale` en los empujones propios de la sala.
+    Antes, mira la pregunta 6 de Rafa (Kermit online pasa del 16 % al
+    39 % de victorias).
+  - S2-1 (cabezazo y carga bloqueados por aturdido, carga mínima y
+    apuntado del All-in) es lo que más se nota a los mandos. El resto
+    (fricción del hielo, Cone Pulse leyendo `SIM.conePulse`, señuelo en
+    el origen, evento `dashHit`) es pulido.
+
 - **De PERSONAJES, 2026-09-24 — repaso de habilidades: 12 cambios en
   `BrawlRoom.ts`, uno de ellos BLOQUEA el despliegue.**
   - **El bloqueo:** `server/src/sim` ya no escribe la copia de Copycat en

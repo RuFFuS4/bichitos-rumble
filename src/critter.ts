@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { cancelAbility, createAbilityStates, getSpeedMultiplier, getMassMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind, getSlipperyZone } from './abilities-runtime';
+import { cancelAbility, cancelSebastianAllInCharge, createAbilityStates, getSpeedMultiplier, getMassMultiplier, getKnockbackTakenMultiplier, getFrictionMultiplier, getZoneSlowMultiplier, isInsideZoneOfKind, getSlipperyZone } from './abilities-runtime';
 import type { AbilityState } from './abilities';
-import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, FEEL } from './gamefeel';
+import { updateScaleFeedback, updateKnockbackTilt, updateHeadbuttRecovery, applyHeadbuttRecovery, tickHitFlash, updateYankVisual, cancelYankVisual, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
 import { getRosterEntry, type RosterEntry } from './roster';
 import { loadModelWithAnimations } from './model-loader';
@@ -242,9 +242,12 @@ export class Critter {
    *  same. Set by `tickProjectiles` on hit (offline) or by the
    *  online state patch (server is authoritative there). */
   slowTimer = 0;
-  /** 2026-04-29 — Trunk Grip K stun + vulnerable. While > 0 the
-   *  critter cannot move (effectiveSpeed → 0) and any knockback
-   *  received is multiplied ×2. Mirror of `PlayerSchema.stunTimer`. */
+  /** Stun + vulnerable (Trunk Grip L, Trunk Slam K). While > 0 the
+   *  critter cannot move (effectiveSpeed → 0) nor act: no headbutt,
+   *  J, K, L or All-in charge starts (2026-09-24, Rafa), and a charge
+   *  it was holding drops unreleased (abilities-runtime `stun`). Any
+   *  knockback it receives is × FEEL.collision.stunnedVulnerability.
+   *  Mirror of `PlayerSchema.stunTimer`. */
   stunTimer = 0;
   /** 2026-04-30 — Kermit Toxic Touch confused state. While > 0
    *  the local cliente inverts the movement input axes for this
@@ -257,9 +260,10 @@ export class Critter {
   lastHitTargetCritter = '';
   /** 2026-05-01 final block — Sebastian hold-to-fire L charging
    *  state. While `lHoldCharging` is true the player is rooted
-   *  (effectiveSpeed → 0) and the trajectory preview is painted
-   *  on the ground. Set on press of the L input, cleared on
-   *  release (where the dash actually fires). */
+   *  (effectiveSpeed → 0), the move input aims the facing and the
+   *  trajectory preview is painted on the ground along it. Set on
+   *  press of the L input, cleared on release (where the dash
+   *  actually fires, once holdToFireMinMs has passed). */
   lHoldCharging = false;
   lHoldChargeTime = 0;
   /** 2026-04-29 — local-only fog-of-war fade. Set by the Kermit
@@ -511,8 +515,29 @@ export class Critter {
     return this.config.mass * getMassMultiplier(this.abilityStates);
   }
 
+  /** × on every push this critter takes from others (Sergei's Frenzy:
+   *  0.4) — the one point all knockback goes through: physics.ts
+   *  collisions, the K / L / Grip effects in abilities-runtime.ts and
+   *  the snowball. See AbilityDef.knockbackTakenMult. Server mirror:
+   *  knockbackScale in server/src/sim/abilities.ts. */
+  get knockbackScale(): number {
+    return getKnockbackTakenMultiplier(this.abilityStates);
+  }
+
+  /** × on this critter's friction half-life from its own abilities (Ice
+   *  Slide glides: AbilityDef.slideFrictionMult). Server mirror:
+   *  frictionScale in server/src/sim/abilities.ts, which BrawlRoom doesn't
+   *  call yet (DISTRIBUCIÓN, buzón fase 2). */
+  get frictionScale(): number {
+    return getFrictionMultiplier(this.abilityStates);
+  }
+
   startHeadbutt(): void {
     if (this.headbuttCooldown > 0 || this.isHeadbutting || this.headbuttAnticipating || this.isImmune) return;
+    // Stunned: no action starts. Server: pending in BrawlRoom's headbutt
+    // trigger (DISTRIBUCIÓN, buzón fase 2); online a stunned player still
+    // headbutts until it lands.
+    if (this.stunTimer > 0) return;
     this.headbuttAnticipating = true;
     this.anticipationTimer = FEEL.headbutt.anticipation.duration;
     // Skeletal hook — if the critter has a wind-up clip, fire it now.
@@ -622,10 +647,14 @@ export class Critter {
     // Friction: faster decay when no input (stops drift), normal decay
     // with input. 2026-04-30 final-L — slippery zones (Kowalski Frozen
     // Floor) multiply the half-life by the ice's `frictionMult`, so
-    // velocity decays slower and the critter slides.
+    // velocity decays slower and the critter slides. So does a gliding
+    // dash of its own (Ice Slide: frictionScale). Server: BrawlRoom's
+    // integrate step has the ice; frictionScale is pending there
+    // (DISTRIBUCIÓN, buzón fase 2), so online Ice Slide doesn't glide yet.
     let halfLife = this.hasInput ? FEEL.movement.frictionHalfLife : FEEL.movement.idleFrictionHalfLife;
     const ice = getSlipperyZone(this.x, this.z, this.config.name);
     if (ice) halfLife *= ice.frictionMult;
+    halfLife *= this.frictionScale;
     const friction = Math.pow(0.5, dt / halfLife);
     this.vx *= friction;
     this.vz *= friction;
@@ -656,8 +685,10 @@ export class Critter {
     // its own headbutt, a pull) never turns it round — it used to spin
     // 180° in mid-flight, turn its back on whoever hit it and fire its next
     // headbutt the wrong way (FEELING §7.10). Coasting keeps the facing.
-    // Mirror: BrawlRoom's integrate step.
-    if ((Math.abs(this.vx) > 0.1 || Math.abs(this.vz) > 0.1) &&
+    // Charging the All-in, the aim owns the facing (advanceAllInCharge).
+    // Mirror: BrawlRoom's integrate step, all but the charging exception,
+    // which is pending there with the aim (DISTRIBUCIÓN, buzón fase 2).
+    if (!this.lHoldCharging && (Math.abs(this.vx) > 0.1 || Math.abs(this.vz) > 0.1) &&
         this.hasInput && this.vx * this.moveX + this.vz * this.moveZ > 0) {
       this.mesh.rotation.y = Math.atan2(this.vx, this.vz);
     }
@@ -695,6 +726,7 @@ export class Critter {
     }
     updateScaleFeedback(this, dt);
     updateKnockbackTilt(this, dt);
+    updateYankVisual(this, dt);
     updateHeadbuttRecovery(this, dt);
   }
 
@@ -708,44 +740,49 @@ export class Critter {
 
   /** Visual-only: updates emissive, posture, and opacity based on current state. No gameplay logic. */
   private updateVisuals(): void {
-    let glowColor = this.config.color;
-    let glowIntensity = 0.15;
+    const G = FEEL.stateGlow;
+    // A flag, not "colour differs from the critter's own": a def colour
+    // equal to it must still glow.
+    let glowing = false;
+    let glowColor = 0x000000;
+    let glowIntensity = 0;
     let bodyScaleY = 1.0;
     let headOffsetY = 0; // additional Y offset for head during states
+    const glow = (hex: number, intensity: number): void => {
+      glowing = true;
+      glowColor = hex;
+      glowIntensity = intensity;
+    };
 
     // --- Headbutt states ---
     if (this.headbuttAnticipating) {
-      glowColor = 0xffffff;
-      glowIntensity = 0.4;
+      glow(G.headbuttWindUp.hex, G.headbuttWindUp.intensity);
     } else if (this.isHeadbutting) {
-      glowColor = 0xffcc00;
-      glowIntensity = 0.8;
+      glow(G.headbutt.hex, G.headbutt.intensity);
     }
 
-    // --- Ability states ---
+    // --- Ability states (a def's own colours over FEEL.stateGlow) ---
     for (const s of this.abilityStates) {
       if (!s.active) continue;
+      const def = s.def;
+      const windingUp = s.windUpLeft > 0;
 
-      if (s.def.type === 'charge_rush') {
-        glowColor = 0xff8800;
-        glowIntensity = 0.7;
+      if (def.type === 'charge_rush') {
+        glow(def.activeGlowHex ?? G.dash.hex, def.activeGlowIntensity ?? G.dash.intensity);
         headOffsetY = -0.08;
-      } else if (s.def.type === 'ground_pound') {
-        if (s.windUpLeft > 0) {
+      } else if (def.type === 'ground_pound') {
+        if (windingUp) {
           bodyScaleY = FEEL.groundPound.windUpSquash;
           headOffsetY = FEEL.groundPound.windUpHeadDrop;
-          glowColor = 0xffff00;
-          glowIntensity = 0.5;
-        } else if (!s.def.selfBuffOnly) {
+          glow(def.windUpGlowHex ?? G.kWindUp.hex, G.kWindUp.intensity);
+        } else if (!def.selfBuffOnly) {
           // A self-buff K (Steel Shell, Mirror Trick) slams nothing: its
           // look is the tint or the ghost below, not the slam's red.
-          glowColor = 0xff2200;
-          glowIntensity = 0.7;
+          glow(def.activeGlowHex ?? G.kActive.hex, def.activeGlowIntensity ?? G.kActive.intensity);
         }
-      } else if (s.def.type === 'frenzy') {
-        if (s.windUpLeft > 0) {
-          glowColor = 0xffff00;
-          glowIntensity = 0.5;
+      } else if (def.type === 'frenzy') {
+        if (windingUp) {
+          glow(def.windUpGlowHex ?? G.lWindUp.hex, pulsedGlow(G.lWindUp, G.lWindUp.intensity));
           bodyScaleY = 0.85;
         } else if (this.config.name === 'Kermit') {
           // Hypnosapo — Kermit's ulti runs a fast hypnotic flicker
@@ -756,30 +793,31 @@ export class Critter {
           const t = Date.now() * 0.025;
           const flicker = Math.sin(t);
           const swing = Math.abs(Math.sin(t * 0.5));
-          glowColor = flicker > 0 ? 0xaa00ff : 0xff44cc;
-          glowIntensity = 0.9 + swing * 0.4;
+          glow(flicker > 0 ? 0xaa00ff : 0xff44cc, 0.9 + swing * 0.4);
           // Slight body scale pulse for "charging hypnosis"
           bodyScaleY = 1.0 + swing * 0.08;
         } else {
-          // Default frenzy — red pulse (Sergei, Shelly, …).
-          const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.008);
-          glowColor = 0xff1100;
-          glowIntensity = 0.6 + pulse * 0.4;
+          // The L's pulse: red by default, the def's colour (Saw Shell
+          // green, Frozen Floor ice, Sinkhole sand) when it has one.
+          glow(def.activeGlowHex ?? G.lActive.hex, pulsedGlow(G.lActive, def.activeGlowIntensity ?? G.lActive.intensity));
         }
+      } else if (windingUp && def.windUpGlowHex !== undefined) {
+        // Projectile or blink: no wind-up glow of its own, only the def's
+        // (Kowalski's snowball charging in ice blue).
+        glow(def.windUpGlowHex, G.kWindUp.intensity);
       }
     }
 
     // --- Cooldown visual (muted) ---
     if (this.headbuttCooldown > 0 && !this.isHeadbutting && !this.headbuttAnticipating) {
-      glowIntensity *= 0.5;
+      glowIntensity *= G.cooldownDim;
     }
 
     // --- Apply to active materials (GLB or procedural) ---
     const mats = this.getActiveMaterials();
-    const isActive = glowColor !== this.config.color;
     for (const mat of mats) {
-      mat.emissive.setHex(isActive ? glowColor : 0x000000);
-      mat.emissiveIntensity = isActive ? glowIntensity : 0;
+      mat.emissive.setHex(glowing ? glowColor : 0x000000);
+      mat.emissiveIntensity = glowing ? glowIntensity : 0;
     }
 
     // Procedural-only posture changes (harmless on invisible meshes when GLB active)
@@ -1248,8 +1286,7 @@ export class Critter {
     for (const s of this.abilityStates) {
       if (s.active) cancelAbility(s);
     }
-    this.lHoldCharging = false;
-    this.lHoldChargeTime = 0;
+    cancelSebastianAllInCharge(this); // and its line
     this.invisibilityTimer = 0;
     this.selfTintTimer = 0;
     this.selfTintHex = null;
@@ -1370,6 +1407,7 @@ export class Critter {
     // the spawn facing after this (reset() is followed by game placement).
     this.lastFacingY = NaN;
     if (this.visualPivot) this.visualPivot.rotation.y = 0;
+    cancelYankVisual(this);
   }
 
   /** Ground velocity from the position delta of this frame. Jumps faster
@@ -1431,6 +1469,14 @@ export class Critter {
     this.lastStatsAbilityActive = [false, false, false];
     this.resetVisualMotion();
   }
+}
+
+/** Intensity of a pulsing state glow (FEEL.stateGlow): `peak` × (floor +
+ *  (1 − floor) × wave), the wave 0..1 at `pulseHz` on the wall clock, as
+ *  every emissive pulse here. Visual only. */
+function pulsedGlow(p: { floor: number; pulseHz: number }, peak: number): number {
+  const wave = 0.5 + 0.5 * Math.sin(Date.now() * 0.001 * Math.PI * 2 * p.pulseHz);
+  return peak * (p.floor + (1 - p.floor) * wave);
 }
 
 /** Vertices sampled per mesh by `measurePosedHeight` — plenty for a

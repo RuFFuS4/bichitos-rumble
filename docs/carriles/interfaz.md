@@ -42,6 +42,21 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-25 — segunda tanda del repaso: la regla del
+  anclaje ya es pública, y el aturdido cambia de significado.**
+  - `isBlockedByAnchor(state, states)` está exportada en
+    `src/abilities-runtime.ts`: es pura, sobre la lista
+    `critter.abilityStates`. Es la que pediste para marcar la J de Shelly
+    como `blocked` mientras está anclada.
+  - **«Aturdido» ahora también impide actuar**: con `stunTimer > 0` no
+    hay cabezazo, J, K ni L. El texto debería decir que no se mueve **ni
+    actúa**. Opcional: atenuar J, K y L mientras dure.
+  - He tocado tres frases de `CONTENT_ES`, con tu permiso para ese
+    bloque:
+    - Grip: aturde 2,5 s;
+    - Fox Dash: atraviesa;
+    - Ice Slide: sigue deslizándose.
+
 - **De PERSONAJES, 2026-09-24 — el repaso de habilidades deja tres cosas
   en tus ficheros.** Detalle en
   [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md).

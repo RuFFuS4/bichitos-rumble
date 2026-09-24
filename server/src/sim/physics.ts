@@ -9,7 +9,7 @@
 
 import type { PlayerSchema } from '../state/PlayerSchema.js';
 import { SIM, getCritterConfig } from './config.js';
-import { cancelActiveAbilities, getAbilityKit, type SlipperyEffect } from './abilities.js';
+import { activeDashDef, cancelActiveAbilities, getAbilityKit, knockbackScale, takeDashContact, type SlipperyEffect } from './abilities.js';
 
 /**
  * Minimal shape for the per-player internal data used here.
@@ -58,10 +58,26 @@ export interface ShellReflectEvent {
   anchoredSid: string;
 }
 
+/** A dash (J) that hit someone this tick — its first contact with that
+ *  player this activation, force or not. For the room to broadcast, so
+ *  clients replay the flash, sound and shake that offline the local
+ *  physics plays (src/physics.ts rushContact). */
+export interface DashHitEvent {
+  rusherSid: string;
+  victimSid: string;
+  /** Direction the victim was pushed (unit, from the rusher). */
+  nx: number;
+  nz: number;
+  /** The dash's dashHitForce: 0 = a contact with no hit of its own (no
+   *  hit stop offline). */
+  force: number;
+}
+
 export function resolveCollisions(
   players: PlayerSchema[],
   internal?: Map<string, InternalLike>,
   reflectsOut?: ShellReflectEvent[],
+  dashHitsOut?: DashHitEvent[],
 ): void {
   for (let i = 0; i < players.length; i++) {
     const a = players[i];
@@ -70,6 +86,9 @@ export function resolveCollisions(
     for (let j = i + 1; j < players.length; j++) {
       const b = players[j];
       if (!b.alive || b.falling) continue;
+      // A dash that phases (Kurama's feint) goes straight through: no
+      // separation, no push, no hit either way. Mirror of the client.
+      if (activeDashDef(a)?.dashPhaseThrough || activeDashDef(b)?.dashPhaseThrough) continue;
       const bCfg = getCritterConfig(b.critterName);
 
       const eitherImmune = a.immunityTimer > 0 || b.immunityTimer > 0;
@@ -116,28 +135,34 @@ export function resolveCollisions(
         const reflectForce = (cfg: { headbuttForce: number; headbuttBoost?: number }) =>
           cfg.headbuttForce * SIM.collision.headbuttMultiplier *
           (cfg.headbuttBoost ?? 1.0) * SHELL_REFLECT;
+        // A dash's hit comes back the same way, once per activation.
+        // What comes back is a push the other side takes: × knockbackScale.
         if (aAnchored && !bAnchored) {
-          if (b.isHeadbutting) {
-            const rf = reflectForce(bCfg);
+          const taken = knockbackScale(b);
+          const dashForce = b.isHeadbutting ? null : takeDashContact(b, a, -nx, -nz);
+          if (b.isHeadbutting || dashForce) {
+            const rf = (dashForce ? dashForce * SHELL_REFLECT : reflectForce(bCfg)) * taken;
             b.vx += nx * rf;
             b.vz += nz * rf;
             reflectsOut?.push({ attackerSid: b.sessionId, anchoredSid: a.sessionId });
             continue;
           }
-          b.vx += nx * BOUNCE;
-          b.vz += nz * BOUNCE;
+          b.vx += nx * BOUNCE * taken;
+          b.vz += nz * BOUNCE * taken;
           continue;
         }
         if (bAnchored && !aAnchored) {
-          if (a.isHeadbutting) {
-            const rf = reflectForce(aCfg);
+          const taken = knockbackScale(a);
+          const dashForce = a.isHeadbutting ? null : takeDashContact(a, b, nx, nz);
+          if (a.isHeadbutting || dashForce) {
+            const rf = (dashForce ? dashForce * SHELL_REFLECT : reflectForce(aCfg)) * taken;
             a.vx -= nx * rf;
             a.vz -= nz * rf;
             reflectsOut?.push({ attackerSid: a.sessionId, anchoredSid: b.sessionId });
             continue;
           }
-          a.vx -= nx * BOUNCE;
-          a.vz -= nz * BOUNCE;
+          a.vx -= nx * BOUNCE * taken;
+          a.vz -= nz * BOUNCE * taken;
           continue;
         }
 
@@ -167,8 +192,9 @@ export function resolveCollisions(
         // stunned side (was ×2). Mirrors client physics. Currently
         // only Trunk's K+L write `stunTimer > 0`; safe to bump
         // globally without disturbing other critters.
-        const aVulnMul = a.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1;
-        const bVulnMul = b.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1;
+        // × each side's knockbackScale (Sergei's Frenzy), recoil included.
+        const aVulnMul = (a.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1) * knockbackScale(a);
+        const bVulnMul = (b.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1) * knockbackScale(b);
         if (a.isHeadbutting) {
           b.vx += nx * force * ratioB * bVulnMul;
           b.vz += nz * force * ratioB * bVulnMul;
@@ -202,15 +228,52 @@ export function resolveCollisions(
           a.vz -= nz * force * ratioA * aVulnMul;
           b.vx += nx * force * ratioB * bVulnMul;
           b.vz += nz * force * ratioB * bVulnMul;
+          // A dash that runs into someone hits (once per victim): its
+          // dashHitForce on top of the nudge, split like a headbutt.
+          // Mirror of the client's rushContact.
+          dashHit(a, b, nx, nz, ratioB * bVulnMul, dashHitsOut);
+          dashHit(b, a, -nx, -nz, ratioA * aVulnMul, dashHitsOut);
         }
       }
     }
   }
 }
 
+/** `rusher`'s dash hitting `victim` along (dirX, dirZ), if the contact
+ *  counts (takeDashContact); `share` is the victim's mass share × stun
+ *  vulnerability × knockbackScale. */
+function dashHit(
+  rusher: PlayerSchema,
+  victim: PlayerSchema,
+  dirX: number,
+  dirZ: number,
+  share: number,
+  out: DashHitEvent[] | undefined,
+): void {
+  const force = takeDashContact(rusher, victim, dirX, dirZ);
+  if (force === null) return;
+  victim.vx += dirX * force * share;
+  victim.vz += dirZ * force * share;
+  out?.push({ rusherSid: rusher.sessionId, victimSid: victim.sessionId, nx: dirX, nz: dirZ, force });
+}
+
+/** True while a self-buff K (Steel Shell, Mirror Trick) is past its
+ *  wind-up. Mirror of the client's `hasSelfBuffActive` (src/physics.ts). */
+function hasSelfBuffActive(p: PlayerSchema): boolean {
+  const kit = getAbilityKit(p.critterName);
+  for (let i = 0; i < p.abilities.length; i++) {
+    const a = p.abilities[i];
+    if (a.active && a.windUpLeft <= 0 && kit[i]?.selfBuffOnly) return true;
+  }
+  return false;
+}
+
 /**
  * Falloff check using the authoritative ArenaSim fragment layout.
  * A player falls if they're NOT on any alive fragment (including immune center).
+ * Immunity keeps a player over the void only as the respawn grace: a
+ * self-buff's immunity shields from pushes, not from the floor vanishing
+ * (Steel Shell, Mirror Trick). Mirror of the client's checkFalloff.
  */
 export function checkFalloff(
   players: PlayerSchema[],
@@ -218,7 +281,8 @@ export function checkFalloff(
   isOnArena: (x: number, z: number) => boolean,
 ): void {
   for (const p of players) {
-    if (!p.alive || p.falling || p.immunityTimer > 0) continue;
+    if (!p.alive || p.falling) continue;
+    if (p.immunityTimer > 0 && !hasSelfBuffActive(p)) continue;
     if (!isOnArena(p.x, p.z)) startFalling(p, internal.get(p.sessionId));
   }
 }

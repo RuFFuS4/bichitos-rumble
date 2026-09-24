@@ -97,6 +97,26 @@ export interface AbilityDef {
    *  movement. */
   slowDuringActive?: number;
 
+  /** charge_rush: knockback the dash deals on its first contact with each
+   *  critter per activation (physics.ts resolveCollisions), split by mass
+   *  and × stunnedVulnerability like a headbutt; an anchored Steel Shell
+   *  reflects it × shellReflectFactor. Undefined / 0 = the plain nudge. */
+  dashHitForce?: number;
+  /** charge_rush: the dash only hits a victim within ±this many degrees
+   *  of the rusher's facing (the way it dashes); elsewhere a contact is the
+   *  plain nudge and doesn't use up the victim. Undefined = any contact. */
+  dashHitArcDeg?: number;
+  /** charge_rush: in the active window the rusher passes through other
+   *  critters — no separation, no push, no hit either way. */
+  dashPhaseThrough?: boolean;
+  /** charge_rush: × on the rusher's own friction half-life in the active
+   *  window (wind-up excluded), so the dash impulse decays that many
+   *  times slower and the critter glides instead of stopping short.
+   *  Read through Critter.frictionScale; server mirror: frictionScale in
+   *  server/src/sim/abilities.ts, not called by BrawlRoom yet
+   *  (DISTRIBUCIÓN, buzón fase 2). Undefined = 1. */
+  slideFrictionMult?: number;
+
   /** When the ability ends (state.active flips false), force the
    *  skeletal animator back to idle/run. Useful for K abilities whose
    *  authored clip is much longer than the gameplay window — without
@@ -111,6 +131,23 @@ export interface AbilityDef {
    *  was bumped from 40 → 48 but the shake didn't follow until this
    *  field landed. Pure feel knob; not synced to server. */
   shakeBoost?: number;
+
+  /** Which FEEL.hitStop entry the ability's hit freezes the game for,
+   *  only when it hits someone. Undefined = its kind's own: 'groundPound'
+   *  for a radial or cone K, 'ability' for a blink's landing (Shadow
+   *  Step). Pure feel knob; not synced to server. */
+  hitStopKey?: keyof typeof FEEL.hitStop;
+
+  /** State glow (Critter.updateVisuals) in this ability's own colours
+   *  instead of its kind's FEEL.stateGlow ones: the dash's orange, the
+   *  slam's red, the L's red pulse. `activeGlowIntensity` is its peak (an
+   *  L still pulses under it). `windUpGlowHex` replaces the K's yellow or
+   *  the L's dark-red heartbeat; a projectile or blink glows in its wind-up
+   *  only with it. Visual only; not synced (online critters read their
+   *  kit def) and not copied by Copycat. */
+  activeGlowHex?: number;
+  activeGlowIntensity?: number;
+  windUpGlowHex?: number;
 
   /** Blink-specific: world-units to teleport along the critter's
    *  facing direction. Server clamps to arena bounds. */
@@ -200,18 +237,32 @@ export interface AbilityDef {
    *  100 % static during Steel Shell. Server mirrors via the
    *  `selfAnchorWhileBuffed` flag in `AbilityDef`. */
   selfAnchorWhileBuffed?: boolean;
+  /** With `selfAnchorWhileBuffed`: the fastest the caster runs on its own
+   *  (u/s). Casting the anchor stops it dead up to this, plus the impulse
+   *  of the dash it cancels and a headbutt lunge in progress; faster, it
+   *  was launched, and the push carries on (anchorInPlace in
+   *  abilities-runtime.ts). Undefined = it stops from any speed, pushes
+   *  included. Server mirror in server/src/sim/abilities.ts. */
+  anchorBrakeMaxSpeed?: number;
 
   /** 2026-04-29 K-refinement — Kurama Mirror Trick escape teleport.
-   *  When set on a self-buff K, the caster blinks this many units
-   *  AWAY from the closest enemy at activation (fallback: along
-   *  facing if no enemy exists). The decoy stays at the original
-   *  spot. Pairs with `invisibilityDuration` so the engaño reads
-   *  as "señuelo se queda, Kurama se va lejos". */
+   *  When set on a self-buff K, the caster jumps this many units
+   *  backward: away from the nearest enemy within `decoyThreatRange`,
+   *  turning to face him, or straight back from her facing when no
+   *  enemy is that close. The decoy stays at the original spot. Pairs
+   *  with `invisibilityDuration` so the engaño reads as "señuelo se
+   *  queda, Kurama se va lejos". */
   decoyEscapeDistance?: number;
   /** Fractions of the (disc-clamped) escape line tried in order until
    *  one lands on live floor; if none does, the caster stays on the
    *  decoy's spot. Server mirror in server/src/sim/abilities.ts. */
   decoyEscapeFallbacks?: readonly number[];
+  /** 2026-09-24 — how close a live enemy must be for the escape to flee
+   *  him instead of following the facing. The facing follows her own
+   *  movement, so a fleeing Kurama faces away from her chaser and
+   *  "backward" used to jump her into him. Server mirror in
+   *  server/src/sim/abilities.ts. */
+  decoyThreatRange?: number;
 
   /** 2026-04-29 final-K — Trunk Grip K. When true, the
    *  ground_pound dispatcher takes a single frontal target
@@ -220,9 +271,9 @@ export interface AbilityDef {
    *       ±`gripFrontalAngleDeg` of facing
    *    2. yank them to `gripPullDistance` units in front of Trunk
    *    3. write `target.stunTimer = gripStunDuration` (server +
-   *       cliente). Stun roots them and grants ×2 incoming
-   *       knockback via the vulnerability path in
-   *       `resolveCollisions`.
+   *       cliente). Stun roots them, stops them acting (no
+   *       headbutt, J, K or L) and grants ×4 incoming knockback via
+   *       the vulnerability path in `resolveCollisions`.
    */
   gripK?: boolean;
   gripFrontalRange?: number;
@@ -256,7 +307,8 @@ export interface AbilityDef {
 
   /** 2026-05-01 final — Trunk Slam K. When set on a ground_pound,
    *  every critter inside the radial AoE additionally receives a
-   *  brief stun (`stunTimer = slamStunDuration`). Stuns from this
+   *  brief stun (`stunTimer = slamStunDuration`: rooted, no action
+   *  starts). Stuns from this
    *  source compose with the global "stunned takes ×4 incoming
    *  knockback" rule in physics — so Slam alone reads as a heavy
    *  thump, but a Slam followed by a headbutt deletes the target. */
@@ -298,6 +350,11 @@ export interface AbilityDef {
    *  as a safety auto-release). Pairs with `allInL`. */
   holdToFireL?: boolean;
   holdToFireMaxMs?: number;
+  /** Shortest charge that resolves: letting go earlier doesn't fire at
+   *  once, it fires when this is reached (2026-09-24). Undefined = 0.
+   *  Online reader pending: BrawlRoom's hold loop (DISTRIBUCIÓN, buzón
+   *  fase 2). */
+  holdToFireMinMs?: number;
 
   /** Kermit Toxic Touch: during frenzy, contact with another
    *  critter writes `target.confusedTimer = confusedDuration`.
@@ -341,6 +398,18 @@ export interface AbilityDef {
    *  The target is consumed; with no target the L is just her buff. */
   copycatL?: boolean;
 
+  /** While the ability is active (wind-up excluded, like the mass buff),
+   *  every push the caster takes from others is × this: headbutts and
+   *  their recoil, nudges, dash hits, the Steel Shell reflect and bounce,
+   *  K and L hits, snowballs, and a Grip's yank (its distance). The mass
+   *  buff already shrinks a collision's share; this reaches the rest.
+   *  Not an All-in hit: that one throws out whoever it catches. Not a
+   *  Sinkhole's pull either: a zone, not a push, as mass doesn't touch it.
+   *  Sergei's Frenzy 0.4 («casi inamovible», Rafa 2026-09-24). Read
+   *  through Critter.knockbackScale; server mirror: knockbackScale in
+   *  server/src/sim/abilities.ts. Undefined = 1. */
+  knockbackTakenMult?: number;
+
   // --- 2026-04-29 K-session: projectile additions (Kowalski Snowball) ---
   /** Forward speed of the projectile (units / second). */
   projectileSpeed?: number;
@@ -366,6 +435,8 @@ export interface AbilityDef {
  * Sebastian's All-in is left out on purpose: copied, it resolved when
  * Kurama's 3.5 s ran out, from wherever she had wandered, so a miss threw
  * her off the arena and a hit was a sure kill. Copying him gives the buff.
+ * Sergei's gimmick is his resistance (`knockbackTakenMult`): a Kurama
+ * copying him takes pushes as he does, with her own speed and mass.
  */
 export const COPYCAT_KEYS = [
   'sawL', 'sawContactImpulse', 'sawSpinSpeed',
@@ -373,6 +444,7 @@ export const COPYCAT_KEYS = [
   'toxicTouchL', 'confusedDuration',
   'frozenFloorL', 'floorRadius', 'floorDuration', 'floorFrictionMult', 'floorAccelMult',
   'sinkholeL', 'holeRadius', 'holeDuration', 'holeForce', 'holeCastOffset',
+  'knockbackTakenMult',
 ] as const satisfies readonly (keyof AbilityDef)[];
 
 export interface AbilityState {
@@ -390,10 +462,9 @@ export interface AbilityState {
    *  the tick spawns a new one each `DASH_TRAIL_INTERVAL` and resets.
    *  Untouched for non-mobility ability types. */
   trailTimer: number;
-  /** charge_rush: the critters this activation has already run into, so
-   *  the contact feedback (physics.ts rushContactFeedback) lands once per
-   *  victim. Cleared when the dash fires (fireEffect); visual bookkeeping
-   *  only. */
+  /** charge_rush: the critters this activation has already hit, so the
+   *  dash hit and its feedback (physics.ts rushContact) land once per
+   *  victim. Cleared when the dash fires (fireEffect). */
   rammed: Set<Critter>;
 }
 
@@ -554,6 +625,9 @@ function makeFrenzy(overrides: Partial<AbilityDef> = {}): AbilityDef {
 //                                           screen).
 //   · `frenzy.color` / `frenzy.secondary` — outer + inner ring on the
 //                                           one-shot Frenzy entry burst.
+//   · `projectile.color` / `.secondary`   — the ring where the critter's
+//                                           projectile hits or melts
+//                                           (src/projectiles.ts).
 //
 // Keys missing from the map (e.g. internal bots Rojo/Azul/Verde/Morado)
 // fall back to the original red shockwave + gold-red frenzy. Adding a
@@ -561,6 +635,7 @@ function makeFrenzy(overrides: Partial<AbilityDef> = {}): AbilityDef {
 interface CritterVfxPalette {
   pound?:  { color?: number; secondary?: number; holdMs?: number };
   frenzy?: { color?: number; secondary?: number };
+  projectile?: { color?: number; secondary?: number };
 }
 
 /**
@@ -584,7 +659,8 @@ export const CRITTER_VFX_PALETTE: Record<string, CritterVfxPalette> = {
   Shelly:    { pound: { color: 0x2dc66b, secondary: 0x6dffe2 }, frenzy: { color: 0x2d8659, secondary: 0x6ddfa9 } }, // green/cyan — shell
   Kermit:    { pound: { color: 0x66ff44, secondary: 0x9c3cee, holdMs: 800 }, frenzy: { color: 0x9c3cee, secondary: 0x66ff44 } }, // toxic green/violet, held longer
   Sihans:    { pound: { color: 0x9c7c3c, secondary: 0xd9c089 }, frenzy: { color: 0x8b6914, secondary: 0xc89a3c } }, // brown/sand — tremor
-  Kowalski:  { pound: { color: 0x6cc9ff, secondary: 0xffffff }, frenzy: { color: 0x88c1ff, secondary: 0xeaf6ff } }, // ice blue/white
+  // Snowball: a snow ring, not the beige dust it used to leave (2026-09-24).
+  Kowalski:  { pound: { color: 0x6cc9ff, secondary: 0xffffff }, frenzy: { color: 0x88c1ff, secondary: 0xeaf6ff }, projectile: { color: 0xeaf6ff, secondary: 0xffffff } }, // ice blue/white
   Cheeto:    { pound: { color: 0xff7322, secondary: 0xffd944 }, frenzy: { color: 0xff3322, secondary: 0xffcc44 } }, // orange/red predator
   Sebastian: { pound: { color: 0x9b1c1c, secondary: 0xff5544 }, frenzy: { color: 0xcc3333, secondary: 0xff5555 } }, // crimson
 };
@@ -696,6 +772,12 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       speedMultiplier: 2.6,
       massMultiplier: 2.2,
       clipPlaybackRate: 2.3,
+      // 2026-09-24 (Rafa: the J must hit, and this J is «perfecta»): a
+      // slap, a third of his 68.6 headbutt. At 22 the victim leaves at
+      // ≤ 19.6 u/s even if it is Kermit, under the 20 u/s speed cap that
+      // every headbutt reaches, so it never reads as one. Before, 106 of
+      // 213 Gorilla Rush touched someone for the plain nudge alone.
+      dashHitForce: 22,
     }),
     makeGroundPound({
       // 2026-04-29 final-K (Rafa: "doblar potencia, apenas
@@ -723,6 +805,11 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // speed sin tocar — el rework es de aguante, no de movilidad.
       speedMultiplier: 1.55,
       massMultiplier: 5.50,
+      // 2026-09-24 (Rafa: «casi inamovible»): the mass only reached
+      // collisions, and capped — Trunk's headbutt still threw him 1.54 u
+      // (2.57 without the Frenzy), and K, L and snowball hits the full
+      // distance. Every push he takes is × this on top.
+      knockbackTakenMult: 0.4,
     }),
   ],
 
@@ -789,12 +876,12 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
     makeGroundPound({
       // 2026-05-01 final — Trunk Grip moved here (was Trunk K).
       // Grabs the closest valid frontal enemy, snaps them to
-      // 1.6 u in front of Trunk, locks them in `stunTimer = 5 s`.
-      // While stunned, the global "vulnerable" rule in physics
-      // applies × 4 incoming knockback so a follow-up headbutt
-      // launches the target across the arena. Rafa's read: "I
-      // grab them with the trunk, leave them helpless, then
-      // finish them off."
+      // 1.6 u in front of Trunk and stuns them (gripStunDuration).
+      // While stunned they can't move or act, and the global
+      // "vulnerable" rule in physics applies × 4 incoming knockback
+      // so a follow-up headbutt launches the target across the
+      // arena. Rafa's read: "I grab them with the trunk, leave them
+      // helpless, then finish them off."
       name: 'Trunk Grip',
       key: 'L',
       // Its own tag: with the factory's 'aoe_push' the bot always found
@@ -805,7 +892,10 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       //   4.25 → 3.80 (-11 %, micropass 2)
       // Sigue siendo CC dominante con la "vulnerable ×4" rule, pero la
       // víctima ya no queda casi 5 s sin opciones.
-      description: 'Trunk pulls a target close — they take ×4 from any hit for 3.8 s',
+      //   3.80 → 2.5 (2026-09-24, Rafa): the stun now blocks the
+      // headbutt, J, K and L too — the gripped one used to headbutt
+      // or escape with a J or Mirror Trick.
+      description: 'Trunk pulls and stuns a target for 2.5 s — it takes ×4 from any hit',
       radius: 0, force: 0,
       windUp: 0.45,
       cooldown: 18.0,
@@ -816,7 +906,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       gripFrontalRange: 28.0,
       gripFrontalAngleDeg: 35,
       gripPullDistance: 1.6,
-      gripStunDuration: 3.80,
+      gripStunDuration: 2.5,
     }),
   ],
 
@@ -830,9 +920,11 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   // the K windup so the burst still reads as a committed pose.
   Kurama: [
     makeChargeRush({
-      name: 'Fox Dash', description: 'Blink-fast feint forward',
+      // 2026-09-24 (Rafa): a feint, not a ram — she dashes through.
+      name: 'Fox Dash', description: 'Blink-fast feint through enemies',
       impulse: 29, duration: 0.26, cooldown: 3.2, windUp: 0.05,
       speedMultiplier: 2.8, massMultiplier: 1.3,
+      dashPhaseThrough: true,
     }),
     // v0.11 — Mirror Trick: drops a static decoy clone where Kurama
     // is, ghosts her own mesh (alpha 0.25) for 1.6 s, and grants
@@ -864,6 +956,12 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // 2026-09-24: the escape used to land on collapsed sectors and,
       // immune, walk the void for up to 1.8 s. Full line, 70 %, 40 %.
       decoyEscapeFallbacks: [1, 0.7, 0.4],
+      // 2026-09-24 (Rafa: «el salto para atrás es precisamente para
+      // alejarse del perseguidor»): flee the nearest enemy within 10 u.
+      // Not 6: with a chaser just past 6 u behind a fleeing Kurama, the
+      // 7 u jump landed on top of him (8 u → 1.1 u). At 10 u anyone left
+      // to the facing fallback ends at least 3 u away.
+      decoyThreatRange: 10.0,
     }),
     makeFrenzy({
       // 2026-04-30 final-L — Copycat. At fire time Kurama's L takes
@@ -885,6 +983,8 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Shell Charge', description: 'Slow rolling ram',
       impulse: 15, duration: 0.45, cooldown: 5.5, windUp: 0.08,
       speedMultiplier: 1.8, massMultiplier: 3.2,
+      // 2026-09-24 (Rafa: «la embestida debe golpear»).
+      dashHitForce: 30,
     }),
     // v0.11 — Shell Slam REPLACED by Steel Shell. Defensive K:
     // skips the outward knockback, grants Shelly 5 s of immunity
@@ -906,11 +1006,20 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       tags: ['defensive'],
       radius: 0, force: 0,
       windUp: 0.20, cooldown: 12.0, duration: 4.0,
+      // 2026-09-24 (Rafa: «frena en seco»): stopped on the key press
+      // (anchorInPlace) and fully rooted through the wind-up too, not the
+      // ground_pound's 0.15 creep. The server kit already roots it
+      // (ROOTED_K).
+      slowDuringWindUp: 0,
       slowDuringActive: 0, cancelAnimOnEnd: true,
       selfBuffOnly: true,
       selfImmunityDuration: 4.0,
       selfTintHex: 0xa8c0d0, // metallic blue-gray
       selfAnchorWhileBuffed: true,
+      // Her run tops at 1.9 u/s (2.6 in Saw Shell, 3.3 on Frozen Floor);
+      // a push starts well above (a headbutt: 20). Only her own motion
+      // stops dead: the shell doesn't wipe a push she's flying from.
+      anchorBrakeMaxSpeed: 3.5,
     }),
     makeFrenzy({
       // 2026-04-30 final-L — Saw Shell. During frenzy Shelly's
@@ -930,6 +1039,8 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // server-side mirrored.
       sawContactImpulse: 90,
       sawSpinSpeed: 22,
+      // Glows shell green while it spins, not the generic L red (2026-09-24).
+      activeGlowHex: 0x6ddfa9,
       // 2026-04-30 final-polish (Rafa: "al terminar de girar,
       // parece que empieza a reproducir la animación"): añadimos
       // cancelAnimOnEnd para que el clip de frenzy NO se reproduzca
@@ -966,6 +1077,11 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
         color: 0x66ff44,
         secondary: 0x9c3cee,
       },
+      // 2026-09-24: it pushes at 6.1 u/s and shook and froze like
+      // Sergei's 68-force Shockwave (20 u/s): half the shake, and the
+      // short ability hit stop (0.04 s) instead of the slam's 0.09.
+      shakeBoost: 0.5,
+      hitStopKey: 'ability',
     }),
     makeFrenzy({
       // 2026-04-30 final-L — Toxic Touch. While the buff is
@@ -1037,6 +1153,10 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // competes with the victim's own — unscaled, the trap stops trapping.
       holeForce: 19.25,
       holeCastOffset: 4.0,
+      // The L is the hole ahead, not Sihans: a soft sand glow instead of
+      // the red pulse that says "this one is buffed" (2026-09-24).
+      activeGlowHex: 0xc89a3c,
+      activeGlowIntensity: 0.4,
     }),
   ],
 
@@ -1047,9 +1167,14 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
   // bola de nieve, no AoE radial".
   Kowalski: [
     makeChargeRush({
-      name: 'Ice Slide', description: 'Slides forward on an ice trail',
+      name: 'Ice Slide', description: 'Belly-slides forward and keeps gliding',
       impulse: 19, duration: 0.30, cooldown: 4.2,
       speedMultiplier: 2.4, massMultiplier: 1.5,
+      // 2026-09-24 (Rafa: «que deslice de verdad»): her friction half-life
+      // ×3 while the slide lasts, so the same impulse carries her 4.7 u
+      // past a plain run instead of 1.6 (stick held, 60 Hz).
+      slideFrictionMult: 3,
+      activeGlowHex: 0x9fe3ff, // ice, not the dash orange (2026-09-24)
     }),
     makeProjectile({
       // 2026-04-29 final-K (Rafa: "el cast de 1.10 es demasiado
@@ -1066,6 +1191,16 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       projectileRadius: 0.55,
       projectileImpulse: 22,
       projectileSlowDuration: 5.0,
+      // The throw has to land on the frame the ball spawns. In Ability2
+      // (3.8 s) the throwing flipper (R_Hand) whips forward at 1.80 s,
+      // its peak forward speed; the clip starts on the press frame, so
+      // at 60 Hz it is at 3.5 × (0.50 + 1/60) = 1.81 s when the ball
+      // appears (3.6 was a frame late: the flipper already past the
+      // ball). Tied to windUp: change one, recompute the other.
+      clipPlaybackRate: 3.5,
+      // Charging the throw glows ice blue (a projectile had no wind-up
+      // glow; 2026-09-24).
+      windUpGlowHex: 0x88c1ff,
     }),
     makeFrenzy({
       // 2026-04-30 final-L — Frozen Floor. Spawns a slippery
@@ -1073,8 +1208,11 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // critters keep their velocity (low friction) and
       // their accel input is reduced — they slide a lot
       // and lose control near the edge. Kowalski herself is
-      // exempt by ownerKey on the zone. Speed/mass buff
-      // dropped to neutral since the zone IS the L.
+      // exempt by ownerKey on the zone. The zone IS the L; on top,
+      // a light ×1.10 speed and mass for the L's 3 s (this said
+      // "neutral" until 2026-09-24). 24 bot matches at 1.10 and 24
+      // at 1.0 (seeds 820-843) differ by no more than noise, so it
+      // stays: the L's 🔥 status keeps telling the truth.
       name: 'Frozen Floor',
       description: 'Coats the ground in ice — enemies slip and slide',
       duration: 3.0, cooldown: 17.0, windUp: 0.4,
@@ -1091,6 +1229,7 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // server kit. Offline only had the friction until 2026-09-24.
       floorFrictionMult: 5,
       floorAccelMult: 0.35,
+      activeGlowHex: 0xcfeeff, // frost, not the generic L red (2026-09-24)
       // Her ability_3 clip loops, so it never 'finishes' back to idle on
       // its own: without the cut she kept the ulti pose after the L.
       cancelAnimOnEnd: true,
@@ -1104,6 +1243,8 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Pounce', description: 'Lightning-fast predator lunge',
       impulse: 33, duration: 0.24, cooldown: 2.8, windUp: 0.04,
       speedMultiplier: 3.0, massMultiplier: 1.2,
+      // 2026-09-24 (Rafa: the J must hit).
+      dashHitForce: 30,
     }),
     makeBlink({
       // 2026-04-29 K-refinement — Cheeto Shadow Step ahora seek
@@ -1157,6 +1298,9 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       name: 'Claw Rush', description: 'Sideways scuttle charge',
       impulse: 33, duration: 0.28, cooldown: 3.5,
       speedMultiplier: 2.6, massMultiplier: 1.7,
+      // 2026-09-24 (Rafa: the J must hit): only what the claw meets
+      // ahead, the same ±60° as his Claw Wave.
+      dashHitForce: 26, dashHitArcDeg: 60,
     }),
     makeGroundPound({
       // v0.11 (Rafa: "onda expansiva frontal desde el bichito"):
@@ -1206,6 +1350,9 @@ export const CRITTER_ABILITIES: Record<string, AbilityDef[]> = {
       // 3.0 s as a safety so a held-down ult never blocks a match.
       holdToFireL: true,
       holdToFireMaxMs: 3000,
+      // 2026-09-24 (Rafa): a tap used to resolve in one ~33 ms step. The
+      // line now shows for at least 0.35 s, and he aims it meanwhile.
+      holdToFireMinMs: 350,
     }),
   ],
 };

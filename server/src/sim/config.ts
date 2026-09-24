@@ -45,6 +45,15 @@ export const SIM = {
   },
 
   bots: {
+    // Deploy gate for the online bots' L (Rafa, 2026-09-24: «10 sí»). OFF
+    // until BrawlRoom runs every L the way this sim does: today its saw and
+    // ram passes add their impulse on every contact tick (no rehit window)
+    // and its own pushes skip knockbackScale. With bots casting in every
+    // match that broke online games (measured: 27 % shorter, L falls ×2.6).
+    // DISTRIBUCIÓN turns it on in the BrawlRoom slice that lands those
+    // fixes (docs/REPASO_HABILIDADES.md). Client-only: offline bots always
+    // cast their L.
+    ultimateOnline: false as boolean,
     // Fraction of the player's acceleration a bot runs with. Online bots
     // used to push at the full 1.0 while offline ones ran at 0.55; both
     // are 0.7 since 2026-09-21. Mirror of FEEL.bots.moveAccelFactor.
@@ -55,9 +64,13 @@ export const SIM = {
     edgeSteer: 1.6,
     lookAhead: 1.1,
     defendRange: 2.8,
-    // blinkSeek: Shadow Step, trap: Sand Trap. The L rates (buff, grip,
-    // risky) stay client-only while online bots cast no L.
-    fireRatesPerSec: { mobility: 0.702, radial: 0.596, cone: 0.839, ranged: 0.737, blinkSeek: 0.702, trap: 0.596 },
+    // blinkSeek: Shadow Step, trap: Sand Trap, buff: the generic L, grip:
+    // Trunk Grip. `risky` (Sebastian's All-in) stays client-only: BrawlRoom
+    // has no way for a bot to hold and drop the charge (see ./bot.ts).
+    fireRatesPerSec: {
+      mobility: 0.702, radial: 0.596, cone: 0.839, ranged: 0.737, blinkSeek: 0.702, trap: 0.596,
+      buff: 0.382, grip: 0.5,
+    },
     // Slot-2 aim and the J's void probe (2026-09-24). Mirrors of FEEL.bots.
     nearbyRadius: 4.0,
     radialSoloFrac: 0.7,
@@ -66,6 +79,10 @@ export const SIM = {
     rangedAimDeg: 35,
     targetedMinRange: 3.0,
     trapRadiusFrac: 0.8,
+    // The L, since online bots cast it (2026-09-24). Mirrors of FEEL.bots.
+    buffRange: 3.5,
+    gripMaxRange: 10,
+    floorCastRadiusFrac: 0.6,
   },
 
   chargeRush: {
@@ -100,10 +117,20 @@ export const SIM = {
   allIn: {
     hitMargin: 0.55,
     missProbeStep: 0.5,
+    // Aiming while charging (2026-09-24). No reader yet: pending in
+    // BrawlRoom's integrate step (DISTRIBUCIÓN, buzón fase 2); online the
+    // charge keeps the facing it started with until then.
+    aimTurnDegPerSec: 360,
   },
   // Blink landing (Sand Trap, Shadow Step). Mirror of FEEL.blink.
   blink: {
     landingProbeStep: 0.5,
+  },
+  // Cone Pulse (Cheeto L) waves. Mirror of FEEL.conePulse. Reader pending:
+  // BrawlRoom's Cone Pulse pass (DISTRIBUCIÓN) still writes 1.4 and 2.0.
+  conePulse: {
+    waveStep: 1.4,
+    waveThickness: 2.0,
   },
   // L contact passes (Saw Shell, Stampede ram, Toxic Touch). Mirror of
   // FEEL.abilities; read by takeContactHit in ./abilities.ts.

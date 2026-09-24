@@ -93,6 +93,16 @@ for (const name of opt.critters.split(',')) {
       api.setSpeed(0);
       api.setAllBotsBehaviour('idle');
       api.resetPlayerCooldowns();
+      // The warm-up at speed 1 is a live match: a bot may have grabbed or
+      // confused someone, and a stunned caster can't fire (since the
+      // 2026-09-24 stun rule). Every take starts clean.
+      for (const c of g.critters) { c.stunTimer = 0; c.confusedTimer = 0; c.slowTimer = 0; }
+      // Idle stops new casts, not one in flight: a dummy's Slam or Grip
+      // started in the warm-up used to land on the take and stun the near
+      // dummy (every Kurama take). Same fields as cancelAbility.
+      for (const b of g.critters.slice(1)) {
+        for (const s of b.abilityStates) if (s.active) { s.active = false; s.windUpLeft = 0; s.durationLeft = 0; }
+      }
       const p = g.critters[0];
       p.x = CASTER.x; p.z = CASTER.z; p.vx = 0; p.vz = 0; p.mesh.rotation.y = Math.PI / 2;
       p.visualYawLag = 0; p.lastFacingY = Number.NaN; p.immunityTimer = 0;

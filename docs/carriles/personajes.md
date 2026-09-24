@@ -122,8 +122,10 @@ antes de commitear el JSON.
    completo en `REPASO_HABILIDADES_INFORME.md`.
    - [x] Bugs de producción e IA de los bots, arreglados y medidos (rama
          `claude/fix/personajes-repaso-habilidades`).
-   - [ ] **Segunda tanda, decisiones de Rafa (2026-09-24)**:
-         - paso fijo de simulación, con permiso para `main.ts`;
+   - [x] **Segunda tanda, decisiones de Rafa (2026-09-24)**, hecha el
+         2026-09-25 salvo el paso fijo (siguiente punto). Qué se aplicó,
+         con cifras, y 6 preguntas abiertas en el documento, §«Segunda
+         tanda»:
          - golpe en los dashes (Kurama los atraviesa);
          - el aturdido no actúa, con Grip 2,5 s;
          - frenesí de Sergei ×0,4 de empuje recibido;
@@ -133,11 +135,31 @@ antes de commitear el JSON.
            y su embestida golpea;
          - Kowalski: Ice Slide que desliza, bola lanzada a mano a tiempo
            con su clip y buff a mi criterio;
-         - L de los bots online.
+         - L de los bots online, en el sim y **apagada** tras
+           `SIM.bots.ultimateOnline` hasta que `BrawlRoom` ejecute las L
+           como el sim.
          - **No** se toca Toxic Touch: que se inviertan todos los
            controles es la intención.
-   - [ ] Lo que falta en `BrawlRoom` (DISTRIBUCIÓN), en tierra de nadie,
-         INTERFAZ y ARENA: listado en el documento.
+   - [ ] **Paso fijo de simulación** (decisión 1, permiso para `main.ts`).
+         El diseño, opción (a), está en `.tmp/fase2/paso-fijo-diseno.md`
+         del worktree. Van dos commits:
+         1. `src/fixed-step.ts` y el bucle de `main.ts`;
+         2. separar simular de presentar en `Critter` y en `frame-ticks`.
+
+         Además, `SIM.movement.integrationSubsteps` con su espejo en `FEEL`
+         para el suavizado de DISTRIBUCIÓN.
+   - [ ] **Kowalski se cae con su Ice Slide largo** (bots: eliminado
+         49 → 65 %, `REPASO_HABILIDADES.md` §«Medido»).
+         1. Que el bot no gire el deslizamiento hacia el borde.
+         2. Si no basta, `slideFrictionMult` de 3 a 2.
+
+         Sergei queda el peor con bots (78 %): pase de balance con más
+         partidas.
+   - [ ] Lo que falta en `BrawlRoom` (DISTRIBUCIÓN, S2-1 a S2-5), en tierra
+         de nadie, INTERFAZ y ARENA: listado en el documento, con aviso en
+         cada buzón.
+   - [ ] Preguntar a Rafa si deja tocar 6 cosas pequeñas de tierra de
+         nadie (`frame-ticks`, `main.ts:414`, `game.ts`, `dev-api.ts`).
 4. **Feel pass de Kurama** (heredado de H4; receta en `NEXT_STEPS.md`).
 5. **Shaders cartoon**: Rafa eligió el 2026-09-23 contorno sobre el
    sombreado actual, no toon (punto 2). Si vuelve el toon, el precedente
@@ -274,6 +296,21 @@ antes de commitear el JSON.
   género en los lemas). O déjame nota y lo hago yo.
 
 ## Cómo retomar
+
+**2026-09-25** — en `dev` están el corte 2 del feeling (reacción al golpe,
+acentos de arranque y frenada) y las dos tandas del repaso de habilidades
+(punto 3). Rafa dio permiso para tocar la física sin preguntar, pero no
+los ficheros de otro carril (memoria `feedback_physics_permission`).
+
+Lo siguiente:
+- que el bot de Kowalski no se salga deslizando (punto 3, medido);
+- el paso fijo de simulación (punto 3), con su diseño ya escrito;
+- después, el punto 3 original del feeling: que cada Tripo corra a su
+  manera.
+
+Siguen abiertas en `REPASO_HABILIDADES.md`:
+- las 6 preguntas de la segunda tanda;
+- el permiso para las 6 cosas pequeñas de tierra de nadie.
 
 **2026-09-24** — la mejora gráfica del punto 2 está completa en `dev`,
 salvo las texturas nuevas de los Tripo (aparcadas: Rafa no tiene acceso a

@@ -46,6 +46,8 @@ const PAIRS: Array<[string, number, number]> = [
   ['bots.fireRatesPerSec.ranged', FEEL.bots.fireRatesPerSec.ranged, SIM.bots.fireRatesPerSec.ranged],
   ['bots.fireRatesPerSec.blinkSeek', FEEL.bots.fireRatesPerSec.blinkSeek, SIM.bots.fireRatesPerSec.blinkSeek],
   ['bots.fireRatesPerSec.trap', FEEL.bots.fireRatesPerSec.trap, SIM.bots.fireRatesPerSec.trap],
+  ['bots.fireRatesPerSec.buff', FEEL.bots.fireRatesPerSec.buff, SIM.bots.fireRatesPerSec.buff],
+  ['bots.fireRatesPerSec.grip', FEEL.bots.fireRatesPerSec.grip, SIM.bots.fireRatesPerSec.grip],
   ['bots.nearbyRadius', FEEL.bots.nearbyRadius, SIM.bots.nearbyRadius],
   ['bots.radialSoloFrac', FEEL.bots.radialSoloFrac, SIM.bots.radialSoloFrac],
   ['bots.dashProbeNear', FEEL.bots.dashProbeNear, SIM.bots.dashProbeNear],
@@ -53,6 +55,9 @@ const PAIRS: Array<[string, number, number]> = [
   ['bots.rangedAimDeg', FEEL.bots.rangedAimDeg, SIM.bots.rangedAimDeg],
   ['bots.targetedMinRange', FEEL.bots.targetedMinRange, SIM.bots.targetedMinRange],
   ['bots.trapRadiusFrac', FEEL.bots.trapRadiusFrac, SIM.bots.trapRadiusFrac],
+  ['bots.buffRange', FEEL.bots.buffRange, SIM.bots.buffRange],
+  ['bots.gripMaxRange', FEEL.bots.gripMaxRange, SIM.bots.gripMaxRange],
+  ['bots.floorCastRadiusFrac', FEEL.bots.floorCastRadiusFrac, SIM.bots.floorCastRadiusFrac],
   ['groundPound.windUp', FEEL.groundPound.windUp, SIM.groundPound.windUp],
   ['groundPound.slowDuringWindUp', FEEL.groundPound.slowDuringWindUp, SIM.groundPound.slowDuringWindUp],
   ['groundPound.radius', FEEL.groundPound.radius, SIM.groundPound.radius],
@@ -79,7 +84,13 @@ const PAIRS: Array<[string, number, number]> = [
   ['chargeRush.windUp', FEEL.chargeRush.windUp, SIM.chargeRush.windUp],
   ['allIn.hitMargin', FEEL.allIn.hitMargin, SIM.allIn.hitMargin],
   ['allIn.missProbeStep', FEEL.allIn.missProbeStep, SIM.allIn.missProbeStep],
+  // aimTurnDegPerSec and conePulse pin the value only: BrawlRoom doesn't
+  // read them yet (pending, DISTRIBUCIÓN buzón fase 2), so green here is
+  // not online parity until it does.
+  ['allIn.aimTurnDegPerSec', FEEL.allIn.aimTurnDegPerSec, SIM.allIn.aimTurnDegPerSec],
   ['blink.landingProbeStep', FEEL.blink.landingProbeStep, SIM.blink.landingProbeStep],
+  ['conePulse.waveStep', FEEL.conePulse.waveStep, SIM.conePulse.waveStep],
+  ['conePulse.waveThickness', FEEL.conePulse.waveThickness, SIM.conePulse.waveThickness],
   ['abilities.contactRehitCooldown', FEEL.abilities.contactRehitCooldown, SIM.abilities.contactRehitCooldown],
 ];
 

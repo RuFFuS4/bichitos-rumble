@@ -15,7 +15,7 @@
 
 import * as THREE from 'three';
 import type { Critter } from './critter';
-import { triggerHitStop, triggerCameraShake, applyDashFeedback, applyLandingFeedback, applyImpactFeedback, createFrozenFrameGate, FEEL } from './gamefeel';
+import { triggerHitStop, triggerCameraShake, applyDashFeedback, applyLandingFeedback, applyImpactFeedback, applyYankVisual, createFrozenFrameGate, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
 import { spawnDustPuff } from './dust-puff';
 import { spawnLocalProjectile } from './projectiles';
@@ -34,8 +34,10 @@ import {
   spawnShockwaveRing,
   spawnZoneRing,
   spawnFrenzyBurst,
+  spawnConeWedge,
   spawnDecoyAt,
   spawnAllInTrajectoryPreview,
+  type AllInPreview,
 } from './abilities-vfx';
 
 // 2026-04-30 final-polish — Sihans Sinkhole opens a real arena hole.
@@ -114,23 +116,59 @@ function isMovementAbility(def: AbilityDef): boolean {
   return def.type === 'charge_rush' || def.type === 'blink';
 }
 
-/** True while another slot holds a self-anchoring buff (Shelly Steel
- *  Shell), wind-up included: anchored means "invulnerable but can't
- *  move", so no dash or blink can start. Server mirror: `blockedByAnchor`
- *  in server/src/sim/abilities.ts. */
-function blockedByAnchor(state: AbilityState, critter: Critter): boolean {
+/** True while another slot of the same critter holds a self-anchoring
+ *  buff (Shelly Steel Shell), wind-up included: anchored means
+ *  "invulnerable but can't move", so no dash or blink can start. Pure over
+ *  the critter's ability states so the HUD can grey the key out with the
+ *  very same rule (INTERFAZ, updateAbilityHUD). Server mirror:
+ *  `blockedByAnchor` in server/src/sim/abilities.ts. */
+export function isBlockedByAnchor(state: AbilityState, states: readonly AbilityState[]): boolean {
   if (!isMovementAbility(state.def)) return false;
-  return critter.abilityStates.some((s) => s !== state && s.active && s.def.selfAnchorWhileBuffed === true);
+  return states.some((s) => s !== state && s.active && s.def.selfAnchorWhileBuffed === true);
+}
+
+function blockedByAnchor(state: AbilityState, critter: Critter): boolean {
+  return isBlockedByAnchor(state, critter.abilityStates);
+}
+
+/** A self-anchoring buff (Shelly Steel Shell) stops the caster's own
+ *  motion dead (Rafa 2026-09-24: «frena en seco», asked about her own
+ *  movement): the dash or blink still running ends, its cooldown started
+ *  as if it had run out, and the velocity goes to 0 if it's no more than
+ *  she makes herself — her run (`anchorBrakeMaxSpeed`), plus that dash's
+ *  impulse and a headbutt lunge in progress. Faster than that, someone
+ *  launched her: the flight carries on, as it did before the shell. Called
+ *  on the key press, so the rooted wind-up doesn't skid on, and again when
+ *  the shell locks, for a lunge that started in the wind-up. Server mirror:
+ *  `anchorInPlace` in server/src/sim/abilities.ts. */
+function anchorInPlace(critter: Critter, def: AbilityDef): void {
+  let ownSpeed = def.anchorBrakeMaxSpeed ?? Infinity;
+  if (critter.isHeadbutting) ownSpeed += FEEL.headbutt.lunge.velocityBoost;
+  for (const s of critter.abilityStates) {
+    if (s.active && isMovementAbility(s.def)) {
+      ownSpeed += s.def.impulse;
+      cancelAbility(s);
+    }
+  }
+  if (Math.hypot(critter.vx, critter.vz) <= ownSpeed) {
+    critter.vx = 0;
+    critter.vz = 0;
+  }
 }
 
 export function activateAbility(state: AbilityState, critter: Critter): boolean {
   if (!canActivateAbility(state)) return false;
+  // Stunned: no J, K or L starts (Critter.stunTimer). What was already
+  // cast before the stun runs its course. Server mirror: the stun gate
+  // in tickPlayerAbilities.
+  if (critter.stunTimer > 0) return false;
   if (blockedByAnchor(state, critter)) return false;
   state.active = true;
   state.effectFired = false;
   state.windUpLeft = state.def.windUp;
   state.durationLeft = state.def.duration;
   state.trailTimer = 0;
+  if (state.def.selfAnchorWhileBuffed) anchorInPlace(critter, state.def);
   // Effect is fired from updateAbilities, which always has access to scene.
   // This avoids needing a null-scene placeholder and keeps the firing path unified.
   return true;
@@ -207,6 +245,19 @@ export function findGripTarget(
   return best;
 }
 
+/**
+ * Stun `target` for at least `seconds` (a stun never shortens a longer
+ * one). A stunned critter doesn't act (Critter.stunTimer), so an All-in
+ * charge it was holding drops unreleased — no dash, no cooldown — as on a
+ * fall. Server: the grip and slam write the same max; the charge lives in
+ * BrawlRoom's hold-to-fire loop, where dropping it on the stun (and sending
+ * `lChargeEnd` so the line goes) is pending (DISTRIBUCIÓN, buzón fase 2).
+ */
+function stun(target: Critter, seconds: number): void {
+  target.stunTimer = Math.max(target.stunTimer, seconds);
+  cancelSebastianAllInCharge(target);
+}
+
 function fireChargeRush(def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
   const angle = critter.mesh.rotation.y;
   critter.vx += Math.sin(angle) * def.impulse;
@@ -228,13 +279,9 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   // and rooted-during-active behaviour come from the existing
   // ROOTED_K spread.
   if (def.selfBuffOnly) {
-    // Anchoring also ends a dash or blink still running (the J pressed
-    // just before the shell); its cooldown starts as if it had expired.
-    if (def.selfAnchorWhileBuffed) {
-      for (const s of critter.abilityStates) {
-        if (s.active && isMovementAbility(s.def)) cancelAbility(s);
-      }
-    }
+    // The shell locks: a lunge of hers from the wind-up stops dead; a
+    // push she took in it doesn't (anchorInPlace).
+    if (def.selfAnchorWhileBuffed) anchorInPlace(critter, def);
     // The activation ring goes where the K was cast: under the shell, or
     // under Mirror Trick's decoy — not where Kurama reappears.
     const castX = critter.x;
@@ -255,9 +302,11 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       // Order is now:
       //   1. snapshot original position
       //   2. spawn the decoy at that original spot (BEFORE moving)
-      //   3. move Kurama backward (opposite of her facing) by
-      //      `decoyEscapeDistance`, clamped to arena, landing on
-      //      live floor (`decoyEscapeFallbacks`, else she stays)
+      //   3. move Kurama backward by `decoyEscapeDistance`: away from
+      //      the nearest enemy within `decoyThreatRange` (turned to
+      //      face him), else opposite her facing; clamped to arena,
+      //      landing on live floor (`decoyEscapeFallbacks`, else she
+      //      stays)
       //   4. ghost her mesh + a couple of dust puffs at the arrival
       //      point (a hint, not a beacon: the ring marks the decoy)
       const originX = castX;
@@ -266,9 +315,10 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       spawnDecoyAt(scene, critter, invisDur);
       const escDist = def.decoyEscapeDistance ?? 0;
       if (escDist > 0) {
-        // 3 — retreat backward from current facing. Kurama
-        // mesh rotation.y points where she's facing forward;
-        // backward is +PI from that direction.
+        // 3 — retreat backward. Facing a chaser (turned toward him if
+        // she was running away) the jump takes her away from him.
+        const threat = nearestDecoyThreat(def, critter, allCritters);
+        if (threat) critter.mesh.rotation.y = Math.atan2(threat.x - originX, threat.z - originZ);
         const backAngle = critter.mesh.rotation.y + Math.PI;
         let nx = originX + Math.sin(backAngle) * escDist;
         let nz = originZ + Math.cos(backAngle) * escDist;
@@ -324,8 +374,11 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
     playSound('groundPound');
     if (target) {
       const pull = def.gripPullDistance ?? 1.6;
-      const tx = critter.x + facingX * pull;
-      const tz = critter.z + facingZ * pull;
+      // The yank is a push the target takes: it comes knockbackScale of
+      // the way to the pull point (a Frenzy Sergei, 0.4), never past it.
+      const k = Math.min(1, target.knockbackScale);
+      const tx = target.x + (critter.x + facingX * pull - target.x) * k;
+      const tz = target.z + (critter.z + facingZ * pull - target.z) * k;
       // The lean follows the real yank: a target already inside the pull
       // distance, or off to a side, isn't moved straight at Trunk.
       let yankX = tx - target.x;
@@ -334,18 +387,22 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
         yankX = -facingX;
         yankZ = -facingZ;
       }
-      // Snap target to the pull point (yank reads as "trunk pulled
-      // them in" not "they slid"). Zero their velocity.
+      // Snap target to where the yank leaves it and zero its velocity:
+      // the physics jump is one step. The model slides in behind it
+      // (FEEL.grip.yankVisualTime) instead of teleporting on screen.
+      const fromX = target.x;
+      const fromZ = target.z;
       target.x = tx;
       target.z = tz;
       target.mesh.position.x = tx;
       target.mesh.position.z = tz;
       target.vx = 0;
       target.vz = 0;
-      // Max, like the server: a grip never shortens a longer stun.
-      target.stunTimer = Math.max(target.stunTimer, def.gripStunDuration ?? 2.0);
-      // Burst at the target so the yank reads.
-      spawnShockwaveRing(scene, tx, tz, 1.0, palette);
+      stun(target, def.gripStunDuration ?? 2.0);
+      // Burst where the trunk catches it: the hit stop freezes the model
+      // there, before the slide.
+      spawnShockwaveRing(scene, fromX, fromZ, 1.0, palette);
+      applyYankVisual(target, fromX, fromZ);
       applyImpactFeedback(target, yankX, yankZ);
       triggerHitStop(FEEL.hitStop.groundPound);
     }
@@ -377,9 +434,9 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
         const dotFacing = nx * facingX + nz * facingZ;
         if (dotFacing < coneCos) continue;
       }
-      const falloff = 1 - dist / def.radius;
-      other.vx += nx * def.force * falloff;
-      other.vz += nz * def.force * falloff;
+      const f = def.force * (1 - dist / def.radius) * other.knockbackScale;
+      other.vx += nx * f;
+      other.vz += nz * f;
       applyImpactFeedback(other, nx, nz);
       // 2026-05-01 final — Trunk Slam K applies a brief stun on
       // every critter inside the AoE via `slamStunDuration`.
@@ -387,7 +444,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       // vulnerable rule in physics — Slam alone reads as a heavy
       // thump, Slam → headbutt deletes the target.
       if (def.slamStunDuration && def.slamStunDuration > 0) {
-        other.stunTimer = Math.max(other.stunTimer, def.slamStunDuration);
+        stun(other, def.slamStunDuration);
       }
       hitCount++;
     }
@@ -398,7 +455,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
   // the shake amplitude so the visual matches the bumped force.
   triggerCameraShake(FEEL.shake.groundPound * (def.shakeBoost ?? 1.0));
   if (hitCount > 0) {
-    triggerHitStop(FEEL.hitStop.groundPound);
+    triggerHitStop(FEEL.hitStop[def.hitStopKey ?? 'groundPound']);
   }
   // 2026-04-29 K-refinement — Sebastian Claw Wave frontal VFX.
   // When `coneAngleDeg` is set the slam is a frontal cone, so the
@@ -618,8 +675,7 @@ export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scen
           // doubling ramp from the prior pass stays.
           const ramp = Math.min(Math.pow(2, state.count - 1), 8);
           const effectiveForce = baseForce * ramp;
-          const waveStep = 1.4;
-          const waveThickness = 2.0;
+          const { waveStep, waveThickness } = FEEL.conePulse;
           const waveCenter = state.count * waveStep;
           const waveMin = Math.max(0.3, waveCenter - waveThickness * 0.5);
           const waveMax = waveCenter + waveThickness * 0.5;
@@ -637,8 +693,9 @@ export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scen
             // band edges. Push direction is Cheeto's facing, not
             // radial — the wave sweeps targets FORWARD.
             const fall = 1 - Math.abs(d - waveCenter) / (waveThickness * 0.5);
-            other.vx += facingX * effectiveForce * fall;
-            other.vz += facingZ * effectiveForce * fall;
+            const f = effectiveForce * fall * other.knockbackScale;
+            other.vx += facingX * f;
+            other.vz += facingZ * f;
           }
           // VFX: arc of dust puffs at the wave's leading edge,
           // spanning the cone's full angular width, plus a small
@@ -682,8 +739,9 @@ export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scen
         if (d2 > reach * reach || d2 < 0.0001) continue;
         if (!takeContactHit(c, other)) continue;
         const d = Math.sqrt(d2);
-        other.vx = (dx / d) * impulse;
-        other.vz = (dz / d) * impulse;
+        const v = impulse * other.knockbackScale;
+        other.vx = (dx / d) * v;
+        other.vz = (dz / d) * v;
       }
     }
 
@@ -701,8 +759,9 @@ export function tickLOffline(dt: number, critters: Critter[], scene?: THREE.Scen
         // SET the launch velocity instead of adding it: the hit is the
         // same whatever the victim was doing, and nothing stacks.
         const d = Math.sqrt(d2);
-        other.vx = (dx / d) * impulse;
-        other.vz = (dz / d) * impulse;
+        const v = impulse * other.knockbackScale;
+        other.vx = (dx / d) * v;
+        other.vz = (dz / d) * v;
       }
     }
 
@@ -857,6 +916,24 @@ function pickSafeLanding(ox: number, oz: number, tx: number, tz: number, fractio
   return [ox, oz];
 }
 
+/** Mirror Trick: the live enemy nearest to the caster within
+ *  `def.decoyThreatRange`, the one the escape jumps away from; null
+ *  leaves it to her facing. Immune ones count: they still chase and
+ *  headbutt. Server mirror: nearestDecoyThreat in server/src/sim/abilities.ts. */
+function nearestDecoyThreat(def: AbilityDef, critter: Critter, allCritters: Critter[]): Critter | null {
+  let best = def.decoyThreatRange ?? 0;
+  let threat: Critter | null = null;
+  for (const other of allCritters) {
+    if (other === critter || !other.alive || other.falling) continue;
+    const d = Math.hypot(other.x - critter.x, other.z - critter.z);
+    if (d < best && d > 0.01) {
+      best = d;
+      threat = other;
+    }
+  }
+  return threat;
+}
+
 /** Fractions of a line `len` long that step back from its end toward
  *  its start in `step` increments: 1, 1 − step/len, … while above 0. */
 function stepBackFractions(len: number, step: number): number[] {
@@ -933,6 +1010,7 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
   // offensive, not just a dodge. The caster is excluded from the
   // push (he's the one teleporting in).
   if (def.blinkImpactRadius && def.blinkImpactForce) {
+    let hits = 0;
     for (const other of allCritters) {
       // Same filter as the server: immune and falling critters are skipped.
       if (other === critter || !other.alive || other.falling || other.isImmune) continue;
@@ -941,13 +1019,20 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
       const d = Math.sqrt(dx * dx + dz * dz);
       if (d < def.blinkImpactRadius && d > 0.01) {
         const fall = 1 - d / def.blinkImpactRadius;
-        const f = def.blinkImpactForce * fall;
+        const f = def.blinkImpactForce * fall * other.knockbackScale;
         other.vx += (dx / d) * f;
         other.vz += (dz / d) * f;
         applyImpactFeedback(other, dx, dz);
+        hits++;
       }
     }
-    triggerCameraShake(FEEL.shake.headbutt * 0.7);
+    // Only a landing that hits shakes, freezes and thuds: the pose of the
+    // impact used to last one frame, and an empty landing shook the same.
+    if (hits > 0) {
+      triggerHitStop(FEEL.hitStop[def.hitStopKey ?? 'ability']);
+      triggerCameraShake(FEEL.shake.headbutt * FEEL.shake.blinkImpactFactor);
+      playSound('headbuttHit');
+    }
   }
   // v0.11 — zone-at-origin (Sihans Burrow): drop the slow zone
   // where the critter STARTED, not where they appear. Reads as
@@ -994,6 +1079,31 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
   playSound('abilityFire');
 }
 
+/** How deep a Cone Pulse channel reaches: the far edge of its last wave
+ *  (tickLOffline), 9.4 u for Cheeto's 6 pulses. */
+function conePulseReach(def: AbilityDef): number {
+  const pulses = def.pulseCount ?? Math.round(def.duration / (def.pulseInterval ?? 0.30));
+  return pulses * FEEL.conePulse.waveStep + FEEL.conePulse.waveThickness * 0.5;
+}
+
+/**
+ * The L's entry beat at (x, z), facing `yaw`, in the caster's frenzy
+ * palette. Cone Pulse paints the wedge it is about to sweep (±pulseAngleDeg,
+ * to its last wave): the round burst read as 360° for a frontal L (Rafa on
+ * Claw Wave, «dice frontal y veo 360°»). Every other L keeps the burst. A
+ * Copycat cast arrives with its copy in `def`, so a copied Cone Pulse gets
+ * the wedge too. Exported for the online `abilityFired` handler (game.ts).
+ */
+export function spawnLEntryVfx(scene: THREE.Scene, def: AbilityDef, critterName: string, x: number, z: number, yaw: number): void {
+  const palette = CRITTER_VFX_PALETTE[critterName]?.frenzy;
+  if (def.conePulseL) {
+    const halfCone = ((def.pulseAngleDeg ?? 45) * Math.PI) / 180;
+    spawnConeWedge(scene, x, z, yaw, halfCone, conePulseReach(def), palette);
+  } else {
+    spawnFrenzyBurst(scene, x, z, palette);
+  }
+}
+
 function fireFrenzy(def: AbilityDef, critter: Critter, _all: Critter[], scene: THREE.Scene): void {
   // Frenzy is a pure buff — no positional effect on other critters. The
   // speed/mass multipliers are applied automatically by
@@ -1004,9 +1114,10 @@ function fireFrenzy(def: AbilityDef, critter: Critter, _all: Critter[], scene: T
   // moment reads clearly. Without it the buff starts silently and the
   // player only realises after observing themselves move faster.
   // Per-critter palette tints the burst so the ultimate fanfare feels
-  // owned by each character (orange tiger rage, ice blizzard, etc.).
-  spawnFrenzyBurst(scene, critter.x, critter.z, CRITTER_VFX_PALETTE[critter.config.name]?.frenzy);
-  triggerCameraShake(FEEL.shake.groundPound * 0.55);
+  // owned by each character (orange tiger rage, ice blizzard, etc.);
+  // Cone Pulse paints its cone instead (spawnLEntryVfx).
+  spawnLEntryVfx(scene, def, critter.config.name, critter.x, critter.z, critter.mesh.rotation.y);
+  triggerCameraShake(FEEL.shake.groundPound * FEEL.shake.frenzyFactor);
   playSound('abilityFire');
 
   // 2026-04-30 final-L — flag-driven L spawns (offline mirror of
@@ -1329,7 +1440,8 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     // startFalling() so the all-in semantic is "guaranteed
     // elimination on contact". The maxSpeed clamp + idle friction
     // would otherwise eat the knockback before the target reached
-    // the rim; explicit fall removes any doubt.
+    // the rim; explicit fall removes any doubt. So no knockbackScale
+    // here: a Frenzy Sergei caught by it goes out too.
     const force = def.allInHitForce ?? 100;
     hit.vx = dirX * force;
     hit.vz = dirZ * force;
@@ -1422,6 +1534,39 @@ export function getMassMultiplier(states: AbilityState[]): number {
   return m;
 }
 
+/** The share of any push from others the critter takes
+ *  (Critter.knockbackScale): its active abilities' `knockbackTakenMult`,
+ *  wind-up excluded like the mass buff. */
+export function getKnockbackTakenMultiplier(states: AbilityState[]): number {
+  let m = 1.0;
+  for (const s of states) {
+    if (s.active && s.windUpLeft <= 0) m *= s.def.knockbackTakenMult ?? 1;
+  }
+  return m;
+}
+
+/** × on the critter's own friction half-life (Critter.frictionScale): its
+ *  active abilities' `slideFrictionMult` (Kowalski's Ice Slide), wind-up
+ *  excluded. */
+export function getFrictionMultiplier(states: AbilityState[]): number {
+  let m = 1.0;
+  for (const s of states) {
+    if (s.active && s.windUpLeft <= 0) m *= s.def.slideFrictionMult ?? 1;
+  }
+  return m;
+}
+
+/** How many times farther a dash's impulse carries with its glide: the
+ *  half-life × m (`slideFrictionMult`) for its active window T, then the
+ *  normal friction h: m − (m − 1)·2^(−T/(h·m)). 1 without a glide; Ice
+ *  Slide 2.16 (~4.7 u instead of ~2.2). The bot's edge probe (bot.ts)
+ *  reaches that much farther. Server mirror: dashGlideFactor in
+ *  server/src/sim/abilities.ts. */
+export function dashGlideFactor(def: AbilityDef): number {
+  const m = def.slideFrictionMult ?? 1;
+  return m - (m - 1) * Math.pow(0.5, def.duration / (FEEL.movement.frictionHalfLife * m));
+}
+
 // ---------------------------------------------------------------------------
 // Sebastian All-in hold-to-fire helpers (offline)
 // ---------------------------------------------------------------------------
@@ -1430,52 +1575,100 @@ export function getMassMultiplier(states: AbilityState[]): number {
  * Direction the All-in dash commits to. Always FORWARD relative to
  * Sebastian's current facing — no lateral auto-pick. Rafa's micro-
  * pass: "toda la habilidad L de Sebastian debe ir SIEMPRE hacia
- * delante respecto al facing actual". The player aligns their facing
- * before pressing L; the telegraph + dash use that direction.
+ * delante respecto al facing actual". The player aims the facing while
+ * holding L (advanceAllInCharge); the telegraph + dash use it.
  */
-function pickAllInDir(critter: Critter, _range: number): [number, number] {
+function pickAllInDir(critter: Critter): [number, number] {
   const ry = critter.mesh.rotation.y;
   return [Math.sin(ry), Math.cos(ry)];
 }
 
-function spawnAllInPreview(scene: THREE.Scene, critter: Critter, range: number, ttl: number): void {
-  const dir = pickAllInDir(critter, range);
-  spawnAllInTrajectoryPreview(scene, critter.x, critter.z, dir[0], dir[1], range, ttl);
+function spawnAllInPreview(scene: THREE.Scene, critter: Critter, range: number, ttl: number): AllInPreview {
+  const dir = pickAllInDir(critter);
+  return spawnAllInTrajectoryPreview(scene, critter.x, critter.z, dir[0], dir[1], range, ttl);
+}
+
+/** The line each charging critter paints, from the start of its charge
+ *  until it resolves or drops (release, cancel, stun, fall). */
+const allInPreviews = new WeakMap<Critter, AllInPreview>();
+
+function endAllInPreview(critter: Critter): void {
+  allInPreviews.get(critter)?.end();
+  allInPreviews.delete(critter);
+}
+
+/** `from` turned toward `to` by at most `maxStep` (radians), the short
+ *  way round, wrapped to (-π, π] like the atan2 facings. */
+function turnToward(from: number, to: number, maxStep: number): number {
+  const diff = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+  const r = from + Math.max(-maxStep, Math.min(maxStep, diff));
+  return Math.atan2(Math.sin(r), Math.cos(r));
 }
 
 /**
  * Sebastian started holding the L (the local player, or a bot in
- * src/bot.ts). Roots the caster, spawns the trajectory preview, and
- * starts the auto-release timer. The preview lasts `previewSec`: the
- * player's whole hold window by default, a bot's decision time.
+ * src/bot.ts). Roots the caster and spawns the trajectory preview,
+ * which follows his aim until the charge resolves or drops — at the
+ * latest, the holdToFireMaxMs auto-release.
  * Idempotent: calling while already charging is a no-op.
  */
-export function startSebastianAllInCharge(critter: Critter, scene: THREE.Scene, previewSec?: number): void {
-  if (critter.lHoldCharging) return;
+export function startSebastianAllInCharge(critter: Critter, scene: THREE.Scene): void {
+  if (critter.lHoldCharging || critter.stunTimer > 0) return;
   const lState = critter.abilityStates[2];
   if (!lState || lState.cooldownLeft > 0 || lState.active) return;
   if (!lState.def.allInL || !lState.def.holdToFireL) return;
   critter.lHoldCharging = true;
   critter.lHoldChargeTime = 0;
-  spawnAllInPreview(scene, critter, lState.def.allInDashRange ?? 9,
-    previewSec ?? (lState.def.holdToFireMaxMs ?? 3000) / 1000);
+  endAllInPreview(critter);
+  allInPreviews.set(critter, spawnAllInPreview(scene, critter, lState.def.allInDashRange ?? 9,
+    (lState.def.holdToFireMaxMs ?? 3000) / 1000));
   applyImpactFeedback(critter); // small "charging" pulse
   triggerCameraShake(FEEL.shake.groundPound * 0.15);
 }
 
 /**
+ * One frame of an All-in charge, for the player and the bots alike:
+ * ages it and aims it. The caster is rooted, so the facing rule of
+ * Critter.update (follow the velocity) turns nothing; while charging it
+ * stands aside and the move input turns the facing instead, toward the
+ * pushed direction at FEEL.allIn.aimTurnDegPerSec, the short way round.
+ * No input keeps the aim. The line follows the facing and the caster (a
+ * shove moves him). Server: pending in BrawlRoom's integrate step, with
+ * SIM.allIn.aimTurnDegPerSec (DISTRIBUCIÓN, buzón fase 2); online the
+ * charge still keeps the facing it started with.
+ */
+export function advanceAllInCharge(critter: Critter, dt: number): void {
+  critter.lHoldChargeTime += dt;
+  if (critter.hasInput) {
+    critter.mesh.rotation.y = turnToward(
+      critter.mesh.rotation.y,
+      Math.atan2(critter.moveX, critter.moveZ),
+      THREE.MathUtils.degToRad(FEEL.allIn.aimTurnDegPerSec) * dt,
+    );
+  }
+  const [dirX, dirZ] = pickAllInDir(critter);
+  allInPreviews.get(critter)?.aim(critter.x, critter.z, dirX, dirZ);
+}
+
+/**
  * Drop an All-in charge without resolving it: no dash, no cooldown.
- * The bot AI's way out when its lane emptied while it held.
+ * The bot AI's way out when its lane emptied while it held; a stun
+ * or a fall drops it too.
  */
 export function cancelSebastianAllInCharge(critter: Critter): void {
   critter.lHoldCharging = false;
   critter.lHoldChargeTime = 0;
+  endAllInPreview(critter);
 }
 
 /**
- * Sebastian released the L (or the auto-release timer fired).
- * Clears the charging flag, runs the dash resolution at the current
- * facing, and starts the cooldown.
+ * Sebastian let go of the L (or the auto-release timer fired): runs
+ * the dash resolution along the current facing and starts the
+ * cooldown. A charge younger than the def's `holdToFireMinMs` doesn't
+ * resolve yet: the call does nothing and the caller tries again next
+ * frame, so a tap goes off exactly when the minimum is reached
+ * (2026-09-24, Rafa: a tap used to erase someone in one ~33 ms step,
+ * with no time to read the line).
  */
 export function releaseSebastianAllInCharge(
   critter: Critter,
@@ -1484,8 +1677,10 @@ export function releaseSebastianAllInCharge(
 ): void {
   if (!critter.lHoldCharging) return;
   const lState = critter.abilityStates[2];
+  if (lState && critter.lHoldChargeTime < (lState.def.holdToFireMinMs ?? 0) / 1000) return;
   critter.lHoldCharging = false;
   critter.lHoldChargeTime = 0;
+  endAllInPreview(critter);
   if (!lState) return;
   fireAllInResolution(lState.def, critter, allCritters, scene);
   lState.cooldownLeft = lState.def.cooldown;
@@ -1507,8 +1702,10 @@ export function tickSebastianHoldToFire(
   const lState = critter.abilityStates[2];
   if (!lState || !lState.def.holdToFireL) return;
   if (critter.lHoldCharging) {
-    critter.lHoldChargeTime += dt;
+    advanceAllInCharge(critter, dt);
     const maxSec = (lState.def.holdToFireMaxMs ?? 3000) / 1000;
+    // Let go before holdToFireMinMs and the release waits for the
+    // minimum; press the L again by then and the charge simply goes on.
     if (!held || critter.lHoldChargeTime >= maxSec) {
       releaseSebastianAllInCharge(critter, allCritters, scene);
     }

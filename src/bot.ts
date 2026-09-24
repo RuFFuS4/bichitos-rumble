@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { Critter } from './critter';
 import type { AbilityDef } from './abilities';
 import {
-  activateAbility, canActivateAbility, cancelSebastianAllInCharge, findAbilityByTag, findAllInTarget,
-  findGripTarget, getSlipperyZone, releaseSebastianAllInCharge, startSebastianAllInCharge,
+  activateAbility, advanceAllInCharge, canActivateAbility, cancelSebastianAllInCharge, dashGlideFactor, findAbilityByTag,
+  findAllInTarget, findGripTarget, getSlipperyZone, releaseSebastianAllInCharge, startSebastianAllInCharge,
 } from './abilities-runtime';
 import { FEEL } from './gamefeel';
 import { matchRng } from './match-rng';
@@ -175,6 +175,9 @@ export function updateBot(
 
   // Early-out paths that disable offensive actions ------------------------
   if (mode === 'passive' || mode === 'chase') return;
+  // Stunned: no action would start (startHeadbutt / activateAbility refuse
+  // it), so no decision is rolled for one. Mirror: server/src/sim/bot.ts.
+  if (bot.stunTimer > 0) return;
 
   // --- Headbutt when close (unless ability_only) ---
   const skipHeadbutt = mode === 'ability_only';
@@ -240,7 +243,7 @@ export function updateBot(
     nearestDist > 3.0 &&
     nearestDist < 6.0 &&
     !movementActive(bot) &&
-    dashStaysOnArena(bot, arena)
+    dashStaysOnArena(bot, mobilityAbility.def, arena)
   ) {
     if (roll(FEEL.bots.fireRatesPerSec.mobility)) {
       activateAbility(mobilityAbility, bot);
@@ -360,7 +363,8 @@ export function updateBot(
   // --- Risky ability (Sebastian's All-in): a miss falls into the void.
   // Same hold-and-release path as the player: charge only with someone
   // in the real hit lane (narrowed by allInLaneInset), and never on top of
-  // another ability. tickAllInCharge re-checks on release.
+  // another ability. tickAllInCharge re-checks on release. Offline only:
+  // online the room gives a bot no way to drop a charge (sim/bot.ts).
   const risky = findAbilityByTag(bot.abilityStates, 'risky');
   if (
     risky?.def.allInL && risky.def.holdToFireL && canActivateAbility(risky) &&
@@ -369,7 +373,7 @@ export function updateBot(
     roll(FEEL.bots.fireRatesPerSec.risky)
   ) {
     const scene = sceneOf(bot);
-    if (scene) startSebastianAllInCharge(bot, scene, FEEL.bots.allInReactionSec);
+    if (scene) startSebastianAllInCharge(bot, scene);
   }
 }
 
@@ -377,10 +381,11 @@ export function updateBot(
  * The bot's side of the All-in hold: after allInReactionSec it releases if
  * the full hit lane still holds someone, and otherwise drops the charge
  * without spending the cooldown (the old blind release was half of
- * Sebastian's falls).
+ * Sebastian's falls). The release waits for the def's holdToFireMinMs like
+ * the player's. With no move input the bot keeps the aim it started with.
  */
 function tickAllInCharge(bot: Critter, allCritters: Critter[], dt: number): void {
-  bot.lHoldChargeTime += dt;
+  advanceAllInCharge(bot, dt);
   if (bot.lHoldChargeTime < FEEL.bots.allInReactionSec) return;
   const risky = findAbilityByTag(bot.abilityStates, 'risky');
   const scene = sceneOf(bot);
@@ -407,15 +412,19 @@ function inFacingCone(bot: Critter, dx: number, dz: number, dist: number, halfAn
 }
 
 /** A J leaves along the facing: its near and far probe points must both
- *  be live floor. No arena view, no probe. */
-function dashStaysOnArena(bot: Critter, arena?: BotArenaView): boolean {
+ *  be live floor, and so must the far one pushed out by the dash's glide
+ *  (dashGlideFactor: Ice Slide carries 2.16× as far; probing at 3 u, 5 of
+ *  43 of her slides ended in a fall within 1 s). No arena view, no probe. */
+function dashStaysOnArena(bot: Critter, def: AbilityDef, arena?: BotArenaView): boolean {
   if (!arena) return true;
   const fx = Math.sin(bot.mesh.rotation.y);
   const fz = Math.cos(bot.mesh.rotation.y);
   const near = FEEL.bots.dashProbeNear;
   const far = FEEL.bots.dashProbeFar;
+  const glide = far * dashGlideFactor(def);
   return arena.isOnArena(bot.x + fx * near, bot.z + fz * near) &&
-    arena.isOnArena(bot.x + fx * far, bot.z + fz * far);
+    arena.isOnArena(bot.x + fx * far, bot.z + fz * far) &&
+    arena.isOnArena(bot.x + fx * glide, bot.z + fz * glide);
 }
 
 /** Enemies on the ground (alive, not falling) within `radius` of the bot;
@@ -448,9 +457,10 @@ function movementActive(bot: Critter): boolean {
  * anchor (Shelly shelled up: the saw would stand still). By shape:
  *   · Frozen Floor: min(2, enemies alive) within floorRadius ×
  *     floorCastRadiusFrac — it's a zone, not a duel buff.
- *   · Cone Pulse: the nearest enemy inside the pulse cone (Cheeto can't
- *     turn during the L).
- *   · Anything else: an enemy within 3.5 u.
+ *   · Cone Pulse: the nearest enemy within buffRange and inside the pulse
+ *     cone (Cheeto can't turn during the L).
+ *   · Anything else: the nearest enemy within buffRange.
+ * Mirror: server/src/sim/bot.ts buffFires.
  */
 function buffFires(def: AbilityDef, bot: Critter, allCritters: Critter[], dx: number, dz: number, dist: number): boolean {
   if (bot.abilityStates.some((s) => s.active && s.def.selfAnchorWhileBuffed)) return false;
@@ -460,6 +470,6 @@ function buffFires(def: AbilityDef, bot: Critter, allCritters: Critter[], dx: nu
     const r = (def.floorRadius ?? 6.0) * FEEL.bots.floorCastRadiusFrac;
     return countEnemiesWithin(bot, allCritters, r, false) >= Math.min(2, alive);
   }
-  if (dist >= 3.5) return false;
+  if (dist >= FEEL.bots.buffRange) return false;
   return def.conePulseL ? inFacingCone(bot, dx, dz, dist, def.pulseAngleDeg ?? 45) : true;
 }
