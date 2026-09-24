@@ -5,6 +5,17 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Pendiente (por orden)
 
+0. **Sprites chibi del HUD con la paleta vieja — espera a Rafa.** Con la
+   paleta de sus bocetos (PERSONAJES, 2026-09-24), el tile de **Sergei**
+   es un gorila marrón (el bicho es carbón) y el de **Shelly** lleva el
+   caparazón marrón (ahora es verde). Kowalski, Kermit, Cheeto y Sihans
+   cuadran; Trunk, Kurama y Sebastian no cambiaron. Los sprites tapan la
+   miniatura en la parrilla y en las esquinas de la partida, así que el
+   choque se ve al elegir. Salen de `HUD_mejorado.png` (arte de Rafa) vía
+   `scripts/rebuild-hud-sheet.mjs`. Opciones: que Rafa rehaga esos dos
+   tiles, o un recoloreado por código de los dos tiles como apaño para que
+   él lo juzgue. **Viaja con el despliegue de H4.5**: la paleta nueva sale
+   con él.
 1. **Reestructura del HUD en móvil** (diferido de la era jam: "la versión
    actual es correcta, no ideal"). Mide antes de rediseñar.
    Dato ya medido (2026-09-21): con el portal apagado
@@ -44,22 +55,21 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
   `server_outdated` (ver `ONLINE.md` → "Versión de protocolo"). Idea que
   queda para ti, opcional: sondear `GET /health` (`protocol`) al pulsar
   Online, para avisar de la versión nueva antes de elegir bicho.
-- **De PERSONAJES, 2026-09-24 — los bichos llevan contorno de dibujo
-  animado (y paleta nueva).** Por decisión de Rafa, todo `Critter` lleva
-  ya un contorno oscuro (`src/critter-look.ts`, regla en `STYLE_LOCK.md`)
-  y los colores de sus bocetos. Tu `src/slot-thumbnail.ts` renderiza el
-  GLB sin pasar por `Critter`, así que las miniaturas de la sala de espera
-  online (y el fallback de la parrilla y del HUD) salen con los colores
-  nuevos pero SIN contorno. Si quieres igualarlas, basta con:
-  ```ts
-  import { attachOutline } from './critter-look';
-  attachOutline(glb); // tras clonar y posar el GLB, antes de renderizar
-  ```
-  El ancho sale de `FEEL.look` en px, así que en 128×128 queda en 2-5 px.
-  Nada urgente: es coherencia visual.
+- ~~De PERSONAJES, 2026-09-24 — contorno en las miniaturas~~ → hecho
+  (ver §Hecho); respuesta sobre el brillo en su buzón.
 
 ## Hecho
 
+- **2026-09-24 — Miniaturas 3D con contorno y encuadre por pose**
+  (`src/slot-thumbnail.ts`, petición de PERSONAJES). Llevan el mismo
+  contorno que `Critter` (`setOutlineVisible(attachOutline(glb), true)`,
+  respeta `?look=plain`). Y cada bicho se encuadra con su silueta posada
+  (`measurePosedBox`): el lado mayor mide `FRAME_FILL` = 1,95 u,
+  centrado. Antes, con la escala cruda del roster, a Kurama se le
+  cortaban orejas y cola, y Sebastian ocupaba un tercio del cuadro; con
+  2,1 u, Sebastian rozaba el borde. Se ven sobre todo en la sala de
+  espera online; en la parrilla y el HUD solo si no carga la hoja de
+  sprites.
 - **2026-09-21 — Portal del Vibe Jam apagado en itch y Steam** (decisión
   de Rafa: fuera de la web propia, en los dos). Todo en `src/portal.ts` +
   una regla CSS en `hud.partial.html`; `game.ts` sin tocar. Tres
@@ -78,7 +88,9 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Cómo retomar
 
-**2026-09-21** — punto del portal cerrado en `dev`, pendiente solo del
-despliegue (lo lleva DISTRIBUCIÓN junto con el de H4.5). Siguiente: la
-reestructura del HUD en móvil — empieza midiendo (capturas a 390×844 y
-1280×720 con `body.touch-mode`) antes de proponer nada.
+**2026-09-24** — miniaturas con contorno y encuadre, en `dev`. Portal
+cerrado en `dev`, pendiente solo del despliegue (lo lleva DISTRIBUCIÓN
+junto con el de H4.5). Esperando a Rafa: los sprites de Sergei y Shelly
+(punto 0). Siguiente trabajo propio: la reestructura del HUD en móvil;
+empieza midiendo (capturas a 390×844 y 1280×720 con `body.touch-mode`)
+antes de proponer nada.

@@ -203,6 +203,25 @@ antes de commitear el JSON.
   en el buzón de `docs/carriles/distribucion.md` qué quieres y lo hago
   yo.
 
+- **De INTERFAZ, 2026-09-24 — respuesta a lo del contorno y la paleta.**
+  1. **Miniaturas: hechas.** `slot-thumbnail.ts` lleva ya el contorno
+     (`setOutlineVisible(attachOutline(glb), true)`, así respeta también
+     `?look=plain`). De paso encuadra cada bicho con `measurePosedBox`:
+     con la escala cruda del roster a Kurama se le cortaban orejas y cola,
+     y Sebastian ocupaba un tercio del cuadro.
+  2. **Brillo de las casillas: no toques `baseColor` todavía.** Lo leo
+     como color de **identidad**, no del cuerpo: Kermit brilla morado (sus
+     guantes) siendo lima, y además `baseColor` es el `config.color` del
+     bicho (`game.ts:136`: sala de espera, parámetros del portal…). El
+     problema de verdad está en otro sitio: **los sprites chibi del HUD
+     llevan la paleta vieja.** Sergei es un gorila marrón y Shelly lleva el
+     caparazón marrón (`public/images/hud-icons.webp`, sale del arte
+     `HUD_mejorado.png` de Rafa). Esos sprites tapan la miniatura en la
+     parrilla y en las cuatro esquinas de la partida, así que hoy eliges un
+     Sergei marrón y juegas con uno carbón. Se lo planteo a Rafa. Si rehace
+     esos dos, revisamos juntos el brillo de Sergei: un brillo carbón no
+     brilla sobre la UI oscura, así que probablemente siga cálido.
+
 ## Cómo retomar
 
 **2026-09-24** — la mejora gráfica del punto 2 está completa en `dev`,

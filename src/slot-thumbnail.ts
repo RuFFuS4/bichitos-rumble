@@ -14,8 +14,19 @@
 import * as THREE from 'three';
 import type { RosterEntry } from './roster';
 import { loadModelWithAnimations } from './model-loader';
+import { attachOutline, setOutlineVisible } from './critter-look';
+import { measurePosedBox } from './posed-bounds';
 
 const THUMB_SIZE = 128; // px — rendered square, downscaled visually in CSS
+
+// Framing. The camera sees ~2.6 u at the critter's distance; every critter
+// is scaled so the larger side of its POSED silhouette (height or width)
+// measures FRAME_FILL, and centred on the camera target. Without this the
+// raw roster scale left Kurama with ears and tail cut and Sebastian at a
+// third of the frame (measured 2026-09-24).
+const CAMERA_TARGET = new THREE.Vector3(0, 1.0, 0);
+const FRAME_FILL = 1.95;         // u — margin for perspective + the outline (2.1 grazed Sebastian's feet)
+const MEASURE_SAMPLES = 400;     // posed vertices read per mesh
 
 const cache = new Map<string, string>(); // entry.id → data URL
 const inflight = new Map<string, Promise<string | null>>();
@@ -37,12 +48,10 @@ function initSharedScene(): void {
 
   scene = new THREE.Scene();
 
-  // Critter stands ~2m tall (bounds ±0.5 scaled 2×). Camera is pulled back
-  // enough to frame the WHOLE body with some headroom so nothing gets
-  // clipped in the 128×128 thumbnail.
+  // Fixed camera; frameCritter() fits each critter to it.
   camera = new THREE.PerspectiveCamera(32, 1, 0.1, 20);
   camera.position.set(0, 1.3, 4.5);
-  camera.lookAt(0, 1.0, 0);
+  camera.lookAt(CAMERA_TARGET);
 
   const ambient = new THREE.AmbientLight(0xffffff, 0.6);
   scene.add(ambient);
@@ -113,6 +122,11 @@ export function getCritterThumbnail(entry: RosterEntry): Promise<string | null> 
         mixer.update(0.5);
         glb.updateMatrixWorld(true);
       }
+      frameCritter(glb);
+
+      // Same cartoon outline as the in-match Critter (critter-look.ts);
+      // setOutlineVisible honours `?look=plain` / FEEL.look.outline.
+      setOutlineVisible(attachOutline(glb), true);
 
       renderer.render(scene, camera);
       const url = renderer.domElement.toDataURL('image/png');
@@ -128,4 +142,20 @@ export function getCritterThumbnail(entry: RosterEntry): Promise<string | null> 
 
   inflight.set(entry.id, p);
   return p;
+}
+
+/** Scale and centre the posed model to the thumbnail frame (see FRAME_FILL). */
+function frameCritter(glb: THREE.Object3D): void {
+  const box = new THREE.Box3();
+  if (!measurePosedBox(glb, box, MEASURE_SAMPLES)) return;
+  const size = box.getSize(new THREE.Vector3());
+  const s = FRAME_FILL / Math.max(size.x, size.y);
+  glb.scale.multiplyScalar(s);
+  // Scaling happens about glb.position, so the box centre moves with it.
+  const center = box.getCenter(new THREE.Vector3())
+    .sub(glb.position).multiplyScalar(s).add(glb.position);
+  glb.position.x -= center.x;
+  glb.position.y += CAMERA_TARGET.y - center.y;
+  glb.position.z -= center.z;
+  glb.updateMatrixWorld(true);
 }
