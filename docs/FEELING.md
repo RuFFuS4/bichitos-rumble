@@ -446,7 +446,28 @@ La zancada sale de la cadencia buscada: `L = zancada × d × duración`.
 El pie apoyado queda sobre el suelo del Idle (hundimiento en modelo
 ≤0,007) y los dos pies barren igual.
 
-No se ha tocado la inclinación de 36° del tronco, que es gusto de Rafa:
-queda como pregunta.
+No se ha tocado la inclinación de 36° del tronco. Rafa, 2026-09-24:
+«no deben correr todos igual». Kowalski va erguido porque es un pingüino,
+y los otros conservan la suya.
+
+**Sebastian y Kurama (2026-09-24).** Eran los únicos que tocaban el
+techo de 6 ciclos/s, así que el pie patinaba: Sebastian a 1,33 porque
+pedía 8, y Kurama a 1,04. Se subió `FEEL.locomotion.runCadenceMaxHz` de
+6 a 8:
+- Sebastian escabulle a 7,98 ciclos/s, como un cangrejo, con el pie a
+  1,00.
+- Kurama va a 6,24, también con el pie a 1,00.
+- Los demás no cambian: van por debajo de 4.
+
+Con esto sobra el IK de su Run, que habría exigido generalizar el script
+de Blender a un rig humanoide doblado en cangrejo (unidades en cm, avance
+por -Y y piernas abiertas hacia los lados).
+
+**Pulido de clips, descartado con medida.** Victory, Defeat y Fall se
+reproducen UNA vez y se quedan en la última pose (`LoopOnce` +
+`clampWhenFinished`), así que sus saltos de bucle no se ven nunca. Por el
+perfil de movimiento, todas las victorias se mueven desde el primer
+segundo. Kowalski celebra entre el segundo 2 y el 8: el estudio decía «no
+arranca hasta los 8», y no es así. Recortarlas no aportaría nada.
 
 Vídeo lateral: `.tmp/graficos/_informe/entrega/runs-vivos-lateral.mp4`.

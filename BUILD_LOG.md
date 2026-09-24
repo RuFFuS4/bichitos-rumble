@@ -1,5 +1,17 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-24 — [PERSONAJES] Sebastian escabulle con el pie apoyado; dos puntos del plan descartados con medida
+
+- `FEEL.locomotion.runCadenceMaxHz` 6 → 8. Solo lo tocaban Sebastian
+  (pedía 8 ciclos/s, pie 1,33 → 1,00, escabullirse de cangrejo) y Kurama
+  (6,24, pie 1,04 → 1,00); el resto va por debajo de 4. Con esto sobra
+  el IK de su Run, que habría exigido generalizar el script de Blender a
+  un rig humanoide doblado en cangrejo.
+- Pulido de clips, descartado: Victory, Defeat y Fall se reproducen una
+  vez y se quedan en la última pose, así que sus saltos de bucle no se
+  ven. Además, todas las victorias se mueven desde el primer segundo
+  (FEELING §7.9).
+
 ## 2026-09-24 — [PERSONAJES] Mejora gráfica: contorno de dibujo animado en los bichos
 
 Decisión 5 de Rafa: contorno sobre el sombreado actual, sin toon. Hecho

@@ -72,12 +72,14 @@ antes de commitear el JSON.
          (`FEELING.md §7.9`): Cheeto 3,49, Kermit 3,51, Shelly 2,00 y
          Trunk 2,36 ciclos/s, con el pie apoyado y el bucle cerrado. Queda
          preguntar a Rafa por la inclinación de 36° del sprint genérico.
-   - [ ] IK del Run de Sebastian (pie en 1,33). Es un rig Meshy con otros
-         nombres de hueso: el script de Blender necesita el mapeo de
-         nombres primero.
-   - [ ] **Pulido de clips**: bucles que saltan (Victory de Sihans 143°,
-         Kurama, Sergei; Fall de Kurama, Kermit, Cheeto), Victory largos,
-         el segundo «Fall» de Sebastian.
+   - [x] Sebastian patinaba (pie 1,33): no hacía falta IK. Pedía 8
+         ciclos/s y el techo era 6; con el techo en 8 escabulle con el pie
+         apoyado, y Kurama también (`FEELING.md §7.9`, 2026-09-24).
+   - [x] ~~Pulido de clips~~: descartado con medida el 2026-09-24
+         (`FEELING.md §7.9`). Victory, Defeat y Fall se reproducen una vez
+         y se quedan en la última pose, y todas las victorias se mueven
+         desde el primer segundo. El segundo «Fall» de Sebastian no lo usa
+         nadie (el resolver coge el primero).
    - [x] **Paleta** (decisión 3, solo color), hecha el 2026-09-24:
          - Sergei: carbón y beige.
          - Kowalski: marino, crema, cresta amarilla, pico y pies naranjas.
@@ -202,6 +204,22 @@ antes de commitear el JSON.
   yo.
 
 ## Cómo retomar
+
+**2026-09-24** — la mejora gráfica del punto 2 está completa en `dev`,
+salvo las texturas nuevas de los Tripo (aparcadas: Rafa no tiene acceso a
+Tripo). Lo nuevo desde la entrada anterior:
+- la **paleta** de los bocetos (`STYLE_LOCK.md`, `critter-grade.mjs`);
+- el **contorno** (`src/critter-look.ts`, `FEEL.look`,
+  `DevApi.setCritterLook`);
+- el techo de cadencia a 8 (Sebastian y Kurama con el pie apoyado);
+- los dos `--check` en `npm run check`.
+
+Descartados con medida: el pulido de clips y el IK de Sebastian.
+
+Lo siguiente es el punto 3 (feel pass de Kurama) o el corte 2 del feeling
+(acentos de arranque y frenada, reacción visible al golpe). Una propuesta
+que queda: darle a cada Tripo su forma de correr (Rafa: «no deben correr
+todos igual»).
 
 **2026-09-23 (noche)** — en `dev` (ab1d0bd) está todo lo del feeling (corte
 1, tamaño 1,7, velocidad ×1,375, sin sesgos de ritmo) y tres fases de la
