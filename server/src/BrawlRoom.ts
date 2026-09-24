@@ -91,6 +91,10 @@ interface InternalPlayerData {
    *  facing follows the velocity only while it goes this way. */
   moveX: number;
   moveZ: number;
+  /** |aceleración de empuje| de este tick (u/s²): input × accel. Espejo de
+   *  Critter.moveAccel — la zona muerta lo usa para distinguir un empuje
+   *  real de un stick con deriva o un bicho enraizado. */
+  moveAccel: number;
   // Online-belt identity (only set for human players who registered a
   // nickname via the REST API and passed verifyPlayer on join). Null for
   // bots and for humans who skipped the nickname modal.
@@ -141,7 +145,7 @@ function newInternal(): InternalPlayerData {
     inputMoveX: 0, inputMoveZ: 0,
     inputHeadbutt: false, inputAbility1: false, inputAbility2: false, inputUltimate: false,
     respawnTimer: 0, anticipationTimer: 0, headbuttTimer: 0, hasInput: false,
-    moveX: 0, moveZ: 0,
+    moveX: 0, moveZ: 0, moveAccel: 0,
     onlinePlayerId: null,
     killsVsHumansThisMatch: 0,
   };
@@ -986,6 +990,7 @@ export class BrawlRoom extends Room {
       // 2026-05-01 final block — Sebastian holding the L is rooted.
       if (data.lHoldCharging) speed = 0;
       const accel = speed * SIM.movement.accelerationScale * accelMul;
+      data.moveAccel = Math.hypot(mx, mz) * accel;
       p.vx += mx * accel * dt;
       p.vz += mz * accel * dt;
     }
@@ -1503,8 +1508,16 @@ export class BrawlRoom extends Room {
       p.vx *= friction;
       p.vz *= friction;
 
+      // Zona muerta solo en inercia — espejo de src/critter.ts
+      // (docs/FEELING.md §7.4 y §7.7). Con input, anular la velocidad por
+      // debajo del umbral se comía justo la que el bicho estaba ganando
+      // (a 30 Hz, Shelly ralentizada o en el hielo). "Inercia" incluye un
+      // empuje que ni a velocidad terminal supera el umbral (stick con
+      // deriva, bicho enraizado).
       const speed = Math.sqrt(p.vx * p.vx + p.vz * p.vz);
-      if (speed < SIM.movement.velocityDeadZone) {
+      const pushTerminal = (data.moveAccel * halfLife) / Math.LN2;
+      const coasting = !data.hasInput || pushTerminal < SIM.movement.velocityDeadZone;
+      if (coasting && speed < SIM.movement.velocityDeadZone) {
         p.vx = 0;
         p.vz = 0;
       } else if (speed > SIM.movement.maxSpeed) {

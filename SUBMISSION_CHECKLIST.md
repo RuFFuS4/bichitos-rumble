@@ -118,19 +118,22 @@
   `index.html` ships; the labs (`tools.html` & co.) build only with
   `VITE_BUILD_TOOLS=1`.
 - [x] Client build verified locally (`npm run build`) — measured
-  2026-09-21 on `dev` 2317564:
+  2026-09-24 on `dev` 82d37aa:
   - index.html: ~114 kB / 28 kB gzip
-  - main bundle: ~278 kB / 85 kB gzip (game logic + HUD + critter pipeline)
-  - three.js chunk: ~648 kB / 162 kB gzip (own hash; re-downloaded only
+  - main bundle: ~298 kB / 92 kB gzip (game logic + HUD + critter pipeline)
+  - three.js chunk: ~650 kB / 162 kB gzip (own hash; re-downloaded only
     when three or the chunking changes)
   - colyseus chunk (@colyseus/sdk 0.17): ~112 kB / 34 kB gzip
-  - critter GLBs: ~46 MB total (loaded on demand; `/models/*` is
-    `max-age=86400, stale-while-revalidate=604800`, only `/assets/*`
-    is `immutable`)
+  - critter GLBs: ~4 MB total (9 GLBs after the F2 diet, loaded on
+    demand). URLs carry a content hash (`?v=`, written by
+    `scripts/stamp-critter-glbs.mjs`), so `/models/critters/*?v=` is
+    `immutable` for a year; everything else under `/models/*` is
+    `max-age=86400, stale-while-revalidate=604800`. `/assets/*` is
+    `immutable`.
   - arena packs: ~14 MB total (5 packs)
   - audio: ~2 MB · images: ~2 MB
-  - **dist post-build: 69.7 MB total**, gated by
-    `scripts/check-payload-budget.mjs` (ratchet 75 MB, 17 MB per file).
+  - **dist post-build: 27.4 MB total**, gated by
+    `scripts/check-payload-budget.mjs` (ratchet 30 MB, 3 MB per file).
     `clean-dist-raw.mjs` drops ~77 MB of `_raw/` masters on every build.
 - [x] Vercel project connected (auto-deploy from GitHub: main → prod, dev → preview)
 - [x] Custom domain `www.bichitosrumble.com` aliased to production

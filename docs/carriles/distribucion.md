@@ -29,13 +29,20 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
    El despliegue lleva también el apagado del portal en itch de INTERFAZ
    (ver Buzón): itch embebe producción.
-2. **Presupuesto de payload**: ratchet 75 MB, dist **69,7 MB**
-   (2026-09-21), margen 5,3 MB. Los crítters son el 62 % (sebastian
-   15,2 + kermit 14,2 + kurama 13,8 MB; el tope por fichero es 17).
-   H4.5 no añade ni un byte a `public/`: el fondo y los dioramas son
-   procedurales. Cualquier carril que quiera meter assets nuevos choca
-   contigo: eres quien dice sí o no, y quien mantiene
-   `scripts/check-payload-budget.mjs`.
+2. **Presupuesto de payload**: ratchet **30 MB total y 3 MB por
+   fichero** (bajado el 2026-09-24). La dist pesa **27,4 MB**, así que
+   el margen es de 2,6 MB. La F2 de PERSONAJES dejó los nueve GLB de
+   bicho en ~4 MB (antes 46). El fichero más gordo es una palmera de
+   coral_beach de 1,4 MB, y las arenas pesan 14 MB. Cualquier carril
+   que quiera meter assets nuevos choca contigo: eres quien dice sí o
+   no, y quien mantiene `scripts/check-payload-budget.mjs`.
+   - **Caché de los GLB de bicho** (2026-09-24): llevan un hash de
+     contenido en la URL (`?v=`, que escribe
+     `scripts/stamp-critter-glbs.mjs`; lo vigila `npm run check`), así
+     que `vercel.json` los sirve `immutable` durante un año.
+   - La regla exige que haya `v` en la query; sin `v`, el resto de
+     `/models/` sigue con un día de caché. Una URL sin versión nunca se
+     queda congelada.
 3. **Limpiar la base de producción**: nicks `SMOKE*` / `Test*` de las
    campañas (`admin:delete-test`). Se hace desde la shell de Railway
    (sin acceso desde aquí). Dentro del contenedor el WORKDIR es `/app`:
@@ -382,6 +389,16 @@ corren riesgo: no hay migraciones.
     nada vuelva a colarse. Kermit deja de ser `heavyAsset`: con 0,58 MB,
     entra en la precarga en segundo plano como los demás. Y los nueve
     GLB de bicho suman ~3,9 MB.
+  → *Leído el 2026-09-24. Hecho:*
+  - *ratchet a 30 MB y 3 MB por fichero;*
+  - *`/models/critters/*?v=` servido `immutable` (solo con `v` en la
+    query);*
+  - *el comentario de `ci.yml` al día;*
+  - *el espejo de la zona muerta en `BrawlRoom.ts`, copiando la lógica
+    de `src/critter.ts` con `pushTerminal`.*
+
+  *El suavizado online está en diseño; `game.ts` necesita permiso de
+  Rafa.*
 
 ## Cómo retomar
 

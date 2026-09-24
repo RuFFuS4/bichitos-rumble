@@ -16,8 +16,13 @@
 //   slice 2 (imágenes WebP): ~115 MB
 //   slice 3 (GLB meshopt):   ~90 MB
 //   objetivo de cierre H2:   ≤ 50 MB inicial-viable (ver ROADMAP §H2)
+//   2026-08-24 dieta:        75 MB (medido 69,7)
+//   2026-09-24 dieta F2:     30 MB (medido 27,4) — objetivo H2 superado
 // El límite per-file protege contra el regreso de un asset gordo
-// individual (sebastian.glb, el mayor legítimo hoy, pesa 16 MB).
+// individual: hoy el mayor pesa 1,4 MB (una palmera de coral_beach) y
+// los nueve GLB de bicho suman ~3,9 MB. Un asset nuevo entra ya dietado
+// (ASSET_PIPELINE.md §«Recetas post-import») o no entra: quien quiera
+// más margen lo pide al carril DISTRIBUCIÓN (docs/carriles/distribucion.md).
 // ---------------------------------------------------------------------------
 
 import { stat, readdir } from 'node:fs/promises';
@@ -26,12 +31,12 @@ import { join } from 'node:path';
 
 const DIST = 'dist';
 // 2026-08-24 dieta de payload: 96.9 → 69.7 MB (gltfpack de 53 GLBs de
-// arenas/belts −26 MB, belts PNG→WebP, audio -vn VBR5). Ratchet a 75
-// para que el margen no se rellene solo. Siguiente frontera (decisión
-// de Rafa, hard-stop): simplificar sebastian/kermit/kurama (44 MB en 3
-// GLBs) para el objetivo H2 de ≤50 MB.
-const TOTAL_BUDGET_MB = 75;
-const FILE_BUDGET_MB = 17;
+// arenas/belts −26 MB, belts PNG→WebP, audio -vn VBR5). Ratchet a 75.
+// 2026-09-24 (PERSONAJES, F2): Kurama, Sebastian y Kermit por receta
+// (44 MB en 3 GLB → ~2 MB) y los Tripo a WebP: 69.7 → 27.4 MB. Ratchet a
+// 30 y 3 por fichero, para que el margen no se rellene solo.
+const TOTAL_BUDGET_MB = 30;
+const FILE_BUDGET_MB = 3;
 
 if (!existsSync(DIST)) {
   console.error(`[payload-budget] no ${DIST}/ — run after vite build`);
