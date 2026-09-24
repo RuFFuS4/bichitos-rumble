@@ -7,7 +7,7 @@
     "node": ">=20.19"
   },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --import ./scripts/precise-timers.mjs src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "admin:list-players": "node scripts/admin-players.mjs list",
