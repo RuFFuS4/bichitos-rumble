@@ -19,10 +19,11 @@ Rafa eligió los cuatro arreglos:
   direcciones. Los nombres propios, no.
 - **La selección cabe entera**, en tres columnas: parrilla | 3D | ficha.
 
-Queda abierto, y es de Rafa: `hud-shots` destapó que la selección
-**también desborda en escritorio** (806 px en 1280×720: el título se sale
-por arriba y la ficha se corta) y en iPad. Opciones en
-`docs/carriles/interfaz.md`.
+`hud-shots` destapó además que la selección **también desbordaba en
+escritorio**: a 1280×720 el título se salía por arriba y la ficha se
+cortaba, y en iPad pasaba lo mismo. Rafa eligió conservar el diseño y
+encoger el 3D con el alto. Ahora cabe en 1280×720, en un portátil de
+1366×650 y en iPad, y en 1920×1080 no cambia nada.
 
 Rafa pidió además un contorno más fino en los bichos. Es de PERSONAJES,
 que ya lo tiene: el mínimo en px era lo que pesaba en pantallas pequeñas.

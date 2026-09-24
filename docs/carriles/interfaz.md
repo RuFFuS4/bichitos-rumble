@@ -18,15 +18,8 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
    - **Las cuatro cosas que eligió Rafa están hechas** (2026-09-24, ver
      §Hecho): enfriamiento en los botones táctiles, las cuatro vidas, la
      ficha en castellano y la selección compacta en móvil.
-   - **Abierto — la selección en escritorio y en iPad también desborda**
-     (lo destapó `hud-shots` al cerrar la de móvil): 806 px en 1280×720 y
-     827 en 1024×768. A 1280×720 el título «ELIGE TU BICHITO» se sale por
-     arriba (`justify-content: center` reparte el sobrante hacia arriba) y
-     la ficha se corta por abajo; en un portátil 1366×768 (~650 px útiles)
-     será peor. Lo pesa el lienzo 3D de 440 px. Es cambio de aspecto en
-     escritorio: **espera a Rafa**. Opciones: las tres columnas del móvil
-     también por debajo de ~900 px de alto, o conservar el diseño y
-     encoger el lienzo con el alto (`clamp` sobre `vh`), anclando arriba.
+   - La selección en escritorio y en iPad, que también desbordaba, quedó
+     arreglada el mismo día (ver §Hecho).
 2. **Audio**: eres el dueño de `src/audio.ts`. Si cambias las claves
    `bichitos.sfxMuted` / `bichitos.musicMuted`, avisa a todos los
    carriles — las lee `scripts/lib/headless-browser.mjs` y de ellas
@@ -67,6 +60,16 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Hecho
 
+- **2026-09-24 — La selección cabe entera también en escritorio y en
+  iPad** (opción de Rafa: encoger el 3D con el alto, sin cambiar el
+  diseño). Lo destapó `hud-shots`. A 1280×720 el contenido medía 806 px:
+  el título se salía por arriba (`justify-content: center` repartía el
+  sobrante hacia arriba) y la ficha se cortaba por abajo. Ahora el lienzo
+  3D mide `clamp(190px, 100vh − 460px, 440px)`, donde 460 px es el resto
+  medido (título 54 + ficha 351 + aviso 46). La pantalla usa
+  `safe center` y se desplaza como último recurso. Medido: cabe justo en
+  1280×720, 1366×650 (portátil), 1440×800 e iPad; 1920×1080 no cambia
+  (440 px). Si la ficha crece, sube el 460.
 - **2026-09-24 — La selección cabe entera en móvil.** En apaisado
   (`max-height: 520px`) la ficha iba debajo de la vista 3D y se quedaba
   bajo el pliegue: 682 px de contenido en 360-430. Ahora hay tres
@@ -176,7 +179,7 @@ de Sergei y Shelly a la paleta nueva. El portal, cerrado en `dev`, sale
 con el despliegue de H4.5 (lo lleva DISTRIBUCIÓN). Las miniaturas ya
 comparten materiales con `Critter`. La reestructura del HUD en móvil está
 hecha entera: modo táctil en móviles grandes y tablets, enfriamiento en
-los botones, cuatro vidas, ficha en castellano y selección compacta.
-Abierto y esperando a Rafa: la selección desborda también en escritorio y
-en iPad (punto 1 de Pendiente, con opciones). Para medir cualquier cambio
-de HUD: `node scripts/hud-shots.mjs`.
+los botones, cuatro vidas, ficha en castellano y selección compacta. La
+selección cabe también en escritorio (portátil incluido) y en iPad. Para
+medir cualquier cambio de HUD: `node scripts/hud-shots.mjs`. Siguiente del
+carril: audio (punto 2), o lo que pidan los buzones.

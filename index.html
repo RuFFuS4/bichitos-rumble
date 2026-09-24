@@ -498,6 +498,17 @@
     }
 
     /* ---------- Character Select ---------- */
+    /* Short desktop / tablet windows (2026-09-24): at 1280×720 the title
+       went off the top and the info card off the bottom — 806 px of
+       content, most of it the 440 px preview canvas. The canvas gives up
+       height first (#preview-canvas below); `safe center` keeps a leftover
+       overflow from being split upwards past the title, and the overlay
+       scrolls as a last resort. Tall screens don't change. */
+    #character-select {
+      justify-content: center;
+      justify-content: safe center;
+      overflow-y: auto;
+    }
     #character-select h2 {
       font-size: 26px;
       font-weight: 800;
@@ -672,7 +683,11 @@
     }
     #preview-canvas {
       width: 500px;
-      height: 440px;
+      /* 460 px ≈ everything else on the screen, measured at 1280×720:
+         title 54 + info card 351 + prompt 46. preview.ts refits the
+         camera to whatever box it gets. 190 px keeps a 1366×768 laptop
+         (~650 px inside the browser) on one screen. */
+      height: clamp(190px, calc(100vh - 460px), 440px);
       display: block;
       cursor: grab;
       touch-action: none;
