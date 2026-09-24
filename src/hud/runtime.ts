@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AbilityState } from '../abilities';
+import { isBlockedByAnchor } from '../abilities-runtime';
 import type { Critter } from '../critter';
 import { getRosterEntry } from '../roster';
 import { getCritterThumbnail } from '../slot-thumbnail';
@@ -380,6 +381,12 @@ export function updateAbilityHUD(states: AbilityState[]): void {
     el.root.classList.toggle('on-cooldown', isCooldown);
     el.touchBtn?.classList.toggle('active', s.active);
     el.touchBtn?.classList.toggle('on-cooldown', isCooldown);
+    // Can't be cast right now for a reason other than cooldown — today,
+    // a dash/blink while Shelly's Steel Shell anchors her. The rule is
+    // gameplay's own (abilities-runtime.ts); the HUD only asks it.
+    const blocked = isBlockedByAnchor(s, states);
+    el.root.classList.toggle('blocked', blocked);
+    el.touchBtn?.classList.toggle('blocked', blocked);
 
     // Conic-gradient cooldown overlay drives off `--cd-progress` on
     // the icon (or the slot itself as fallback). 1 = full dim arc,

@@ -42,34 +42,22 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
-- **De PERSONAJES, 2026-09-25 — segunda tanda del repaso: la regla del
-  anclaje ya es pública, y el aturdido cambia de significado.**
-  - `isBlockedByAnchor(state, states)` está exportada en
-    `src/abilities-runtime.ts`: es pura, sobre la lista
-    `critter.abilityStates`. Es la que pediste para marcar la J de Shelly
-    como `blocked` mientras está anclada.
-  - **«Aturdido» ahora también impide actuar**: con `stunTimer > 0` no
-    hay cabezazo, J, K ni L. El texto debería decir que no se mueve **ni
-    actúa**. Opcional: atenuar J, K y L mientras dure.
-  - He tocado tres frases de `CONTENT_ES`, con tu permiso para ese
-    bloque:
-    - Grip: aturde 2,5 s;
-    - Fox Dash: atraviesa;
-    - Ice Slide: sigue deslizándose.
-
-- **De PERSONAJES, 2026-09-24 — el repaso de habilidades deja tres cosas
-  en tus ficheros.** Detalle en
+- **De PERSONAJES, 2026-09-24/25 — repaso de habilidades.** Detalle en
   [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md).
-  - ~~Textos de estado~~ → hechos el mismo día. «Vulnerable» dice ya ×4
-    (con comentario que lo ata a `FEEL.collision.stunnedVulnerability`),
-    y «Congelado» cubre la bola y el suelo helado; el icono ya salía en
-    los dos casos (`frame-ticks.ts`).
-  - **Opcional, a medias: J de Shelly bloqueada mientras está anclada.**
-    La regla es `blockedByAnchor` en `abilities-runtime.ts`, privada. No
-    la copio al HUD, porque sería una regla de juego duplicada en la capa
-    visual. He pedido a PERSONAJES que la exporten pura (sobre la lista de
-    estados); cuando esté, `updateAbilityHUD` marca la J (barra y botón
-    táctil) con una clase `blocked`.
+  - ~~Textos «Vulnerable» (×4) y «Congelado» (bola y suelo helado)~~ →
+    hechos (33562ff).
+  - ~~J de Shelly bloqueada mientras está anclada~~ → hecho el 25: la
+    barra y el botón táctil llevan la clase `blocked` (gris y apagado)
+    cuando `isBlockedByAnchor` (pública desde 1cb22a8) lo dice.
+  - ~~«Aturdido» también impide actuar: el texto~~ → hecho el 25 («Ni se
+    mueve ni actúa»).
+  - **Opcional, pendiente de Rafa: atenuar J, K y L mientras dure el
+    aturdido.** El HUD solo recibe las habilidades
+    (`updateAbilityHUD(this.player.abilityStates)`, 4 llamadas en
+    `game.ts`, tierra de nadie), y el `Critter` no marca cuál es el
+    local. Hace falta pasarle `stunTimer > 0` desde `game.ts`.
+  - Sus tres retoques de `CONTENT_ES` (Grip, Fox Dash, Ice Slide) están
+    bien; el test de contenido sigue verde.
   - ~~Contorno~~ → en `dev` (4748f63), las miniaturas lo reciben solas.
 
 - **De DISTRIBUCIÓN, 2026-09-21 — he tocado tu `src/i18n.ts`, con

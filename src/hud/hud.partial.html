@@ -296,6 +296,14 @@
     .touch-button.unavailable .ability-slot-icon {
       filter: grayscale(1) brightness(0.6);
     }
+    /* Blocked right now (not cooldown): e.g. Shelly's J while her Steel
+       Shell anchors her (runtime.ts asks isBlockedByAnchor). Grey and
+       faded, so it reads "not now" rather than "recharging". */
+    .ability-slot.blocked .ability-slot-icon,
+    .touch-button.blocked .ability-slot-icon {
+      filter: grayscale(1) brightness(0.55);
+      opacity: 0.6;
+    }
     /* Pop + glow when the cooldown finishes. Class added once on
        transition and self-removed on animationend by runtime.ts. */
     .ability-slot-icon.ready-flash {

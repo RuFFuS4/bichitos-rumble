@@ -240,8 +240,9 @@ const DICT = {
   'status-poisoned-desc':     { en: 'Toxic cloud — slowed + limited vision.',
                                 es: 'Nube tóxica — más lento y con visión limitada.' },
   'status-stunned':           { en: 'Stunned',                  es: 'Aturdido' },
-  'status-stunned-desc':      { en: 'Cannot move for a brief window.',
-                                es: 'No puede moverse durante un instante.' },
+  // Since 2026-09-24 (PERSONAJES) a stun also blocks headbutt, J, K and L.
+  'status-stunned-desc':      { en: 'Cannot move or act for a brief window.',
+                                es: 'Ni se mueve ni actúa durante un instante.' },
   'status-vulnerable':        { en: 'Vulnerable',               es: 'Vulnerable' },
   // ×4 = FEEL.collision.stunnedVulnerability (physics.ts); keep in step.
   'status-vulnerable-desc':   { en: 'Hits push four times as hard.',
