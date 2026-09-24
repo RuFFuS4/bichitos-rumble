@@ -1,5 +1,30 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-24 — [Interfaz] Los retratos del HUD se ponen al día con la paleta nueva
+
+PERSONAJES cambió los bichos a la paleta de los bocetos de Rafa y les puso
+contorno. Con eso, dos superficies de este carril enseñaban otro bicho.
+
+- **Sprites chibi (lo que se ve en la parrilla y en las esquinas).** Sergei
+  seguía siendo un gorila marrón y Shelly llevaba el caparazón marrón, así
+  que se elegía un bicho y se jugaba con otro. Rafa eligió un recoloreado
+  por código antes que redibujar, y lo aprobó sobre la hoja
+  antes/después/3D. `scripts/recolor-hud-tiles.mjs` mueve solo los
+  píxeles marrón oscuro de esos dos tiles, fundidos por peso. Sergei
+  conserva las muñequeras, que el 3D también lleva, y se separan del pelo
+  por saturación: 0,9 frente a 0,3-0,5. El fundido suave hacía que una
+  segunda pasada moviera 240 px más, así que la idempotencia va por
+  guarda (menos de 1.000 px marrones = hecho). `HUD_mejorado.png` sigue
+  con la paleta del jam: si se rehace la hoja, el recoloreado va después
+  de `compress-images`.
+- **Miniaturas 3D (sala de espera online).** Llevan el contorno de
+  `critter-look.ts` y se encuadran por su silueta posada
+  (`measurePosedBox`). Con la escala cruda del roster, a Kurama se le
+  cortaban orejas y cola y Sebastian ocupaba un tercio del cuadro.
+- `baseColor` (brillo de las casillas) **no se toca**: es color de
+  identidad (Kermit brilla morado siendo lima) y además es el
+  `config.color` del bicho.
+
 ## 2026-09-24 — [PERSONAJES] El bicho encaja el golpe: inclinación visible, fotograma de impacto y destello en los nueve
 
 - `reactionRig` (`mesh → rig → pivot → GLB`): el empujón inclina el

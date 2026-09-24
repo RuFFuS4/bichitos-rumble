@@ -5,17 +5,6 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Pendiente (por orden)
 
-0. **Sprites chibi del HUD con la paleta vieja — espera a Rafa.** Con la
-   paleta de sus bocetos (PERSONAJES, 2026-09-24), el tile de **Sergei**
-   es un gorila marrón (el bicho es carbón) y el de **Shelly** lleva el
-   caparazón marrón (ahora es verde). Kowalski, Kermit, Cheeto y Sihans
-   cuadran; Trunk, Kurama y Sebastian no cambiaron. Los sprites tapan la
-   miniatura en la parrilla y en las esquinas de la partida, así que el
-   choque se ve al elegir. Salen de `HUD_mejorado.png` (arte de Rafa) vía
-   `scripts/rebuild-hud-sheet.mjs`. Opciones: que Rafa rehaga esos dos
-   tiles, o un recoloreado por código de los dos tiles como apaño para que
-   él lo juzgue. **Viaja con el despliegue de H4.5**: la paleta nueva sale
-   con él.
 1. **Reestructura del HUD en móvil** (diferido de la era jam: "la versión
    actual es correcta, no ideal"). Mide antes de rediseñar.
    Dato ya medido (2026-09-21): con el portal apagado
@@ -60,6 +49,22 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Hecho
 
+- **2026-09-24 — Sprites chibi de Sergei y Shelly a la paleta nueva**
+  (aprobado por Rafa sobre la hoja antes/después/3D). Con la paleta de sus
+  bocetos, el tile de Sergei era un gorila marrón (el bicho es carbón) y
+  el de Shelly llevaba el caparazón marrón (ahora es oliva). Los sprites
+  tapan la miniatura en la parrilla y en las esquinas, así que se elegía
+  un bicho y se jugaba con otro. `scripts/recolor-hud-tiles.mjs` mueve
+  solo los píxeles marrón oscuro de esos dos tiles, fundidos por peso:
+  cara, aros, tripa y contorno quedan intactos. Las muñequeras de Sergei
+  (s ≥ 0,9) se conservan, porque el 3D también las lleva. Reescribe el
+  máster `_raw/hud-icons.png` y regenera el `.webp`. Es idempotente por
+  guarda: un tile con menos de 1.000 px marrones se da por hecho, porque
+  el fundido suave hacía que una segunda pasada moviera 240 px más. **Si
+  algún día se rehace la hoja desde `HUD_mejorado.png`** (que sigue con la
+  paleta del jam): `rebuild-hud-sheet` → `compress-images` →
+  `recolor-hud-tiles`. Kowalski, Kermit, Cheeto y Sihans ya cuadraban;
+  Trunk, Kurama y Sebastian no cambiaron.
 - **2026-09-24 — Miniaturas 3D con contorno y encuadre por pose**
   (`src/slot-thumbnail.ts`, petición de PERSONAJES). Llevan el mismo
   contorno que `Critter` (`setOutlineVisible(attachOutline(glb), true)`,
@@ -88,9 +93,11 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Cómo retomar
 
-**2026-09-24** — miniaturas con contorno y encuadre, en `dev`. Portal
-cerrado en `dev`, pendiente solo del despliegue (lo lleva DISTRIBUCIÓN
-junto con el de H4.5). Esperando a Rafa: los sprites de Sergei y Shelly
-(punto 0). Siguiente trabajo propio: la reestructura del HUD en móvil;
-empieza midiendo (capturas a 390×844 y 1280×720 con `body.touch-mode`)
-antes de proponer nada.
+**2026-09-24** — en `dev`: miniaturas con contorno y encuadre, y sprites
+de Sergei y Shelly a la paleta nueva. El portal, cerrado en `dev`, sale
+con el despliegue de H4.5 (lo lleva DISTRIBUCIÓN). Queda abierto con
+PERSONAJES: la normalización de materiales de los rigs de Meshy en la
+miniatura, a la espera de que la saquen como función compartida a
+`critter-look.ts` (ver su buzón). Siguiente trabajo propio: la
+reestructura del HUD en móvil; empieza midiendo (capturas a 390×844 y
+1280×720 con `body.touch-mode`) antes de proponer nada.

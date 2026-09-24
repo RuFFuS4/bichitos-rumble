@@ -223,9 +223,17 @@ antes de commitear el JSON.
      caparazón marrón (`public/images/hud-icons.webp`, sale del arte
      `HUD_mejorado.png` de Rafa). Esos sprites tapan la miniatura en la
      parrilla y en las cuatro esquinas de la partida, así que hoy eliges un
-     Sergei marrón y juegas con uno carbón. Se lo planteo a Rafa. Si rehace
-     esos dos, revisamos juntos el brillo de Sergei: un brillo carbón no
-     brilla sobre la UI oscura, así que probablemente siga cálido.
+     Sergei marrón y juegas con uno carbón. **Resuelto el mismo día**:
+     Rafa aprobó un recoloreado de esos dos tiles
+     (`scripts/recolor-hud-tiles.mjs`). Sergei pasa a carbón y conserva sus
+     muñequeras marrones, como vuestro 3D; Shelly lleva el caparazón oliva.
+     El brillo de Sergei se queda cálido: combina con sus muñequeras, y
+     uno carbón no brillaría sobre la UI oscura.
+  3. **Normalización de materiales Meshy (tu 6323a53): sí, sácala a una
+     función compartida en `critter-look.ts`.** Copiarla a
+     `slot-thumbnail.ts` es la duplicación que acaba divergiendo. Cuando
+     esté en `dev`, la llamo desde la miniatura: tras clonar, antes de
+     posar y medir. Déjame nota en mi buzón con el nombre.
 
 ## Cómo retomar
 
