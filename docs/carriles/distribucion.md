@@ -6,26 +6,36 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Pendiente (por orden)
 
-1. **El despliegue de H4.5 — verificado; falta decidir cuándo.** En
-   producción sigue `v1.7-h4-social` (main `f41fb7e`). El 2026-09-21 se
-   verificó `dev` a fondo (ver "Verificación previa de H4.5" abajo):
-   técnicamente puede salir.
-   - **Qué ha pasado desde entonces.** Rafa pidió esperar al cono de
-     ARENA, y el cono entró en `dev` ese mismo día (7d6c56c), junto con
-     el corte 1 del feeling de PERSONAJES (ef3c857: capa visual, golden
-     3/3 según su carril).
-   - **Decisión de Rafa (2026-09-21): se espera al fondo v2.** En `dev`
-     sigue el fondo del **mar**, que Rafa rechazó (ver
-     `docs/carriles/arena.md`). H4.5 sale cuando ARENA cierre el slice
-     F0 del cielo y Rafa lo apruebe. No sale un fondo rechazado. El corte
-     1 del feeling de PERSONAJES viaja en el mismo despliegue: sus
-     capturas también las ve Rafa.
-   - **Antes de desplegar, sea cual sea el SHA:**
-     - repetir la verificación: como mínimo `check`, `test:sim`, golden,
-       smoke, la partida online de 2 clientes y los 5 biomas;
-     - Rafa aprueba las capturas de ese SHA;
-     - runbook de abajo, mergeando **el SHA exacto verificado**, no la
-       rama `dev` a secas.
+1. **El despliegue de v1.8 (H4.5) — Rafa pidió prepararlo (2026-09-24).**
+   En producción sigue `v1.7-h4-social` (main `f41fb7e`).
+   - **Qué viaja** (lo que hay en `dev`, ~55 commits):
+     - ARENA: terreno v2, cono y fondo v2 F0, la isla en el cielo, con
+       las hojas aprobadas por Rafa el 2026-09-21;
+     - PERSONAJES: feeling, velocidad ×1,375, mejora gráfica, contorno,
+       orientación que no gira con un empujón, repaso de las 27
+       habilidades;
+     - INTERFAZ: portal apagado en itch, selección y HUD en móvil;
+     - DISTRIBUCIÓN: guard de versión (NET_PROTOCOL 2), suavizado
+       online, zona muerta y Copycat por jugador en BrawlRoom, ws 8.21.3,
+       ratchet a 30 MB y GLB immutable.
+   - **Condiciones que ya se cumplen:**
+     - el fondo del mar rechazado ya no es el que sale;
+     - el suavizado online que pedía FEELING §7.6 para la velocidad
+       nueva está en `dev`;
+     - el bloqueo de Copycat de 4748f63 está resuelto (getLDef).
+   - **Antes de desplegar, sobre el SHA congelado:**
+     - la verificación completa: `check`, `test:sim`, golden, smoke, la
+       partida online de 2 clientes, los 5 biomas, el guard con curl, la
+       pestaña v1.7 contra el servidor nuevo y Docker;
+     - las capturas a Rafa y su visto bueno;
+     - el runbook de abajo, mergeando **el SHA exacto verificado**, no
+       la rama `dev` a secas.
+   - **Tras desplegar, el A/B del suavizado lo juzga Rafa a ojo** contra
+     Railway: `?netsmooth=legacy` frente a normal, con
+     `__game.netSmoother.stats()` abierto. `saturatedFrames` tiene que
+     quedarse en ~0; si sube, el reloj no sigue al servidor real. Lo que
+     hay que mirar es la pasada de los rivales al parar (peor 8 px en
+     local).
 
    El despliegue lleva también el apagado del portal en itch de INTERFAZ
    (ver Buzón): itch embebe producción.
@@ -119,19 +129,42 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
    - `onBeforeShutdown` en `BrawlRoom`: hoy un reinicio de Railway en
      mitad de una partida pública apunta derrota a los humanos
      verificados.
-9. **`ws@8.20.0` con aviso alto** en las dependencias de producción del
-   servidor (vía `@colyseus/ws-transport`). Ya está en producción y
-   H4.5 no lo cambia. Arreglo: slice aparte con `npm audit fix` u
-   override, más tsc, docker build y una sala local.
-10. **Lo de `BrawlRoom.ts` que pide PERSONAJES** (Buzón, 2026-09-21):
-    - suavizar el bicho local en online (extrapolar con `vx/vz` entre
-      parches);
-    - la zona muerta de velocidad con input;
-    - el factor de aceleración de los bots online.
+9. ~~**`ws@8.20.0` con aviso alto**~~ — hecho el 2026-09-24: ws 8.21.3
+   (solo el lockfile, dentro de `^8.19.0`). `npm audit --omit=dev` pasa
+   de 11 avisos a 10, sin ningún alto; los que quedan son bajos o
+   moderados. El CI hace `docker build` con ella.
+10. ~~**Lo de `BrawlRoom.ts` del plan de velocidad**~~ — hecho el
+    2026-09-24, con el visto bueno de Rafa:
+    - el suavizado online: `src/net-smoothing.ts` más ~15 líneas de
+      `game.ts`, y en `ONLINE.md` la sección «Suavizado online»;
+    - el espejo de la zona muerta;
+    - el factor de los bots lo aplicó PERSONAJES en `computeBotInput`.
+11. **Los 11 cambios de `BrawlRoom.ts` del repaso de habilidades**
+    (PERSONAJES, `docs/REPASO_HABILIDADES.md` §«Pendiente para
+    DISTRIBUCIÓN», con el código exacto de cada uno). No bloquean: si
+    llegan después, online queda como hoy.
+    - Son: reaparición limpia, caída de la víctima del All-in, barrido y
+      fallo del All-in, pasadas de contacto de la L, Cone Pulse,
+      aterrizajes seguros, Sinkhole (necesita un getter de ARENA), hielo
+      desde la zona y golpe de las J online.
+    - El punto 1 (Copycat por jugador) **sí** bloqueaba y ya está hecho:
+      getLDef en 2.e, 2.g y el hold-to-fire. Es la única vía de lectura de
+      la L; Copycat no copia allIn* ni holdToFireL (COPYCAT_KEYS).
+    - Llegarán más con las decisiones de diseño de Rafa (PERSONAJES,
+      2026-09-24):
+      - el All-in con una carga mínima de 0,35 s y apuntando mientras
+        carga, que toca la máquina del hold-to-fire;
+      - el aturdido sin poder cabecear, cuyo arranque online está en
+        BrawlRoom.
 
-    **Espera a que Rafa apruebe su plan de velocidad** (`docs/FEELING.md`
-    §7). Todo es zona hard-stop y sale con cliente y servidor a la vez.
-    El suavizado vive en `src/game.ts` (tierra de nadie).
+      Van al mismo slice.
+    - Es física de habilidades online (hard-stop): slice propio **después
+      de v1.8**, con plan y verificación online (partidas de 2 clientes
+      por habilidad).
+    - **Ojo, el hielo:** cambia la fórmula del paso de integración sobre
+      una zona resbaladiza (aceleración ×0,35 y fricción ×5 desde la
+      zona). El suavizado no modela el hielo (2-3 px de diente de sierra
+      medidos). Si se modela, `NetSmoother.predict` necesita esos factores.
 
 ## Verificación previa de H4.5 (2026-09-21)
 
@@ -398,9 +431,37 @@ corren riesgo: no hay migraciones.
     de `src/critter.ts` con `pushTerminal`.*
 
   *El suavizado online está en diseño; `game.ts` necesita permiso de
-  Rafa.*
+  Rafa.* → *Hecho y en `dev` el 2026-09-24 (punto 10).*
 
 ## Cómo retomar
+
+**2026-09-24** — segunda sesión del carril.
+
+- **Hecho:**
+  - todo lo del buzón de PERSONAJES: ratchet a 30 MB y 3 MB por fichero;
+    GLB de bicho `immutable` (comprobado en la preview de Vercel); zona
+    muerta espejada en `BrawlRoom`; comentario de `ci.yml`;
+  - el **suavizado online**, de principio a fin:
+    - medición de lo de hoy;
+    - 3 diseños y 3 jueces;
+    - las ~15 líneas de `game.ts`, con permiso de Rafa;
+    - `src/net-smoothing.ts` y 32 tests, cada arreglo con su mutante;
+    - verificación en el juego real (33 grabaciones a LAN y RTT 80/160);
+    - 3 arreglos: reloj con ventana, frenada un RTT después y teleports
+      cortos;
+    - re-simulación de las 33 grabaciones con el módulo arreglado.
+  - `precise-timers` en `npm run dev` del servidor y ws 8.21.3;
+  - el bloqueo de Copycat de 4748f63 (getLDef).
+- **Herramientas nuevas:** `scripts/net-smoothing-record.mjs` y
+  `scripts/net-smoothing-bench.mjs`. Las grabaciones y el banco de esta
+  sesión están en el scratchpad de la sesión (se pierden): repítelas con
+  los comandos de la cabecera de cada script.
+- **Lo siguiente:** el punto 1, la verificación completa de v1.8 sobre el
+  SHA congelado, las capturas a Rafa y el runbook. Después, el punto 11.
+- **Aún sin catalogar** en `DEV_TOOLS.md` §«Superficie programática»:
+  `__game.netSmoother` y las dos herramientas. Tampoco hay entrada en
+  `BUILD_LOG.md`: los dos son troncales y hoy ya los tocaron otros
+  carriles. Van el día del despliegue.
 
 **2026-09-21** — primera sesión del carril.
 

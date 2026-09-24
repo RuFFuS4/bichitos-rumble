@@ -29,7 +29,7 @@ import {
 import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
 import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed, isOnSlipperyZone, type ActiveZoneSnapshot } from './sim/physics.js';
-import { createAbilityStates, tickPlayerAbilities, getAbilityKit, getLDef } from './sim/abilities.js';
+import { createAbilityStates, tickPlayerAbilities, getLDef } from './sim/abilities.js';
 import { ArenaSim } from './sim/arena.js';
 import { computeBotInput } from './sim/bot.js';
 import {
@@ -1008,8 +1008,9 @@ export class BrawlRoom extends Room {
       if (!p.alive || p.falling) continue;
       const data = this.internal.get(p.sessionId);
       if (!data) continue;
-      const kit = getAbilityKit(p.critterName);
-      const lDef = kit[2];
+      // Una sola vía de lectura de la L (getLDef, Copycat por jugador). Hoy
+      // Copycat no copia holdToFireL (COPYCAT_KEYS), así que no cambia nada.
+      const lDef = getLDef(p);
       const lState = p.abilities[2];
       if (!lDef || !lState || !lDef.holdToFireL) {
         data.lHoldPrevInput = !!data.inputUltimate;
