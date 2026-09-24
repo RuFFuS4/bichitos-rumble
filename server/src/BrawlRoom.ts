@@ -29,7 +29,7 @@ import {
 import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
 import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed, isOnSlipperyZone, type ActiveZoneSnapshot } from './sim/physics.js';
-import { createAbilityStates, tickPlayerAbilities, getAbilityKit } from './sim/abilities.js';
+import { createAbilityStates, tickPlayerAbilities, getAbilityKit, getLDef } from './sim/abilities.js';
 import { ArenaSim } from './sim/arena.js';
 import { computeBotInput } from './sim/bot.js';
 import {
@@ -1219,8 +1219,9 @@ export class BrawlRoom extends Room {
     // the kit and branch on flags.
     for (const p of players) {
       if (!p.alive || p.falling) continue;
-      const kit = getAbilityKit(p.critterName);
-      const lDef = kit[2];
+      // Por jugador: Copycat guarda la L copiada fuera del kit compartido
+      // (server/src/sim/abilities.ts, docs/REPASO_HABILIDADES.md).
+      const lDef = getLDef(p);
       const lState = p.abilities[2];
       if (!lDef || !lState) continue;
       // Decrement confused/stun timers up here so they expire
@@ -1407,9 +1408,8 @@ export class BrawlRoom extends Room {
       if (!data || !data.allInActive) continue;
       const lState = p.abilities[2];
       if (lState && lState.active) continue; // still windup
-      // Resolution time.
-      const kit = getAbilityKit(p.critterName);
-      const lDef = kit[2];
+      // Resolution time. L por jugador (Copycat), como en 2.e.
+      const lDef = getLDef(p);
       if (!lDef || !lDef.allInL) {
         data.allInActive = false;
         continue;
