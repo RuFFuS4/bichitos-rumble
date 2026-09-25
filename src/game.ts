@@ -169,7 +169,7 @@ export class Game {
    *  the fall so the roster doesn't land in sync; `fallStarted` gates the
    *  skeletal 'fall' clip so we only trigger it once when gravity kicks in. */
   private countdownDrops = new Map<Critter, {
-    y: number; vy: number; delay: number; fallStarted: boolean;
+    y: number; vy: number; delay: number; fallStarted: boolean; landing: boolean;
   }>();
   private displayRoster: RosterEntry[] = getDisplayRoster();
 
@@ -699,15 +699,15 @@ export class Game {
       const baseDelay = i === 0 ? 0 : 0.15 + matchRng() * 0.2;
       const delay = i === 0 ? 0 : (baseDelay * i);
       c.mesh.position.y = h;
-      this.countdownDrops.set(c, { y: h, vy: 0, delay, fallStarted: false });
+      this.countdownDrops.set(c, { y: h, vy: 0, delay, fallStarted: false, landing: false });
     }
   }
 
   /**
    * Integrate gravity on every live drop. Each critter waits for its
    * own `delay` to run out before gravity kicks in and the 'fall' clip
-   * plays. On landing: snap to ground, spawn a dust puff, play impact
-   * SFX, and swap the skeletal state back to 'idle'.
+   * plays; just before the floor it blends back to 'idle'. On landing:
+   * snap to ground, spawn a dust puff, play impact SFX.
    */
   private updateCountdownDrops(dt: number): void {
     if (this.countdownDrops.size === 0) return;
@@ -735,12 +735,19 @@ export class Game {
         playSoundEffect('headbuttHit');
         // Force the idle clip to take over — fall has clampWhenFinished
         // so without an explicit swap the critter would freeze in its
-        // last fall-pose frame forever. A short blend: the tucked legs of
-        // a fall pose hovered over the dust for the default 0.15 s.
-        c.playSkeletal('idle', { force: true, crossfade: FEEL.match.dropLandBlend });
+        // last fall-pose frame forever. Normally it is already in (below).
+        if (!state.landing) c.playSkeletal('idle', { force: true, crossfade: 0 });
         this.countdownDrops.delete(c);
       } else {
         c.mesh.position.y = state.y;
+        // The legs come down to meet the floor: the fall → idle blend is
+        // timed to end as it lands. Blending after the touchdown, the
+        // tucked legs of a fall pose hovered over the dust (Trunk +0.28 u).
+        // A latch for the clip event only, like fallStarted.
+        const t = FEEL.match.dropLandBlend;
+        if (state.fallStarted && !state.landing && state.y + state.vy * t - 0.5 * G * t * t <= 0) {
+          state.landing = c.playSkeletal('idle', { force: true, crossfade: t });
+        }
       }
     }
   }

@@ -262,7 +262,7 @@ export const FEEL = {
   match: {
     duration: 120,            // seconds total (raised from 90 for 3-life matches)
     countdown: 3,             // seconds before match starts
-    dropLandBlend: 0.05,      // s, fall → idle blend as a countdown drop lands (visual)
+    dropLandBlend: 0.1,       // s, fall → idle blend that ends as a countdown drop lands (visual)
     // Arena collapse timing lives in `arena-fragments.ts` FRAG config
     // (replaces the old ring-based collapseInterval).
   },
