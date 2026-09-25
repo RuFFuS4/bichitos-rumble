@@ -1,5 +1,52 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [PERSONAJES] Las caídas del final offline ya se cuentan
+
+- **Qué:** la estadística «Caídas» de la pantalla final offline daba
+  siempre 0. Es uno de los dos fallos viejos que dejó apuntados la entrada
+  del clip de caída.
+- **Por qué:**
+  - `Critter.tickMatchStats` cuenta la caída por el flanco de `falling`, y
+    solo corre en `observeStep`, al final de `Critter.simulate`.
+  - Offline, `Game.simulate` solo simula a los bichos con `!c.falling`. La
+    caída empieza más tarde en ese mismo paso: `checkFalloff`, o un All-in
+    en `updateAbilities`.
+  - Mientras cae, el bicho no se vuelve a simular hasta que `respawnAt`
+    baja la bandera, así que ningún paso veía el flanco.
+  - Solo lo veía la fase `ended`, que sí simula a los que caen. Por eso una
+    caída en curso al acabar sumaba 1, pero después de pintar la pantalla.
+  - Online funciona: `updateOnline` llama a `c.update` en cada bicho y en
+    cada fotograma.
+- **Arreglo, solo en `src/critter.ts`:**
+  - `startFalling` cuenta la caída. Es la única entrada offline: la usan
+    la física y el All-in, y online nunca se llama.
+  - `startFalling` marca además el flanco como visto
+    (`lastStatsFalling = true`). Así la fase `ended` no la cuenta otra vez.
+  - El camino del flanco sigue igual para online.
+  - No se tocó `present` (la presentación no lleva contabilidad por paso)
+    ni `src/game.ts`.
+- **Medido** (sonda headless muda en `/`, partida offline con Sergei).
+  Primero se tira al jugador fuera del disco y se espera a que reaparezca.
+  Luego se le tira otra vez y la partida se acaba mientras cae:
+
+  | Momento | Antes | Después |
+  |---|---|---|
+  | Tras la 1.ª caída | 0 | **1** |
+  | Tras reaparecer | 0 | 1 |
+  | Al acabar la partida, cayendo | 1 (lo sumó `ended`) | 2 |
+  | Pantalla final, «Caídas» | 0 | **2** |
+
+  En los cuatro momentos, «Después» coincide con los flancos de `falling`
+  contados paso a paso.
+- **La simulación no cambia:** golden 3/3 (253, 188 y 242 eventos
+  idénticos), `npm run check` y 304 tests en verde.
+- **Visto de paso:** online, «Reapariciones» daba siempre 0.
+  `matchStats.respawns` solo subía en `respawnAt`, y online la reaparición
+  la manda el servidor sin llamarlo. Ya está arreglado (entrada de abajo,
+  1f15315). Entró en `dev` antes que este cambio, y su limpieza de
+  `lastStatsFalling` en `respawnAt` es lo que evita que, con los dos
+  juntos, las reapariciones offline se cuenten doble.
+
 ## 2026-09-25 — [PERSONAJES] Las reapariciones online ya se cuentan
 
 - **Qué:** online, la estadística «Reapariciones» de la pantalla final

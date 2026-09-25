@@ -355,6 +355,7 @@ export class Critter {
    * from `isHeadbutting` / `falling` / `abilityStates[i].active` which
    * are set by the local sim in offline and by the sync loop in online
    * BEFORE Critter.update() runs, so both modes feed the same flags.
+   * The offline fall is the exception: startFalling counts it.
    */
   matchStats = {
     headbutts: 0,
@@ -1215,7 +1216,9 @@ export class Critter {
    * Called once per step (observeStep) in BOTH offline and online paths —
    * the flags it watches (`isHeadbutting`, `falling`, `abilityStates[i].
    * active`) are set by the local sim in offline and by the online
-   * sync loop before `update()` runs. So one detection path feeds both.
+   * sync loop before `update()` runs. So one detection path feeds both,
+   * except the offline fall: startFalling counts it (a falling critter is
+   * not simulated, so no step would see the edge).
    */
   private tickMatchStats(): void {
     // Headbutt edge — count one "attempt" per lunge (not per anticipation
@@ -1343,6 +1346,12 @@ export class Critter {
     this.lives--;
     this.respawnTimer = FEEL.lives.respawnDelay;
     this.cancelActiveAbilities();
+    // The fall is counted here, not by tickMatchStats' edge: offline a
+    // falling critter is not simulated again until respawnAt, so
+    // observeStep never sees the flag up. Marking the edge as seen keeps
+    // the 'ended' phase, which does simulate it, from counting it twice.
+    this.matchStats.falls++;
+    this.lastStatsFalling = true;
     playSound('fall');
     this.presentFallEdge(true);
   }
