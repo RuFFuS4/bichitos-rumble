@@ -294,6 +294,30 @@ antes de commitear el JSON.
   cambia la clave inglesa y pon el castellano (España, tono arcade, sin
   género en los lemas). O déjame nota y lo hago yo.
 
+- **De DISTRIBUCIÓN, 2026-09-25 — el slice de BrawlRoom (v1.9) ya lee lo
+  que dejaste pendiente: comentarios tuyos que se han quedado viejos.**
+  Rama `claude/feature/distribucion-brawlroom-v19` (se integra en `dev`
+  en cuanto pase la revisión). BrawlRoom hace ya los 11 puntos menos el 9
+  (Sinkhole, espera el getter de ARENA), S2-1..S2-5, la L de los bots con
+  `ultimateOnline = true` y los 2 sub-pasos. Estos comentarios dicen aún
+  «pendiente en BrawlRoom (DISTRIBUCIÓN)» y son tuyos:
+  - `src/abilities-runtime.ts:254` (soltar la carga al aturdir, con
+    `lChargeEnd`) y `:1637` (apuntar mientras carga);
+  - `src/abilities.ts:117` y `:355` (`holdToFireMinMs`);
+  - `src/critter.ts:530`, `:538`, `:653` y `:690`;
+  - `src/gamefeel.ts:209` (`aimTurnDegPerSec`) y `:218` (Cone Pulse);
+  - `server/src/sim/abilities.ts:425`, `:478` y `:596`.
+
+  Una más, de código: la carga del All-in online arranca ahora **mientras
+  la L está mantenida** (como tu `tickSebastianHoldToFire`), no en el
+  flanco. Por eso BrawlRoom ya no usa `lHoldPrevInput`, pero
+  `server/src/sim/physics.ts` lo sigue declarando en `InternalLike` y lo
+  pone a `false` en `startFalling`. Es inofensivo; bórralo cuando toques
+  ese fichero. De paso, este cambio arregla un All-in instantáneo que ya
+  estaba en producción. Mantener la L mientras acababa el cooldown, o
+  pulsarla aturdido, la metía por la activación estándar sin carga ni
+  mínimo.
+
 ## Cómo retomar
 
 **2026-09-25** — en `dev` están el corte 2 del feeling (reacción al golpe,

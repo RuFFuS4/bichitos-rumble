@@ -121,6 +121,17 @@ está abajo, por dueño.
 
 ## Pendiente para DISTRIBUCIÓN (`server/src/BrawlRoom.ts`)
 
+> **Estado (DISTRIBUCIÓN, 2026-09-25):** hechos el 1 (en v1.8), del 2 al 8,
+> el 10 en la sala y el 11 (por S2-5), en la rama
+> `claude/feature/distribucion-brawlroom-v19` (v1.9, `NET_PROTOCOL` 3).
+> Queda:
+> - **el 9 (Sinkhole)**, a la espera de que ARENA dé el getter del layout
+>   en `ArenaSim`;
+> - del 10, la predicción online, que sigue sin modelar el hielo (2-3 px
+>   de diente de sierra medidos; no bloquea).
+>
+> Verificación en BUILD_LOG (entrada de v1.9).
+
 > **BLOQUEO DE DESPLIEGUE.** El `server/src/sim` de esta rama ya no
 > escribe la copia de Copycat en el kit compartido. `BrawlRoom` tiene que
 > leer la L por jugador **en el mismo despliegue**. Si no, online la
@@ -399,6 +410,17 @@ lo mismo.
    lo enciende DISTRIBUCIÓN con S2-2.
 
 ## Pendiente para DISTRIBUCIÓN (segunda tanda)
+
+> **Estado (DISTRIBUCIÓN, 2026-09-25):** hechos del S2-1 al S2-5 en la
+> misma rama, más los 2 sub-pasos de integración
+> (`SIM.movement.integrationSubsteps`), repetidos en el suavizado online.
+> - **S2-1:** la carga arranca mientras la L está mantenida, como
+>   `tickSebastianHoldToFire`. En el flanco, mantenerla mientras acababa
+>   el cooldown o un aturdido metía la L por la activación estándar: un
+>   All-in instantáneo, que ya estaba en producción.
+> - **S2-2:** `ultimateOnline = true`. La tanda online sobre la sala nueva
+>   (216 partidas, semillas 9000) da 0 errores y 0 L fuera de su
+>   condición; Kermit gana el 37 % de sus partidas.
 
 - **S2-1. Bucle del hold-to-fire unido, cabezazo y apuntado** (decisiones
   3 y 5).
