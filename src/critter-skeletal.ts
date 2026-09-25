@@ -108,6 +108,20 @@ const HEAVY_STATES = new Set<SkeletalState>([
   'hit',
 ]);
 
+/**
+ * States whose motion the game owns, so their clip plays in place: the
+ * skeleton root's translation (Mixamo's Hips, Tripo's Root) is dropped, the
+ * root stays at its bind position, and the procedural bob stays off. The
+ * game moves a falling critter (the void fall, the countdown drop), and the
+ * Mixamo Fall clips of Sergei, Sihans and Kurama drop their hips ~2 m to the
+ * floor: as authored the critter hopped up at the rim, jumped back up
+ * whenever the loop wrapped, and landed floating over its dust (2026-09-25).
+ * The bind position is within a few cm of the idle's (Sihans: +6 cm), a
+ * shift the 0.15 s crossfade absorbs; holding the idle's first key instead
+ * would slide Kurama, whose idle swings her hips far to the side.
+ */
+const IN_PLACE_STATES = new Set<SkeletalState>(['fall']);
+
 /** How long (seconds) a state swap takes to blend. Short but not snap. */
 const DEFAULT_CROSSFADE = 0.15;
 
@@ -158,6 +172,10 @@ export class SkeletalAnimator {
   private readonly clips: THREE.AnimationClip[];
   /** Lazy-created Actions keyed by exact clip name — for playClipByName. */
   private readonly clipActionsByName = new Map<string, THREE.AnimationAction>();
+  /** The in-place copy an IN_PLACE_STATES clip plays as, by the loaded
+   *  clip's name: the lab's previews and clip list see what the game
+   *  plays. */
+  private readonly inPlaceClips = new Map<string, THREE.AnimationClip>();
   /** True while /anim-lab.html is previewing a clip via playClipByName.
    *  Flips `isHeavyClipActive()` on so the procedural layer suppresses
    *  its `glbMesh.{position,rotation,scale}` writes — without this, the
@@ -279,6 +297,11 @@ export class SkeletalAnimator {
       if (!clip) {
         this.resolveSources[state] = 'missing';
         continue;
+      }
+      if (IN_PLACE_STATES.has(state)) {
+        const inPlace = withoutRootTranslation(clip, root);
+        if (inPlace !== clip) this.inPlaceClips.set(clip.name, inPlace);
+        clip = inPlace;
       }
 
       const action = this.mixer.clipAction(clip);
@@ -541,9 +564,10 @@ export class SkeletalAnimator {
     source: ResolveSource | null;
   }> {
     return this.clips.map(clip => {
+      const played = this.inPlaceClips.get(clip.name) ?? clip;
       let matchedState: SkeletalState | null = null;
       for (const [state, action] of Object.entries(this.actions)) {
-        if (action.getClip() === clip) {
+        if (action.getClip() === played) {
           matchedState = state as SkeletalState;
           break;
         }
@@ -603,7 +627,7 @@ export class SkeletalAnimator {
    * Returns true if the clip was found and started, false otherwise.
    */
   playClipByName(clipName: string, loop = true, speed = 1): boolean {
-    const clip = this.clips.find(c => c.name === clipName);
+    const clip = this.inPlaceClips.get(clipName) ?? this.clips.find(c => c.name === clipName);
     if (!clip) return false;
 
     let action = this.clipActionsByName.get(clipName);
@@ -741,6 +765,12 @@ export class SkeletalAnimator {
     return !!this.actions[this.currentState];
   }
 
+  /** True while an IN_PLACE_STATES clip plays: the game owns the motion,
+   *  so the procedural layer adds no bob either. */
+  isInPlaceClipActive(): boolean {
+    return !!this.currentState && IN_PLACE_STATES.has(this.currentState) && !!this.actions[this.currentState];
+  }
+
   getCurrentState(): SkeletalState | null {
     return this.currentState;
   }
@@ -791,6 +821,26 @@ function isClipEffectivelyStatic(clip: THREE.AnimationClip, eps = 1e-3): boolean
     }
   }
   return true;
+}
+
+/**
+ * `clip` without the translation of the skeleton's root joints (bones whose
+ * parent isn't a bone), for IN_PLACE_STATES: with no track driving it, the
+ * mixer leaves the root at its bind position. A new clip when there's
+ * anything to drop — the loaded ones are shared through the model cache —
+ * else `clip` itself.
+ */
+function withoutRootTranslation(clip: THREE.AnimationClip, root: THREE.Object3D): THREE.AnimationClip {
+  const rootJoints = new Set<string>();
+  root.traverse((o) => {
+    if ((o as THREE.Bone).isBone && !(o.parent as THREE.Bone | null)?.isBone) rootJoints.add(o.name);
+  });
+  const tracks = clip.tracks.filter((t) => {
+    const { nodeName, propertyName } = THREE.PropertyBinding.parseTrackName(t.name);
+    return !(propertyName === 'position' && rootJoints.has(nodeName));
+  });
+  if (tracks.length === clip.tracks.length) return clip;
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks, clip.blendMode);
 }
 
 /**

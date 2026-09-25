@@ -169,7 +169,7 @@ export class Game {
    *  the fall so the roster doesn't land in sync; `fallStarted` gates the
    *  skeletal 'fall' clip so we only trigger it once when gravity kicks in. */
   private countdownDrops = new Map<Critter, {
-    y: number; vy: number; delay: number; fallStarted: boolean;
+    y: number; vy: number; delay: number; fallStarted: boolean; landing: boolean;
   }>();
   private displayRoster: RosterEntry[] = getDisplayRoster();
 
@@ -683,7 +683,7 @@ export class Game {
    * so the roster lands asynchronously (feels like actual falling from
    * the sky instead of a synchronized rain). Each critter plays its
    * skeletal 'fall' clip the instant its delay expires and gravity
-   * takes over; they snap to 'idle' the moment they touch the floor.
+   * takes over, and blends back to 'idle' the moment it touches the floor.
    */
   private initCountdownDrops(): void {
     this.countdownDrops.clear();
@@ -699,15 +699,15 @@ export class Game {
       const baseDelay = i === 0 ? 0 : 0.15 + matchRng() * 0.2;
       const delay = i === 0 ? 0 : (baseDelay * i);
       c.mesh.position.y = h;
-      this.countdownDrops.set(c, { y: h, vy: 0, delay, fallStarted: false });
+      this.countdownDrops.set(c, { y: h, vy: 0, delay, fallStarted: false, landing: false });
     }
   }
 
   /**
    * Integrate gravity on every live drop. Each critter waits for its
    * own `delay` to run out before gravity kicks in and the 'fall' clip
-   * plays. On landing: snap to ground, spawn a dust puff, play impact
-   * SFX, and swap the skeletal state back to 'idle'.
+   * plays; just before the floor it blends back to 'idle'. On landing:
+   * snap to ground, spawn a dust puff, play impact SFX.
    */
   private updateCountdownDrops(dt: number): void {
     if (this.countdownDrops.size === 0) return;
@@ -719,9 +719,12 @@ export class Game {
         // critter is not frozen in bind pose while it waits).
         continue;
       }
+      // A latch for the clip event only (the drop never reads it): it
+      // holds until the model can take the clip, so a player whose GLB
+      // attaches after the first drop step (cold cache, a 2-step frame)
+      // still falls in the fall pose.
       if (!state.fallStarted) {
-        c.playSkeletal('fall', { fallback: 'idle' });
-        state.fallStarted = true;
+        state.fallStarted = c.playSkeletal('fall', { fallback: 'idle' });
       }
       state.vy -= G * dt;
       state.y += state.vy * dt;
@@ -732,11 +735,19 @@ export class Game {
         playSoundEffect('headbuttHit');
         // Force the idle clip to take over — fall has clampWhenFinished
         // so without an explicit swap the critter would freeze in its
-        // last fall-pose frame forever.
-        c.playSkeletal('idle', { force: true });
+        // last fall-pose frame forever. Normally it is already in (below).
+        if (!state.landing) c.playSkeletal('idle', { force: true, crossfade: 0 });
         this.countdownDrops.delete(c);
       } else {
         c.mesh.position.y = state.y;
+        // The legs come down to meet the floor: the fall → idle blend is
+        // timed to end as it lands. Blending after the touchdown, the
+        // tucked legs of a fall pose hovered over the dust (Trunk +0.28 u).
+        // A latch for the clip event only, like fallStarted.
+        const t = FEEL.match.dropLandBlend;
+        if (state.fallStarted && !state.landing && state.y + state.vy * t - 0.5 * G * t * t <= 0) {
+          state.landing = c.playSkeletal('idle', { force: true, crossfade: t });
+        }
       }
     }
   }
@@ -1398,7 +1409,10 @@ export class Game {
       if (wasAlive && !c.alive) {
         c.playSkeletal('defeat', { fallback: 'defeat' });
       }
+      // Same for the fall and the respawn: the fall clip on the way down.
+      const wasFalling = c.falling;
       c.falling = p.falling ?? false;
+      if (c.alive && c.falling !== wasFalling) c.presentFallEdge(c.falling);
       c.mesh.position.y = pos.y;
       c.mesh.visible = c.alive;
       c.immunityTimer = p.immunityTimer ?? 0;
@@ -2110,8 +2124,12 @@ export class Game {
           // to compute duration for the Speedrun Belt badge.
           this.matchStartMs = performance.now();
           // Safety net: any critter still mid-air when countdown ends
-          // snaps to ground (no thud — we'd rather avoid a late SFX).
-          for (const [c] of this.countdownDrops) c.mesh.position.y = 0;
+          // snaps to ground (no thud — we'd rather avoid a late SFX), and
+          // out of the fall clip, which nothing else would leave.
+          for (const [c] of this.countdownDrops) {
+            c.mesh.position.y = 0;
+            c.playSkeletal('idle', { force: true, crossfade: FEEL.match.dropLandBlend });
+          }
           this.countdownDrops.clear();
         }
         break;
@@ -2314,6 +2332,9 @@ export class Game {
     switch (this.phase) {
       case 'title':
       case 'character_select':
+      // countdown: the drop (updateCountdownDrops) raises the fall and idle
+      // clips; they play here.
+      case 'countdown':
         for (const c of this.critters) c.present(dt);
         break;
       case 'playing': {
@@ -2326,14 +2347,14 @@ export class Game {
         // and no effect ages before the freeze.
         if (this.paused || (this.lastStepFrozen && !this.livePending)) break;
         const presentDt = this.lastStepFrozen || isHitStopActive() ? 0 : dt;
-        for (const c of this.critters) if (c.alive && !c.falling) c.present(presentDt);
+        // Falling critters too, as in 'ended': the fall clip plays on the way down.
+        for (const c of this.critters) if (c.alive) c.present(presentDt);
         this.livePending = false;
         break;
       }
       case 'ended':
         for (const c of this.critters) if (c.alive) c.present(dt);
         break;
-      // countdown: nothing presents during the drop, as before.
       // online: updateOnline presented every critter inside simulate().
     }
     this.syncCritterShadows();

@@ -7,7 +7,7 @@ import { getRosterEntry, type RosterEntry } from './roster';
 import { loadModelWithAnimations } from './model-loader';
 import { SkeletalAnimator, type SkeletalState } from './critter-skeletal';
 import { createCritterParts } from './critter-parts';
-import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, runShare, type AnimationPersonality } from './critter-animation';
+import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, runShare, resetAccents, type AnimationPersonality } from './critter-animation';
 import { deriveCritterStats } from './pws-stats';
 import { measurePosedBox } from './posed-bounds';
 import { attachOutline, normalizeCritterMaterials, setOutlineVisible, type CritterOutline } from './critter-look';
@@ -701,18 +701,21 @@ export class Critter {
   }
 
   /**
-   * Once per rendered frame: saw spin, headbutt head pose, skeleton,
-   * procedural pose, glow, feedback, decoy. `dt`: game time shown since the
-   * last call (0 holds everything still). Runs inside the pose.apply /
-   * restore window, so position reads get the drawn pose; it must never
-   * write mesh.position (restore would undo it) nor anything the sim reads.
+   * Once per rendered frame: saw spin, headbutt head pose (offline),
+   * skeleton, procedural pose, glow, feedback, decoy. `dt`: game time shown
+   * since the last call (0 holds everything still). Runs inside the
+   * pose.apply / restore window, so position reads get the drawn pose; it
+   * must never write mesh.position (restore would undo it) nor anything the
+   * sim reads.
    */
   present(dt: number): void {
-    // Online keeps today's look: the server doesn't sync these (follow-up).
-    if (!this.skipPhysics) {
-      this.tickSawSpin(dt);
-      this.applyHeadbuttPose();
-    }
+    // Online too: the saw reads the L's active / windUpLeft, which
+    // Game.updateOnline copies from the server before this runs.
+    this.tickSawSpin(dt);
+    // Offline only: the head comes back through applyHeadbuttRecovery,
+    // which simulate()'s headbutt state machine raises and online never
+    // runs, so the head would stay thrust out.
+    if (!this.skipPhysics) this.applyHeadbuttPose();
 
     // Skeletal animation layer (no-op if this critter has no clips). Runs
     // BEFORE procedural so procedural can read the skeletal state and
@@ -745,11 +748,21 @@ export class Critter {
    * set in attachGlbMesh (Tripo critters ship with rotation: -π/2) —
    * Sergei, Shelly, Kermit, Kowalski and Cheeto were all rendering at the
    * wrong angle as a result.
+   *
+   * Online the flags are the server's and `def` is the client's kit, so the
+   * spin follows the server's saw window (since 2026-09-25). A Copycat
+   * Kurama carrying the saw doesn't spin: offline the name gate stops her,
+   * and online the client never builds the copy (applyCopycat runs offline
+   * only), so dropping the gate alone would spin her offline only.
    */
   private tickSawSpin(dt: number): void {
     if (this.config.name !== 'Shelly' || !this.glbMesh) return;
     const lState = this.abilityStates[2];
-    if (lState?.active && lState.windUpLeft <= 0 && lState.def.sawL) {
+    // Not under the victory clip: nothing cancels a saw the match ended in
+    // (offline 'ended' ticks no abilities; the server's endMatch cancels
+    // none), and she spun behind the end screen for as long as it stayed.
+    const celebrating = this.skeletal?.getCurrentState() === 'victory';
+    if (lState?.active && lState.windUpLeft <= 0 && lState.def.sawL && !celebrating) {
       const rate = lState.def.sawSpinSpeed ?? 22;
       this.glbMesh.rotation.y += rate * dt;
     } else if (this.glbMesh.rotation.y !== this.baseGlbRotationY) {
@@ -804,10 +817,11 @@ export class Critter {
       glowIntensity = intensity;
     };
 
-    // --- Headbutt states ---
-    if (this.headbuttAnticipating) {
+    // --- Headbutt states --- (not while falling: a fall freezes the flags
+    // until the respawn clears them, here and on the server)
+    if (!this.falling && this.headbuttAnticipating) {
       glow(G.headbuttWindUp.hex, G.headbuttWindUp.intensity);
-    } else if (this.isHeadbutting) {
+    } else if (!this.falling && this.isHeadbutting) {
       glow(G.headbutt.hex, G.headbutt.intensity);
     }
 
@@ -894,6 +908,8 @@ export class Critter {
     // (tint, ghost). The respawn blink made the steel shell read as
     // intangible — the opposite of a wall you bounce off.
     const selfBuff = this.abilityStates.some((s) => s.active && s.windUpLeft <= 0 && s.def.selfBuffOnly);
+    // Nor while falling: a fall cancels the self-buff but not the immunity
+    // it granted, and the drop blinked "invulnerable" at 15 % opacity.
     if (this.invisibilityTimer > 0) {
       // v0.11 — Kurama Mirror Trick. Mesh ghosted while the decoy
       // tricks bots and other players.
@@ -916,7 +932,7 @@ export class Critter {
         mat.opacity = ghostAlpha;
         mat.depthWrite = false;
       }
-    } else if (this.immunityTimer > 0 && !selfBuff) {
+    } else if (this.immunityTimer > 0 && !selfBuff && !this.falling) {
       const phase = (Date.now() * 0.001 * FEEL.lives.blinkRate) % 1;
       const visible = phase < 0.5;
       if (!visible) translucent = true;
@@ -1322,10 +1338,26 @@ export class Critter {
     this.respawnTimer = FEEL.lives.respawnDelay;
     this.cancelActiveAbilities();
     playSound('fall');
-    // Skeletal fall clip — kept until respawn (one-shot with defeat
-    // fallback so if there's no fall clip but there is defeat, it still
-    // reads as "going down" instead of idle during the drop).
-    this.playSkeletal('fall', { fallback: 'defeat' });
+    this.presentFallEdge(true);
+  }
+
+  /**
+   * The look of a fall's two edges: the fall clip when it starts, and at
+   * the respawn a clean slate (resetVisualMotion) and the respawn clip with
+   * no crossfade — a teleport, so the fall pose doesn't linger at the spawn
+   * point. Offline startFalling and respawnAt raise it; online, where the
+   * server owns the fall, Game.updateOnline does on the synced flag.
+   */
+  presentFallEdge(falling: boolean): void {
+    if (falling) {
+      // Kept until the respawn (with the defeat clip as fallback, so a rig
+      // with no fall clip still reads as "going down").
+      this.playSkeletal('fall', { fallback: 'defeat' });
+    } else {
+      this.resetVisualMotion();
+      // A respawn clip if present; falls back to idle.
+      this.playSkeletal('respawn', { fallback: 'idle', crossfade: 0 });
+    }
   }
 
   /**
@@ -1378,7 +1410,6 @@ export class Critter {
     // critter never looks toward the void.
     this.mesh.rotation.y = Math.atan2(-x, -z);
     this.mesh.position.y = 0;
-    this.resetVisualMotion();
     this.immunityTimer = FEEL.lives.immunityDuration;
     // Control statuses die with the life they were put on: no stun,
     // confusion or snowball slow carries over to the respawn (they were
@@ -1396,8 +1427,7 @@ export class Critter {
     this.mesh.visible = true;
     this.mesh.scale.set(1, 1, 1);
     this.body.scale.y = 1.0;
-    // Play a respawn clip if present; falls back to idle automatically.
-    this.playSkeletal('respawn', { fallback: 'idle' });
+    this.presentFallEdge(false);
     this.matchStats.respawns++;
   }
 
@@ -1448,8 +1478,9 @@ export class Critter {
   }
 
   /** A teleport (respawn, new match) is neither a run nor a turn: drop
-   *  the ground-speed history and the turn lag so the model doesn't
-   *  sprint in place or spin on the spot when it reappears. */
+   *  the ground-speed history, the turn lag, the accents and the root's
+   *  lean and sway, so the model doesn't sprint in place, spin, lurch or
+   *  straighten up on the spot when it reappears. */
   private resetVisualMotion(): void {
     this.groundSpeed = 0;
     this.groundVX = 0;
@@ -1462,7 +1493,12 @@ export class Critter {
     // the spawn facing after this (reset() is followed by game placement).
     this.lastFacingY = NaN;
     if (this.visualPivot) this.visualPivot.rotation.y = 0;
+    if (this.glbMesh) {
+      this.glbMesh.rotation.x = 0;
+      this.glbMesh.rotation.z = 0;
+    }
     cancelYankVisual(this);
+    resetAccents(this);
   }
 
   /** Ground velocity from the position delta of this step. Jumps faster
