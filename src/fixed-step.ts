@@ -61,6 +61,19 @@ const RESYNC_PER_FRAME = 0.05 * SIM_STEP;
 /** Tolerance so 1/60-sized frames don't lose a step to float rounding. */
 const STEP_EPSILON = 1e-6;
 
+/**
+ * Share of the way to its target that a `min(1, rate·dt)` lerp tuned at
+ * one 1/60 step covers in `dt`, at any frame rate: the old value at
+ * dt = SIM_STEP (to float rounding), n steps' worth over n·SIM_STEP, 0 at
+ * dt = 0. For
+ * presentation smoothing that now runs per frame instead of per step, so
+ * its feel doesn't change with the refresh rate.
+ */
+export function lerpFactor(ratePerSec: number, dt: number): number {
+  const perStep = Math.min(1, ratePerSec * SIM_STEP);
+  return 1 - Math.pow(1 - perStep, dt / SIM_STEP);
+}
+
 export class FixedStepClock {
   /** Real time minus sim time, s: ≤ 0 after each frame (the sim is ahead). */
   private lag = 0;

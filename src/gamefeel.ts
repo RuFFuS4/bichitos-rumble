@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Critter } from './critter';
+import { lerpFactor } from './fixed-step';
 
 // ---------------------------------------------------------------------------
 // Tuning — ALL game feel values centralized here
@@ -678,7 +679,7 @@ function lerp(a: number, b: number, t: number): number {
 
 function lerpMeshScale(critter: Critter, tx: number, ty: number, tz: number, dt: number, speed: number): void {
   const s = critter.mesh.scale;
-  const f = Math.min(dt * speed, 1);
+  const f = lerpFactor(speed, dt); // same feel per frame at any rate as per 1/60 step
   s.x += (tx - s.x) * f;
   s.y += (ty - s.y) * f;
   s.z += (tz - s.z) * f;

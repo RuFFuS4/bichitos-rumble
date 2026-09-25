@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  FixedStepClock, PoseInterpolator, SIM_STEP, MAX_STEPS_PER_FRAME, SNAP_DISTANCE,
+  FixedStepClock, PoseInterpolator, SIM_STEP, MAX_STEPS_PER_FRAME, SNAP_DISTANCE, lerpFactor,
   type PoseTarget,
 } from '../../src/fixed-step';
 
@@ -180,5 +180,22 @@ describe('PoseInterpolator', () => {
     expect(b.mesh.position.x).toBe(4);
     pose.restore();
     expect(b.mesh.position.x).toBe(4);
+  });
+});
+
+describe('lerpFactor (presentation smoothing per frame, tuned per 1/60 step)', () => {
+  it('one 1/60 step gives the old min(1, rate·dt)', () => {
+    for (const rate of [1, 10, 20, 25, 30, 59]) expect(lerpFactor(rate, SIM_STEP)).toBeCloseTo(Math.min(1, rate * SIM_STEP), 12);
+  });
+
+  it('two half steps compose into one step, and 0 s moves nothing', () => {
+    const half = lerpFactor(10, SIM_STEP / 2);
+    expect(1 - (1 - half) * (1 - half)).toBeCloseTo(lerpFactor(10, SIM_STEP), 12);
+    expect(lerpFactor(10, 0)).toBe(0);
+  });
+
+  it('a rate that closes the gap in one step closes it at any dt > 0', () => {
+    expect(lerpFactor(60, SIM_STEP / 3)).toBe(1);
+    expect(lerpFactor(120, 0.001)).toBe(1);
   });
 });
