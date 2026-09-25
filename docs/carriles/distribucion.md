@@ -6,6 +6,18 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Pendiente (por orden)
 
+0. **v1.9 — preparada, falta el visto bueno de Rafa y desplegar.**
+   `BrawlRoom` ejecuta las habilidades como el sim (repaso de PERSONAJES
+   menos el Sinkhole), la L de los bots online, el paso fijo con 2
+   sub-pasos y `NET_PROTOCOL` 3.
+   - Verificación completa en BUILD_LOG (2026-09-25, DISTRIBUCIÓN, v1.9).
+   - Capturas en `.tmp/v19-live/shots/` del worktree de distribución.
+   - **Al desplegar** (runbook de abajo, el SHA exacto verificado):
+     - comprobar `/health` → `protocol: 3`;
+     - un cliente v1.8 que siga abierto verá «recarga»: es lo esperado;
+     - las cifras de balance online cambian (sub-pasos + L de los bots):
+       Kermit fuerte, decisión de Rafa.
+
 1. **v1.8 (H4.5) — ✅ EN PRODUCCIÓN desde el 2026-09-24 a las 22:00 UTC**
    (main `784779f` = `bf7b3ee`, tag `v1.8-terreno-v2`). Comprobaciones de
    después y lecciones en BUILD_LOG (2026-09-25, DISTRIBUCIÓN).
@@ -147,47 +159,22 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
       `game.ts`, y en `ONLINE.md` la sección «Suavizado online»;
     - el espejo de la zona muerta;
     - el factor de los bots lo aplicó PERSONAJES en `computeBotInput`.
-11. **Los 11 cambios de `BrawlRoom.ts` del repaso de habilidades**
-    (PERSONAJES, `docs/REPASO_HABILIDADES.md` §«Pendiente para
-    DISTRIBUCIÓN», con el código exacto de cada uno). No bloquean: si
-    llegan después, online queda como hoy.
-    - Son: reaparición limpia, caída de la víctima del All-in, barrido y
-      fallo del All-in, pasadas de contacto de la L, Cone Pulse,
-      aterrizajes seguros, Sinkhole (necesita un getter de ARENA), hielo
-      desde la zona y golpe de las J online.
-    - El punto 1 (Copycat por jugador) **sí** bloqueaba y ya está hecho:
-      getLDef en 2.e, 2.g y el hold-to-fire. Es la única vía de lectura de
-      la L; Copycat no copia allIn* ni holdToFireL (COPYCAT_KEYS).
-    - Llegarán más con las decisiones de diseño de Rafa (PERSONAJES,
-      2026-09-24):
-      - el All-in con una carga mínima de 0,35 s y apuntando mientras
-        carga, que toca la máquina del hold-to-fire;
-      - el aturdido sin poder cabecear, cuyo arranque online está en
-        BrawlRoom.
-
-      Van al mismo slice.
-    - Es física de habilidades online (hard-stop): slice propio **después
-      de v1.8**, con plan y verificación online (partidas de 2 clientes
-      por habilidad).
-    - **Paso fijo en el servidor** (aprobado por Rafa, aviso de
-      PERSONAJES del 2026-09-25). A 30 Hz, online se empuja más que
-      offline: la K un 29 % más, y Cone Pulse 10,8 u frente a 5,8.
-      - El arreglo: 2 sub-pasos de integración en `simulatePlaying`,
-        bloque 3 (h = dt/2), con su test. No cambia el protocolo ni obliga
-        a desplegar a la vez que el cliente, pero mueve el balance online
-        hacia el offline.
-      - **Me afecta además en el suavizado.** `NetSmoother.predict` y
-        `estimateDrive` repiten el paso del servidor con UNA integración
-        por tick (fricción f por tick). Con sub-pasos hay que cambiarlos
-        en el mismo commit que `BrawlRoom`.
-      - El número de sub-pasos tiene que salir de config (`SIM`, y
-        `FEEL` inyectado al suavizado), no de un literal en cada lado.
-      - Después, re-simular las grabaciones con el banco y ver que la
-        réplica y los umbrales siguen dentro.
-    - **Ojo, el hielo:** cambia la fórmula del paso de integración sobre
-      una zona resbaladiza (aceleración ×0,35 y fricción ×5 desde la
-      zona). El suavizado no modela el hielo (2-3 px de diente de sierra
-      medidos). Si se modela, `NetSmoother.predict` necesita esos factores.
+11. ~~**Los 11 cambios de `BrawlRoom.ts` del repaso de habilidades**~~ —
+    hechos en v1.9 (ver el punto 0 y BUILD_LOG del 2026-09-25), con la
+    segunda tanda (S2-1..S2-5), la L de los bots online y el paso fijo
+    (2 sub-pasos, repetidos en el suavizado). Quedan dos cosas:
+    - **Sinkhole (punto 9)**: espera a que ARENA exponga el layout en
+      `ArenaSim` (nota en su buzón).
+    - **El hielo en el suavizado**: la sala aplica ya los factores de la
+      zona (aceleración ×0,35, fricción ×5) y el Ice Slide (fricción ×3),
+      pero `NetSmoother.predict` usa la fricción base: 2-3 px de diente de
+      sierra medidos sobre hielo. No bloquea; si se modela, `predict`
+      necesita esos factores por bicho.
+    - Hueco de pruebas: `BrawlRoom` no tiene tests propios. Los decoradores
+      de Colyseus y el sqlite que abre al importarse lo complican en
+      vitest. Los casos de la carga del All-in se comprobaron con un script
+      sin clientes (`.tmp/allin-check.mts` del worktree). Montarlo es del
+      punto 8.
 
 ## Verificación previa de H4.5 (2026-09-21)
 
