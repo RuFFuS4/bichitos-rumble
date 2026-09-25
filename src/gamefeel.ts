@@ -221,6 +221,12 @@ export const FEEL = {
     landingProbeStep: 0.5,    // a target off live floor steps back toward the origin in these steps; none on floor = stay put
   },
 
+  // --- Snowball (Kowalski K) look — presentation only, no SIM mirror ---
+  snowball: {
+    tumbleX: 8,               // rad per second of flight, so it reads as a thrown snowball
+    tumbleZ: 6,
+  },
+
   // --- Cone Pulse (Cheeto L) waves. Mirror: SIM.conePulse, read by
   // BrawlRoom's Cone Pulse pass ---
   // Pulse N is a band waveThickness wide centred N × waveStep ahead, so the

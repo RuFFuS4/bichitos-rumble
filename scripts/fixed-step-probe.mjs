@@ -35,6 +35,9 @@
 // (the victim's squash and flash, the attacker's scale and glow). It has to
 // be the same picture at every rate, and hold still.
 //
+// --snowball adds a third: Kowalski throws his K and the ball's DRAWN
+// position is read every frame (CV of its per-frame move: ~0 is smooth).
+//
 // --jitter=MS adds ± MS of noise to every frame timestamp and rounds it to
 // 0.1 ms, like a real browser; without it the clock is exact.
 //
@@ -55,6 +58,7 @@ const { values: opt } = parseArgs({
     jitter: { type: 'string', default: '0' },
     json: { type: 'boolean', default: false },
     hitstop: { type: 'boolean', default: false },
+    snowball: { type: 'boolean', default: false },
   },
 });
 const RATES = opt.hz.split(',').map(Number);
@@ -256,12 +260,68 @@ async function measureHitstop(hz) {
   };
 }
 
+/**
+ * Kowalski throws his snowball (K); per frame, where the ball is DRAWN
+ * (its mesh). A ball drawn at its sim positions moves 0 or 1 steps' worth
+ * per frame at 144 Hz; drawn between them it moves evenly.
+ */
+async function measureSnowball(hz) {
+  const page = await openGame();
+  await frames(page, 60, 30);
+  await page.evaluate(() => window.__game.debugStartOfflineMatch('Kowalski', ['Trunk', 'Kurama', 'Shelly'], { seed: 7, packId: 'kitsune_shrine' }));
+  for (let i = 0; i < 600; i++) {
+    await frames(page, hz, 10);
+    if (await page.evaluate(() => window.__game.phase === 'playing' && window.__game.critters.every((c) => c.glbMesh))) break;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  await page.evaluate(() => {
+    const g = window.__game;
+    const [p, a, b, c] = g.critters;
+    for (const o of [a, b, c]) { o.stunTimer = 1e9; o.vx = 0; o.vz = 0; }
+    a.x = 0; a.z = 8; b.x = -8; b.z = -8; c.x = 8; c.z = -8;
+    p.x = -8; p.z = 0; p.vx = 0; p.vz = 0; p.mesh.rotation.y = Math.PI / 2; // throws along +x
+    for (const s of p.abilityStates) s.cooldownLeft = 0;
+  });
+  await frames(page, hz, Math.max(2, Math.round(hz * 0.2)));
+  // A 50 ms tap, like a person's: the sim reads held keys once per step,
+  // so a press shorter than a step (16.7 ms) can fall between two.
+  await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyK' })));
+  await frames(page, hz, Math.max(2, Math.round(hz * 0.05)));
+  await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyK' })));
+  const xs = [];
+  for (let f = 0; f < Math.round(hz * 2.5); f++) {
+    const x = await page.evaluate(({ ms }) => {
+      window.__vclock.tick(ms);
+      let ball = null;
+      window.__game.scene.traverse((o) => {
+        if (o.isMesh && o.geometry?.type === 'SphereGeometry' && o.geometry.parameters?.widthSegments === 12
+          && o.geometry.parameters?.heightSegments === 8 && o.material?.color?.getHex() === 0xeaf6ff) ball = o;
+      });
+      return ball ? ball.position.x : null;
+    }, { ms: 1000 / hz });
+    if (x !== null) xs.push(x);
+    else if (xs.length) break;
+  }
+  await page.close();
+  const d = xs.slice(2, -1).map((x, i) => xs[i + 3] - x).filter((v) => Number.isFinite(v));
+  if (d.length < 5) return { hz, error: `bola vista en ${xs.length} fotogramas` };
+  const mean = d.reduce((s, v) => s + v, 0) / d.length;
+  const sd = Math.sqrt(d.reduce((s, v) => s + (v - mean) ** 2, 0) / d.length);
+  return { hz, frames: xs.length, ballSpeed: +(mean * hz).toFixed(2), ballCV: +(sd / mean).toFixed(4) };
+}
+
 const rows = [];
 for (const hz of RATES) rows.push(await measure(hz));
 const ref = rows.find((r) => r.hz === 60)?.carry;
 for (const r of rows) r.carryVs60 = ref && r.carry !== null ? `${(100 * (r.carry / ref - 1)).toFixed(1)} %` : '—';
 const hitstop = [];
 if (opt.hitstop) for (const hz of RATES) hitstop.push(await measureHitstop(hz));
+const snowball = [];
+if (opt.snowball) for (const hz of RATES) snowball.push(await measureSnowball(hz));
 await browser.close();
-if (opt.json) console.log(JSON.stringify({ rows, hitstop }, null, 2));
-else { console.table(rows); if (hitstop.length) console.table(hitstop); }
+if (opt.json) console.log(JSON.stringify({ rows, hitstop, snowball }, null, 2));
+else {
+  console.table(rows);
+  if (hitstop.length) console.table(hitstop);
+  if (snowball.length) console.table(snowball);
+}

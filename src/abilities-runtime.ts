@@ -549,18 +549,41 @@ interface ActiveZone {
    *  toward the centre is applied in `tickAbilityZones`. */
   sinkhole?: boolean;
   pullForce?: number;
+  /** ttl before the newest sim step (snapshotZoneClocks): the ring's
+   *  clock is drawn between the two (setZoneDrawAlpha). Offline only. */
+  prevTtl?: number;
 }
 
 const activeZones: ActiveZone[] = [];
+/** Where the drawn instant falls inside the newest sim step (the pose's
+ *  alpha), for the rings' clocks. 1 online and in the lab. */
+let zoneDrawAlpha = 1;
+
+/** Before every sim step (paused and frozen ones too): each zone's clock
+ *  as it stands. */
+export function snapshotZoneClocks(): void {
+  for (const zone of activeZones) zone.prevTtl = zone.ttl;
+}
+
+/** Once per rendered frame: the alpha the zone rings draw their clock at. */
+export function setZoneDrawAlpha(alpha: number): void {
+  zoneDrawAlpha = alpha;
+}
 
 /** Push an offline zone and return the clock its ring runs on
- *  (spawnZoneRing `age`): seconds of game time since it spawned, which
- *  stop with the zone on hit stop and pause, and read as its whole
- *  lifetime once it has left the list (expired or cleared). */
+ *  (spawnZoneRing `age`): seconds of game time since it spawned, drawn
+ *  between the last two sim steps like the critters, which stop with the
+ *  zone on hit stop and pause, and read as its whole lifetime once it has
+ *  left the list (expired or cleared). */
 function pushOfflineZone(zone: ActiveZone): () => number {
+  zone.prevTtl = zone.ttl;
   activeZones.push(zone);
   const lifetime = zone.ttl;
-  return () => (activeZones.includes(zone) ? lifetime - zone.ttl : lifetime);
+  return () => {
+    if (!activeZones.includes(zone)) return lifetime;
+    const prev = zone.prevTtl ?? zone.ttl;
+    return lifetime - (prev + (zone.ttl - prev) * zoneDrawAlpha);
+  };
 }
 
 /** Map a critter name to the zone visual kind they spawn. Centralised

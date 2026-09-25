@@ -497,7 +497,7 @@ function loop(now: number) {
       updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
     }
     // Dust and status icons, placed with this frame's camera.
-    if (alpha >= 0) tickSharedPresentation(dt, game, camera, viewport);
+    if (alpha >= 0) tickSharedPresentation(dt, alpha, game, camera, viewport);
     renderer.render(scene, camera);
   } finally {
     pose.restore();

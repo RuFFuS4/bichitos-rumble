@@ -21,8 +21,8 @@ import type * as THREE from 'three';
 import type { Game } from './game';
 import type { Critter } from './critter';
 import { updateDustPuffs } from './dust-puff';
-import { tickAbilityZones, isInsideZoneOfKind, tickLOffline } from './abilities-runtime';
-import { tickProjectiles } from './projectiles';
+import { tickAbilityZones, isInsideZoneOfKind, tickLOffline, snapshotZoneClocks, setZoneDrawAlpha } from './abilities-runtime';
+import { tickProjectiles, snapshotProjectiles, presentProjectiles } from './projectiles';
 import {
   setCritterStatus,
   updateAllStatusPositions,
@@ -72,6 +72,11 @@ export function computeCritterStatuses(c: Critter, isLocal: boolean): Set<Critte
  * freeze once per step (createFrozenFrameGate): never call them per frame.
  */
 export function tickSharedSimulation(dt: number, game: Game, scene: THREE.Scene): void {
+  // Before the pause and frozen gates: a paused or frozen step leaves the
+  // previous state equal to the current one, so balls and rings stand
+  // still whatever the draw alpha.
+  snapshotProjectiles();
+  snapshotZoneClocks();
   if (game.isPaused()) return;
   // Ability zones (Kermit Poison Cloud, Sihans Quicksand, Kowalski
   // legacy Arctic Burst).
@@ -86,12 +91,15 @@ export function tickSharedSimulation(dt: number, game: Game, scene: THREE.Scene)
 
 /**
  * Once per rendered frame, after the camera and inside the pose window
- * (src/main.ts): dust puffs and status icons, which follow the drawn pose.
- * `dt`: real frame time for the dust (it keeps going through a hit stop,
- * as it always has; frozen behind the pause menu).
+ * (src/main.ts): dust puffs, snowballs and zone rings drawn between their
+ * last two sim steps (`alpha`, the pose's), and status icons, which
+ * follow the drawn pose. `dt`: real frame time for the dust (it keeps
+ * going through a hit stop, as it always has; frozen behind the pause
+ * menu).
  */
 export function tickSharedPresentation(
   dt: number,
+  alpha: number,
   game: Game,
   camera: THREE.PerspectiveCamera,
   viewport: { width: number; height: number },
@@ -99,6 +107,8 @@ export function tickSharedPresentation(
   if (game.isPaused()) return;
   // Dust puff pool tick — no-op when empty.
   updateDustPuffs(dt);
+  presentProjectiles(alpha);
+  setZoneDrawAlpha(alpha);
   presentStatusIcons(game, camera, viewport);
 }
 
@@ -117,6 +127,8 @@ export function tickSharedGameplay(
   if (game.isPaused()) return;
   updateDustPuffs(dt);
   tickSharedSimulation(dt, game, scene);
+  presentProjectiles(1);
+  setZoneDrawAlpha(1);
   presentStatusIcons(game, camera, viewport);
 }
 
