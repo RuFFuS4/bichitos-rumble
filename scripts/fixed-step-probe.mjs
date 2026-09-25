@@ -18,16 +18,29 @@
 //           actually DRAWN each frame (mesh.matrixWorld, written by the
 //           render), and the CV of its per-frame moves. ~0 is smooth; fixed
 //           steps drawn raw at 144 Hz give ~1.2.
-//   steps   how many sim steps (game.update calls) each of those frames
+//   steps   how many sim steps (game.simulate calls) each of those frames
 //           ran. At 60 Hz it must be 1 every frame: a mix of 0 and 2 means
-//           animations and everything not interpolated stutter.
+//           the sim jitters against the display.
+//   presents / animCV / animRate  how many times the player's presentation
+//           ran each frame (1 since the second cut; before, once per step:
+//           0 or 1 at 144 Hz), and the per-frame advance of its animation
+//           mixer: CV ~0 is smooth, and rate ~1 is real time.
+//   leaks   frames where anything the sim owns (positions, velocities,
+//           facing, timers, flags, abilities, match timer, phase) changed
+//           after the frame's last sim step: presentation writing sim state.
+//           Must be 0.
+//
+// --hitstop adds a second table: the player headbutts a stunned dummy, and
+// per rate it measures the freeze (frames, ms) and the picture it holds
+// (the victim's squash and flash, the attacker's scale and glow). It has to
+// be the same picture at every rate, and hold still.
 //
 // --jitter=MS adds ± MS of noise to every frame timestamp and rounds it to
 // 0.1 ms, like a real browser; without it the clock is exact.
 //
 // Usage (dev server running; muted browser like every test instance):
 //   node scripts/fixed-step-probe.mjs --url=http://localhost:5181
-//   node scripts/fixed-step-probe.mjs --hz=30,60,144,240 --push=25 --json
+//   node scripts/fixed-step-probe.mjs --hz=30,60,144,240 --push=25 --hitstop --json
 //   node scripts/fixed-step-probe.mjs --hz=60 --jitter=0.2
 // ---------------------------------------------------------------------------
 
@@ -41,6 +54,7 @@ const { values: opt } = parseArgs({
     push: { type: 'string', default: '25' },
     jitter: { type: 'string', default: '0' },
     json: { type: 'boolean', default: false },
+    hitstop: { type: 'boolean', default: false },
   },
 });
 const RATES = opt.hz.split(',').map(Number);
@@ -124,35 +138,130 @@ async function measure(hz) {
     if (Math.hypot(q[0] - rest[0], q[1] - rest[1]) > 1e-6) { lagFrames = f; break; }
   }
   // Smoothness: keep D held, let the player reach its steady speed, then
-  // read the drawn position and the sim steps of every frame for a second.
+  // for a second read, every frame: the drawn position, the sim steps, how
+  // many times the player's presentation ran, how far its animation
+  // advanced, and whether anything the sim owns changed after the sim
+  // (the fingerprint: presentation must never write sim state). Hooks the
+  // split names (simulate/present) and falls back to update() on a build
+  // from before the fixed step's second cut.
   await frames(page, hz, hz);
   await page.evaluate(() => {
     const g = window.__game;
-    const update = g.update;
+    const p = g.critters[0];
+    window.__fp = () => JSON.stringify([g.phase, g.matchTimer, ...g.critters.map((c) => [
+      c.x, c.z, c.vx, c.vz, c.mesh.rotation.y, c.immunityTimer, c.stunTimer, c.slowTimer, c.confusedTimer,
+      c.invisibilityTimer, c.selfTintTimer, c.headbuttCooldown, c.isHeadbutting, c.headbuttAnticipating,
+      c.falling, c.alive, c.lives, c.abilityStates.map((s) => [s.active, s.windUpLeft, s.durationLeft, s.cooldownLeft]),
+    ])]);
+    const stepKey = typeof g.simulate === 'function' ? 'simulate' : 'update';
+    const step = g[stepKey];
     window.__steps = 0;
-    g.update = function (dt) { window.__steps++; return update.call(g, dt); };
+    g[stepKey] = function (dt) { window.__steps++; const r = step.call(g, dt); window.__afterSim = window.__fp(); return r; };
+    const presentKey = typeof p.present === 'function' ? 'present' : 'update';
+    const present = p[presentKey];
+    window.__presents = 0;
+    p[presentKey] = function (dt) { window.__presents++; return present.call(p, dt); };
   });
   const drawn = [];
   const stepHist = {};
+  const presentHist = {};
+  const anim = [];
+  let leaks = 0;
   for (let f = 0; f < hz; f++) {
-    await frames(page, hz, 1);
-    drawn.push(await drawnAt());
-    const n = await page.evaluate(() => { const n = window.__steps; window.__steps = 0; return n; });
-    stepHist[n] = (stepHist[n] ?? 0) + 1;
+    const s = await page.evaluate(({ ms }) => {
+      window.__afterSim = window.__fp();
+      const t0 = window.__game.critters[0].skeletal?.mixer?.time ?? 0;
+      window.__vclock.tick(ms);
+      const p = window.__game.critters[0];
+      const e = p.mesh.matrixWorld.elements;
+      const out = {
+        drawn: [e[12], e[14]], steps: window.__steps, presents: window.__presents,
+        anim: (p.skeletal?.mixer?.time ?? 0) - t0, leak: window.__afterSim !== window.__fp(),
+      };
+      window.__steps = 0; window.__presents = 0;
+      return out;
+    }, { ms: 1000 / hz });
+    drawn.push(s.drawn);
+    stepHist[s.steps] = (stepHist[s.steps] ?? 0) + 1;
+    presentHist[s.presents] = (presentHist[s.presents] ?? 0) + 1;
+    anim.push(s.anim);
+    if (s.leak) leaks++;
   }
   await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyD' })));
   await page.close();
   const d = drawn.slice(1).map((q, i) => Math.hypot(q[0] - drawn[i][0], q[1] - drawn[i][1]));
-  const mean = d.reduce((s, v) => s + v, 0) / d.length;
-  const sd = Math.sqrt(d.reduce((s, v) => s + (v - mean) ** 2, 0) / d.length);
-  const steps = Object.entries(stepHist).map(([n, c]) => `${n}×${c}`).join(' ');
-  return { hz, carry: carry === null ? null : +carry.toFixed(3), walkSpeed: +(mean * hz).toFixed(2), smoothCV: +(sd / mean).toFixed(4), lagFrames, steps };
+  const cv = (xs) => {
+    const mean = xs.reduce((s, v) => s + v, 0) / xs.length;
+    const sd = Math.sqrt(xs.reduce((s, v) => s + (v - mean) ** 2, 0) / xs.length);
+    return { mean, cv: mean > 0 ? sd / mean : NaN };
+  };
+  const hist = (h) => Object.entries(h).map(([n, c]) => `${n}×${c}`).join(' ');
+  const move = cv(d);
+  const a = cv(anim);
+  return {
+    hz, carry: carry === null ? null : +carry.toFixed(3), walkSpeed: +(move.mean * hz).toFixed(2),
+    smoothCV: +move.cv.toFixed(4), lagFrames, steps: hist(stepHist), presents: hist(presentHist),
+    animCV: +a.cv.toFixed(4), animRate: +(a.mean * hz).toFixed(3), leaks,
+  };
+}
+
+/**
+ * The hit stop: the player headbutts a stunned dummy standing 1.3 u ahead.
+ * Per frame, the attacker's animation time, scale and glow and the
+ * victim's squash and flash. The freeze starts on the frame the blow lands
+ * and holds everything still; it has to show the same picture, for about
+ * the same time, at every refresh rate.
+ */
+async function measureHitstop(hz) {
+  const page = await openGame();
+  await startMatch(page, hz);
+  await page.evaluate(() => {
+    const g = window.__game;
+    const [p, v, a, b] = g.critters;
+    for (const c of [v, a, b]) { c.stunTimer = 1e9; c.vx = 0; c.vz = 0; c.immunityTimer = 0; }
+    p.immunityTimer = 0; p.vx = 0; p.vz = 0; p.headbuttCooldown = 0;
+    p.x = -4; p.z = 0; p.mesh.rotation.y = Math.PI / 2; // facing +x
+    v.x = -2.7; v.z = 0;
+    a.x = 0; a.z = 7; b.x = 0; b.z = -7;
+  });
+  await frames(page, hz, Math.max(2, Math.round(hz * 0.3)));
+  await page.evaluate(() => window.__game.critters[0].startHeadbutt());
+  const rows = [];
+  for (let f = 0; f < Math.round(hz * 0.6); f++) {
+    rows.push(await page.evaluate(({ ms }) => {
+      window.__vclock.tick(ms);
+      const g = window.__game;
+      const [p, v] = g.critters;
+      const mat = (c) => c.getActiveMaterials()[0];
+      return {
+        frozen: g.lastStepFrozen === true, hit: v.vx !== 0 || v.vz !== 0,
+        pMix: p.skeletal?.mixer?.time ?? 0, pSy: p.glbMesh?.scale.y ?? 0, pEm: mat(p)?.emissiveIntensity ?? 0,
+        vSy: v.mesh.scale.y, vEm: mat(v)?.emissiveIntensity ?? 0,
+      };
+    }, { ms: 1000 / hz }));
+  }
+  await page.close();
+  const hitAt = rows.findIndex((r) => r.hit);
+  if (hitAt < 0) return { hz, error: 'no hit' };
+  // The freeze: from the hit frame, the frames whose attacker animation
+  // doesn't move.
+  let n = 1;
+  while (hitAt + n < rows.length && rows[hitAt + n].pMix === rows[hitAt].pMix) n++;
+  const h = rows[hitAt];
+  const still = rows.slice(hitAt, hitAt + n).every((r) => r.pSy === h.pSy && r.vSy === h.vSy && r.vEm === h.vEm && r.pEm === h.pEm);
+  return {
+    hz, freezeFrames: n, freezeMs: +(n * 1000 / hz).toFixed(1), stillDuringFreeze: still,
+    victimScaleY: +h.vSy.toFixed(4), victimFlash: +h.vEm.toFixed(4),
+    attackerScaleY: +h.pSy.toFixed(4), attackerGlow: +h.pEm.toFixed(4),
+  };
 }
 
 const rows = [];
 for (const hz of RATES) rows.push(await measure(hz));
-await browser.close();
 const ref = rows.find((r) => r.hz === 60)?.carry;
 for (const r of rows) r.carryVs60 = ref && r.carry !== null ? `${(100 * (r.carry / ref - 1)).toFixed(1)} %` : '—';
-if (opt.json) console.log(JSON.stringify(rows, null, 2));
-else console.table(rows);
+const hitstop = [];
+if (opt.hitstop) for (const hz of RATES) hitstop.push(await measureHitstop(hz));
+await browser.close();
+if (opt.json) console.log(JSON.stringify({ rows, hitstop }, null, 2));
+else { console.table(rows); if (hitstop.length) console.table(hitstop); }

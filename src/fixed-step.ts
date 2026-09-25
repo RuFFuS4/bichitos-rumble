@@ -108,6 +108,39 @@ export class FixedStepClock {
   }
 }
 
+/**
+ * Game time as presentation shows it. The sim reports the game time each
+ * step covered (0 while the match is paused or a hit stop freezes it);
+ * each frame asks how far the picture moves on: the game time at the drawn
+ * instant (alpha inside the newest step) minus the last one shown. A
+ * 0-step frame at 144 Hz moves it by its share of a step, a 4-step frame
+ * (slow motion, the lab's fixed mode) by four steps, a freeze by nothing.
+ * Never negative. Not the frame's real dt: presentation (clips tuned to
+ * ability windows, the decoy's life) runs on game time.
+ */
+export class PresentClock {
+  private stepStart = 0; // game time when the newest step began
+  private stepEnd = 0;   // … and when it ended
+  private shown = 0;     // game time of the last frame asked for
+
+  /** Once per sim step (or per update online): the game time it covered. */
+  onStep(gameDt: number): void {
+    this.stepStart = this.stepEnd;
+    this.stepEnd += gameDt;
+  }
+
+  /** Once per frame, with FixedStepClock's alpha (1 when not
+   *  interpolating). Returns the game time to present. Consumed even if
+   *  the caller then presents less (a freeze drops ≤ 1 step of animation,
+   *  never adds). */
+  onFrame(alpha: number): number {
+    const t = this.stepStart + (this.stepEnd - this.stepStart) * alpha;
+    const dt = Math.max(0, t - this.shown);
+    this.shown += dt;
+    return dt;
+  }
+}
+
 /** Anything drawn at mesh.position whose sim pose lives there too. */
 export interface PoseTarget {
   readonly mesh: { readonly position: { x: number; y: number; z: number } };

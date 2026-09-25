@@ -6,9 +6,11 @@
 // running a DIVERGED copy: the lab's old loop never ticked dust puffs,
 // ability zones, offline-L mechanics, projectiles or status icons —
 // abilities with zones/projectiles literally froze in the lab while
-// working in production. There is exactly ONE list of per-frame
-// gameplay ticks now; if a new subsystem gets a tick, add it here and
-// both the game and the lab pick it up.
+// working in production. There is exactly ONE list of these ticks now;
+// if a new subsystem gets a tick, add it here and both the game and the
+// lab pick it up. Since the fixed step's second cut (2026-09-25) it comes
+// in two halves: tickSharedSimulation per sim step, tickSharedPresentation
+// per rendered frame; tickSharedGameplay runs both for the per-frame paths.
 //
 // The poison-cloud screen overlay + critter fade logic stays in
 // src/main.ts: it drives index.html-specific DOM vignette layers and
@@ -63,23 +65,14 @@ export function computeCritterStatuses(c: Critter, isLocal: boolean): Set<Critte
 }
 
 /**
- * The per-frame gameplay ticks that live OUTSIDE game.update but must
- * run every frame a match is on screen. Pause gating matches the
- * original loop exactly: a paused offline match freezes puffs, zones,
- * L-mechanics and projectiles so nothing keeps animating behind the
- * pause menu.
+ * The gameplay ticks that live OUTSIDE game.simulate, once per sim step
+ * (the offline fixed step, the lab's fixed mode), in today's order. Pause
+ * gating matches the original loop exactly: a paused offline match freezes
+ * zones, L-mechanics and projectiles. Each of them reads the hit-stop
+ * freeze once per step (createFrozenFrameGate): never call them per frame.
  */
-export function tickSharedGameplay(
-  dt: number,
-  game: Game,
-  scene: THREE.Scene,
-  camera: THREE.PerspectiveCamera,
-  viewport: { width: number; height: number },
-): void {
+export function tickSharedSimulation(dt: number, game: Game, scene: THREE.Scene): void {
   if (game.isPaused()) return;
-
-  // Dust puff pool tick — no-op when empty.
-  updateDustPuffs(dt);
   // Ability zones (Kermit Poison Cloud, Sihans Quicksand, Kowalski
   // legacy Arctic Burst).
   tickAbilityZones(dt);
@@ -89,10 +82,52 @@ export function tickSharedGameplay(
   tickLOffline(dt, game.getActiveCritters(), scene);
   // Kowalski Snowball projectile tick.
   tickProjectiles(dt, game.getActiveCritters());
+}
 
-  // Status icons — only while a match is actually in play (title /
-  // select / countdown / ended phases must not re-add icons; the
-  // phase-transition clearAllCritterStatus() calls keep the DOM clean).
+/**
+ * Once per rendered frame, after the camera and inside the pose window
+ * (src/main.ts): dust puffs and status icons, which follow the drawn pose.
+ * `dt`: real frame time for the dust (it keeps going through a hit stop,
+ * as it always has; frozen behind the pause menu).
+ */
+export function tickSharedPresentation(
+  dt: number,
+  game: Game,
+  camera: THREE.PerspectiveCamera,
+  viewport: { width: number; height: number },
+): void {
+  if (game.isPaused()) return;
+  // Dust puff pool tick — no-op when empty.
+  updateDustPuffs(dt);
+  presentStatusIcons(game, camera, viewport);
+}
+
+/**
+ * The per-frame paths (online, the lab's clock mode): both halves at once,
+ * in the order they always ran — a puff spawned by this tick starts at
+ * age 0.
+ */
+export function tickSharedGameplay(
+  dt: number,
+  game: Game,
+  scene: THREE.Scene,
+  camera: THREE.PerspectiveCamera,
+  viewport: { width: number; height: number },
+): void {
+  if (game.isPaused()) return;
+  updateDustPuffs(dt);
+  tickSharedSimulation(dt, game, scene);
+  presentStatusIcons(game, camera, viewport);
+}
+
+/** Status icons — only while a match is actually in play (title / select /
+ *  countdown / ended phases must not re-add icons; the phase-transition
+ *  clearAllCritterStatus() calls keep the DOM clean). */
+function presentStatusIcons(
+  game: Game,
+  camera: THREE.PerspectiveCamera,
+  viewport: { width: number; height: number },
+): void {
   if (game.isMatchPlaying()) {
     const critters = game.getActiveCritters();
     for (const c of critters) {

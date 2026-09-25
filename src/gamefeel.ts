@@ -416,6 +416,21 @@ export function applyHitStop(dt: number): number {
   return dt;
 }
 
+/** A hit stop is pending or running. Presentation gate only (offline
+ *  'playing'; online nothing drains the timer): the step that lands the
+ *  blow isn't frozen yet, and the last frozen step already leaves the
+ *  timer ≤ 0 — Game pairs it with "the newest step froze". */
+export function isHitStopActive(): boolean {
+  return hitStopTimer > 0;
+}
+
+/** A new match starts unfrozen: a hit that landed as the previous one
+ *  ended, or an online hit stop (never drained), used to freeze its first
+ *  steps. */
+export function resetHitStop(): void {
+  hitStopTimer = 0;
+}
+
 /**
  * A reader of the hit-stop freeze for one of those ticks: call the
  * returned function once at the top of the tick and skip the tick when it
