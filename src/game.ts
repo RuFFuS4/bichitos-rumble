@@ -1398,7 +1398,10 @@ export class Game {
       if (wasAlive && !c.alive) {
         c.playSkeletal('defeat', { fallback: 'defeat' });
       }
+      // Same for the fall and the respawn: the fall clip on the way down.
+      const wasFalling = c.falling;
       c.falling = p.falling ?? false;
+      if (c.alive && c.falling !== wasFalling) c.presentFallEdge(c.falling);
       c.mesh.position.y = pos.y;
       c.mesh.visible = c.alive;
       c.immunityTimer = p.immunityTimer ?? 0;

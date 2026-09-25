@@ -1334,10 +1334,26 @@ export class Critter {
     this.respawnTimer = FEEL.lives.respawnDelay;
     this.cancelActiveAbilities();
     playSound('fall');
-    // Skeletal fall clip — kept until respawn (one-shot with defeat
-    // fallback so if there's no fall clip but there is defeat, it still
-    // reads as "going down" instead of idle during the drop).
-    this.playSkeletal('fall', { fallback: 'defeat' });
+    this.presentFallEdge(true);
+  }
+
+  /**
+   * The look of a fall's two edges: the fall clip when it starts, and at
+   * the respawn a clean slate (resetVisualMotion) and the respawn clip with
+   * no crossfade — a teleport, so the fall pose doesn't linger at the spawn
+   * point. Offline startFalling and respawnAt raise it; online, where the
+   * server owns the fall, Game.updateOnline does on the synced flag.
+   */
+  presentFallEdge(falling: boolean): void {
+    if (falling) {
+      // Kept until the respawn (with the defeat clip as fallback, so a rig
+      // with no fall clip still reads as "going down").
+      this.playSkeletal('fall', { fallback: 'defeat' });
+    } else {
+      this.resetVisualMotion();
+      // A respawn clip if present; falls back to idle.
+      this.playSkeletal('respawn', { fallback: 'idle', crossfade: 0 });
+    }
   }
 
   /**
@@ -1390,7 +1406,6 @@ export class Critter {
     // critter never looks toward the void.
     this.mesh.rotation.y = Math.atan2(-x, -z);
     this.mesh.position.y = 0;
-    this.resetVisualMotion();
     this.immunityTimer = FEEL.lives.immunityDuration;
     // Control statuses die with the life they were put on: no stun,
     // confusion or snowball slow carries over to the respawn (they were
@@ -1408,10 +1423,7 @@ export class Critter {
     this.mesh.visible = true;
     this.mesh.scale.set(1, 1, 1);
     this.body.scale.y = 1.0;
-    // Play a respawn clip if present; falls back to idle automatically.
-    // No crossfade: a teleport, so the fall pose doesn't linger at the
-    // spawn point.
-    this.playSkeletal('respawn', { fallback: 'idle', crossfade: 0 });
+    this.presentFallEdge(false);
     this.matchStats.respawns++;
   }
 
