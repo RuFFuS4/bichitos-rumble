@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  FixedStepClock, PoseInterpolator, SIM_STEP, MAX_STEPS_PER_FRAME, SNAP_DISTANCE, lerpFactor,
+  FixedStepClock, PoseInterpolator, PresentClock, SIM_STEP, MAX_STEPS_PER_FRAME, SNAP_DISTANCE, lerpFactor,
   type PoseTarget,
 } from '../../src/fixed-step';
 
@@ -197,5 +197,65 @@ describe('lerpFactor (presentation smoothing per frame, tuned per 1/60 step)', (
   it('a rate that closes the gap in one step closes it at any dt > 0', () => {
     expect(lerpFactor(60, SIM_STEP / 3)).toBe(1);
     expect(lerpFactor(120, 0.001)).toBe(1);
+  });
+});
+
+describe('PresentClock (game time shown per frame)', () => {
+  it.each([30, 60, 75, 120, 144, 165, 240])('%i Hz with jitter: never negative, and it adds up to the sim time', (hz) => {
+    const clock = new FixedStepClock();
+    const shown = new PresentClock();
+    const rnd = mulberry32(hz + 7);
+    let sim = 0;
+    let total = 0;
+    for (let f = 0; f < hz * 10; f++) {
+      const tick = clock.advance((1 / hz) * (0.9 + 0.2 * rnd()));
+      for (let i = 0; i < tick.steps; i++) { shown.onStep(SIM_STEP); sim += SIM_STEP; }
+      const dt = shown.onFrame(tick.alpha);
+      expect(dt).toBeGreaterThanOrEqual(0);
+      total += dt;
+    }
+    expect(Math.abs(total - sim)).toBeLessThanOrEqual(SIM_STEP + 1e-9);
+  });
+
+  it('at a steady 60 Hz every frame shows one step; at 30 Hz, two', () => {
+    for (const [hz, perFrame] of [[60, 1], [30, 2]]) {
+      const clock = new FixedStepClock();
+      const shown = new PresentClock();
+      const dts: number[] = [];
+      for (let f = 0; f < 120; f++) {
+        const tick = clock.advance(1 / hz);
+        for (let i = 0; i < tick.steps; i++) shown.onStep(SIM_STEP);
+        dts.push(shown.onFrame(tick.alpha));
+      }
+      for (const dt of dts.slice(10)) expect(dt).toBeCloseTo(perFrame * SIM_STEP, 9);
+    }
+  });
+
+  it('a freeze shows nothing new; the resume moves by alpha of a step', () => {
+    const shown = new PresentClock();
+    shown.onStep(SIM_STEP);
+    shown.onFrame(1);
+    for (let i = 0; i < 5; i++) { shown.onStep(0); expect(shown.onFrame(1)).toBe(0); }
+    shown.onStep(SIM_STEP);
+    expect(shown.onFrame(0.25)).toBeCloseTo(0.25 * SIM_STEP, 12);
+  });
+
+  it('slow motion: 0.1 s frames show the 4 steps they ran', () => {
+    const clock = new FixedStepClock();
+    const shown = new PresentClock();
+    for (let f = 0; f < 10; f++) {
+      const tick = clock.advance(0.1);
+      for (let i = 0; i < tick.steps; i++) shown.onStep(SIM_STEP);
+      const dt = shown.onFrame(tick.alpha);
+      if (f > 0) expect(dt).toBeCloseTo(4 * SIM_STEP, 9);
+    }
+  });
+
+  it('the one-step-one-frame path (Game.update) shows exactly its dt', () => {
+    const shown = new PresentClock();
+    for (const dt of [0.016, 0.02, 0.05, 0.001]) {
+      shown.onStep(dt);
+      expect(shown.onFrame(1)).toBeCloseTo(dt, 12);
+    }
   });
 });
