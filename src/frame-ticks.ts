@@ -52,8 +52,8 @@ export function computeCritterStatuses(c: Critter, isLocal: boolean): Set<Critte
   if (frenzy?.active && frenzy.windUpLeft <= 0) out.add('frenzy');
   // Zones — only someone else's: the owner is skipped by name, which is the
   // zones' ownerKey (so offline a Kurama who copied Frozen Floor isn't
-  // frozen by her own ice, and Kowalski is by hers; online a copied zone
-  // arrives as 'generic' and shows nothing — game.ts onZoneSpawned).
+  // frozen by her own ice, and Kowalski is by hers; online too, since
+  // game.ts onZoneSpawned takes the kind from the zone's L flags).
   const owner = c.config.name;
   if (isInsideZoneOfKind(c.x, c.z, 'poison', owner)) out.add('poisoned');
   if (isInsideZoneOfKind(c.x, c.z, 'sand', owner)) out.add('slowed');

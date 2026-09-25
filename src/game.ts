@@ -1062,7 +1062,12 @@ export class Game {
       // local-side overlays (Kermit Poison Cloud screen-space mask)
       // can light up while the player stands inside a zone of the
       // matching kind. Same lookup table as the offline path.
-      const vfxKind = caster ? deriveZoneVfxKind(caster.config.name) : 'generic';
+      // The L flags win over the caster: a Frozen Floor or Sinkhole
+      // that Kurama copied (Copycat) is ice / sand like the offline
+      // one, not Kurama's 'generic' (no frozen/slowed icon inside).
+      const vfxKind = ev.slippery ? 'ice'
+        : ev.sinkhole ? 'sand'
+          : caster ? deriveZoneVfxKind(caster.config.name) : 'generic';
       pushNetworkZone({
         x: ev.x, z: ev.z, radius: ev.radius,
         slowMultiplier: ev.slowMultiplier,

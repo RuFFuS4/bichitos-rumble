@@ -335,6 +335,38 @@ antes de commitear el JSON.
     `feel-sim-parity`;*
   - *`lHoldPrevInput`, fuera de `server/src/sim/physics.ts`.*
 
+- **De DISTRIBUCIÓN, 2026-09-25 — tu nota de las zonas de Copycat, hecha,
+  y tres cosas más de la misma familia que no toco.** Las copias de
+  Kurama del Frozen Floor y del Sinkhole salen ya online como hielo y
+  arena (`onZoneSpawned`, con permiso de Rafa para `game.ts`; medido en
+  vivo con 4 clientes). Un barrido del cliente online buscando visuales
+  que se deciden por el nombre del lanzador, con verificador adversarial,
+  confirmó tres fallos más, todos de gravedad baja y solo visuales.
+  Casi todo está ya en tu informe (C7, A3 y las líneas 238-239), pero la
+  trampa de Copycat es nueva:
+  1. **La cuña del Cone Pulse online** (`game.ts` ~1729,
+     `handleAbilityFired`, rama `frenzy`): online siempre se pinta
+     `spawnFrenzyBurst`, un disco. Si se cablea `spawnLEntryVfx` con
+     `c.abilityStates[2].def`, Cheeto queda bien pero la copia de Kurama
+     sigue saliendo como disco. Online `applyCopycat` no corre nunca (solo
+     desde `fireEffect` en offline), así que esa def es siempre la del kit
+     de Kurama. El comentario de `abilities-runtime.ts` ~1096 («la copia
+     llega en `def`») solo es cierto offline. Para la copia, el servidor
+     tendría que mandar la forma de la L en el `abilityFired` (campos
+     opcionales, leídos de `getLDef`); eso es mío cuando lo decidáis.
+  2. **Shake y sonido por pulso del Cone Pulse**
+     (`abilities-runtime.ts` ~641, `tickLOffline`): también corre online y
+     lee la def del kit del cliente. La copia de Kurama online no hace
+     shake ni suena en ningún pulso, y el Cheeto online saca los puffs y
+     anillos dos veces (esto es tu C7). Si aplicas C7 saltándote
+     `tickLOffline` en online, pasa el shake y el sonido a `onLPulse`, o
+     el Cheeto online también se queda mudo.
+  3. **El giro de la sierra** (`critter.ts` ~608): va condicionado a
+     `config.name === 'Shelly'` y está después del `return` de
+     `skipPhysics`. Online no gira nadie, ni Shelly ni la copia (la parte
+     de Shelly online no la vi documentada). Offline la copia tampoco
+     gira, aunque `COPYCAT_KEYS` copia `sawSpinSpeed`.
+
 ## Cómo retomar
 
 **2026-09-25** — en `dev` están el corte 2 del feeling (reacción al golpe,

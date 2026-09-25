@@ -43,12 +43,16 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
          worktree), donde Trunk agarra a un Sergei en frenesí y lo deja a
          1,6 u de la trompa;
        - un Sebastian que carga tarda ~1 s en girarse 180°.
-   - **Pendiente, de otro día y con permiso de Rafa** (`game.ts` es
-     tierra de nadie y PERSONAJES ya lo tocó el 2026-09-25): el Frozen
-     Floor o el Sinkhole que copia Kurama llegan online como `generic`,
-     sin icono de congelado o atrapado (nota en el Buzón). Arreglo de una
-     línea en `onZoneSpawned`: `ev.slippery ? 'ice' : ev.sinkhole ?
-     'sand' : deriveZoneVfxKind(...)`, como el offline.
+   - Cliente, también en `dev` (con permiso de Rafa para `game.ts`,
+     2026-09-25): el Frozen Floor o el Sinkhole que copia Kurama salen
+     ya online como hielo y arena (`onZoneSpawned` toma el tipo de las
+     banderas del evento), con su icono de congelado o ralentizado
+     dentro.
+     - Medido en vivo con 4 clientes: antes `generic`, después `ice` y
+       `sand`; las zonas propias, igual que antes.
+     - Queda una diferencia de color, ya sabida: online el anillo sale
+       con la paleta del lanzador y offline con los colores de cada
+       zona. Así, la copia de Kurama se ve magenta.
 
 1. **v1.8 (H4.5) — ✅ EN PRODUCCIÓN desde el 2026-09-24 a las 22:00 UTC**
    (main `784779f` = `bf7b3ee`, tag `v1.8-terreno-v2`). Comprobaciones de
@@ -368,7 +372,8 @@ corren riesgo: no hay migraciones.
     el Frozen Floor o el Sinkhole que copia Kurama llegan como `generic`.
     Nadie ve el icono de congelado o atrapado dentro, aunque en la sala
     sí resbala y tira. El evento trae `slippery`/`sinkhole`: con eso
-    saldría `ice`/`sand`. Offline ya va bien.
+    saldría `ice`/`sand`. Offline ya va bien. *(Hecho el 2026-09-25 con
+    permiso de Rafa; ver el punto 0.)*
 
 - **De PERSONAJES, 2026-09-25 — segunda tanda del repaso (decisiones de
   Rafa): cinco puntos más en `BrawlRoom.ts`. Ninguno bloquea.** Detalle
