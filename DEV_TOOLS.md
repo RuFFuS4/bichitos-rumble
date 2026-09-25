@@ -113,6 +113,25 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   setSpeed/requestStep, forzar habilidades, bots, recording.
 - **Inspección de assets**: `npm run inspect:clips|parts|bounds`,
   `verify:glbs`, `check-pws-parity`.
+- **Online: versión y suavizado** (DISTRIBUCIÓN, 2026-09-24; detalle en
+  `ONLINE.md` §«Versión de protocolo» y §«Suavizado online»):
+  - `GET /health` del servidor devuelve `protocol`, `protocolGuard` y
+    `rejectedJoins`. `POST /matchmake/joinOrCreate/brawl` con `{}` da 523
+    `client_outdated` sin crear sala, pero **solo** si `/health` dice
+    `protocolGuard: "on"`.
+  - `__game.netSmoother.config.<clave> = valor` en vivo, y
+    `__game.netSmoother.stats()` para el reloj, el RTT, la edad de los
+    estados, los frames saturados, las correcciones y los saltos.
+  - `?netsmooth=legacy|localonly` sirve de A/B.
+  - `node scripts/net-smoothing-record.mjs` graba una partida online real
+    (navegador mudo, `--rtt/--jitter`, `--netsmooth=`), y
+    `node scripts/net-smoothing-bench.mjs` la re-simula con el módulo real
+    a 60/144 Hz con `--set clave=valor`. Comandos completos en la
+    cabecera de cada script.
+  - `npx vitest run tests/sim/net-protocol.test.ts` imprime las huellas
+    nuevas si el generador de la arena cambia.
+  - Servidor local en Windows: `npm run dev` en `server/` carga los
+    temporizadores precisos (sin ellos corre a 0,72×).
 - **Zancada del clip Run** (feeling, 2026-09-21):
   `node scripts/inspect-stride.mjs [id] [--json] [--write] [--check]` mide
   en node, sin navegador, a qué velocidad barre cada Run el pie apoyado y
@@ -188,6 +207,16 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     recibe (stun, slow, confused…).
   - La L de Sebastian, que es de mantener, se mantiene `--hold` pasos.
   - Sirve para revisar habilidades con pruebas.
+- **Por qué cae un bicho** (2026-09-25): con el dev server vivo,
+  `node scripts/fall-probe.mjs --critter=Kowalski [--matches=40]
+  [--seed=4000] [--feel=sec.key=val]`.
+  - Juega partidas con el bicho en autopiloto. Cada caída se clasifica en
+    tiempo de simulación: `contact` (rival a menos de 1,3 u en el último
+    medio segundo), `alone` o `floor` (se hundió la baldosa).
+  - Cuenta además las caídas justo después de su propia J.
+  - La tanda dice cuánto cae un bicho; esto dice por qué. Las grabaciones
+    de la tanda no sirven para ventanas cortas: sus eventos llevan el
+    reloj de pared (ERROR_LOG 2026-09-25).
 - **Servidor «foto fija» para capturas largas** (2026-09-24):
   `npx vite --config scripts/vite.snapshot.config.mjs --port 5182
   --strictPort` levanta un segundo servidor sin vigilancia de ficheros ni

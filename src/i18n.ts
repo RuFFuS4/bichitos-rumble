@@ -240,8 +240,9 @@ const DICT = {
   'status-poisoned-desc':     { en: 'Toxic cloud — slowed + limited vision.',
                                 es: 'Nube tóxica — más lento y con visión limitada.' },
   'status-stunned':           { en: 'Stunned',                  es: 'Aturdido' },
-  'status-stunned-desc':      { en: 'Cannot move for a brief window.',
-                                es: 'No puede moverse durante un instante.' },
+  // Since 2026-09-24 (PERSONAJES) a stun also blocks headbutt, J, K and L.
+  'status-stunned-desc':      { en: 'Cannot move or act for a brief window.',
+                                es: 'Ni se mueve ni actúa durante un instante.' },
   'status-vulnerable':        { en: 'Vulnerable',               es: 'Vulnerable' },
   // ×4 = FEEL.collision.stunnedVulnerability (physics.ts); keep in step.
   'status-vulnerable-desc':   { en: 'Hits push four times as hard.',
@@ -449,11 +450,11 @@ export const CONTENT_ES: Readonly<Record<string, string>> = {
     'Embestida imparable con los colmillos',
   'Wide AoE thump — knocks back and stuns':
     'Pisotón en área — empuja y aturde',
-  'Trunk pulls a target close — they take ×4 from any hit for 3.8 s':
-    'La trompa atrae a un rival — recibe ×4 de cualquier golpe durante 3,8 s',
+  'Trunk pulls and stuns a target for 2.5 s — it takes ×4 from any hit':
+    'La trompa atrae y aturde a un rival 2,5 s — recibe ×4 de cualquier golpe',
   // Kurama
-  'Blink-fast feint forward':
-    'Finta relámpago hacia delante',
+  'Blink-fast feint through enemies':
+    'Finta relámpago que atraviesa a los rivales',
   'Leave a decoy, ghost away from danger for 2.8 s':
     'Deja un señuelo y se esfuma del peligro durante 2,8 s',
   'Mimics the L of the last enemy you hit':
@@ -487,8 +488,8 @@ export const CONTENT_ES: Readonly<Record<string, string>> = {
   'Open a hazardous pit ahead — pulls enemies in':
     'Abre un socavón delante — arrastra dentro a los rivales',
   // Kowalski
-  'Slides forward on an ice trail':
-    'Se desliza hacia delante sobre un rastro de hielo',
+  'Belly-slides forward and keeps gliding':
+    'Se lanza de panza y sigue deslizándose',
   'Frontal snowball — knocks back and freezes the target for 5 s':
     'Bola de nieve frontal — empuja y congela al objetivo durante 5 s',
   'Coats the ground in ice — enemies slip and slide':

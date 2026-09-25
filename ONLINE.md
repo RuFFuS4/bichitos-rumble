@@ -5,14 +5,20 @@ sincronización cliente↔servidor.
 
 ---
 
-## Estado del deploy (comprobado el 2026-09-21)
+## Estado del deploy (comprobado el 2026-09-25)
 
-> **El online está VIVO en producción** con `v1.7-h4-social` (main
-> `f41fb7e`, desplegado el 2026-09-05). Comprobado hoy con GETs de solo
-> lectura: `https://bichitos-rumble-production.up.railway.app/health`
-> responde `ok` con ~16 días de uptime, `/api/leaderboard` devuelve los
-> 5 cinturones (el volumen de la DB está montado) y el bundle de
-> `www.bichitosrumble.com` apunta a ese `wss://`.
+> **El online está VIVO en producción** con `v1.8-terreno-v2` (main
+> `784779f`, desplegado el 2026-09-24 a las 22:00 UTC; antes,
+> `v1.7-h4-social`). Comprobado tras desplegar:
+> - `https://bichitos-rumble-production.up.railway.app/health` responde
+>   `protocol: 2` y `protocolGuard: "on"`;
+> - `/api/leaderboard` devuelve los 5 cinturones (el volumen de la DB
+>   está montado);
+> - el bundle de `www.bichitosrumble.com` apunta a ese `wss://`.
+>
+> Detalle en BUILD_LOG (2026-09-25). **v1.9** (protocolo 3, el repaso de
+> habilidades en `BrawlRoom`) está en verificación en la rama
+> `claude/feature/distribucion-brawlroom-v19`.
 >
 > - **Cómo se despliega**: Railway construye `server/Dockerfile`
 >   (multi-stage `node:22-alpine`) y Vercel `npm run build`, **los dos
@@ -310,7 +316,16 @@ mandar geometría por la red para taparlo.
 **La pieza.** Un entero, `NET_PROTOCOL`, en `server/src/protocol.ts`:
 fuente única, sin imports. El servidor lo compila y el cliente lo
 importa con `../server/src/protocol`. v1.7 no manda nada y cuenta como
-1; v1.8 (H4.5) es la **2**.
+1; v1.8 (H4.5) es la 2; v1.9 (el repaso de habilidades en `BrawlRoom`)
+es la **3**.
+- **Por qué la 3:** mensajes nuevos que un cliente v1.8 no sabe pintar:
+  - `dashHit`: una J que golpea, con su hit stop y su sacudida;
+  - `lChargeEnd`: se apaga la línea del All-in, al disparar o porque
+    un aturdido suelta la carga;
+  - `abilityFired` con `originX/originZ/originRotY`: el señuelo de
+    Kurama y el origen de los blinks.
+- El suelo no cambia: la fila 3 de `LAYOUT_BY_PROTOCOL` lleva la misma
+  huella que la 2.
 
 | Paso | Dónde | Qué pasa |
 |---|---|---|
@@ -360,8 +375,9 @@ importa con `../server/src/protocol`. v1.7 no manda nada y cuenta como
 - `POST /matchmake/joinOrCreate/brawl` con cuerpo `{}` → 523 con
   `client_outdated`. No crea sala, **pero solo si el guard está vivo**.
   Contra un servidor v1.7 o con el guard apagado, crea una sala y
-  reserva un asiento. Así que primero `GET /health` y confirmar
-  `protocol: 2` y `protocolGuard: "on"`; solo entonces sirve contra
+  reserva un asiento. Así que primero `GET /health` y confirmar que
+  `protocol` es el número de `NET_PROTOCOL` del código desplegado (3
+  desde v1.9) y `protocolGuard: "on"`; solo entonces sirve contra
   producción.
 - `npx vitest run tests/sim/net-protocol.test.ts` imprime las huellas
   nuevas cuando algo cambia.
@@ -395,7 +411,17 @@ líneas en `src/game.ts` (`updateOnline`). Solo visual: el servidor sigue
 siendo la autoridad, y no cambia ni el protocolo ni el golden.
 - **Predicción.** Repite el paso de integración de `BrawlRoom` tick a tick
   y en su orden (empuje → mover → fricción → zona muerta → tope) hasta la
-  hora de servidor de "ahora". El reloj sale de `matchTimer` (baja 1/30
+  hora de servidor de "ahora".
+  - **Sub-pasos (desde v1.9).** El servidor integra en
+    `SIM.movement.integrationSubsteps` sub-pasos por tick (2: una
+    integración cada 1/60 s, como el juego offline), con el empuje del
+    mando una vez por tick. La predicción los repite
+    (`FEEL.movement.integrationSubsteps`, espejo).
+  - Los sub-pasos solo dan dónde **acaba** cada tick. Dentro del tick se
+    interpola en línea recta: pintar su forma metía un diente de sierra
+    de velocidad del 13 % a 30 Hz, porque el servidor solo existe en los
+    ticks.
+  - Una grabación sin el campo (anterior a v1.9) se reproduce con 1. El reloj sale de `matchTimer` (baja 1/30
   por tick y solo en `playing`) con el mínimo de (llegada − hora de
   servidor) en una ventana de 1 s. El empuje por tick se deduce de dos
   estados seguidos.
@@ -419,9 +445,9 @@ el módulo real a 60 y 144 Hz; 2026-09-24):
 | Frames parados del local | 60-86 % | 0 % en crucero (solo se para en un hueco de red > 150 ms) |
 | Tirón p95 del local en crucero | 5,5-14,4 px | ≤ 0,77 px (RTT 160) |
 | Retraso del local en LAN | 28-34 ms | 0-1 ms |
-| Ratio de velocidad por frame (p5-p95) | 0-9,6 | 0,94-1,20 |
+| Ratio de velocidad por frame del local (p5-p95) | 0-9,6 | 0,94-1,20 (los bots rivales con habilidades y RTT salen de ese rango sin que se note: tirón ≤ 0,7 px) |
 | Coherencia local↔rivales p95 | 10-20 px | 2,6-12,5 px menos que `legacy` |
-| Pasada de largo al parar, local (p99) | 0 | ≤ 2,6 px |
+| Pasada de largo al parar, local (p99) | 0 | ≤ 2,6 px en las 33 grabaciones de la verificación; en 2 de las 4 de `bf7b3ee`, 3,6-6,9 px, siempre por una sola frenada |
 | Pasada de largo al parar, rivales (p99) | ≤ 1,1 px | mediana 1,9, peor 8,3 px |
 
 La pasada de los rivales es el precio conocido: si un parche llega tarde,
@@ -458,7 +484,7 @@ núcleo por sala; `PRECISE_TIMERS=off` lo apaga. **Nunca** se juzga el
 suavizado contra un servidor local sin él.
 
 **Si cambias el paso de integración de `BrawlRoom`** (orden, fórmula de
-fricción, zona muerta, tope) o el ritmo de `matchTimer`, la predicción
+fricción, zona muerta, tope, sub-pasos) o el ritmo de `matchTimer`, la predicción
 empeora sin romper nada: avisa a DISTRIBUCIÓN. Valores de FEEL/SIM los
 sigue sola (se inyectan).
 
@@ -487,11 +513,15 @@ Si cambias `MAX_PLAYERS`, revisa también:
 - [x] Build cliente y server limpios.
 - [x] Compatibilidad con flujo offline preservada (código offline no
       toca `isBot` ni `waitingTimeLeft`).
-- [ ] Testing manual online end-to-end con 2+ clientes (pendiente de
-      smoke test del usuario).
-- [ ] Testing bot-takeover con desconexión forzada (pendiente).
-- [ ] Testing timeout + bot-fill completo (pendiente — abrir 1 pestaña,
-      esperar 60 s, ver que se suman 3 bots y arranca).
+- [x] Online end-to-end con varios clientes: en v1.9 (2026-09-25),
+      salas de 4 navegadores mudos contra un servidor local pulsando
+      J/K/L de los 9 bichos (arranque instantáneo con 4 humanos).
+- [ ] Testing bot-takeover con desconexión forzada (pendiente en
+      navegador; el caso de soltar la carga del All-in al pasar a bot
+      está comprobado sin clientes contra `BrawlRoom`).
+- [x] Timeout + bot-fill completo: cada grabación de
+      `scripts/net-smoothing-record.mjs` espera los 60 s y juega con
+      los 3 bots de relleno.
 
 Lo que **no se puede validar desde aquí**: cualquier cosa que requiera
 dos navegadores reales + red. Checklist para el usuario al final del

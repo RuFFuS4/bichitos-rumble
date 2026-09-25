@@ -233,7 +233,9 @@ function loadRecording(path) {
  */
 function replay(R, cfg, sched, localInput = LOCAL_INPUT) {
   // fallSpeed: las grabaciones anteriores al 2026-09-24 guardaban solo
-  // FEEL.movement.
+  // FEEL.movement. Las anteriores a v1.9 no traen integrationSubsteps: el
+  // servidor que grabaron integraba una vez por tick, que es lo que hace
+  // NetSmoother sin el campo.
   const sm = new NetSmoother(() => ({ fallSpeed: 12, ...R.movement }), cfg);
   const keys = R.players.map(() => ({}));
   const out = R.players.map(() => new Array(sched.length).fill(null));

@@ -2183,6 +2183,11 @@
       height: 88%;
       margin: 0;
     }
+    /* Stunned: the headbutt is blocked too (hud/runtime.ts updateAbilityHUD). */
+    .touch-button.touch-btn-headbutt.blocked {
+      opacity: 0.45;
+      filter: grayscale(1);
+    }
 
     /* ---------- Responsive: narrow viewports (phones in landscape,
          small tablets). Stacks character-select vertically so the 3D

@@ -6,8 +6,28 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Pendiente (por orden)
 
-1. **El despliegue de v1.8 (H4.5) — Rafa pidió prepararlo (2026-09-24).**
-   En producción sigue `v1.7-h4-social` (main `f41fb7e`).
+0. **v1.9 — preparada, falta el visto bueno de Rafa y desplegar.**
+   `BrawlRoom` ejecuta las habilidades como el sim (repaso de PERSONAJES
+   menos el Sinkhole), la L de los bots online, el paso fijo con 2
+   sub-pasos y `NET_PROTOCOL` 3.
+   - Verificación completa en BUILD_LOG (2026-09-25, DISTRIBUCIÓN, v1.9).
+   - Capturas en `.tmp/v19-live/shots/` del worktree de distribución.
+   - **Al desplegar** (runbook de abajo, el SHA exacto verificado):
+     - comprobar `/health` → `protocol: 3`;
+     - un cliente v1.8 que siga abierto verá «recarga»: es lo esperado;
+     - las cifras de balance online cambian (sub-pasos + L de los bots):
+       Kermit fuerte, decisión de Rafa.
+
+1. **v1.8 (H4.5) — ✅ EN PRODUCCIÓN desde el 2026-09-24 a las 22:00 UTC**
+   (main `784779f` = `bf7b3ee`, tag `v1.8-terreno-v2`). Comprobaciones de
+   después y lecciones en BUILD_LOG (2026-09-25, DISTRIBUCIÓN).
+   - **Queda de Rafa, a mano:**
+     - el A/B del suavizado contra Railway (`?netsmooth=legacy` frente a
+       normal, con `__game.netSmoother.stats()`);
+     - 2 pestañas en una sala privada hasta el primer colapso;
+     - Sentry sin issues nuevos.
+
+   Lo de abajo es cómo se preparó, para el próximo despliegue.
    - **Qué viaja** (lo que hay en `dev`, ~55 commits):
      - ARENA: terreno v2, cono y fondo v2 F0, la isla en el cielo, con
        las hojas aprobadas por Rafa el 2026-09-21;
@@ -139,32 +159,22 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
       `game.ts`, y en `ONLINE.md` la sección «Suavizado online»;
     - el espejo de la zona muerta;
     - el factor de los bots lo aplicó PERSONAJES en `computeBotInput`.
-11. **Los 11 cambios de `BrawlRoom.ts` del repaso de habilidades**
-    (PERSONAJES, `docs/REPASO_HABILIDADES.md` §«Pendiente para
-    DISTRIBUCIÓN», con el código exacto de cada uno). No bloquean: si
-    llegan después, online queda como hoy.
-    - Son: reaparición limpia, caída de la víctima del All-in, barrido y
-      fallo del All-in, pasadas de contacto de la L, Cone Pulse,
-      aterrizajes seguros, Sinkhole (necesita un getter de ARENA), hielo
-      desde la zona y golpe de las J online.
-    - El punto 1 (Copycat por jugador) **sí** bloqueaba y ya está hecho:
-      getLDef en 2.e, 2.g y el hold-to-fire. Es la única vía de lectura de
-      la L; Copycat no copia allIn* ni holdToFireL (COPYCAT_KEYS).
-    - Llegarán más con las decisiones de diseño de Rafa (PERSONAJES,
-      2026-09-24):
-      - el All-in con una carga mínima de 0,35 s y apuntando mientras
-        carga, que toca la máquina del hold-to-fire;
-      - el aturdido sin poder cabecear, cuyo arranque online está en
-        BrawlRoom.
-
-      Van al mismo slice.
-    - Es física de habilidades online (hard-stop): slice propio **después
-      de v1.8**, con plan y verificación online (partidas de 2 clientes
-      por habilidad).
-    - **Ojo, el hielo:** cambia la fórmula del paso de integración sobre
-      una zona resbaladiza (aceleración ×0,35 y fricción ×5 desde la
-      zona). El suavizado no modela el hielo (2-3 px de diente de sierra
-      medidos). Si se modela, `NetSmoother.predict` necesita esos factores.
+11. ~~**Los 11 cambios de `BrawlRoom.ts` del repaso de habilidades**~~ —
+    hechos en v1.9 (ver el punto 0 y BUILD_LOG del 2026-09-25), con la
+    segunda tanda (S2-1..S2-5), la L de los bots online y el paso fijo
+    (2 sub-pasos, repetidos en el suavizado). Quedan dos cosas:
+    - **Sinkhole (punto 9)**: espera a que ARENA exponga el layout en
+      `ArenaSim` (nota en su buzón).
+    - **El hielo en el suavizado**: la sala aplica ya los factores de la
+      zona (aceleración ×0,35, fricción ×5) y el Ice Slide (fricción ×3),
+      pero `NetSmoother.predict` usa la fricción base: 2-3 px de diente de
+      sierra medidos sobre hielo. No bloquea; si se modela, `predict`
+      necesita esos factores por bicho.
+    - Hueco de pruebas: `BrawlRoom` no tiene tests propios. Los decoradores
+      de Colyseus y el sqlite que abre al importarse lo complican en
+      vitest. Los casos de la carga del All-in se comprobaron con un script
+      sin clientes (`.tmp/allin-check.mts` del worktree). Montarlo es del
+      punto 8.
 
 ## Verificación previa de H4.5 (2026-09-21)
 
@@ -231,13 +241,13 @@ git push origin main          # dispara Vercel y Railway a la vez
 ```
 
 **2. La ventana (unos 2 min)**
-- Vercel termina antes (~20 s): en el log tiene que salir
-  `[payload-budget] OK`.
-- Railway tarda ~70 s (estimado por el uptime de `/health`; la vez
-  anterior BUILD_LOG anotó ~30 s). En el log, `[server] listening`.
-- El orden por defecto es el bueno: las partidas de un cliente nuevo
-  contra el servidor viejo mueren con el reinicio antes del primer
-  colapso (s. 28). No lo inviertas.
+- Vercel termina antes: en el log tiene que salir `[payload-budget] OK`.
+- Railway tarda más: en el log, `[server] listening`.
+- Medido en v1.8 (2026-09-24): Vercel sirvió la build nueva a los ~38 s
+  del push y Railway, el proceso nuevo, a los ~2 min. Se ve con un bucle
+  de `curl` a `/health` (uptime y `protocol`) y al `index-*.js` de www.
+- Con el guard, en esa ventana el cliente nuevo ve «el servidor se está
+  actualizando» y no llega a sentarse.
 - **Si un lado falla y el otro no**, la desincronización pasa a ser
   permanente: arregla el que falla o haz rollback del otro ya.
 
@@ -306,6 +316,32 @@ corren riesgo: no hay migraciones.
 ## Buzón
 
 *(Notas que te dejan otros carriles.)*
+
+- **De PERSONAJES, 2026-09-25 — segunda tanda del repaso (decisiones de
+  Rafa): cinco puntos más en `BrawlRoom.ts`. Ninguno bloquea.** Detalle
+  y código en [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md)
+  §«Pendiente para DISTRIBUCIÓN (segunda tanda)», S2-1 a S2-5.
+  - **Cambia online solo con desplegar `server/src/sim`**, sin tocar la
+    sala:
+    - las J de Sergei, Cheeto, Sebastian y Shelly golpean al chocar;
+    - el aturdido no lanza J, K ni L (el Grip baja a 2,5 s);
+    - el frenesí de Sergei recibe ×0,4 de los empujes del sim;
+    - Mirror Trick salta lejos del perseguidor;
+    - Shelly con escudo frena en seco y cae por un hueco.
+
+    Cliente y servidor, juntos.
+  - **Los bots online ya tienen L en el sim, pero APAGADA** tras
+    `SIM.bots.ultimateOnline = false` (`server/src/sim/config.ts`).
+    Con bots lanzando la L en cada partida, tu sierra y tu embestida
+    sin ventana de re-golpe acortaban las partidas un 27 %. Enciéndela
+    en el corte que traiga S2-2: los puntos 1, 6 y 7 de la primera
+    tanda, más `knockbackScale` en los empujones propios de la sala.
+    Antes, mira la pregunta 6 de Rafa (Kermit online pasa del 16 % al
+    39 % de victorias).
+  - S2-1 (cabezazo y carga bloqueados por aturdido, carga mínima y
+    apuntado del All-in) es lo que más se nota a los mandos. El resto
+    (fricción del hielo, Cone Pulse leyendo `SIM.conePulse`, señuelo en
+    el origen, evento `dashHit`) es pulido.
 
 - **De PERSONAJES, 2026-09-24 — repaso de habilidades: 12 cambios en
   `BrawlRoom.ts`, uno de ellos BLOQUEA el despliegue.**
@@ -456,12 +492,16 @@ corren riesgo: no hay migraciones.
   `scripts/net-smoothing-bench.mjs`. Las grabaciones y el banco de esta
   sesión están en el scratchpad de la sesión (se pierden): repítelas con
   los comandos de la cabecera de cada script.
-- **Lo siguiente:** el punto 1, la verificación completa de v1.8 sobre el
-  SHA congelado, las capturas a Rafa y el runbook. Después, el punto 11.
-- **Aún sin catalogar** en `DEV_TOOLS.md` §«Superficie programática»:
-  `__game.netSmoother` y las dos herramientas. Tampoco hay entrada en
-  `BUILD_LOG.md`: los dos son troncales y hoy ya los tocaron otros
-  carriles. Van el día del despliegue.
+- **Desplegado:** v1.8 salió el mismo día (punto 1). `BUILD_LOG`,
+  `DEV_TOOLS` (superficie programática) y `NEXT_STEPS` al día el
+  2026-09-25.
+- **Lo siguiente:**
+  - el A/B de Rafa y lo que diga de la pasada de los rivales al parar;
+  - el punto 11, el slice de `BrawlRoom` del repaso de habilidades, que
+    irá con su propio despliegue;
+  - el 8 (huecos del pipeline), que ahora incluye un arreglo pequeño:
+    añadir `stamp-critter-glbs --check` al script `build`, para que
+    Vercel también vigile los `?v=` de los GLB immutable.
 
 **2026-09-21** — primera sesión del carril.
 

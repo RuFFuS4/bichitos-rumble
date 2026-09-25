@@ -15,7 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import type { PlayerSchema } from '../state/PlayerSchema.js';
-import { getAbilityKit } from './abilities.js';
+import { dashGlideFactor, findGripTarget, getAbilityKit, type AbilityDef } from './abilities.js';
 import { SIM } from './config.js';
 
 export interface BotInput {
@@ -41,6 +41,8 @@ const ZERO: BotInput = {
  *   - Fire ability1 (mobility / charge rush) at mid-range (3..6 units),
  *     unless the dash along the facing runs off the arena.
  *   - Fire ability2 by the SHAPE of its def (see the branches below).
+ *   - Fire the L by the shape of its def too (`lFires`), except
+ *     Sebastian's All-in.
  *   - Small per-tick probability so it doesn't spam — scales with tickRate.
  *
  * Kurama Mirror Trick (v0.11 authorial K, 2026-04-29): while a critter
@@ -78,15 +80,19 @@ interface BotArenaView {
 }
 
 /** A J leaves along the facing: its near and far probe points must both
- *  be live floor. No arena view, no probe. Mirror of src/bot.ts. */
-function dashStaysOnArena(bot: PlayerSchema, arena?: BotArenaView): boolean {
+ *  be live floor, and so must the far one pushed out by the dash's glide
+ *  (dashGlideFactor: Ice Slide carries 2.16× as far). No arena view, no
+ *  probe. Mirror of src/bot.ts. */
+function dashStaysOnArena(bot: PlayerSchema, def: AbilityDef | undefined, arena?: BotArenaView): boolean {
   if (!arena) return true;
   const fx = Math.sin(bot.rotationY);
   const fz = Math.cos(bot.rotationY);
   const near = SIM.bots.dashProbeNear;
   const far = SIM.bots.dashProbeFar;
+  const glide = def ? far * dashGlideFactor(def) : far;
   return arena.isOnArena(bot.x + fx * near, bot.z + fz * near) &&
-    arena.isOnArena(bot.x + fx * far, bot.z + fz * far);
+    arena.isOnArena(bot.x + fx * far, bot.z + fz * far) &&
+    arena.isOnArena(bot.x + fx * glide, bot.z + fz * glide);
 }
 
 /** True while a dash or blink of the bot is active. Mirror of src/bot.ts. */
@@ -98,15 +104,85 @@ function movementActive(bot: PlayerSchema, kit: ReturnType<typeof getAbilityKit>
   return false;
 }
 
-/** Enemies a push would move (alive, not falling, not immune) within
- *  `radius` of the bot. Mirror of src/bot.ts countEnemiesWithin. */
-function countPushableWithin(bot: PlayerSchema, allPlayers: PlayerSchema[], radius: number): number {
+/** Enemies on the ground (alive, not falling) within `radius` of the bot;
+ *  `pushableOnly` also skips the immune, whom no push moves. Mirror of
+ *  src/bot.ts countEnemiesWithin. */
+function countEnemiesWithin(bot: PlayerSchema, allPlayers: PlayerSchema[], radius: number, pushableOnly: boolean): number {
   let n = 0;
   for (const p of allPlayers) {
-    if (p === bot || !p.alive || p.falling || p.immunityTimer > 0) continue;
+    if (p === bot || !p.alive || p.falling) continue;
+    if (pushableOnly && p.immunityTimer > 0) continue;
     if (Math.hypot(p.x - bot.x, p.z - bot.z) < radius) n++;
   }
   return n;
+}
+
+/**
+ * Whether the bot presses its L this tick, by the shape of the def. Mirror
+ * of the L branches of src/bot.ts:
+ *   · Trunk Grip (gripK): someone the grip would take right now, past
+ *     targetedMinRange and within gripMaxRange.
+ *   · Sebastian's All-in (holdToFireL): never. BrawlRoom's hold loop starts
+ *     the charge on the press and fires it on the release, and gives a bot
+ *     neither its charge time nor a way to drop the charge unspent. Held
+ *     blind, the bot would fire whether or not anyone is left in the lane,
+ *     and those blind releases were half of Sebastian's falls offline.
+ *   · Any other L: `buffFires`.
+ * `shellingUp`: this tick's K press raises a self-anchoring shell.
+ */
+function lFires(
+  bot: PlayerSchema,
+  kit: readonly AbilityDef[],
+  allPlayers: PlayerSchema[],
+  nearestDist: number,
+  inFacingCone: (halfAngleDeg: number) => boolean,
+  shellingUp: boolean,
+): boolean {
+  if (!SIM.bots.ultimateOnline) return false; // deploy gate, see SIM.bots
+  const def = kit[2];
+  const state = bot.abilities[2];
+  if (!def || !state || state.active || state.cooldownLeft > 0) return false;
+  if (def.gripK) {
+    const grip = findGripTarget(def, bot, allPlayers);
+    return !!grip && grip.dist > SIM.bots.targetedMinRange && grip.dist < SIM.bots.gripMaxRange &&
+      rollAt(FIRE_RATES.grip);
+  }
+  if (def.holdToFireL) return false;
+  return buffFires(def, bot, kit, allPlayers, nearestDist, inFacingCone, shellingUp) && rollAt(FIRE_RATES.buff);
+}
+
+/**
+ * When a 'buff' L is worth casting. Never while anchored or charging the
+ * anchor (Shelly shelled up: the saw would stand still), counting a shell
+ * pressed this same tick: the room starts the K before the L. By shape:
+ *   · Frozen Floor: min(2, enemies alive) within floorRadius ×
+ *     floorCastRadiusFrac — it's a zone, not a duel buff.
+ *   · Cone Pulse: the nearest enemy within buffRange and inside the pulse
+ *     cone (Cheeto can't turn during the L).
+ *   · Anything else: the nearest enemy within buffRange.
+ * Mirror of src/bot.ts buffFires.
+ */
+function buffFires(
+  def: AbilityDef,
+  bot: PlayerSchema,
+  kit: readonly AbilityDef[],
+  allPlayers: PlayerSchema[],
+  nearestDist: number,
+  inFacingCone: (halfAngleDeg: number) => boolean,
+  shellingUp: boolean,
+): boolean {
+  if (shellingUp) return false;
+  for (let i = 0; i < bot.abilities.length; i++) {
+    if (bot.abilities[i].active && kit[i]?.selfAnchorWhileBuffed) return false;
+  }
+  if (def.frozenFloorL) {
+    let alive = 0;
+    for (const p of allPlayers) if (p !== bot && p.alive) alive++;
+    const r = (def.floorRadius ?? 6.0) * SIM.bots.floorCastRadiusFrac;
+    return countEnemiesWithin(bot, allPlayers, r, false) >= Math.min(2, alive);
+  }
+  if (nearestDist >= SIM.bots.buffRange) return false;
+  return def.conePulseL ? inFacingCone(def.pulseAngleDeg ?? 45) : true;
 }
 
 export function computeBotInput(
@@ -172,6 +248,17 @@ export function computeBotInput(
     }
   }
 
+  // Bot pace: the move vector's length IS the acceleration fraction
+  // (BrawlRoom only renormalises when it exceeds 1), so scaling it here
+  // runs online bots at the same moveAccelFactor as offline ones. Applied
+  // on the way out, AFTER the LOOK_AHEAD edge probe used the unit
+  // direction — scaling earlier would shrink the probe.
+  const pace = SIM.bots.moveAccelFactor;
+
+  // Stunned (Trunk Grip / Slam): no action would start, so none is
+  // pressed or rolled for. Mirror of src/bot.ts.
+  if (bot.stunTimer > 0) return { ...ZERO, moveX: moveX * pace, moveZ: moveZ * pace };
+
   // --- Headbutt at contact range ---
   const headbutt = nearestDist < 2.0;
 
@@ -184,7 +271,7 @@ export function computeBotInput(
   const kit = getAbilityKit(bot.critterName);
   const moving = movementActive(bot, kit);
   const ability1 =
-    nearestDist > 3.0 && nearestDist < 6.0 && !moving && dashStaysOnArena(bot, arena) && rollAt(FIRE_RATES.mobility);
+    nearestDist > 3.0 && nearestDist < 6.0 && !moving && dashStaysOnArena(bot, kit[0], arena) && rollAt(FIRE_RATES.mobility);
   // 2026-08-24 paridad con src/bot.ts (hallazgo del review adversarial:
   // el cañón de Sebastian era solo-cliente y online nunca salía en
   // 1v1). El slot 2 dispara según la FORMA del def, resuelta del kit
@@ -234,8 +321,7 @@ export function computeBotInput(
       edgePressure = rd > arena.radiusAt(Math.atan2(bot.z, bot.x)) - EDGE_MARGIN && nearestDist < SIM.bots.defendRange;
     }
     // With its own L active (Saw Shell, wind-up included), shelling up only
-    // for the rim. Online bots cast no L, but a bot taking over a human can
-    // inherit one.
+    // for the rim: anchored, the saw stands still. Mirror of src/bot.ts.
     const ownLRunning = kit[2]?.type === 'frenzy' && !!bot.abilities[2]?.active;
     ability2 = (chargeIncoming && !ownLRunning) || edgePressure;
   } else if (def2?.type === 'projectile') {
@@ -257,18 +343,19 @@ export function computeBotInput(
     const r = Math.min(def2?.radius ?? SIM.groundPound.radius, SIM.bots.nearbyRadius);
     const pushes = r > 0 && (def2?.force ?? SIM.groundPound.force) > 0 && !def2?.selfBuffOnly;
     const fires = pushes
-      ? countPushableWithin(bot, allPlayers, r) >= 2 ||
+      ? countEnemiesWithin(bot, allPlayers, r, true) >= 2 ||
         (nearestDist < r * SIM.bots.radialSoloFrac && nearest.immunityTimer <= 0)
       : nearbyCount >= 2;
     ability2 = fires && rollAt(FIRE_RATES.radial);
   }
-  const ultimate = false; // conservative: let bots not spam ultimates online
+  // --- The L (2026-09-24, Rafa: online bots cast it too), by the shape of
+  // its def. Until then this was a flat `false`. `shellingUp`: this tick's
+  // K press starts a self-anchoring shell, which it only does with the K
+  // ready.
+  const kState = bot.abilities[1];
+  const shellingUp = ability2 && !!def2?.selfAnchorWhileBuffed &&
+    !!kState && !kState.active && kState.cooldownLeft <= 0;
+  const ultimate = lFires(bot, kit, allPlayers, nearestDist, inFacingCone, shellingUp);
 
-  // Bot pace: the move vector's length IS the acceleration fraction
-  // (BrawlRoom only renormalises when it exceeds 1), so scaling it here
-  // runs online bots at the same moveAccelFactor as offline ones. Applied
-  // on the way out, AFTER the LOOK_AHEAD edge probe used the unit
-  // direction — scaling earlier would shrink the probe.
-  const pace = SIM.bots.moveAccelFactor;
   return { moveX: moveX * pace, moveZ: moveZ * pace, headbutt, ability1, ability2, ultimate };
 }

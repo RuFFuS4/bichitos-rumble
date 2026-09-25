@@ -16,7 +16,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 > **2026-09-24 — repaso de habilidades, grupo G1 (inmunidad y arreglos pequeños). `[~]`, pendiente de golden y de validación de Rafa:**
 > - **Inmunidad offline = servidor.** Las K radiales y de cono, el Grip (ahora agarra al siguiente no inmune), el impacto de Shadow Step y el tirón del Sinkhole saltan a los inmunes y a los que caen. Steel Shell, Mirror Trick y la inmunidad de reaparición ya no se empujan offline (Shockwave sobre un inmune: 1,59 u → 0; Trunk Slam sobre Steel Shell: 1,63 u → 0).
 > - **Trunk Grip**: el aturdido usa `Math.max` (no acorta uno más largo) y la inclinación del impacto sigue el desplazamiento real del tirón, con −facing de respaldo si apenas se mueve.
-> - **Shelly**: con Steel Shell activo o cargando no arranca ninguna J ni blink, y al disparar el escudo se cancela la J en curso (cliente y `server/src/sim`).
+> - **Shelly**: con Steel Shell activo o cargando no arranca ninguna J ni blink, y al disparar el escudo se cancela la J en curso (cliente y `server/src/sim`). *(Desde el grupo H6 de la fase 2, la J se corta ya al pulsar K, y Shelly frena en seco.)*
 > - **Cheeto Cone Pulse**: `pulseCount: 6`. El fotograma en que expira la L cuenta como tiempo de canal, así que el sexto pulso (×8) sale a cualquier dt (antes se perdía a 75 y 95 Hz). Copycat copia el campo: la Kurama que copia queda en 6 pulsos (antes 11).
 > - **Kowalski Frozen Floor**: `cancelAnimOnEnd`. Ya no se queda con la pose de la ulti en bucle.
 > - **Animación**: el final de una ranura con `cancelAnimOnEnd` solo corta su propio clip. Una J que acaba bajo la K ya no le corta la pose a la K.
@@ -93,6 +93,246 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 >   - Sihans cae algo más (2,72 → 3,05/min). Las caídas en los 2 s siguientes a Sand Trap (11 de 83) están en su tasa base.
 >   - Los bots confundidos por Toxic Touch no se han tocado: esa propuesta revisa la decisión del 2026-08-21.
 > - Online: los cambios de J y K viven en `server/src/sim/bot.ts` y salen con el despliegue del servidor; `BrawlRoom` no cambia. La grabación del laboratorio solo ve el flanco de `active`, y el All-in por carga no lo tiene: desaparece de `ability_cast` (y del golden) hasta que `dev-api.ts` registre `lHoldCharging` (tierra de nadie).
+
+> **2026-09-24 — repaso de habilidades, fase 2, grupo H1 (golpe de dash en las J; decisiones 2 y 7 de Rafa). `[~]`, pendiente de golden y de validación de Rafa:**
+> - **Las J golpean** (`dashHitForce` en la definición de la J; sin él, el roce de siempre). En el primer contacto de cada víctima por activación (el mismo `AbilityState.rammed` del feedback de G7, ahora `rushContact` en `src/physics.ts`) la víctima recibe el golpe encima del roce, repartido por masas y ×4 si está aturdida, como un cabezazo; el que embiste no retrocede. Hit stop corto solo si hay fuerza (`FEEL.hitStop.dashHit` 0,03 s, frente a los 0,07 del cabezazo). Valores:
+>   - Sergei 22 (rango 22-25): la víctima sale a 19,6 u/s como mucho, aunque sea Kermit, por debajo del tope de 20 u/s al que llega cualquier cabezazo. Con 24, contra Kermit pasaba a 21,2.
+>   - Shelly 30 (Shell Charge, decisión 7) y Cheeto 30.
+>   - Sebastian 26, solo a quien tiene a ±60° de su mirada (`dashHitArcDeg`, el cono de su Claw Wave). Fuera del cono es el roce y la víctima no se gasta.
+>   - Trunk, Kermit, Sihans y Kowalski siguen sin fuerza (solo el feedback de G7).
+> - **Kurama atraviesa** (`dashPhaseThrough`): mientras dura Fox Dash no hay separación, empujón ni golpe con ningún bicho, en ninguno de los dos sentidos (un cabezazo tampoco la toca). La descripción pasa a «Blink-fast feint through enemies» / «Finta relámpago que atraviesa a los rivales».
+> - **Inmunes y anclados**: a un inmune no le hace nada. Contra Steel Shell, el golpe vuelve al que embiste × `shellReflectFactor` (0,85), una vez por activación, como el cabezazo; después, el rebote de siempre.
+> - **Online**: el espejo está en `server/src/sim/physics.ts` (`resolveCollisions`) y en `takeDashContact` / `activeDashDef` de `server/src/sim/abilities.ts`, con los mismos valores en el kit y filas en `ability-kit-parity` (las 9 J comparan los tres campos, también cuando no están). El empujón sale con el despliegue del servidor. El feedback online necesita `BrawlRoom` (DISTRIBUCIÓN: `resolveCollisions` ya devuelve los golpes en `dashHitsOut`) y su manejador en `game.ts` (tierra de nadie).
+> - Medido con pasos de 1/60 s, muñeco quieto a 1,8 u (Sihans, masa 1), sin mover el stick (`.tmp/fase2/h1/probe-*.txt`; el cabezazo, a 1,25 u, es la referencia). Velocidad de salida y distancia, antes → después:
+>   - Sergei: 4,4 u/s y 0,45 u → 17,2 u/s y 0,89 u. Su cabezazo: 34,3 u/s y 1,62 u. Contra Kermit, 19,6 u/s y 1,02 u frente a 42,9 u/s y 1,76 u.
+>   - Cheeto: 3,1 u/s y 0,43 u → 16,2 u/s y 0,93 u (cabezazo: 1,58 u).
+>   - Sebastian: 3,7 u/s y 0,51 u → 16,7 u/s y 0,97 u (cabezazo: 1,72 u). Con el muñeco a 58° de su línea golpea (16,7 u/s); a 75°, roce (1,7 u/s). Cheeto, sin cono, golpea a 73°.
+>   - Shelly: 2,5 u/s y 0,13 u → 27 u/s y 1,40 u (cabezazo: 1,67 u).
+>   - Kurama, corriendo: el muñeco se movía 1,61 u y ahora 0,07 u; ella recorre 6,39 u en vez de 2,88.
+>   - Contra Steel Shell, lo que avanza el que embiste: Sergei 0,61 → 0,33 u, Cheeto 0,68 → 0,09 u. Contra un aturdido, la J de Sergei: 13,9 → 68,8 u/s.
+>   - `ability-shots` (muñeco cercano): Sergei 0,42 → 0,84 u, Cheeto 0,29 → 0,93, Sebastian 0,34 → 0,97, Shelly 0,13 → 1,31. Hojas en `.tmp/fase2/h1/antes` y `despues` (con vídeo).
+> - Tanda de bots, 8 partidas por bicho con las semillas de referencia (la de 5182 reproduce exacta la de `.tmp/fix-audit`; resumen en `.tmp/fase2/h1/batch-summary.txt`). Caídas de los rivales por minuto, antes → después: Sergei 6,53 → 7,23; Sebastian 6,28 → 7,14; Shelly 6,31 → 6,07 (ella cae menos: 3,36 → 2,73); Cheeto 8,50 → 8,20 (él cae más: 2,47 → 3,13); Kurama 6,21 → 6,09 (ella igual, 2,00). Ninguna partida falla. Con 8 partidas por bicho es una tendencia, no una medida del equilibrio.
+> - **Para Rafa:**
+>   - Shelly empuja con la J el 84 % de lo que empuja con su cabezazo (1,40 frente a 1,67 u): con 30 y su masa de carga (×3,2), las dos pasan del tope de 20 u/s. Con 20 se quedaría por debajo contra un rival de masa 1 (18,8 u/s).
+>   - Si Kurama acaba el dash encima de alguien (sin mover el stick recorre 1 u), al terminar se separan de golpe: el muñeco sale a 5,3 u/s y 0,27 u.
+>   - Atravesar también la hace intocable los 0,26 s del dash: un cabezazo que la pille entonces la atraviesa.
+>   - Lo de si el golpe alimenta Copycat no aplica: Kurama atraviesa, así que su J no golpea nunca. El golpe de dash tampoco cuenta como cabezazo recibido (el cinturón Pain Tolerance habla de cabezazos) ni da el crédito de la eliminación online, como el resto de habilidades.
+
+> **2026-09-24 — repaso de habilidades, fase 2, grupo H2 (el aturdido no actúa; decisión 3 de Rafa). `[~]`, pendiente de golden y de validación de Rafa:**
+> - **Mientras `stunTimer > 0` no arranca ninguna acción:** ni cabezazo (`Critter.startHeadbutt`), ni J, K o L (`activateAbility` en el cliente; `tickPlayerAbilities` en `server/src/sim`), ni la carga del All-in (`startSebastianAllInCharge`). Moverse ya estaba bloqueado (`effectiveSpeed` 0) y no cambia. Vale para los dos aturdidos, el del Grip y el del Slam (1,5 s en radio 7).
+> - **Lo lanzado antes del aturdido sigue su curso:** una K que estaba cargando dispara aunque ya esté aturdido, una L en marcha sigue (Saw Shell sierra, el frenesí dura) y un dash en vuelo acaba.
+> - **La carga del All-in es la excepción:** soltarla es la acción, así que el aturdido la suelta sin dash ni cooldown, como una caída. Lo hace `stun()` de `abilities-runtime.ts`, que usan el Grip y el Slam. Con la tecla aún pulsada, la carga vuelve a empezar cuando acaba el aturdido.
+> - **Bots:** el offline (`src/bot.ts`) y el online (`server/src/sim/bot.ts`) no tiran dados ni pulsan nada mientras están aturdidos; siguen orientados al objetivo. Test nuevo en `server-bot.test.ts`.
+> - **Grip: aturdido 3,8 → 2,5 s** en el cliente y en el kit del servidor (fila en `ability-kit-parity`; centinela de `verify-ability-parity` a 2,5). Descripción: «Trunk pulls and stuns a target for 2.5 s — it takes ×4 from any hit» / «La trompa atrae y aturde a un rival 2,5 s — recibe ×4 de cualquier golpe», con la misma longitud en castellano que antes.
+> - Medido con pasos de 1/60 s: Trunk a 4,2 u agarra al muñeco, que intenta actuar durante el aturdido (`.tmp/fase2/h2/probe-antes.txt` y `probe-despues.txt`). Antes → después:
+>   - Jugador Sergei pulsando cabezazo, J, K y L: antes salen las cuatro y empuja a Trunk 2,25 u (pico 20 u/s); después ninguna, 0 u. El aturdido pasa de 4,0 a 2,6 s de juego (lo que sobra de 3,8 y 2,5 son los hit stops, que congelan el reloj).
+>   - Jugador Kurama: antes Mirror Trick la sacaba 7 u de un paso; después se queda agarrada.
+>   - Jugador Sebastian cargando el All-in desde antes del tirón y soltando ya aturdido: antes lanzaba a Trunk al vacío (220 u/s, cae); después la carga se suelta en el paso del tirón y Trunk no se mueve.
+>   - Bots en modo agresivo pegados a Trunk: antes Sergei lanzaba la L y Shelly cabeceaba estando aturdidos; después, nada.
+>   - Al acabar el aturdido todo responde (cabezazo, J y K en los pasos 280-310).
+>   - Servidor: `tickPlayerAbilities` con las tres teclas pulsadas y aturdido no activa ninguna ranura en Sergei, Kurama, Shelly y Trunk; sin aturdido, las tres (`.tmp/fase2/h2/server-stun.test.ts`).
+> - Tanda de Trunk, 8 partidas con la semilla 720. Para separar este grupo de H1 se repitió con las puertas del aturdido quitadas a mano (`.tmp/fase2/h2/solo-h1-batch-Trunk.json`). Solo H1 → H1 + H2: Trunk gana 5 → 4 de 8, cae 2,58 → 2,82/min; los rivales caen 9,17 → 8,78/min, cabecean 93,8 → 87,3/min y lanzan habilidades 35,1 → 30,4/min. Ninguna partida falla. Con 8 partidas es una tendencia: el bloqueo no hace más fuerte a Trunk, porque el Grip pierde 1,3 s.
+> - Online faltan dos trozos en `BrawlRoom`: el arranque del cabezazo y el bucle del hold-to-fire (DISTRIBUCIÓN). Al soltar la carga por aturdido, la sala tiene que mandar también `lChargeEnd` (el mismo mensaje que la cancelación del bot de H8), y `game.ts` apagar la línea al recibirlo (tierra de nadie); sin eso, la línea se queda pintada hasta los 3 s de su vida. Hasta que llegue, un jugador aturdido online sigue cabeceando y cargando el All-in. El texto del estado «Aturdido» (i18n `status-stunned-desc`, hoy «No puede moverse durante un instante») es de INTERFAZ.
+> - **Para Rafa:**
+>   - El Slam también bloquea acciones 1,5 s a todos los que pilla en radio 7. Si resulta demasiado control, se puede bajar `slamStunDuration` o limitar el bloqueo al Grip (haría falta un campo aparte).
+>   - Las L ya en marcha siguen durante el aturdido: en la prueba, la Saw Shell de Shelly, lanzada justo antes del tirón, empuja a Trunk 1,36 u (pico 26 u/s) estando ella aturdida. ¿Debe el aturdido cortarlas?
+
+> **2026-09-24 — repaso de habilidades, fase 2, grupo H3 (frenesí de Sergei casi inamovible; decisión 4 de Rafa). `[~]`, pendiente de golden y de validación de Rafa:**
+> - **Campo `knockbackTakenMult` en la definición** (Sergei L: 0,4). Mientras la habilidad está activa (sin contar la carga, como la masa), todo empujón que recibe el bicho de otro va × ese valor. Un solo punto: `Critter.knockbackScale` en el cliente y `knockbackScale(player)` en `server/src/sim/abilities.ts`. La masa ×5,5 sigue: reparte el choque; el multiplicador llega a lo que la masa no tocaba y a lo que el tope de 20 u/s aplanaba.
+> - **Lo que pasa por él:** cabezazo recibido y el retroceso del propio cabezazo, roce, golpe de dash (H1), reflejo y rebote de Steel Shell, las K radiales y de cono, el impacto de Shadow Step, el tirón del Grip (recorre 0,4 del camino, y el aturdido entra igual), la bola de nieve, Saw Shell, la embestida, Cone Pulse. **No pasan:** el golpe del All-in (echa fuera a quien pilla, decisión de Rafa del 2026-05-01) ni el tirón del Sinkhole (es una zona, no un golpe; tampoco la masa lo toca). El aturdido ×4 y el 0,4 se multiplican: ×1,6.
+> - **Copycat lo copia** (`COPYCAT_KEYS` en los dos lados): la Kurama que copia a Sergei recibe × 0,4, con su propia velocidad y masa (×1,2).
+> - Medido con pasos de 1/60 s en el laboratorio, 60 pasos, sin tocar el stick (`.tmp/fase2/h3/probe.mjs`; `antes.json` en 5182 y `despues.json` en 5181). Sin frenesí nada cambia. Con frenesí, antes → después:
+>   - Cabezazo de Trunk: 1,54 → 0,62 u (sin frenesí, 2,57).
+>   - Slam de Trunk a 2,5 u: 1,57 → 0,66 u. Claw Wave a 1,8 u: 1,65 → 0,76 u. Bola de Kowalski: 1,14 → 0,45 u. Saw Shell pegado: 2,54 → 1,64 u. Cone Pulse (1 s): 3,00 → 1,05 u.
+>   - Grip desde 8 u: lo traía 6,4 u, hasta 1,6 u de Trunk; ahora 2,56 u y se queda a 5,44 u, aturdido.
+>   - Su propio cabezazo a Trunk: retrocede 1,00 → 0,25 u (Trunk sale igual, 1,98 u).
+>   - Kurama copiando a Sergei, cabezazo de Trunk: 2,60 → 1,66 u (copiando a nadie, 2,60).
+>   - Servidor, con el mismo choque: Sergei sale a 30,1 → 12,0 u/s, su retroceso 24,0 → 9,6 u/s, el Grip lo deja a 5,44 u y la Kurama que lo copia pasa a × 0,4 al acabar la carga (`.tmp/fase2/h3/server-kb.test.ts`).
+> - Tanda de Sergei, 8 partidas con la semilla 700, repetida con el multiplicador a 1 para aislar este grupo de H1 y H2 (`.tmp/fase2/h3/batch-Sergei-mult1.json` → `batch-Sergei.json`): Sergei cae 4,04 → 3,88/min, los rivales caen 6,23 → 7,43/min y eliminan 5 → 8; gana 0 de 8 en las dos. Ninguna partida falla. Tendencia, no medida.
+> - Online, los empujones que viven en `BrawlRoom` (bola de nieve, Cone Pulse, sierra, embestida) necesitan leer `knockbackScale`: aviso a DISTRIBUCIÓN.
+> - **Para Rafa:** el Grip a un Sergei en frenesí lo deja a medio camino (aturdido, pero lejos de la trompa). Si prefieres que el Grip lo traiga entero y solo resista los golpes, es quitar una línea.
+
+> **2026-09-24 — repaso de habilidades, fase 2, grupo H4 (All-in con carga mínima y apuntando; decisión 5 de Rafa). `[~]`, pendiente de golden y de validación de Rafa:**
+> - **Carga mínima de 0,35 s** (`holdToFireMinMs: 350` en la definición de la L, junto a `holdToFireMaxMs`; el mismo valor en el kit del servidor, con fila en `ability-kit-parity`). Soltar antes no dispara al instante: el tajo sale en el paso en que se cumple el mínimo. Si se vuelve a pulsar L antes de eso, la carga sigue. La espera vive en `releaseSebastianAllInCharge`, que usan el jugador y el bot, así que nadie se la salta.
+> - **Apuntar mientras carga.** Sebastian sigue enraizado, y la regla de «el facing sigue a la velocidad» no giraba nada. Ahora, mientras carga, `Critter.update` no toca el facing y `advanceAllInCharge` lo gira hacia el stick a `FEEL.allIn.aimTurnDegPerSec` (360°/s: 90° en 0,25 s, media vuelta en 0,5 s), por el lado corto. Sin stick mantiene la puntería. Confundido, el stick sale invertido, como todo lo demás.
+> - **Por qué con tope de giro y no instantáneo:** la línea barre en vez de saltar, así que los demás la ven venir. Un giro instantáneo en el último paso dejaría la carga mínima sin tiempo de reacción. Con 360°/s, un toque con el stick girado 90° ya sale en la nueva dirección a los 0,35 s.
+> - **La línea sigue la puntería**, y a Sebastian si lo empujan: `spawnAllInTrajectoryPreview` devuelve un handle con `aim` y `end`. Se apaga en 0,2 s al soltar, cancelar, aturdir o caer. Antes se quedaba pintada hasta 3 s después del tajo, y una carga empezada con el stick pulsado pintaba la línea hacia un lado y tajaba hacia otro.
+> - **Bots:** misma vía, y respetan el mínimo por construcción. Hoy sueltan a los 0,5 s (`allInReactionSec`), por encima del mínimo, y no mueven el stick mientras cargan: sus partidas no cambian.
+> - Medido con pasos de 1/60 s en el laboratorio (`.tmp/fase2/h4/allin-probe.mjs`: `antes.json` en 5182 y `despues.json` en 5181). Sebastian en el centro mirando a +X y un muñeco a 5 u. Antes → después:
+>   - Toque de 2 pasos (33 ms), muñeco delante: se resolvía a los 0,033 s; ahora a los 0,35 s (paso 21). Elimina igual.
+>   - Stick girado 90° y L soltada a los 0,75 s, muñeco a 90°: el facing se quedaba en +X, fallaba y Sebastian caía. Ahora el facing y la línea van juntos 90° → 66° → 36° → 6° → 0° (cada 5 pasos), el tajo sale hacia +Z y el muñeco cae.
+>   - Toque con el stick girado 90° a la vez: la línea apuntaba a +X y el tajo salía hacia +Z. Ahora línea y tajo a 0°, a los 0,35 s.
+>   - Media vuelta (stick 180°, muñeco detrás): fallaba y caía; ahora gira 180° en 0,5 s y lo elimina.
+>   - L mantenida 1 s sin stick: igual antes y después (sale en el paso de soltar).
+>   - La línea desaparece a los 0,19 s del tajo (antes, entre 0,6 y 2,9 s).
+>   - Bot con `allInReactionSec` forzado a 0,1 s (`bot-probe.mjs`): resolvía a los 0,117 s; ahora a los 0,35 s. Con el 0,5 real, 0,517 s en los dos.
+>   - `ability-shots` de Sebastian L con la L mantenida 45 pasos: idéntica. Con `--hold=2`: el muñeco cercano caía en el paso 2 y ahora en el 21. Hojas y vídeo en `.tmp/fase2/h4/{antes,despues}{,-tap}`.
+> - Tanda de Sebastian, 8 partidas con la semilla 860 (`.tmp/fase2/h4/batch.json`): Sebastian cae 2,77/min y queda eliminado en 6 de 8; los rivales caen 6,79/min. No cambia nada respecto a H1-H3: los bots no giran ni sueltan antes de 0,35 s, así que la partida es la misma paso a paso.
+> - Online, la máquina de carga está en `BrawlRoom`: aviso a DISTRIBUCIÓN (el mínimo con `lDef.holdToFireMinMs`, el giro con `SIM.allIn.aimTurnDegPerSec` y la dirección leída al soltar, no al empezar). Que la línea de los demás jugadores siga la puntería es de `game.ts` (tierra de nadie). Hasta entonces `holdToFireMinMs` del kit y `SIM.allIn.aimTurnDegPerSec` no tienen lector en la sala: sus filas de `ability-kit-parity` y `feel-sim-parity` fijan el valor, no la paridad online. Lo mismo `SIM.conePulse` (la sala escribe 1,4 y 2,0 a mano) y `frictionScale` (grupo H7).
+> - **Para Rafa:**
+>   - Apuntando, el All-in casi no falla. El roster corre a 2,3-5,3 u/s (Shelly a Kurama y Sihans; `.tmp/fase2/h4/speeds.mjs`), así que un rival que corre de lado a 5 u gira, visto desde Sebastian, 25-60°/s, muy por debajo de los 360°/s de la puntería. Solo lo salvan la distancia (más de ~10 u) o la inmunidad. Si se queda corto de riesgo, los mandos son `aimTurnDegPerSec` y `holdToFireMinMs`.
+>   - Los bots no apuntan: si el pasillo se vacía, sueltan la carga sin gastarla. Hacer que sigan a su objetivo sería la misma vía que el jugador, pero su All-in acertaría casi siempre. ¿Lo quieres?
+
+> **2026-09-24 — repaso de habilidades, fase 2, grupo H5 (Mirror Trick lejos del perseguidor; decisión 6 de Rafa). `[~]`, pendiente de golden y de validación de Rafa:**
+> - **El salto de 7 u se aleja del enemigo vivo más cercano a menos de `decoyThreatRange` (10 u)**, campo nuevo en la definición de la K y en el kit del servidor, con fila en `ability-kit-parity` (junto con `decoyEscapeDistance`). Cuenta a los inmunes, porque siguen persiguiendo y cabeceando, y no a los que caen. Sin nadie a 10 u, salta hacia atrás de su facing, como antes. Se mantienen el recorte a 11,6 u y `decoyEscapeFallbacks` con `pickSafeLanding`. `nearestDecoyThreat` está en `abilities-runtime.ts` y en `server/src/sim/abilities.ts`.
+> - **Se gira hacia el perseguidor y salta de espaldas.** Así las dos órdenes de Rafa se cumplen a la vez: la del 2026-04-29 («HACIA ATRÁS, no hacia delante», y el clip es Back_Jump) y la de hoy («para alejarse del perseguidor»). El señuelo se crea antes del giro y conserva la pose de huida. Si el jugador sigue con el stick pulsado, el facing vuelve a la huida en el paso siguiente, porque sigue al movimiento.
+> - **Por qué 10 u y no 6:** el salto mide 7 u. Con un alcance menor, un perseguidor justo por fuera y a su espalda recibe a Kurama encima: con 8 u de distancia, el salto la dejaba a 1,1 u de él, con alcance 6 y también antes del cambio. Con 10, quien queda para el facing acaba a 3 u como mínimo.
+> - Medido con pasos de 1/60 s en el laboratorio, Kurama en el centro (`.tmp/fase2/h5/probe.mjs`; `antes.json` en 5182 y `despues.json` en 5181). Dónde reaparece y a qué distancia queda del perseguidor, antes → después:
+>   - (a) Encarando a Sergei, a 2 u delante: (−7, 0) y 9 u en los dos casos.
+>   - (b) Huyendo con Sergei 2 u detrás: antes (7, 0), cruzándolo y a 5 u al otro lado. Ahora (−7, 0), a 9 u y girada hacia él.
+>   - (c1) Sergei 2 u al este (el más cercano) y Trunk 4 u detrás: antes saltaba hacia Trunk y quedaba a 3 u. Ahora se aleja de Sergei (9 u) y Trunk queda a 8,1 u.
+>   - (c2) Sergei 4,5 u al este y Trunk 3 u detrás (el más cercano): antes pasaba por encima de Trunk y quedaba a 4 u. Ahora (0, 7), con Trunk a 10 u y Sergei a 8,3 u.
+>   - (d) Huyendo con Sergei 8 u detrás: antes quedaba a 1,1 u de él. Ahora a 15 u. Con el alcance forzado a 6, 1,1 u.
+>   - (e) Nadie a menos de 10 u: (7, 0), atrás del facing, igual que antes.
+>   - Jugador huyendo con A pulsada y Sergei 2 u detrás (`flee-probe.mjs`): antes reaparecía en x 6,61, al otro lado de Sergei, y seguía corriendo hacia él. Ahora reaparece en x −7,39 y el facing vuelve a −90° en el paso siguiente.
+>   - Servidor (`.tmp/fase2/h5/server-mirror.test.ts`, 9 casos): los mismos puntos. Si la línea de huida sale del suelo, aterriza al 70 % (−4,9), y si no hay suelo en ninguna fracción, se queda junto al señuelo. Un enemigo que cae no cuenta.
+>   - `ability-shots` de Kurama K: idéntica (el laboratorio la pone encarando al muñeco, caso a).
+> - En partida, con Kurama en autopiloto contra Shelly, Kowalski y Sergei, 8 partidas con la semilla 740 (`casts.mjs`). Para aislar el cambio se repitió con el alcance a 0, que es la lógica anterior. Alcance 0 → 10:
+>   - 31 → 25 K lanzadas. El bot lanza la K encarando a su objetivo, así que casi siempre es el caso (a). Con alcance 0 hubo 4 con el más cercano a la espalda, y ganaban 3,3 u de media, frente a 5,7 u con él delante.
+>   - Distancia ganada al más cercano: +5,4 → +6,2 u de media. Ninguna K acaba más cerca de él.
+>   - Tanda (`batch-range0.json` → `batch.json`): Kurama cae 2,10 → 2,10/min, los rivales 5,79 → 5,53/min, gana 3 → 2 de 8. Las 8 partidas salen bien en los dos casos. Es ruido: el cambio se nota al huir, y los bots no huyen.
+>   - **El golden cambia también por H5.** Su partida 1 (Sergei contra Trunk, Kurama y Shelly, semilla 501) lleva a Kurama de bot. Con el código actual lanza 3 K, y en 2 el enemigo más cercano a menos de 10 u no estaba justo delante (a 4,7° y a 77° de su facing), así que H5 la gira y aterriza en otro sitio (`.tmp/fase2/rev/golden501-kurama.mjs`). Hay que contarlo en la nota del `golden:write` junto con los demás grupos.
+> - Online: el giro y el salto viven en `server/src/sim` y salen con el despliegue. El evento `abilityFired` lleva la posición y el `rotationY` de después del efecto (punto 7 del informe), así que el señuelo online aparece en el destino y, ahora, mirando al perseguidor. Cuando el evento lleve el origen, que lleve también el `rotationY` de antes del giro.
+> - **Para Rafa:** el mando es `decoyThreatRange`. Con 10 u, casi siempre salta lejos de alguien y el «atrás del facing» queda para cuando nadie está cerca. Si prefieres que el jugador decida la dirección más a menudo, bajarlo por debajo de 7 vuelve a abrir el caso (d).
+
+> **2026-09-24 — repaso de habilidades, fase 2, grupo H6 (Steel Shell frena en seco y no flota sobre el vacío; decisión 7 de Rafa). `[~]`, pendiente de golden y de validación de Rafa:**
+> - **Frena en seco al pulsar K.** `anchorInPlace` (`abilities-runtime.ts` y `server/src/sim/abilities.ts`) corta la J o el blink en curso, con su enfriamiento, y pone la velocidad a 0. Se llama al activar la K (así la carga de 0,2 s no patina) y otra vez al cerrarse el escudo, por si la estocada de un cabezazo la movió durante la carga. Antes la J solo se cortaba al cerrarse, y la velocidad seguía hasta que la frenaba el rozamiento.
+> - **Solo frena lo que se mueve ella** (corrección tras la revisión). La primera versión ponía a 0 toda la velocidad, también la de un empujón recibido: pulsar K justo después de un cabezazo le quitaba casi todo el vuelo, y la segunda puesta a 0, al cerrarse, borraba los empujones de la carga, que era su ventana vulnerable. Rafa respondió «frena en seco» a una pregunta sobre su propio movimiento; lo de anular empujones no se le había planteado. Ahora la velocidad va a 0 solo si no pasa de lo que ella misma se da: `anchorBrakeMaxSpeed` (3,5 u/s, campo nuevo de Steel Shell; su carrera llega a 1,89, a 2,65 con Saw Shell y a 3,31 sobre el hielo de Frozen Floor), más el impulso de la J que corta (15) y la estocada de un cabezazo en curso (4,7). Si va más rápido, alguien la ha lanzado, y el vuelo sigue como antes de H6. Mismo valor en el kit del servidor, con fila en `ability-kit-parity`.
+> - **La carga de Steel Shell queda enraizada del todo** (`slowDuringWindUp: 0` en su definición). Con el 0,15 genérico de las K y el stick pulsado, Shelly se arrastraba 0,04 u en la carga. El kit del servidor ya la enraizaba (`ROOTED_K`), así que en esta K cliente y servidor coinciden. El resto de las K sigue a la espera del punto 2 del buzón (C5 del informe).
+> - **Por qué no caía:** `checkFalloff` (cliente y `server/src/sim/physics.ts`) se salta a todo inmune, y Steel Shell y Mirror Trick escriben la inmunidad. El anclaje (masa ×9999) no intervenía. Ahora la inmunidad solo sostiene sobre el vacío como gracia de reaparición. Con una K de autobuff pasada su carga (`selfBuffOnly`: Steel Shell y Mirror Trick), el bicho cae como cualquiera. La inmunidad los sigue librando de empujones. Si se lanza la K durante la gracia de reaparición, la gracia vale durante la carga, y al cerrarse la K manda ella.
+> - **Mirror Trick también cae** (pendiente de Rafa: la decisión 7 habla solo de Shelly). La regla mira `selfBuffOnly`, así que vale para Steel Shell y para Mirror Trick. Offline, Kurama anda durante el truco: si se sale del disco o se hunde la baldosa, cae en el acto. Antes flotaba hasta 2,8 s, inmune, y podía volver al suelo.
+> - Medido con pasos de 1/60 s en el laboratorio (`.tmp/fase2/h6/probe-shell.mjs`; `probe-antes.txt` en 5182 y `probe-despues.txt` en 5181):
+>   - Andando a tope (1,89 u/s) + K: desliza 0,32 u (0,27 en la carga y 0,05 tras cerrarse, parada 10 pasos después) → 0 u.
+>   - Con la J en curso (8,57 u/s) + K: 1,07 u (0,92 + 0,15, parada 16 pasos después) → 0 u, y la J acaba al pulsar.
+>   - Tras la corrección (`.tmp/fase2/rev/r1-probe.mjs`; `r1-antes-5182.txt`, `r1-antes-5181.txt` con la puesta a 0 total, `r1-despues-5181.txt`), antes de H6 → puesta a 0 total → ahora:
+>     - Lanzada a 20 u/s (un cabezazo) y K al paso siguiente: recorre 1,04 → 0 → 1,03 u. A los 3 pasos: 1,04 → 0,33 → 1,04 u. A los 6 (va a 4,3 u/s): 1,04 → 0,82 → 1,04 u. Sin K, 1,04 u.
+>     - Empujón de 20 u/s 9 pasos dentro de la carga (le llega al cierre a 6,3 u/s): 1,04 → 0,56 → 1,04 u. A 6 pasos (al cierre va a 2 u/s, por debajo del umbral): 1,04 → 0,89 → 0,89 u.
+>     - Andando a tope y con la J en curso: 0 u, igual que con la puesta a 0 total. Cabezazo y K durante la estocada: 0,24 u en los tres casos (la estocada sale en la carga, antes del cierre).
+>   - Se hunde la baldosa (`killFragmentIndices`) bajo Shelly anclada: no caía en 2,5 s → cae en el paso siguiente. Igual Kurama con el truco.
+>   - Recién reaparecida (1,5 s de inmunidad): cae a los 1,55 s antes y después. La gracia se mantiene.
+>   - Reaparecida y con el escudo ya cerrado: no caía → cae en el paso siguiente.
+>   - `ability-shots` de Shelly K y Kurama K: idénticas, porque desde parada no cambia nada.
+> - Servidor (`.tmp/fase2/h6/server-shell.test.ts`, 6 casos):
+>   - 2 u/s → 0 al pulsar;
+>   - un empujón de 3 u/s en la carga → 0 al cerrarse;
+>   - J a 15 u/s → 0, con la J cancelada y 5,5 s de enfriamiento;
+>   - anclada sobre un hueco: cae y pierde una vida;
+>   - reaparecida sin K: no cae;
+>   - gracia de reaparición con la K en carga: no cae; al cerrarse, sí;
+>   - Kurama con el truco: cae.
+>   - Tras la corrección (`.tmp/fase2/rev/server-anchor.test.ts`, 6 casos): lanzada a 20 u/s y K, sigue a 20; empujón de 20 u/s en la carga, sigue a 20 al cerrarse; un roce de 3 u/s en la carga, 0 al cerrarse; estocada de 6,5 u/s y K, 0; corriendo y con la J, 0. Los 6 casos de H6 siguen en verde.
+> - Tandas en 5181. El «antes» es el mismo código con estas líneas revertidas, así que aísla el grupo.
+>   - Shelly, 24 partidas (semillas 760-783; `antes-batch-Shelly*.json` → `batch-Shelly*.json`): cae 2,87 → 2,79/min (71 → 72); los rivales, 6,11 → 5,74/min; 84 → 88 escudos; gana 1 → 0.
+>     - Antes, 3 caídas llegaron justo al acabarse el escudo, entre 4,1 y 4,4 s después de lanzarlo: flotaba sobre una baldosa hundida hasta que se le acababa la inmunidad.
+>     - Después, 2 caídas a mitad de escudo (a 2,9 y 3,85 s), que son la regla nueva, y ninguna flotando.
+>   - Kurama, 8 partidas (semilla 740): cae 2,10 → 2,54/min (18 → 21); 25 → 22 trucos; gana 3 → 3. Una caída a mitad de truco (a 1,40 s): el lote 2 se hundió bajo ella y bajo Shelly a la vez. El resto es divergencia de las partidas.
+>   - Tras la corrección, Shelly contra Trunk, Sebastian y Kermit, semillas 760-767, el mismo código con y sin `anchorBrakeMaxSpeed` (`.tmp/fase2/rev/batch-Shelly-fullzero.json` → `batch-Shelly-fix.json`): la partida dura 69,2 → 48,5 s de media y Shelly cae en las 8 en los dos casos (3 vidas: 2,6 → 3,7 caídas/min). En el «antes» de H6 duraba 55,8 s. El bot lanza el escudo justo cuando un rival cabecea a su lado (`shelly-k-speed.txt`): de 22 escudos, en 10 le llega un empujón que la puesta a 0 total borraba, 1 al pulsar (iba a 16,8 u/s) y 9 durante la carga (al cerrarse iba a 4,6-14,3 u/s). Con la puesta a 0 total, el escudo del bot funcionaba como una parada del cabezazo incluso en la carga.
+> - Online: `checkFalloff` y `tickPlayerAbilities` viven en `server/src/sim`, y `BrawlRoom` solo las llama. Sale con el despliegue sin tocar la sala.
+> - **Para Rafa:**
+>   - ¿Quieres que Steel Shell anule también los empujones? Hoy no: si la lanzan y pulsa K, o la empujan durante la carga de 0,2 s, el vuelo sigue y el escudo se cierra donde aterriza. Si sí, basta con quitar `anchorBrakeMaxSpeed` de su definición en los dos kits: frena desde cualquier velocidad, pulsar K justo después de un cabezazo le ahorra casi todo el vuelo (1,04 → 0 u), y el bot de Shelly aguanta bastante más (partidas de 48,5 → 69,2 s en las semillas 760-767).
+>   - ¿Mirror Trick también debe caer sobre el vacío? La decisión 7 era de Shelly, y la regla se extendió al truco porque los dos escriben la inmunidad. Si prefieres que Kurama siga flotando durante el truco, se limita a Shelly filtrando por `selfAnchorWhileBuffed` en vez de `selfBuffOnly` en `hasSelfBuffActive` (`src/physics.ts` y `server/src/sim/physics.ts`).
+>   - El bot de Shelly se encierra en el borde cuando lo aprietan (regla de presión de borde), y el borde es lo que se hunde. Sobre una baldosa que ya tiembla, eso es ahora una caída segura: pasó en 2 de 88 escudos. Evitarlo pide que el bot sepa si la baldosa que pisa está avisando, y la arena hoy no lo expone (aviso a ARENA). ¿Lo hacemos?
+>   - Si Shelly lanza el escudo en su gracia de reaparición, al cerrarse el escudo ya puede caer. Es coherente con «el escudo no te sostiene», pero si prefieres que la gracia de 1,5 s valga siempre, hay que llevar un temporizador de gracia aparte en cliente y servidor (el del servidor lo escribe `BrawlRoom` al reaparecer).
+
+> **2026-09-24 — repaso de habilidades, fase 2, grupo H7 (Kowalski: Ice Slide, bola y buff; decisión 8 de Rafa). `[~]`, pendiente de golden y de validación de Rafa:**
+> - **Ice Slide desliza de verdad.** `slideFrictionMult: 3` en la definición de la J (cliente y kit de `server/src/sim`, con fila en `ability-kit-parity`): mientras dura la J, la vida media de su rozamiento va ×3. Lo leen `Critter.frictionScale` en el bucle de rozamiento de `critter.ts` y, en el servidor, `frictionScale(p)` de `server/src/sim/abilities.ts`, que `BrawlRoom` aún tiene que multiplicar en su paso de integración (DISTRIBUCIÓN). La descripción decía «on an ice trail» y ese rastro no existe: pasa a «Belly-slides forward and keeps gliding» / «Se lanza de panza y sigue deslizándose».
+> - Medido con pasos de 1/60 s, Kowalski sola y parada, 1,5 s desde que pulsa (`.tmp/fase2/h7/probe-j.mjs`; `probe-j-antes.txt` en 5182 y `probe-j-despues.txt` en 5181). Antes → después:
+>   - Con el stick: la J la lleva 1,64 → 4,73 u más lejos que correr (6,57 → 9,66 u, frente a 4,93 corriendo). En la ventana activa recorre 2,68 → 4,78 u y sale de ella a 2,3 → 10,3 u/s; vuelve a su velocidad de carrera a los 0,8 s en vez de a los 0,35.
+>   - Sin el stick: 0,98 → 2,48 u.
+>   - `ability-shots` (con el muñeco cercano a 1,8 u en medio): recorre 0,80 → 1,33 u y lo empuja 0,22 → 0,75 u.
+> - **El bot mira hasta donde llega el deslizamiento.** Con la sonda del borde a 3 u, 5 de sus 43 J acababan en caída antes de 1 s y ganaba 0 de 8 partidas (5 de 8 sin el cambio). La sonda lejana se multiplica ahora por `dashGlideFactor(def)` = m − (m − 1)·2^(−T/(h·m)), la distancia de más que da el deslizamiento: 2,16 en Ice Slide (sonda a 6,5 u) y 1 en las otras ocho J, que no cambian. Está en `src/bot.ts` y en `server/src/sim/bot.ts`, con test nuevo en `server-bot.test.ts`.
+> - **Snowball: el lanzamiento casa con el clip.** Trazado hueso a hueso (`.tmp/fase2/h7/bones.mjs`): en Ability2 (3,8 s) la aleta que lanza (R_Hand) llega a su máxima velocidad hacia delante a 1,80-1,82 s y a su máximo alcance a 1,85 s. El clip arranca en el paso en que se pulsa, así que en el paso en que nace la bola va por `rate` × 31/60 s. Con `clipPlaybackRate: 3.5` va por 1,81 s y la aleta está sobre la bola. Con el 3,6 del informe va por 1,86 s: la aleta ya ha pasado la bola y va hacia abajo, un fotograma tarde. Antes, con el 2 de `ANIMATION_OVERRIDES`, iba por 1,03 s: el pingüino aún estaba girándose y la bola salía de la nada. Hojas fotograma a fotograma (pasos 20-39): `.tmp/fase2/h7/k-antes`, `k-3.5`, `k-3.6` y `k-despues/release-sheet.png`. El 3,5 va atado al windUp de 0,50: si cambia uno, hay que recalcular el otro.
+> - **Buff de Frozen Floor: se queda en ×1,10 de velocidad y de masa**, y el comentario, que decía «neutro», ya cuenta lo que hace. Tanda de 24 partidas con 1,10 y otras 24 con 1,0, mismo código y semillas 820-843 (`ab-glide.json` y `ab-neutral.json`). Con 1,10 → con 1,0:
+>   - Kowalski gana 6 → 10 y cae 2,95 → 2,65/min.
+>   - Caídas rivales por L: 0,88 → 0,87; durante el hielo: 1,63 → 1,52.
+>   - Caídas de Kowalski en su L: 8 de 48 → 7 de 46.
+>   - Nada se sale del ruido. Se queda así porque el 🔥 y el brillo de frenesí de la L no mienten, y no hay que tocar nada fuera del carril. Si Rafa lo prefiere neutro, hacen falta 1,0/1,0 en los dos kits, la tabla de `verify-ability-parity`, que `frame-ticks.ts` no ponga 'frenzy' con `frozenFloorL` y otro brillo en `updateVisuals`.
+> - Tanda de Kowalski, 8 partidas con la semilla 820 (`antes-batch.json` en 5182, que reproduce `.tmp/fix-audit`; `batch.json` en 5181, con los grupos H1-H6 dentro):
+>   - gana 5 → 2;
+>   - cae 2,05 → 3,15/min;
+>   - caídas en el segundo siguiente a una J: 0 de 62 → 2 de 48;
+>   - los rivales caen 8,70 → 7,01/min.
+> - Para separar el deslizamiento del resto de la fase 2 se repitió con `slideFrictionMult` a 1. En 8 partidas, sin deslizamiento gana 5 de 8. En 24 partidas (semillas 820-843), con → sin deslizamiento:
+>   - gana 6 → 9;
+>   - cae 2,95 → 2,55/min;
+>   - caídas en el segundo siguiente a una J: 5 de 163 → 4 de 185;
+>   - los rivales caen 7,36 → 7,59/min.
+>   - Es una tendencia: al bot le cuesta algo más de una caída cada 2,5 minutos.
+> - **Para Rafa:**
+>   - El deslizamiento hace a Kowalski un poco peor en manos del bot, aunque ya no se tira por el borde. Si el jugador lo nota igual, la palanca es `slideFrictionMult` (con 2 serían unas 3,8 u).
+>   - `scripts/ability-shots.mjs` no borra el aturdido del lanzador. Con la semilla 501, un Grip de Trunk en el primer segundo y medio deja a Kowalski aturdida, y desde H2 eso bloquea la J, la K y la L («activa 0f»). Las hojas de este grupo salen de una copia que lo borra (`.tmp/fase2/h7/ability-shots-h7.mjs`). El arreglo de verdad es de tierra de nadie y hay que aplicarlo antes de la tanda final de `ability-shots`: en el `evaluate` del setup, tras `resetPlayerCooldowns()`, `for (const c of g.critters) { c.stunTimer = 0; c.confusedTimer = 0; c.slowTimer = 0; }`.
+
+> **2026-09-24 — repaso de habilidades, fase 2, grupo H8 (los bots online lanzan la L; decisión 10 de Rafa). `[~]`, pendiente de golden y de validación de Rafa:**
+> - **`server/src/sim/bot.ts` pulsa la L** (antes, `ultimate = false`). `lFires` espeja las reglas de `src/bot.ts` y decide por la forma de la definición:
+>   - Trunk Grip (`gripK`): alguien a quien el agarre cogería ya, a más de `targetedMinRange` (3 u) y a menos de `gripMaxRange` (10 u). Tasa `grip` 0,5/s. `findGripTarget` sale de la rama del agarre de `server/src/sim/abilities.ts` y la usan el agarre y el bot, como en el cliente.
+>   - Las L de tipo buff (Frenzy, Copycat, Saw Shell, Toxic Touch, Sinkhole): el enemigo más cercano a menos de `buffRange` (3,5 u), en cualquier dirección. Tasa `buff` 0,382/s.
+>   - Frozen Floor: min(2, rivales vivos) a menos de `floorRadius × floorCastRadiusFrac` (4,8 u).
+>   - Cone Pulse: el más cercano a menos de 3,5 u y dentro de su cono (±45°).
+>   - Shelly: ni con el escudo puesto ni en el tick en que lo levanta. En la sala la K arranca antes que la L, y la sierra saldría anclada. El escudo solo cuenta si la K está lista, porque si no, pulsarla no hace nada.
+>   - Siempre con la L lista (ni activa ni en enfriamiento) y nunca aturdido.
+> - **All-in de Sebastian: excluido online.** El bucle de carga de `BrawlRoom` empieza la carga al pulsar y dispara al soltar. Pero el bot no ve su carga (`lHoldCharging` vive en los datos internos de la sala, no en `PlayerSchema`), y la sala no le da forma de dejarla sin gastarla. Si la mantuviera a ciegas, soltaría con el pasillo vacío, y esas sueltas a ciegas eran la mitad de las caídas de Sebastian offline. El cambio exacto que falta en la sala queda para DISTRIBUCIÓN. Offline sigue como estaba.
+> - Valores: `SIM.bots` gana `fireRatesPerSec.buff` y `.grip`, `buffRange`, `gripMaxRange` y `floorCastRadiusFrac`, con sus 5 filas en `feel-sim-parity`. El 3,5 que `buffFires` llevaba escrito a mano en `src/bot.ts` pasa a `FEEL.bots.buffRange`, con el mismo valor.
+> - Tests: 7 casos nuevos en `server-bot.test.ts`:
+>   - buff con alcance, enfriamiento, activa y aturdido;
+>   - la tasa convertida a 30 Hz;
+>   - Grip;
+>   - Frozen Floor;
+>   - Cone Pulse;
+>   - Shelly;
+>   - Sebastian.
+>
+>   Si se quita la regla del escudo en el mismo tick, falla el de Shelly.
+> - Medido:
+>   - **Offline no cambia.** La tanda de Kowalski (semilla 820, 8 partidas, `.tmp/fase2/h8/batch-Kowalski.json`) sale idéntica, partida a partida, a la última de H7 (`.tmp/fase2/h7/ab-glide.json`).
+>   - **Online, con la sala de verdad y sin clientes.** `.tmp/fase2/h8/online-sim.mts` ejecuta `BrawlRoom.simulatePlaying` a 30 Hz con 4 bots: 24 partidas por bicho, 216 en total, con `Math.random` sembrado. El «antes» es la L aparcada en enfriamiento, que equivale al `false` de antes. Resultados:
+>     - 1441 L, entre 2,2 y 3,4 por minuto vivo según el bicho. Offline, en `.tmp/fix-audit`, entre 2,0 y 3,0.
+>     - Ninguna L fuera de su regla (comprobado con el estado del tick en que el bot decidió).
+>     - Sebastian: 0 cargas.
+>     - Ningún error en la sala.
+>   - La partida media baja de 65,7 a 48,2 s. Las caídas por minuto suben en los nueve, por ejemplo Trunk 1,73 → 2,93, Sergei 2,73 → 4,38 y Sihans 2,79 → 5,58.
+>   - Caídas de rivales mientras dura la L o en el segundo siguiente, por cada L: entre 0,65 y 1,69 online, frente a 0,30-1,31 offline. Online las L empujan más. No lo he aislado, pero las pasadas de L de `BrawlRoom` aún van con sus propios números: la sierra golpea cada tick sin `contactRehitCooldown`, Cone Pulse lleva su rampa, `knockbackScale` no se lee y Copycat usa el kit y no `getLDef`. Todo eso ya está en el buzón de DISTRIBUCIÓN.
+>   - Victorias y eliminaciones por bicho, mismas 216 partidas y semillas; la única diferencia es que los bots lanzan la L (`online-sim-antes.txt` → `online-sim-despues.txt`):
+>
+>     | Bicho | Apariciones | Victorias | % | Eliminado | Sus caídas/min | Caídas rivales por L |
+>     |---|---|---|---|---|---|---|
+>     | Sergei | 101 | 23 → 17 | 23 → 17 % | 77 → 83 % | 2,73 → 4,38 | 0,75 |
+>     | Trunk | 89 | 67 → 52 | 75 → 58 % | 25 → 42 % | 1,73 → 2,93 | 0,65 |
+>     | Kurama | 99 | 7 → 9 | 7 → 9 % | 93 → 91 % | 3,25 → 4,54 | 0,77 |
+>     | Shelly | 99 | 6 → 15 | 6 → 15 % | 94 → 85 % | 3,00 → 3,72 | 0,89 |
+>     | **Kermit** | 90 | **14 → 35** | **16 → 39 %** | **84 → 61 %** | 2,93 → 3,42 | **1,69** |
+>     | Sihans | 98 | 24 → 19 | 24 → 19 % | 76 → 81 % | **2,79 → 5,58** | 1,59 |
+>     | Kowalski | 96 | 22 → 28 | 23 → 29 % | 77 → 71 % | 2,62 → 3,70 | 1,11 |
+>     | Cheeto | 113 | 39 → 25 | 35 → 22 % | 65 → 78 % | 2,70 → 4,56 | 0,76 |
+>     | Sebastian | 79 | 9 → 9 | 11 → 11 % | 89 → 89 % | 3,16 → 4,44 | — (no la lanza) |
+>
+>   - **Kermit es efecto directo de lanzar la L, no de lo que falta en `BrawlRoom`.** Toxic Touch no empuja: solo escribe `confusedTimer = max(confusedTimer, dur)`, igual online (`BrawlRoom.ts`, pasada de Toxic Touch) que offline, y la puerta de repetición no cambia nada sobre un `max`. La sala invierte todo lo que pulsa el bot confundido, también su huida del borde (decisión 9 de Rafa), y contra bots eso vale caídas. Offline ya era la L que más caídas provoca (1,31 por L; `.tmp/fase2/h8/offline-lrates.txt`). Los arreglos pendientes de DISTRIBUCIÓN no lo corrigen.
+>   - **Sihans** dobla sus propias caídas por minuto (el resto sube ×1,2-1,7). Offline también era el que más caía (3,80/min). No lo he aislado: puede ser su propio Sinkhole.
+> - **Condición de despliegue.** Desde H8 los bots lanzan la L en todas las partidas online, así que las pasadas de L de `BrawlRoom` que siguen rotas salen en todas las partidas con bots, no solo con humanos que usan la L. El servidor con H8 no se despliega sin que DISTRIBUCIÓN aplique antes, en la misma sala: `getLDef(p)` en vez de `kit[2]` en las pasadas 2.e y 2.g; `takeContactHit` y `ageContactRehit` en la sierra y la embestida (hoy suman el impulso en cada tick de contacto); `knockbackScale` en la bola, Cone Pulse, la sierra y la embestida. Tras esos parches, repetir `.tmp/fase2/h8/online-sim.mts` y comparar victorias, no solo caídas por minuto. El All-in necesita además el cambio de la sala descrito arriba.
+> - **Para Rafa:**
+>   - En partidas solo de bots, con la L duran un 27 % menos. Si las quieres más largas, las palancas son `fireRatesPerSec.buff` y `.grip`, que comparten offline y online, y que las L de `BrawlRoom` empujen como las de offline.
+>   - Kermit pasa de ganar el 16 % de sus partidas online al 39 %, y eso no lo cambian los arreglos de la sala. ¿Lo aceptas, o bajamos cuánto lanza el bot esa L? Sería una tasa propia por definición en `lFires`/`buffFires` (`server/src/sim/bot.ts` y `src/bot.ts`), con su fila de paridad. Afectaría también offline.
+
+> **2026-09-24 — repaso de habilidades, fase 2, grupo H9 (pulido visual de la tabla de ajustes). `[~]`, pendiente de golden y de validación de Rafa. Solo cambia lo que se ve y cuánto dura cada pausa: ningún empujón, distancia ni estado cambia.**
+> - **Brillo de estado por habilidad.** Los colores de `Critter.updateVisuals` pasan a `FEEL.stateGlow`, y cada definición puede traer los suyos: `activeGlowHex`, `activeGlowIntensity` (el pico; la L sigue latiendo por debajo) y `windUpGlowHex`. Son solo visuales: no van al servidor ni los copia Copycat. Además, el brillo se pinta con un indicador y no comparando el color con el del bicho, así que un color de definición igual al del bicho ya no se apaga. Medido con `.tmp/fase2/h9/probe.mjs` (pasos de 1/60 s; `probe-antes.json` → `probe-despues.json`):
+>   - La carga de toda L: amarillo 0xffff00 a 0,5 → latido rojo oscuro 0xb01000, entre 0,25 y 1,0 a 5 Hz. La carga de la K sigue en amarillo («apártate»).
+>   - Kowalski: J 0xff8800 → 0x9fe3ff; la carga de la bola, sin brillo → 0x88c1ff a 0,5; Frozen Floor, pulso rojo → 0xcfeeff.
+>   - Saw Shell: pulso rojo → 0x6ddfa9. Sinkhole: pulso rojo de 0,6-1,0 → arena 0xc89a3c de 0,24-0,4.
+>   - Sergei (las tres por defecto) y el parpadeo de Toxic Touch no cambian.
+> - **Shadow Step (Cheeto K)**: si el aterrizaje golpea a alguien, hit stop de habilidad (`FEEL.hitStop.ability`, 0,04 s), sonido `headbuttHit` y shake (`FEEL.shake.blinkImpactFactor` 0,7, antes escrito a mano). Si no golpea, ni shake ni pausa; antes sacudía siempre. Pasos congelados con un golpe: 0 → 3.
+> - **Poison Cloud (Kermit K)**: `shakeBoost: 0.5` y `hitStopKey: 'ability'`. Empuja a 6,1 u/s y sacudía y congelaba como la Shockwave de Sergei (20 u/s). Pasos congelados: 6 → 3. `hitStopKey` es un campo nuevo de la definición: por defecto `'groundPound'` en una K radial o de cono, `'ability'` en el aterrizaje de un blink.
+> - **Snowball (Kowalski K)**: al impactar, un anillo de nieve (`CRITTER_VFX_PALETTE.Kowalski.projectile`, 0xeaf6ff y blanco) en vez de 6 manchas de polvo beige. Al derretirse, uno más pequeño. Es el mismo helper offline y online (`spawnProjectileBurst` en `projectiles.ts`), y offline hay hit stop de habilidad (pasos congelados: 0 → 3). El polvo en color nieve y la estela 0xdff4ff de Ice Slide esperan a que `spawnDustPuff` acepte color (`dust-puff.ts` es de ARENA).
+> - **Cone Pulse (Cheeto L)**: al arrancar pinta en el suelo la cuña que va a barrer (`spawnConeWedge`: ±45°, 9,4 u, el borde de su última onda) en vez del anillo de 360° de las demás L (`spawnLEntryVfx` en `abilities-runtime.ts`). Rafa ya había rechazado lo mismo en Claw Wave: «dice frontal y veo 360°». La Kurama que copia Cone Pulse también la pinta. Los 1,4 y 2,0 de las ondas pasan a `FEEL.conePulse`, con espejo en `SIM.conePulse` y dos filas en `feel-sim-parity`. En la sala, `BrawlRoom` aún los escribe a mano (aviso a DISTRIBUCIÓN).
+> - **Trunk Grip**: la víctima sigue llegando a la trompa en un paso, pero su modelo se desliza hasta ella en `FEEL.grip.yankVisualTime` (0,15 s): primero rápido y frenando al llegar, por el `reactionRig` (`applyYankVisual` en `gamefeel.ts`). El anillo del agarre sale donde la trompa la atrapa, no donde llega. Sonda con la víctima a 7 u (un tirón de 5,4 u): antes el modelo estaba en el destino en el mismo paso. Ahora, durante los 6 pasos congelados del hit stop, se queda a 4,27 u (ya ha recorrido el 21 %, porque la víctima se actualiza en el mismo paso, después de Trunk). Luego baja a 3,27 · 2,40 · 1,67 · 1,07 · 0,60 · 0,27 · 0,07 · 0 u. Si la víctima se actualiza antes que Trunk, la pausa la enseña en el sitio exacto del agarre. La reaparición y el reinicio cortan el deslizamiento (`cancelYankVisual`). **Solo offline:** `applyYankVisual` se llama desde el Grip local. Online, el jugador agarrado sigue saltando hasta 7 u en un paso, porque `game.ts` coloca al jugador local tal cual llega del parche (a los remotos ya los suaviza su interpolación). Falta en `game.ts` (tierra de nadie): al ver en el parche del jugador local que `stunTimer` sube desde 0 y su posición salta, llamar a `applyYankVisual(c, xAnterior, zAnterior)`.
+> - **Sin cambios de física.** `ability-shots` en 11 filas (`.tmp/fase2/h9/antes*` → `despues*`, con la copia que borra el aturdido, `.tmp/fase2/h7/ability-shots-h7.mjs`): Kowalski J/K/L, Cheeto K/L, Kermit K/L y la L de Trunk, Shelly, Sihans y Sergei.
+>   - Empujones, picos, direcciones y estados salen idénticos.
+>   - Solo cambian los fotogramas activos, por las pausas: Cheeto K 10 → 13, Kowalski K 34 → 37 y Kermit K 19 → 16. El muñeco lejano de Shadow Step recibe en el paso 12 en vez del 9.
+>   - La velocidad inicial del muñeco lateral en Kowalski J (1,5 → 1,0) es ruido del segundo y medio de calentamiento con reloj de pared: dos repeticiones dan 1,5.
+> - Tandas: Kowalski con la semilla 820, 8 partidas, frente a la de H8. Mismo ganador, caídas y lanzamientos en cada partida; cada una dura 0,2-0,6 s más de simulación, que son las pausas nuevas. Trunk con la semilla 720: 8/8 sin errores.
+> - Grabaciones: `.tmp/fase2/h9/{antes,despues}*/*.mp4` y las hojas. `grip7-{antes,despues}` es el Grip con el muñeco a 4,2 u (`ability-shots-grip7.mjs`).
+> - **Para Rafa:**
+>   - La carga de la bola a 0,5 pinta al pingüino de azul claro entero. Si tapa demasiado su silueta, la palanca es `FEEL.stateGlow.kWindUp.intensity`, que es la de todas las K.
+>   - Sinkhole a 0,4 se lee como arena suave. La palanca es `activeGlowIntensity`.
+>   - Kowalski: además de lo que pedía el resumen, lleva el hit stop de habilidad al impactar, que venía en la fila de la tabla del informe.
 
 > **BLOQUE FINAL pass (2026-05-01 — deadline-day). Todos `[~]` pendientes de validación de Rafa:**
 >
@@ -223,7 +463,7 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 > - **Cheeto K**: sin tocar (Rafa: "perfecta").
 > - **Sebastian K**: force `38 → 76` (Rafa: "duplicar potencia"). Cono frontal y VFX intactos.
 > - **Shelly K**: sin tocar (Rafa: "perfecta").
-> - **Kurama K (lógica corregida)**: orden ahora correcto — primero spawnDecoy en posición original, después move backward (rotación + 180°) por `decoyEscapeDistance = 7 u`. NO más facing-forward / nearest-enemy seek. Server mirror.
+> - **Kurama K (lógica corregida)**: orden ahora correcto — primero spawnDecoy en posición original, después move backward (rotación + 180°) por `decoyEscapeDistance = 7 u`. NO más facing-forward / nearest-enemy seek. Server mirror. *(2026-09-24, grupo H5: vuelve a huir del enemigo más cercano, a menos de 10 u, pero girándose hacia él y saltando de espaldas; con el facing que sigue al movimiento, «atrás» llevaba a la Kurama que huía hacia su perseguidor)*
 > - **Sergei**: K force `34 → 68` (Rafa: "doblar"). Headbutt boost `1.15 → 1.40` cliente + server.
 > - **Trunk K REDESIGN — Trunk Grip** (Rafa: rediseño oficial):
 >   - Nuevo flag `gripK: true` en AbilityDef. Al disparar:
@@ -323,8 +563,8 @@ Use `git log --grep abilities` to see the commit trail behind each item.
 ## Kowalski
 
 - [~] **Headbutt** — boost ×1.20
-- [~] **J Ice Slide** — sin cambios mecánicos + `cancelAnimOnEnd: true`
-- [~] **K Snowball PROYECTIL (2026-04-29)** — IMPLEMENTADO autorial. Nuevo `AbilityType: 'projectile'`. Server-authoritative end-to-end:
+- [~] **J Ice Slide** — `cancelAnimOnEnd: true`; desde 2026-09-24 desliza de verdad (`slideFrictionMult: 3`, unas 4,7 u más que correr frente a 1,6; ver grupo H7 en el header)
+- [~] **K Snowball PROYECTIL (2026-04-29)** — IMPLEMENTADO autorial. *(2026-09-24: clip a 3,5× (`clipPlaybackRate`) para que la aleta suelte la bola en el fotograma en que nace; ver grupo H7.)* Nuevo `AbilityType: 'projectile'`. Server-authoritative end-to-end:
   - **Server**: `BrawlRoom.activeProjectiles` Array, `tickPlayerAbilities` devuelve `projectileSpawns`, BrawlRoom integra cada tick (vx/vz fixed at fire), sweep collision contra todos los players alive non-owner non-immune con reach `pr.radius + 0.55`, on hit: knockback impulse + `victim.slowTimer = max(slowTimer, 2.0)`, broadcast `projectileHit`. TTL 1.2 s o salida del arena → `projectileExpired`.
   - **Cliente**: `src/projectiles.ts` nuevo módulo con sphere geometry shared + per-instance ice-blue emissive material. Offline: `spawnLocalProjectile` + `tickProjectiles` hace mismo sweep. Online: `pushNetworkProjectile` registra para mirror visual, `removeProjectile` despawn on server hit/expired.
   - **Schema**: `PlayerSchema.slowTimer: number` añadido. `effectiveSpeed` (cliente + server) multiplica por 0.5 cuando > 0.

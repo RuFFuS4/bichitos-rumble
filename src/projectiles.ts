@@ -20,9 +20,15 @@
 
 import * as THREE from 'three';
 import type { Critter } from './critter';
-import { spawnDustPuff } from './dust-puff';
-import { triggerCameraShake, applyImpactFeedback, createFrozenFrameGate, FEEL } from './gamefeel';
+import { triggerCameraShake, triggerHitStop, applyImpactFeedback, createFrozenFrameGate, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
+import { getCritterVfxPalette } from './abilities';
+import { spawnShockwaveRing } from './abilities-vfx';
+
+/** Radius (u) of the ring where a projectile hits someone, and of the
+ *  smaller one where it melts at the end of its range. */
+const HIT_RING_RADIUS = 1.2;
+const EXPIRE_RING_RADIUS = 0.7;
 
 interface ActiveProjectile {
   id: number | null; // null for offline (no server id), number for online
@@ -128,23 +134,33 @@ export function pushNetworkProjectile(
   playSound('abilityFire');
 }
 
+/**
+ * Where a projectile hits someone (`hit`) or melts at the end of its
+ * range: a ring in its thrower's projectile palette, Kowalski's snow
+ * (2026-09-24; it used to leave beige ground dust, and a ball thrown
+ * from under 2 u never showed). A hit also shakes and thuds. Shared by
+ * the offline sweep and the online `projectileHit` handler.
+ */
+function spawnProjectileBurst(pr: ActiveProjectile, hit: boolean): void {
+  const scene = pr.mesh.parent as THREE.Scene | null;
+  if (!scene) return;
+  const palette = getCritterVfxPalette(pr.ownerCritterName)?.projectile;
+  spawnShockwaveRing(scene, pr.x, pr.z, hit ? HIT_RING_RADIUS : EXPIRE_RING_RADIUS, palette);
+  if (hit) {
+    triggerCameraShake(FEEL.shake.headbutt * 0.45);
+    playSound('headbuttHit');
+  }
+}
+
 /** Remove a tracked projectile by id. `withImpact` = true spawns the
- *  impact VFX (dust burst + small shake) at the projectile's last
- *  position; called from the online `projectileHit` handler so the
- *  victim's reaction reads the same as offline. */
+ *  impact VFX (spawnProjectileBurst) at the projectile's last position;
+ *  called from the online `projectileHit` handler so the victim's
+ *  reaction reads the same as offline. */
 export function removeProjectile(id: number, withImpact = false): void {
   for (let i = activeProjectiles.length - 1; i >= 0; i--) {
     const pr = activeProjectiles[i];
     if (pr.id !== id) continue;
-    if (withImpact) {
-      // Mini snow burst at last position
-      for (let k = 0; k < 6; k++) {
-        const a = (k / 6) * Math.PI * 2;
-        spawnDustPuff(pr.mesh.parent as THREE.Scene, pr.x + Math.cos(a) * 0.4, 0, pr.z + Math.sin(a) * 0.4);
-      }
-      triggerCameraShake(FEEL.shake.headbutt * 0.45);
-      playSound('headbuttHit');
-    }
+    if (withImpact) spawnProjectileBurst(pr, true);
     pr.mesh.parent?.remove(pr.mesh);
     (pr.mesh.material as THREE.Material).dispose();
     activeProjectiles.splice(i, 1);
@@ -217,25 +233,22 @@ export function tickProjectiles(
     }
     if (hit) {
       const speedMag = Math.sqrt(pr.vx * pr.vx + pr.vz * pr.vz) || 1;
-      hit.vx += (pr.vx / speedMag) * pr.impulse;
-      hit.vz += (pr.vz / speedMag) * pr.impulse;
+      const impulse = pr.impulse * hit.knockbackScale;
+      hit.vx += (pr.vx / speedMag) * impulse;
+      hit.vz += (pr.vz / speedMag) * impulse;
       hit.slowTimer = Math.max(hit.slowTimer, pr.slowDuration);
       applyImpactFeedback(hit, pr.vx, pr.vz);
-      // Mini snow burst at impact
-      for (let k = 0; k < 6; k++) {
-        const a = (k / 6) * Math.PI * 2;
-        spawnDustPuff(pr.mesh.parent as THREE.Scene, pr.x + Math.cos(a) * 0.4, 0, pr.z + Math.sin(a) * 0.4);
-      }
-      triggerCameraShake(FEEL.shake.headbutt * 0.45);
-      playSound('headbuttHit');
+      spawnProjectileBurst(pr, true);
+      // The ability hit stop, offline only: online nothing freezes.
+      triggerHitStop(FEEL.hitStop.ability);
       pr.mesh.parent?.remove(pr.mesh);
       (pr.mesh.material as THREE.Material).dispose();
       activeProjectiles.splice(i, 1);
       continue;
     }
     if (pr.ttl <= 0) {
-      // Soft expire — small puff so it doesn't just vanish
-      spawnDustPuff(pr.mesh.parent as THREE.Scene, pr.x, 0, pr.z);
+      // Soft expire — a small ring so it doesn't just vanish
+      spawnProjectileBurst(pr, false);
       pr.mesh.parent?.remove(pr.mesh);
       (pr.mesh.material as THREE.Material).dispose();
       activeProjectiles.splice(i, 1);

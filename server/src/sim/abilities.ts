@@ -36,6 +36,18 @@ export interface AbilityDef {
   impulse?: number;
   speedMultiplier?: number;
   massMultiplier?: number;
+  /** Dash hit on the first contact with each player per activation, split
+   *  like a headbutt (./physics.ts resolveCollisions). Mirror of the
+   *  client field; undefined / 0 = the plain nudge. */
+  dashHitForce?: number;
+  /** The dash only hits within ±this many degrees of the facing. */
+  dashHitArcDeg?: number;
+  /** In the active window the dash goes through other players. */
+  dashPhaseThrough?: boolean;
+  /** × on the rusher's own friction half-life in the active window, so
+   *  the dash glides (read through `frictionScale`). Mirror of the client
+   *  field; undefined = 1. */
+  slideFrictionMult?: number;
   // ground_pound per-kit tuning (falls back to SIM.groundPound.*)
   radius?: number;
   force?: number;
@@ -69,16 +81,26 @@ export interface AbilityDef {
    *  critters running into her are shoved back and Shelly herself
    *  doesn't budge. */
   selfAnchorWhileBuffed?: boolean;
+  /** With `selfAnchorWhileBuffed`: the fastest the caster runs on its own
+   *  (u/s); faster, it was launched and the push carries on
+   *  (`anchorInPlace`). Mirror of the client field; undefined = it stops
+   *  from any speed. */
+  anchorBrakeMaxSpeed?: number;
   /** 2026-04-29 K-refinement — Kurama Mirror Trick escape distance.
-   *  When > 0 on a self-buff K, the caster teleports this many
-   *  units AWAY from the closest enemy at activation. Fallback:
-   *  along facing if no enemy. Pairs with `selfImmunityDuration`
-   *  so the trick reads as "señuelo se queda, Kurama se va". */
+   *  When > 0 on a self-buff K, the caster teleports this many units
+   *  backward: away from the nearest enemy within `decoyThreatRange`,
+   *  turning to face him, or straight back from her facing when no
+   *  enemy is that close. Pairs with `selfImmunityDuration` so the
+   *  trick reads as "señuelo se queda, Kurama se va". */
   decoyEscapeDistance?: number;
   /** Fractions of the (disc-clamped) escape line tried in order until
    *  one lands on live floor; none = the caster stays put. Mirror of the
    *  client's `decoyEscapeFallbacks`. */
   decoyEscapeFallbacks?: readonly number[];
+  /** 2026-09-24 — how close a live enemy must be for the escape to flee
+   *  him instead of following the facing. Mirror of the client's
+   *  `decoyThreatRange`. */
+  decoyThreatRange?: number;
 
   // --- 2026-04-30 final-L flags (mirror of cliente AbilityDef) ---
   sawL?: boolean;
@@ -108,6 +130,9 @@ export interface AbilityDef {
   // 2026-05-01 final block — Sebastian hold-to-fire flag.
   holdToFireL?: boolean;
   holdToFireMaxMs?: number;
+  /** Shortest charge that resolves (mirror of the client field): let go
+   *  earlier and it fires when this is reached. Undefined = 0. */
+  holdToFireMinMs?: number;
   toxicTouchL?: boolean;
   confusedDuration?: number;
   frozenFloorL?: boolean;
@@ -123,6 +148,10 @@ export interface AbilityDef {
   holeForce?: number;
   holeCastOffset?: number;
   copycatL?: boolean;
+  /** While the ability is active (wind-up excluded), every push the
+   *  player takes from others is × this — read through `knockbackScale`.
+   *  Mirror of the client field (src/abilities.ts): Sergei's Frenzy 0.4. */
+  knockbackTakenMult?: number;
 
   /** 2026-04-29 final-K — Trunk Grip K. Authorial K replacement
    *  for the radial Earthquake. See client AbilityDef for full
@@ -177,6 +206,7 @@ export const COPYCAT_KEYS = [
   'toxicTouchL', 'confusedDuration',
   'frozenFloorL', 'floorRadius', 'floorDuration', 'floorFrictionMult', 'floorAccelMult',
   'sinkholeL', 'holeRadius', 'holeDuration', 'holeForce', 'holeCastOffset',
+  'knockbackTakenMult',
 ] as const satisfies readonly (keyof AbilityDef)[];
 
 // Per-critter ability kits. MUST stay in sync with client's CRITTER_ABILITIES.
@@ -192,15 +222,19 @@ const ROOTED_K = { slowDuringWindUp: 0, slowDuringActive: 0 } as const;
 
 const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Sergei: [
+    // 2026-09-24 — the J hits (mirror of src/abilities.ts).
     { type: 'charge_rush',  cooldown: 4.0, duration: 0.28, windUp: 0.04,
-      impulse: 25, speedMultiplier: 2.6, massMultiplier: 2.2 },
+      impulse: 25, speedMultiplier: 2.6, massMultiplier: 2.2,
+      dashHitForce: 22 },
     // 2026-04-29 final-K: force 34 → 68 (doblar potencia).
     { type: 'ground_pound', cooldown: 6.0, duration: 0.05, windUp: 0.30,
       radius: 3.5, force: 68, ...ROOTED_K },
     // 2026-04-30 final-polish — frenzy massMult 1.75 → 5.50 (near-
     // immovable berserk, Rafa "más resistencia"). speed unchanged.
+    // 2026-09-24 — and every push he takes × 0.4 (mirror of src/abilities.ts).
     { type: 'frenzy',       cooldown: 15.0, duration: 2.5, windUp: 0.35,
-      frenzySpeedMult: 1.55, frenzyMassMult: 5.50 },
+      frenzySpeedMult: 1.55, frenzyMassMult: 5.50,
+      knockbackTakenMult: 0.4 },
   ],
   Trunk: [
     // 2026-04-30 final-polish (Rafa: "J debe recorrer más espacio"):
@@ -215,13 +249,15 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       slamStunDuration: 1.5 },
     // 2026-05-01 final — Trunk Grip. Micropasses gripStunDuration:
     //   5.0 → 4.25 (m1) → 3.80 (m2). CC dominante con margen.
+    //   3.80 → 2.5 (2026-09-24, Rafa): the stun now blocks every
+    //   action too (tickPlayerAbilities). Mirror of src/abilities.ts.
     { type: 'ground_pound', cooldown: 18.0, duration: 0.05, windUp: 0.45,
       radius: 0, force: 0, ...ROOTED_K,
       gripK: true,
       gripFrontalRange: 28.0,
       gripFrontalAngleDeg: 35,
       gripPullDistance: 1.6,
-      gripStunDuration: 3.80 },
+      gripStunDuration: 2.5 },
   ],
 
   // --- Bloque C: 7 remaining playables ---
@@ -229,8 +265,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   // Kurama — Trickster: trades raw knockback for very fast K and an
   // agile, short-windowed Frenzy that rewards mobility plays.
   Kurama: [
+    // 2026-09-24 — Fox Dash goes through (mirror of src/abilities.ts).
     { type: 'charge_rush',  cooldown: 3.2, duration: 0.26, windUp: 0.05,
-      impulse: 29, speedMultiplier: 2.8, massMultiplier: 1.3 },
+      impulse: 29, speedMultiplier: 2.8, massMultiplier: 1.3,
+      dashPhaseThrough: true },
     // 2026-04-29 K-refinement — Mirror Trick: duration 1.6 → 2.8,
     // cooldown 7 → 9, decoyEscapeDistance 7 (server teleports
     // Kurama away from the nearest enemy at fire time). Decoy
@@ -239,7 +277,9 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'ground_pound', cooldown: 9.0, duration: 2.8, windUp: 0.10,
       radius: 0, force: 0, ...ROOTED_K,
       selfBuffOnly: true, selfImmunityDuration: 2.8,
-      decoyEscapeDistance: 7.0, decoyEscapeFallbacks: [1, 0.7, 0.4] },
+      decoyEscapeDistance: 7.0, decoyEscapeFallbacks: [1, 0.7, 0.4],
+      // 2026-09-24 — flee the nearest enemy within 10 u (mirror of src/abilities.ts).
+      decoyThreatRange: 10.0 },
     // 2026-04-30 final-L — Copycat. At fire time takes the
     // COPYCAT_KEYS of the lastHitTarget's L, for that cast only.
     { type: 'frenzy',       cooldown: 16.0, duration: 3.5, windUp: 0.30,
@@ -249,7 +289,8 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
 
   Shelly: [
     { type: 'charge_rush',  cooldown: 5.5, duration: 0.45, windUp: 0.08,
-      impulse: 15, speedMultiplier: 1.8, massMultiplier: 3.2 },
+      impulse: 15, speedMultiplier: 1.8, massMultiplier: 3.2,
+      dashHitForce: 30 },
     // v0.11 — Steel Shell. 2026-04-29 K-refinement: duration 5 → 4,
     // selfImmunityDuration mirrored, selfAnchorWhileBuffed:true
     // makes Shelly physically immovable during the buff (other
@@ -257,7 +298,9 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
     { type: 'ground_pound', cooldown: 12.0, duration: 4.0, windUp: 0.20,
       radius: 0, force: 0, ...ROOTED_K,
       selfBuffOnly: true, selfImmunityDuration: 4.0,
-      selfAnchorWhileBuffed: true },
+      selfAnchorWhileBuffed: true,
+      // Only her own motion stops dead (mirror of src/abilities.ts).
+      anchorBrakeMaxSpeed: 3.5 },
     // 2026-04-30 final-L — Saw Shell. Spin contact knockback.
     // 2026-04-30 final-polish — sawContactImpulse 32 → 90 (Rafa
     // "muchísimo más empuje"). Sentinel parity bumped.
@@ -303,8 +346,11 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   // applies knockback + 2 s slow on hit, despawns on hit or TTL.
   // No more radial AoE — Rafa: "debe ser bola de nieve, no AoE".
   Kowalski: [
+    // 2026-09-24 — Ice Slide glides: friction half-life ×3 while it lasts
+    // (mirror of src/abilities.ts).
     { type: 'charge_rush',  cooldown: 4.2, duration: 0.30, windUp: 0.06,
-      impulse: 19, speedMultiplier: 2.4, massMultiplier: 1.5 },
+      impulse: 19, speedMultiplier: 2.4, massMultiplier: 1.5,
+      slideFrictionMult: 3 },
     // 2026-04-29 final-K: windUp 1.10 → 0.50 (cast más rápido),
     // slow 2.0 → 5.0 (frozen 5 s), cooldown 6.5 → 6.0.
     { type: 'projectile',   cooldown: 6.0, duration: 0.05, windUp: 0.50,
@@ -316,7 +362,8 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       projectileSlowDuration: 5.0 },
     // 2026-04-30 final-L — Frozen Floor slippery zone.
     // 2026-04-30 final-polish (Rafa "agrandar + +2s"): radius
-    // 6.0 → 8.0, floorDuration 5.0 → 7.0.
+    // 6.0 → 8.0, floorDuration 5.0 → 7.0. Plus a light ×1.10 speed
+    // and mass buff for the L's 3 s (mirror of src/abilities.ts).
     { type: 'frenzy',       cooldown: 17.0, duration: 3.0, windUp: 0.40,
       frenzySpeedMult: 1.10, frenzyMassMult: 1.10,
       frozenFloorL: true, floorRadius: 8.0, floorDuration: 7.0,
@@ -328,7 +375,8 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   // (blinkSeekNearest), see ./bot.ts.
   Cheeto: [
     { type: 'charge_rush',  cooldown: 2.8, duration: 0.24, windUp: 0.04,
-      impulse: 33, speedMultiplier: 3.0, massMultiplier: 1.2 },
+      impulse: 33, speedMultiplier: 3.0, massMultiplier: 1.2,
+      dashHitForce: 30 },
     // v0.11 — Shadow Step. 2026-04-29 K-refinement (Rafa: "se parece
     // demasiado a J + empuje débil"): blink ahora SEEK al enemigo
     // válido más cercano dentro de blinkSeekRange y aterriza al
@@ -354,7 +402,8 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
   Sebastian: [
     // v0.11 (Rafa: "más potencia y empuje"): impulse 28→33, mass 1.4→1.7
     { type: 'charge_rush',  cooldown: 3.5, duration: 0.28, windUp: 0.06,
-      impulse: 33, speedMultiplier: 2.6, massMultiplier: 1.7 },
+      impulse: 33, speedMultiplier: 2.6, massMultiplier: 1.7,
+      dashHitForce: 26, dashHitArcDeg: 60 },
     // v0.11 — Claw Wave: cone-restricted ground_pound (frontal sweep,
     // 120° arc). 2026-04-29 final-K: force 38 → 76 (Rafa: "duplicar
     // potencia"). Cone gate intacto.
@@ -371,7 +420,10 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       // micropass v2 — hit force 110 → 220 to guarantee the visual
       // yeet on contact (BrawlRoom.ts paired with explicit fall flow).
       allInHitForce: 220, allInMissSelfForce: 130,
-      holdToFireL: true, holdToFireMaxMs: 3000 },
+      holdToFireL: true, holdToFireMaxMs: 3000,
+      // 2026-09-24: shortest charge 0.35 s. No reader yet: pending in
+      // BrawlRoom's hold loop (DISTRIBUCIÓN, buzón fase 2).
+      holdToFireMinMs: 350 },
   ],
 };
 
@@ -397,6 +449,56 @@ const copycatDefs = new WeakMap<PlayerSchema, AbilityDef>();
  *  alone. */
 export function getLDef(player: PlayerSchema): AbilityDef | undefined {
   return copycatDefs.get(player) ?? getAbilityKit(player.critterName)[2];
+}
+
+/**
+ * × on every push `player` takes from others (Sergei's Frenzy: 0.4): its
+ * active abilities' `knockbackTakenMult`, wind-up excluded, the L read
+ * through getLDef so a Copycat of Sergei resists too. Used by the
+ * collisions (./physics.ts) and the K effects here; BrawlRoom's own
+ * pushes (snowball, Cone Pulse, Saw, ram) must read it as well
+ * (DISTRIBUCIÓN). Mirror of the client's Critter.knockbackScale.
+ */
+export function knockbackScale(player: PlayerSchema): number {
+  const kit = getAbilityKit(player.critterName);
+  let m = 1;
+  for (let i = 0; i < player.abilities.length; i++) {
+    const s = player.abilities[i];
+    if (!s.active || s.windUpLeft > 0) continue;
+    const def = i === 2 ? getLDef(player) : kit[i];
+    m *= def?.knockbackTakenMult ?? 1;
+  }
+  return m;
+}
+
+/**
+ * × on `player`'s own friction half-life (Kowalski's Ice Slide: 3): its
+ * active abilities' `slideFrictionMult`, wind-up excluded. No caller yet:
+ * BrawlRoom's integrate step must multiply its half-life by it, like the
+ * ice's frictionMult (DISTRIBUCIÓN, buzón fase 2); until then Ice Slide
+ * doesn't glide online. Mirror of the client's Critter.frictionScale.
+ */
+export function frictionScale(player: PlayerSchema): number {
+  const kit = getAbilityKit(player.critterName);
+  let m = 1;
+  for (let i = 0; i < player.abilities.length; i++) {
+    const s = player.abilities[i];
+    if (!s.active || s.windUpLeft > 0) continue;
+    m *= kit[i]?.slideFrictionMult ?? 1;
+  }
+  return m;
+}
+
+/** How many times farther a dash's impulse carries with its glide:
+ *  m − (m − 1)·2^(−T/(h·m)), m = `slideFrictionMult`, T its duration, h
+ *  the friction half-life. 1 without a glide. The bot's edge probe
+ *  (./bot.ts) reaches that much farther. Mirror of the client's
+ *  dashGlideFactor (src/abilities-runtime.ts). Until BrawlRoom calls
+ *  `frictionScale`, the online Kowalski bot probes 6.5 u for a slide that
+ *  stops at the plain dash's: more careful, never less. */
+export function dashGlideFactor(def: AbilityDef): number {
+  const m = def.slideFrictionMult ?? 1;
+  return m - (m - 1) * Math.pow(0.5, def.duration / (SIM.movement.frictionHalfLife * m));
 }
 
 /** Create initial ability state array for a new player by critter name. */
@@ -452,13 +554,26 @@ function cancelSlot(player: PlayerSchema, j: number, kit: readonly AbilityDef[])
   s.cooldownLeft = kit[j]?.cooldown ?? 0;
 }
 
-/** Steel Shell anchoring ends a dash or blink still running. Mirror of
- *  the client. */
-function cancelMovementAbilities(player: PlayerSchema): void {
+/** A self-anchoring buff (Steel Shell) stops the caster's own motion dead:
+ *  the dash or blink still running ends, and the velocity goes to 0 if
+ *  it's no more than the caster makes itself (`anchorBrakeMaxSpeed`, plus
+ *  that dash's impulse and a headbutt lunge in progress). Faster, it was
+ *  launched and the push carries on. On activation and again when the
+ *  shell locks. Mirror of the client's `anchorInPlace`. */
+function anchorInPlace(player: PlayerSchema, def: AbilityDef): void {
   const kit = getAbilityKit(player.critterName);
+  let ownSpeed = def.anchorBrakeMaxSpeed ?? Infinity;
+  if (player.isHeadbutting) ownSpeed += SIM.headbutt.velocityBoost;
   for (let j = 0; j < player.abilities.length; j++) {
     const s = player.abilities[j];
-    if (s.active && isMovementAbility(s.abilityType)) cancelSlot(player, j, kit);
+    if (s.active && isMovementAbility(s.abilityType)) {
+      ownSpeed += kit[j]?.impulse ?? 0;
+      cancelSlot(player, j, kit);
+    }
+  }
+  if (Math.hypot(player.vx, player.vz) <= ownSpeed) {
+    player.vx = 0;
+    player.vz = 0;
   }
 }
 
@@ -501,6 +616,47 @@ export function takeContactHit(caster: PlayerSchema, victim: PlayerSchema): bool
   if (left.has(victim)) return false;
   left.set(victim, SIM.abilities.contactRehitCooldown);
   return true;
+}
+
+/** The kit def of the player's dash (J, charge_rush) while it is in its
+ *  active window. Mirror of the client's `activeDash` (src/physics.ts). */
+export function activeDashDef(player: PlayerSchema): AbilityDef | undefined {
+  const kit = getAbilityKit(player.critterName);
+  for (let i = 0; i < player.abilities.length; i++) {
+    const s = player.abilities[i];
+    if (s.active && s.windUpLeft <= 0 && s.abilityType === 'charge_rush') return kit[i];
+  }
+  return undefined;
+}
+
+/** The players each rusher's dash has already hit this activation, so it
+ *  hits each one once. Cleared when the dash fires (fireChargeRush).
+ *  Mirror of the client's `AbilityState.rammed`. */
+const dashRammed = new WeakMap<PlayerSchema, Set<PlayerSchema>>();
+
+/**
+ * A dash's first contact with `victim` this activation, `victim` lying
+ * along (dirX, dirZ) from the rusher: marks it and returns the dash's
+ * `dashHitForce` (0 = the plain nudge). Null when it doesn't count: no
+ * dash in its active window, the victim was already hit, or it lies
+ * outside `dashHitArcDeg` of the rusher's facing (then it isn't used up
+ * either). Mirror of the client's takeDashContact (src/physics.ts).
+ */
+export function takeDashContact(rusher: PlayerSchema, victim: PlayerSchema, dirX: number, dirZ: number): number | null {
+  const def = activeDashDef(rusher);
+  if (!def) return null;
+  let hit = dashRammed.get(rusher);
+  if (hit?.has(victim)) return null;
+  if (def.dashHitArcDeg !== undefined) {
+    const facing = rusher.rotationY;
+    if (dirX * Math.sin(facing) + dirZ * Math.cos(facing) < Math.cos((def.dashHitArcDeg * Math.PI) / 180)) return null;
+  }
+  if (!hit) {
+    hit = new Set();
+    dashRammed.set(rusher, hit);
+  }
+  hit.add(victim);
+  return def.dashHitForce ?? 0;
 }
 
 /** Try to activate an ability if input is held and it's ready. */
@@ -590,13 +746,17 @@ export function tickPlayerAbilities(
     inputs.ultimate,
   ];
 
+  // Stunned (Trunk Grip / Slam): no J, K or L starts; what was already
+  // cast runs its course. Mirror of the client's activateAbility.
+  const stunned = player.stunTimer > 0;
+
   for (let i = 0; i < player.abilities.length; i++) {
     const state = player.abilities[i];
     const def = kit[i];
     if (!def) continue;
 
-    if (inputFlags[i] && !state.active && !blockedByAnchor(i, player, kit)) {
-      tryActivate(state, def);
+    if (inputFlags[i] && !stunned && !state.active && !blockedByAnchor(i, player, kit)) {
+      if (tryActivate(state, def) && def.selfAnchorWhileBuffed) anchorInPlace(player, def);
     }
 
     if (state.active) {
@@ -827,6 +987,7 @@ function fireCopycat(base: AbilityDef, player: PlayerSchema): AbilityDef {
 }
 
 function fireChargeRush(def: AbilityDef, player: PlayerSchema): void {
+  dashRammed.delete(player);
   const impulse = def.impulse ?? SIM.chargeRush.impulse;
   const angle = player.rotationY;
   player.vx += Math.sin(angle) * impulse;
@@ -863,6 +1024,24 @@ function pickSafeLanding(
     if (isOnArena(x, z)) return [x, z];
   }
   return [ox, oz];
+}
+
+/** Mirror Trick: the live enemy nearest to the caster within
+ *  `def.decoyThreatRange`, the one the escape jumps away from; null
+ *  leaves it to her facing. Immune ones count: they still chase and
+ *  headbutt. Mirror of the client's nearestDecoyThreat. */
+function nearestDecoyThreat(def: AbilityDef, caster: PlayerSchema, allPlayers: PlayerSchema[]): PlayerSchema | null {
+  let best = def.decoyThreatRange ?? 0;
+  let threat: PlayerSchema | null = null;
+  for (const other of allPlayers) {
+    if (other === caster || !other.alive || other.falling) continue;
+    const d = Math.hypot(other.x - caster.x, other.z - caster.z);
+    if (d < best && d > 0.01) {
+      best = d;
+      threat = other;
+    }
+  }
+  return threat;
 }
 
 /** Fractions of a line `len` long that step back from its end toward
@@ -955,13 +1134,43 @@ function fireBlink(def: AbilityDef, player: PlayerSchema, allPlayers: PlayerSche
       const d = Math.sqrt(dx * dx + dz * dz);
       if (d < def.blinkImpactRadius && d > 0.01) {
         const fall = 1 - d / def.blinkImpactRadius;
-        const f = def.blinkImpactForce * fall;
+        const f = def.blinkImpactForce * fall * knockbackScale(other);
         other.vx += (dx / d) * f;
         other.vz += (dz / d) * f;
       }
     }
   }
   return { originX, originZ, targetX: nx, targetZ: nz };
+}
+
+/**
+ * The player a Trunk Grip (`gripK`) would take right now, and how far: the
+ * closest alive, grounded, non-immune one within `gripFrontalRange` and
+ * ±`gripFrontalAngleDeg` of the caster's facing. The grip's own pick, and
+ * what the bot (./bot.ts) checks before casting it. Mirror of the client's
+ * findGripTarget (src/abilities-runtime.ts).
+ */
+export function findGripTarget(
+  def: AbilityDef,
+  caster: PlayerSchema,
+  allPlayers: readonly PlayerSchema[],
+): { target: PlayerSchema; dist: number } | null {
+  const range = def.gripFrontalRange ?? 6.0;
+  const cosHalf = Math.cos(((def.gripFrontalAngleDeg ?? 50) * Math.PI) / 180);
+  const facingX = Math.sin(caster.rotationY);
+  const facingZ = Math.cos(caster.rotationY);
+  let best: { target: PlayerSchema; dist: number } | null = null;
+  for (const other of allPlayers) {
+    if (other === caster || !other.alive || other.falling || other.immunityTimer > 0) continue;
+    const dx = other.x - caster.x;
+    const dz = other.z - caster.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d > range || d < 0.01) continue;
+    if ((dx * facingX + dz * facingZ) / d < cosHalf) continue;
+    // Closest wins.
+    if (!best || d < best.dist) best = { target: other, dist: d };
+  }
+  return best;
 }
 
 /**
@@ -974,18 +1183,23 @@ function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: Play
   // No outward force; just write the caster's immunity. The cliente
   // adds the visual layer (tint / decoy / alpha).
   if (def.selfBuffOnly) {
-    if (def.selfAnchorWhileBuffed) cancelMovementAbilities(caster);
+    // The shell locks: a lunge of hers from the wind-up stops dead; a
+    // push she took in it doesn't (anchorInPlace).
+    if (def.selfAnchorWhileBuffed) anchorInPlace(caster, def);
     if (def.selfImmunityDuration && def.selfImmunityDuration > 0) {
       caster.immunityTimer = Math.max(caster.immunityTimer, def.selfImmunityDuration);
     }
     // 2026-04-29 final-K (Rafa: "Kurama debe desplazarse HACIA
     // ATRÁS, no hacia delante, decoy se queda en posición de
     // activación"). Server moves Kurama by `decoyEscapeDistance`
-    // along the direction OPPOSITE to her facing, landing on live
+    // backward — away from the nearest enemy within `decoyThreatRange`
+    // (turned to face him), else opposite her facing — landing on live
     // floor (`decoyEscapeFallbacks`, else she stays). Decoy is a
     // pure cliente concept (server doesn't track decoy entity).
     const escDist = def.decoyEscapeDistance ?? 0;
     if (escDist > 0) {
+      const threat = nearestDecoyThreat(def, caster, allPlayers);
+      if (threat) caster.rotationY = Math.atan2(threat.x - caster.x, threat.z - caster.z);
       const backAngle = caster.rotationY + Math.PI;
       let nx = caster.x + Math.sin(backAngle) * escDist;
       let nz = caster.z + Math.cos(backAngle) * escDist;
@@ -1006,29 +1220,16 @@ function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: Play
   // pulled to `gripPullDistance` u in front of the caster, gets
   // `stunTimer = gripStunDuration`. No radial knockback.
   if (def.gripK) {
-    const range = def.gripFrontalRange ?? 6.0;
-    const halfCone = ((def.gripFrontalAngleDeg ?? 50) * Math.PI) / 180;
     const facingX = Math.sin(caster.rotationY);
     const facingZ = Math.cos(caster.rotationY);
-    let target: PlayerSchema | null = null;
-    let bestScore = Infinity;
-    for (const other of allPlayers) {
-      if (other === caster || !other.alive || other.falling) continue;
-      if (other.immunityTimer > 0) continue;
-      const dx = other.x - caster.x;
-      const dz = other.z - caster.z;
-      const d = Math.sqrt(dx * dx + dz * dz);
-      if (d > range || d < 0.01) continue;
-      const nx = dx / d;
-      const nz = dz / d;
-      const dot = nx * facingX + nz * facingZ;
-      if (dot < Math.cos(halfCone)) continue;
-      if (d < bestScore) { bestScore = d; target = other; }
-    }
+    const target = findGripTarget(def, caster, allPlayers)?.target;
     if (target) {
       const pull = def.gripPullDistance ?? 1.6;
-      target.x = caster.x + facingX * pull;
-      target.z = caster.z + facingZ * pull;
+      // The yank comes knockbackScale of the way to the pull point, never
+      // past it. Mirror of the client.
+      const k = Math.min(1, knockbackScale(target));
+      target.x += (caster.x + facingX * pull - target.x) * k;
+      target.z += (caster.z + facingZ * pull - target.z) * k;
       target.vx = 0;
       target.vz = 0;
       target.stunTimer = Math.max(target.stunTimer, def.gripStunDuration ?? 2.0);
@@ -1055,9 +1256,9 @@ function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: Play
       const dot = nx * facingX + nz * facingZ;
       if (dot < coneCos) continue;
     }
-    const falloff = 1 - dist / radius;
-    other.vx += nx * force * falloff;
-    other.vz += nz * force * falloff;
+    const f = force * (1 - dist / radius) * knockbackScale(other);
+    other.vx += nx * f;
+    other.vz += nz * f;
     // 2026-05-01 final — Trunk Slam K applies brief stun to every
     // critter inside the radial AoE via `slamStunDuration`. Stuns
     // compose with the ×4 vulnerable multiplier in physics.

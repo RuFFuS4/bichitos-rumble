@@ -29,12 +29,16 @@
 // Detalle y runbook: ONLINE.md → "Versión de protocolo".
 // ---------------------------------------------------------------------------
 
-export const NET_PROTOCOL = 2;
+export const NET_PROTOCOL = 3;
 
 /** Huella (FNV-1a 32) del golden de layout con la que salió cada protocolo.
  *  Al subir NET_PROTOCOL se AÑADE una fila; las viejas no se tocan. */
 export const LAYOUT_BY_PROTOCOL: Readonly<Record<number, string>> = {
   2: 'dbf21526', // v1.8-terreno-v2 (H4.5)
+  // v1.9 (bloque de BrawlRoom del repaso de habilidades): mensajes nuevos
+  // (dashHit, lChargeEnd, abilityFired con origen) que un cliente v1.8 no
+  // sabe pintar. El suelo no cambia: misma huella.
+  3: 'dbf21526',
 };
 
 /** Huella (FNV-1a 32) del cuerpo de server/src/sim/arena-fragments.ts. Si el

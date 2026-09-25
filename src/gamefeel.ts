@@ -18,6 +18,10 @@ export const FEEL = {
     // Espejo: SIM.movement.accelerationScale. docs/FEELING.md §7.
     accelerationScale: 2.2,
     velocityDeadZone: 0.15,   // below this speed → snap to 0 (kills micro-drift)
+    // The SERVER's integrations per 30 Hz tick (SIM.movement.integrationSubsteps,
+    // mirror): 2 = one every 1/60 s, like the offline game. Not read by the
+    // offline sim; src/net-smoothing.ts replays the server's step with it.
+    integrationSubsteps: 2,
   },
 
   // --- Locomoción visual (feeling, 2026-09-21) ---
@@ -93,7 +97,9 @@ export const FEEL = {
       blinkSeek: 0.702,   // Shadow Step (Cheeto K), same rate as the dash
       trap: 0.596,        // Sand Trap (Sihans K), what the server rolled for it as a radial
       grip: 0.5,          // Trunk Grip (Trunk L)
-      risky: 0.382,       // All-in (Sebastian L), the rate it had as a buff
+      // All-in (Sebastian L), the rate it had as a buff. Offline only: the
+      // online bot doesn't cast it (server/src/sim/bot.ts says why).
+      risky: 0.382,
     },
     // Enemies counted as "nearby" (surrounded) and the cap on a radial K's
     // radius when the bot judges it (Trunk Slam reaches 7 u; with the cap
@@ -117,13 +123,17 @@ export const FEEL = {
     // range. Mirror: SIM.bots.targetedMinRange (Shadow Step).
     targetedMinRange: 3.0,
     // Trunk Grip reaches 28 u, more than the arena's diameter: the bot
-    // doesn't yank from the far side. Offline only (online bots cast no L).
+    // doesn't yank from the far side. Mirror: SIM.bots.gripMaxRange.
     gripMaxRange: 10,
     // Sand Trap when the nearest enemy stands within zone.radius × this of
     // the bot, so the quicksand left behind catches them.
     // Mirror: SIM.bots.trapRadiusFrac.
     trapRadiusFrac: 0.8,
+    // A 'buff' L (Frenzy, Saw Shell, Toxic Touch...) with the nearest enemy
+    // closer than this. Mirror: SIM.bots.buffRange.
+    buffRange: 3.5,
     // Frozen Floor needs min(2, enemies alive) within floorRadius × this.
+    // Mirror: SIM.bots.floorCastRadiusFrac.
     floorCastRadiusFrac: 0.6,
     // Sebastian's All-in: a miss falls into the void. The bot charges only
     // with someone inside the real hit lane narrowed by this inset (u),
@@ -196,11 +206,27 @@ export const FEEL = {
   allIn: {
     hitMargin: 0.55,          // lane half-width = caster radius + target radius + this; only targets ahead count
     missProbeStep: 0.5,       // a miss walks the dash line in these steps to the first point off the arena and falls there
+    aimTurnDegPerSec: 360,    // while charging (rooted) the stick turns the facing, and the line with it, this fast: 90° in 0.25 s, a full flip in 0.5 s. Online reader pending in BrawlRoom (DISTRIBUCIÓN)
   },
 
   // --- Blink landing (Sand Trap, Shadow Step). Mirror: SIM.blink ---
   blink: {
     landingProbeStep: 0.5,    // a target off live floor steps back toward the origin in these steps; none on floor = stay put
+  },
+
+  // --- Cone Pulse (Cheeto L) waves. Mirror: SIM.conePulse, which the room
+  // doesn't read yet: BrawlRoom writes its own 1.4 / 2.0 (DISTRIBUCIÓN) ---
+  // Pulse N is a band waveThickness wide centred N × waveStep ahead, so the
+  // last one (pulseCount 6) reaches 6 × 1.4 + 1.0 = 9.4 u: the depth of the
+  // cone its entry wedge paints (abilities-runtime spawnLEntryVfx).
+  conePulse: {
+    waveStep: 1.4,
+    waveThickness: 2.0,
+  },
+
+  // --- Trunk Grip look. Visual only, no SIM mirror ---
+  grip: {
+    yankVisualTime: 0.15,     // s the victim's model takes to slide in after the yank; its position is there at once (up to ~7 u in one step)
   },
 
   // --- Mirror Trick (Kurama K) look. Visual only, no SIM mirror ---
@@ -241,15 +267,36 @@ export const FEEL = {
     headbutt: 0.07,           // perceptible freeze on headbutt
     groundPound: 0.09,        // heavy slam
     ability: 0.04,            // generic ability hit
+    dashHit: 0.03,            // a J's dashHitForce landing (physics.ts rushContact): two frames, a slap next to the headbutt's 0.07
   },
 
   // --- Camera Shake ---
   shake: {
     headbutt: 0.22,           // amplitude when a headbutt connects
     groundPound: 0.45,        // stronger, it's a slam
-    chargeRush: 0.15,         // online dash broadcast; offline, a dash's first contact with each victim (physics.ts rushContactFeedback) — fireChargeRush itself has no shake (known drift)
-    frenzyFactor: 0.55,       // × groundPound on frenzy activation; abilities.ts fireFrenzy still inlines the same 0.55 — unify when touching that file
+    chargeRush: 0.15,         // online dash broadcast; offline, a dash's first contact with each victim (physics.ts rushContact) — fireChargeRush itself has no shake (known drift)
+    frenzyFactor: 0.55,       // × groundPound on frenzy activation (offline fireFrenzy and the online event)
+    blinkImpactFactor: 0.7,   // × headbutt when a blink's landing hits someone (Cheeto Shadow Step); a miss doesn't shake
     decay: 0.18,              // how fast the shake fades (seconds)
+  },
+
+  // --- State glow (Critter.updateVisuals). Visual only, no SIM mirror ---
+  // Emissive tint while a headbutt or an ability runs, by kind. The K's
+  // wind-up warns «get away, it's coming»; the L's is a buff charging, and
+  // until 2026-09-24 both were the same yellow in the nine critters. An
+  // ability def can take its own colours: activeGlowHex, activeGlowIntensity
+  // and windUpGlowHex (a projectile or blink wind-up only glows with one).
+  // Pulsing glows: intensity × (floor + (1 − floor) × wave), wave 0..1 at
+  // pulseHz.
+  stateGlow: {
+    headbuttWindUp: { hex: 0xffffff, intensity: 0.4 },
+    headbutt: { hex: 0xffcc00, intensity: 0.8 },
+    dash: { hex: 0xff8800, intensity: 0.7 },
+    kWindUp: { hex: 0xffff00, intensity: 0.5 },
+    kActive: { hex: 0xff2200, intensity: 0.7 },
+    lWindUp: { hex: 0xb01000, intensity: 1.0, floor: 0.25, pulseHz: 5 },   // dark red heartbeat: two beats in a 0.4 s wind-up
+    lActive: { hex: 0xff1100, intensity: 1.0, floor: 0.6, pulseHz: 1.27 }, // the red pulse the L always had (0.6-1.0)
+    cooldownDim: 0.5,         // × intensity while the headbutt is on cooldown
   },
 
   // --- Hit Flash ---
@@ -539,6 +586,57 @@ export function updateKnockbackTilt(critter: Critter, dt: number): void {
   }
 
   if (t >= 1) activeTilts.delete(critter);
+}
+
+// ---------------------------------------------------------------------------
+// Yank slide — a one-step teleport shown as a short slide (visual only)
+// ---------------------------------------------------------------------------
+// Trunk Grip moves its victim up to ~7 u in a single step. The position
+// (physics) lands there at once; the model trails behind on the reaction
+// rig and catches up over FEEL.grip.yankVisualTime, fast at first and
+// settling as it arrives, so the yank reads as a pull instead of a jump
+// cut. The placeholder
+// mesh (no rig) just snaps.
+
+interface YankSlide {
+  elapsed: number;
+  offX: number;  // world offset of the model from the position at the start
+  offZ: number;
+}
+
+const activeYanks = new WeakMap<Critter, YankSlide>();
+
+/** Start the slide of a critter that was just moved from (fromX, fromZ)
+ *  to where it is now. */
+export function applyYankVisual(critter: Critter, fromX: number, fromZ: number): void {
+  if (!critter.reactionRig) return;
+  activeYanks.set(critter, { elapsed: 0, offX: fromX - critter.x, offZ: fromZ - critter.z });
+  updateYankVisual(critter, 0);
+}
+
+export function updateYankVisual(critter: Critter, dt: number): void {
+  const yank = activeYanks.get(critter);
+  const rig = critter.reactionRig;
+  if (!yank || !rig) return;
+  yank.elapsed += dt;
+  const t = Math.min(yank.elapsed / FEEL.grip.yankVisualTime, 1);
+  const left = (1 - t) * (1 - t);
+  // World offset → the rig's parent frame (the mesh: facing yaw, then the
+  // squash scale), as the knockback lean does for its axis.
+  const wx = yank.offX * left;
+  const wz = yank.offZ * left;
+  const yaw = critter.mesh.rotation.y;
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  const scale = critter.mesh.scale;
+  rig.position.set((wx * c - wz * s) / scale.x, 0, (wx * s + wz * c) / scale.z);
+  if (t >= 1) activeYanks.delete(critter);
+}
+
+/** Drop a slide in progress (respawn, new match): the model snaps home. */
+export function cancelYankVisual(critter: Critter): void {
+  activeYanks.delete(critter);
+  critter.reactionRig?.position.set(0, 0, 0);
 }
 
 // ---------------------------------------------------------------------------

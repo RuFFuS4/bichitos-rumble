@@ -122,8 +122,10 @@ antes de commitear el JSON.
    completo en `REPASO_HABILIDADES_INFORME.md`.
    - [x] Bugs de producción e IA de los bots, arreglados y medidos (rama
          `claude/fix/personajes-repaso-habilidades`).
-   - [ ] **Segunda tanda, decisiones de Rafa (2026-09-24)**:
-         - paso fijo de simulación, con permiso para `main.ts`;
+   - [x] **Segunda tanda, decisiones de Rafa (2026-09-24)**, hecha el
+         2026-09-25 salvo el paso fijo (siguiente punto). Qué se aplicó,
+         con cifras, y 6 preguntas abiertas en el documento, §«Segunda
+         tanda»:
          - golpe en los dashes (Kurama los atraviesa);
          - el aturdido no actúa, con Grip 2,5 s;
          - frenesí de Sergei ×0,4 de empuje recibido;
@@ -133,11 +135,30 @@ antes de commitear el JSON.
            y su embestida golpea;
          - Kowalski: Ice Slide que desliza, bola lanzada a mano a tiempo
            con su clip y buff a mi criterio;
-         - L de los bots online.
+         - L de los bots online, en el sim y **apagada** tras
+           `SIM.bots.ultimateOnline` hasta que `BrawlRoom` ejecute las L
+           como el sim.
          - **No** se toca Toxic Touch: que se inviertan todos los
            controles es la intención.
-   - [ ] Lo que falta en `BrawlRoom` (DISTRIBUCIÓN), en tierra de nadie,
-         INTERFAZ y ARENA: listado en el documento.
+   - [ ] **Paso fijo de simulación** (decisión 1, permiso para `main.ts`).
+         El diseño, opción (a), está en `.tmp/fase2/paso-fijo-diseno.md`
+         del worktree. Van dos commits:
+         1. `src/fixed-step.ts` y el bucle de `main.ts`;
+         2. separar simular de presentar en `Critter` y en `frame-ticks`.
+
+         Además, `SIM.movement.integrationSubsteps` con su espejo en `FEEL`
+         para el suavizado de DISTRIBUCIÓN.
+   - [ ] **Pase de balance de los golpes de dash** (`REPASO_HABILIDADES.md`
+         §«Medido»). Kowalski (eliminado 49 → 65 %) y Sergei (70 → 78 %)
+         pierden: les tiran más los dashes que ahora golpean, no su
+         propio deslizamiento. Medir con `scripts/fall-probe.mjs`, que
+         da la causa de cada caída en tiempo de simulación, y con más
+         partidas que la tanda, que tiene ±8 puntos de ruido.
+   - [ ] Lo que falta en `BrawlRoom` (DISTRIBUCIÓN, S2-1 a S2-5), en tierra
+         de nadie, INTERFAZ y ARENA: listado en el documento, con aviso en
+         cada buzón.
+   - [ ] Preguntar a Rafa si deja tocar 6 cosas pequeñas de tierra de
+         nadie (`frame-ticks`, `main.ts:414`, `game.ts`, `dev-api.ts`).
 4. **Feel pass de Kurama** (heredado de H4; receta en `NEXT_STEPS.md`).
 5. **Shaders cartoon**: Rafa eligió el 2026-09-23 contorno sobre el
    sombreado actual, no toon (punto 2). Si vuelve el toon, el precedente
@@ -273,7 +294,46 @@ antes de commitear el JSON.
   cambia la clave inglesa y pon el castellano (España, tono arcade, sin
   género en los lemas). O déjame nota y lo hago yo.
 
+- **De DISTRIBUCIÓN, 2026-09-25 — el slice de BrawlRoom (v1.9) ya lee lo
+  que dejaste pendiente: comentarios tuyos que se han quedado viejos.**
+  Rama `claude/feature/distribucion-brawlroom-v19` (se integra en `dev`
+  en cuanto pase la revisión). BrawlRoom hace ya los 11 puntos menos el 9
+  (Sinkhole, espera el getter de ARENA), S2-1..S2-5, la L de los bots con
+  `ultimateOnline = true` y los 2 sub-pasos. Estos comentarios dicen aún
+  «pendiente en BrawlRoom (DISTRIBUCIÓN)» y son tuyos:
+  - `src/abilities-runtime.ts:254` (soltar la carga al aturdir, con
+    `lChargeEnd`) y `:1637` (apuntar mientras carga);
+  - `src/abilities.ts:117` y `:355` (`holdToFireMinMs`);
+  - `src/critter.ts:530`, `:538`, `:653` y `:690`;
+  - `src/gamefeel.ts:209` (`aimTurnDegPerSec`) y `:218` (Cone Pulse);
+  - `server/src/sim/abilities.ts:425`, `:478` y `:596`.
+
+  Una más, de código: la carga del All-in online arranca ahora **mientras
+  la L está mantenida** (como tu `tickSebastianHoldToFire`), no en el
+  flanco. Por eso BrawlRoom ya no usa `lHoldPrevInput`, pero
+  `server/src/sim/physics.ts` lo sigue declarando en `InternalLike` y lo
+  pone a `false` en `startFalling`. Es inofensivo; bórralo cuando toques
+  ese fichero. De paso, este cambio arregla un All-in instantáneo que ya
+  estaba en producción. Mantener la L mientras acababa el cooldown, o
+  pulsarla aturdido, la metía por la activación estándar sin carga ni
+  mínimo.
+
 ## Cómo retomar
+
+**2026-09-25** — en `dev` están el corte 2 del feeling (reacción al golpe,
+acentos de arranque y frenada) y las dos tandas del repaso de habilidades
+(punto 3). Rafa dio permiso para tocar la física sin preguntar, pero no
+los ficheros de otro carril (memoria `feedback_physics_permission`).
+
+Lo siguiente:
+- el pase de balance de los golpes de dash (Kowalski y Sergei pierden);
+- el paso fijo de simulación (punto 3), con su diseño ya escrito;
+- después, el punto 3 original del feeling: que cada Tripo corra a su
+  manera.
+
+Siguen abiertas en `REPASO_HABILIDADES.md`:
+- las 6 preguntas de la segunda tanda;
+- el permiso para las 6 cosas pequeñas de tierra de nadie.
 
 **2026-09-24** — la mejora gráfica del punto 2 está completa en `dev`,
 salvo las texturas nuevas de los Tripo (aparcadas: Rafa no tiene acceso a

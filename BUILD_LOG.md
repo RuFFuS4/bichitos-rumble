@@ -1,5 +1,201 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [DISTRIBUCIÓN] v1.9 preparada: BrawlRoom ejecuta las habilidades como el sim (protocolo 3)
+
+- **Qué**: rama `claude/feature/distribucion-brawlroom-v19` sobre `dev`
+  `39318ae`. Sin desplegar: falta el visto bueno de Rafa.
+  - Del repaso de PERSONAJES (`docs/REPASO_HABILIDADES.md`): los 11
+    puntos menos el 9 (Sinkhole, espera el getter de ARENA) y S2-1..S2-5.
+  - La L de los bots online (`SIM.bots.ultimateOnline = true`; Rafa,
+    pregunta 6).
+  - El paso fijo: 2 sub-pasos de integración por tick en la sala, y
+    repetidos en el suavizado.
+  - `NET_PROTOCOL` 3, por los mensajes nuevos (`dashHit`, `lChargeEnd`,
+    origen en `abilityFired`).
+- **Verificado** (sobre `46007a7`):
+  - check; `test:sim` 258/258; golden 3/3; smoke 4/4; tsc del servidor;
+    `docker build` + `docker run` con `/health` → `protocol: 3` y
+    `POST {}` → 523 `client_outdated 1<3`.
+  - Guard contra el servidor local: protocolos 1 y 2 (el cliente v1.8)
+    rebotan con «recarga»; el 3 entra y recibe su eco.
+  - Tanda online sin clientes (el `online-sim` de PERSONAJES, 216
+    partidas por modo, semillas 9000):
+    - 0 errores y 0 L de bot fuera de su condición;
+    - Kermit gana el 37 % de sus partidas (el 39 % con la sala vieja).
+  - En vivo: 5 salas de 4 navegadores mudos contra el servidor local,
+    pulsando J/K/L de los 9 bichos.
+    - Toda pulsación con la habilidad lista se ejecuta; 0 errores.
+    - Llegan los 8 tipos de mensaje (`abilityFired`, `dashHit`, `lPulse`,
+      `lAllInResolve`, zonas, proyectiles…).
+    - Los aturdidos no lanzan: el Slam de Trunk tapaba la K de Kurama y
+      Shelly.
+    - Capturas de cada L y de la línea del All-in.
+  - Suavizado: 8 grabaciones contra el servidor v1.9 (LAN y RTT
+    80/160), re-simuladas con el banco:
+    - tirón de crucero p95 ≤ 0,28 px, salvo un pico de 1,91 px de un
+      Kurama bot en una (no se repite en otras 4, ni con Kurama local);
+    - pasada al parar p99 ≤ 1,9 px (v1.8 medía hasta 8,3);
+    - réplica exacta.
+  - Revisión adversarial del diff: 4 revisores y un verificador por
+    dimensión. De 13 hallazgos, 11 confirmados, todos arreglados en la
+    rama salvo el hielo en la predicción, que no bloquea.
+- **Encontrado por el camino**:
+  1. **All-in instantáneo, ya en producción.** La carga online arrancaba
+     en el flanco de la L. Si la mantenías mientras acababa el cooldown o
+     un aturdido, la L entraba por la activación estándar: sin carga, sin
+     línea y sin el mínimo de 0,35 s. Ahora arranca mientras la L está
+     mantenida, como offline, y la L de carga no llega nunca a
+     `tickPlayerAbilities`. De paso, un tick sin mensaje de input ya no
+     suelta la carga.
+  2. **Diente de sierra del 13 %.** Pintar dentro del tick la forma de los
+     sub-pasos lo metía en el suavizado. Ahora los sub-pasos dan dónde
+     acaba cada tick y dentro se interpola en línea recta.
+  3. Con 2 sub-pasos el servidor frena en un 16 % menos de recorrido, y a
+     un rival que para se le ve pasarse algo más en el test sintético.
+     Umbrales recalibrados, y los 5 mutantes de las reglas de frenada
+     siguen cayendo.
+- **Lecciones**:
+  1. **Nada de tocar `src/` ni `server/` con una prueba en vivo en
+     marcha.** `tsx watch` reinicia la sala y Vite recarga la página: una
+     grabación salió con 168 parches de 500.
+  2. **Una prueba de habilidades en vivo tiene que anotar si el bicho
+     estaba aturdido al pulsar.** Si no, un bloqueo correcto parece un
+     fallo.
+  3. **El comodín `onMessage('*')` del SDK solo recibe los tipos sin
+     handler.** Para contar todos los mensajes hay que envolver
+     `room.dispatchMessage`.
+- **Falta**: capturas y visto bueno de Rafa, despliegue con el runbook, y
+  el Sinkhole online cuando ARENA exponga el layout.
+
+## 2026-09-25 — [Interfaz] El HUD enseña cuándo no puedes actuar
+
+Del repaso de habilidades de PERSONAJES: hay dos momentos en que el juego
+bloquea acciones y el HUD las seguía pintando disponibles.
+
+- **Shelly anclada** (Steel Shell activo): su J no sale. El HUD le
+  pregunta a `isBlockedByAnchor`, que PERSONAJES exportó pura a petición
+  nuestra para que la regla viva en un solo sitio.
+- **Aturdido**: desde la segunda tanda del repaso bloquea el cabezazo, J,
+  K y L. Con permiso de Rafa para `game.ts` (tierra de nadie; nadie más
+  lo tocó hoy), las 4 llamadas a `updateAbilityHUD` pasan
+  `stunTimer > 0`, y J/K/L y el ⚡ táctil se atenúan mientras dure.
+- `.blocked` es gris y apagado, distinto del barrido de enfriamiento: se
+  lee «ahora no», no «recargando». Los textos de «Aturdido», «Vulnerable»
+  (×4) y «Congelado» (bola y suelo helado) quedan al día.
+
+## 2026-09-25 — [DISTRIBUCIÓN] v1.8-terreno-v2 en producción: H4.5 entero, con guard de versión y suavizado online
+
+- **Despliegue**: merge `--no-ff` de `bf7b3ee` (el SHA verificado, no
+  `dev` a secas) → `main` `784779f`, tag `v1.8-terreno-v2`. Push a las
+  21:59:43 UTC del 2026-09-24.
+  - **Vercel** sirvió la build nueva a los ~38 s.
+  - **Railway**, el proceso nuevo a los ~2 min. En BUILD_LOG estaba
+    anotado ~30 s; la verificación del 2026-09-21 midió ~69 s.
+  - En la ventana (~1:24, cliente nuevo contra servidor viejo) había 0
+    partidas.
+  - Rollback, si hiciera falta: Vercel `dpl_9LKsaf69bRibyTWN8AkTgnngh5dH`
+    (f41fb7e) y Railway, el despliegue de f41fb7e. Siempre los dos lados.
+- **Qué salió** (~55 commits desde v1.7):
+  - ARENA: terreno v2, fondo v2 F0 (la isla en el cielo) y cono.
+  - PERSONAJES: feeling, velocidad ×1,375, mejora gráfica y repaso de las
+    27 habilidades.
+  - INTERFAZ: portal apagado en itch y Steam, HUD en móvil.
+  - DISTRIBUCIÓN:
+    - guard de versión (`NET_PROTOCOL` 2);
+    - suavizado online;
+    - zona muerta espejada y Copycat por jugador en `BrawlRoom`;
+    - ws 8.21.3;
+    - payload 27,4 MB con ratchet a 30;
+    - GLB de bicho `immutable` con `?v=`.
+- **Verificado antes** (`bf7b3ee`, 6 frentes):
+  - check, `test:sim` 171/171, golden 3/3, smoke 4/4, Docker;
+  - partida online real de 2 clientes con el suavizado, y Copycat online;
+  - cruce con un cliente v1.7 REAL (el caso del 4º asiento cerrado);
+  - 5 biomas y compatibilidad (solo se añade `GameState.protocol`, sin
+    migraciones);
+  - capturas aprobadas por Rafa.
+- **Comprobado después** (producción, sin crear datos):
+  - `/health` → `protocol: 2`, `protocolGuard: "on"`;
+  - `/api/leaderboard` 200;
+  - `POST /matchmake/joinOrCreate/brawl {}` → **523 `client_outdated`
+    a través del edge de Railway** (primera vez que se prueba fuera de
+    local);
+  - `/` con `max-age=0`; `/assets` y los GLB con `?v=` `immutable`, sin
+    `?v=` un día;
+  - release de Sentry `784779f`;
+  - navegador mudo en www: 0 errores, 0 respuestas 4xx, el portal en la
+    web y apagado con `?ref=itch`, y `?netsmooth=legacy|localonly`
+    funcionan.
+- **Suavizado online** (`src/net-smoothing.ts`, ONLINE.md «Suavizado
+  online»):
+  - Decisión: 3 diseños + 3 jueces; ganó extrapolar (24 frente a 20 y
+    19,5). Descartadas la interpolación con retardo (+22-42 ms de
+    latencia de mando) y la predicción completa (rivales desplazados
+    52-66 px a RTT 80-160).
+  - Verificación en el juego real: 33 grabaciones a LAN y RTT 80/160.
+    Sacó 3 fallos, arreglados: el reloj pasa a ventana de 1 s, el local
+    frena un RTT después y los teleports cortos saltan.
+  - Resultado en local: frames parados 60-86 % → 0 en crucero; retraso
+    28-34 → 0-1 ms; tirón p95 hasta 14 px → ≤ 0,8 px.
+  - Pendiente: el A/B de Rafa contra Railway (la pasada al frenar).
+- **Lecciones**:
+  1. **Mergear el SHA verificado.** `dev` se movió dos veces durante la
+     preparación: INTERFAZ y un bloqueo de Copycat de PERSONAJES que
+     había que meter.
+  2. **Nada de probar el online de producción con navegador.** Crea
+     nicks y filas en la base real. Para el guard basta `curl`: el
+     rechazo no crea sala.
+  3. **Un servidor local en Windows sin temporizadores precisos va a
+     0,72×.** Todo lo online se juzga con `npm run dev` (precise-timers).
+
+## 2026-09-25 — [PERSONAJES] Segunda tanda del repaso: las decisiones de Rafa sobre las habilidades
+
+- **Qué pidió Rafa** (sobre las propuestas del repaso, 2026-09-24):
+  - las J golpean y Kurama atraviesa;
+  - el aturdido no actúa, con el Grip a 2,5 s;
+  - el frenesí de Sergei recibe ×0,4 de los empujes;
+  - el All-in, con carga mínima de 0,35 s y apuntado;
+  - Mirror Trick salta lejos del perseguidor;
+  - Shelly frena en seco con el escudo, cae si se hunde la baldosa, y su
+    embestida golpea;
+  - el Ice Slide desliza de verdad y la bola sale de la mano;
+  - bots online con L.
+
+  Toxic Touch no se toca. Todo con cifras en
+  `docs/REPASO_HABILIDADES.md` §«Segunda tanda».
+- **Método**: nueve grupos en secuencia, cada uno medido antes y después
+  contra la foto fija de `dev`, y revisión adversarial del diff.
+- **L de los bots online**, en `server/src/sim/bot.ts` pero **apagada**
+  (`SIM.bots.ultimateOnline = false`). Con la sala actual, los bots con
+  L acortaban las partidas online un 27 %. La enciende DISTRIBUCIÓN
+  cuando `BrawlRoom` ejecute las L como el sim.
+- **Medido** (dos juegos de semillas, 40-80 apariciones por bicho):
+  - Sebastian, Cheeto y Kurama ganan, porque sus dashes golpean.
+  - **Kowalski pierde** (eliminado 49 → 65 %). No es por su
+    deslizamiento: le tiran más los golpes de dash de los demás (sonda
+    en tiempo de simulación). Una primera lectura culpaba al
+    deslizamiento; estaba mal medida y se corrigió el mismo día
+    (ERROR_LOG).
+  - Sergei queda el peor con bots (78 %).
+  - La dispersión sube de 11,5 a 13,0 puntos.
+- **Golden** regenerado: las J golpean, los aturdidos no lanzan y los
+  bots siguen las reglas nuevas. 3/3 detrás.
+- **Tests**: 254/254, con 5 ficheros nuevos del sim del servidor (31
+  casos).
+- **Fuera de carril, dicho aquí**:
+  - tres frases de `CONTENT_ES`, con permiso de INTERFAZ para ese bloque;
+  - el centinela del Grip en `verify-ability-parity.mjs`.
+- **Pendiente de otros carriles**:
+  - DISTRIBUCIÓN: S2-1 a S2-5 en `BrawlRoom`. Ninguno bloquea.
+  - Tierra de nadie: manejadores de `dashHit` y `lChargeEnd`.
+  - INTERFAZ: «Aturdido» también impide actuar, y la J de Shelly
+    bloqueada con `isBlockedByAnchor`.
+
+  Aviso en cada buzón.
+- **Despliegue**: el golpe de dash, el aturdido, el frenesí, Mirror Trick
+  y Shelly cambian online solo con desplegar `server/src/sim`. Cliente y
+  servidor, juntos.
+
 ## 2026-09-24 — [PERSONAJES] Repaso de las 27 habilidades: bugs de producción, IA de los bots y contorno más fino
 
 - **Método**: las 27 habilidades filmadas y medidas

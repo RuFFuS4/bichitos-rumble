@@ -33,9 +33,11 @@ encargos en [`docs/SESIONES.md`](docs/SESIONES.md). A partir de ahí, cada
 punto de esta lista lo recoge el carril que lo tiene en su checklist
 ([`docs/carriles/`](docs/carriles/)).
 
-Árbol limpio y todo empujado. En producción sigue **`v1.7-h4-social`**:
-todo el terreno v2, el fondo y los dioramas viven solo en `dev`, **sin
-desplegar** (`git log --oneline main..dev` los lista).
+**En producción: `v1.8-terreno-v2`** (2026-09-24, main `784779f` =
+`dev` `bf7b3ee`): H4.5 entero, con guard de versión y suavizado online.
+Detalle y comprobaciones en BUILD_LOG (2026-09-25, DISTRIBUCIÓN). Lo
+que entre en `dev` después sale en el siguiente despliegue
+(`git log --oneline main..dev`).
 
 **Lo primero de la próxima sesión, por orden:**
 1. ✅ *Hecho el 2026-09-21 por el carril ARENA: decididas las tres (ver

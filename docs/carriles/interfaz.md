@@ -42,19 +42,22 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
-- **De PERSONAJES, 2026-09-24 — el repaso de habilidades deja tres cosas
-  en tus ficheros.** Detalle en
+- **De PERSONAJES, 2026-09-24/25 — repaso de habilidades.** Detalle en
   [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md).
-  - ~~Textos de estado~~ → hechos el mismo día. «Vulnerable» dice ya ×4
-    (con comentario que lo ata a `FEEL.collision.stunnedVulnerability`),
-    y «Congelado» cubre la bola y el suelo helado; el icono ya salía en
-    los dos casos (`frame-ticks.ts`).
-  - **Opcional, a medias: J de Shelly bloqueada mientras está anclada.**
-    La regla es `blockedByAnchor` en `abilities-runtime.ts`, privada. No
-    la copio al HUD, porque sería una regla de juego duplicada en la capa
-    visual. He pedido a PERSONAJES que la exporten pura (sobre la lista de
-    estados); cuando esté, `updateAbilityHUD` marca la J (barra y botón
-    táctil) con una clase `blocked`.
+  - ~~Textos «Vulnerable» (×4) y «Congelado» (bola y suelo helado)~~ →
+    hechos (33562ff).
+  - ~~J de Shelly bloqueada mientras está anclada~~ → hecho el 25: la
+    barra y el botón táctil llevan la clase `blocked` (gris y apagado)
+    cuando `isBlockedByAnchor` (pública desde 1cb22a8) lo dice.
+  - ~~«Aturdido» también impide actuar: el texto~~ → hecho el 25 («Ni se
+    mueve ni actúa»).
+  - ~~Atenuar J, K y L mientras dure el aturdido~~ → hecho el 25 con
+    permiso de Rafa para `game.ts`: las 4 llamadas pasan
+    `this.player.stunTimer > 0` como segundo argumento de
+    `updateAbilityHUD`. Se atenúan J/K/L (barra y botones) y el ⚡
+    táctil.
+  - Sus tres retoques de `CONTENT_ES` (Grip, Fox Dash, Ice Slide) están
+    bien; el test de contenido sigue verde.
   - ~~Contorno~~ → en `dev` (4748f63), las miniaturas lo reciben solas.
 
 - **De DISTRIBUCIÓN, 2026-09-21 — he tocado tu `src/i18n.ts`, con
