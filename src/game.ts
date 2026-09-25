@@ -571,6 +571,12 @@ export class Game {
     // is module-scoped so without this an end-of-match cloud could
     // still slow the new match's countdown drops.
     clearActiveZones();
+    // Same for a Kowalski snowball still in flight (restart from the end
+    // screen or the pause menu): tickProjectiles runs every sim step,
+    // countdown included, and its sweep is 2D, so the ball would hit a
+    // critter of the new match while it drops from the sky, before GO
+    // (2026-09-25). debugStartOfflineMatch and enterTitle already clear.
+    clearProjectiles();
     // Pack selection in offline matches: random by default, but the
     // /decor-editor.html "Preview in game" button can pin a specific
     // pack via the ?arenaPack=<id>&decorPreview=1 URL params, which

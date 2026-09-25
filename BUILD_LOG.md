@@ -1,5 +1,36 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [PERSONAJES] Una bola de nieve de la partida anterior ya no golpea en la cuenta atrás
+
+- **El fallo** (viejo, apuntado como pendiente en la entrada de abajo):
+  - `Game.enterCountdown` resetea la arena y llama a `clearActiveZones()`,
+    pero no a `clearProjectiles()`, que sí llaman `enterTitle` y
+    `debugStartOfflineMatch`.
+  - `tickProjectiles` corre en cada paso del sim, cuenta atrás incluida,
+    y su barrido es 2D: no mira la altura.
+  - Resultado: una bola de Kowalski que sigue en vuelo al reiniciar
+    golpea a un bicho de la partida nueva mientras cae del cielo, antes
+    del «¡YA!».
+- **Medido antes del arreglo**, con una sonda headless muda con GPU (la
+  bola sale de (0,−6) hacia el centro):
+  - **Pausa → Reiniciar**: la pausa congela la bola junto a (0,−6), y en
+    el primer paso golpea al **jugador nuevo**, que sale justo ahí.
+  - **Se acaba el tiempo → R**: la bola sigue en vuelo en la cuenta atrás
+    y golpea al bot que sale en (0,6).
+  - En los dos casos la víctima arranca el «¡YA!» con 5 s de
+    congelación y 22 u/s de empujón guardados en la velocidad.
+- **Arreglo:** `clearProjectiles()` al entrar en la cuenta atrás, junto a
+  `clearActiveZones()`, con su comentario.
+- **Verificado:**
+  - la misma sonda, dos pasadas por camino: 0 bolas desde la entrada en
+    la cuenta atrás hasta el «¡YA!», y ningún bicho congelado ni empujado;
+  - golden 3/3 (usa `debugStartOfflineMatch`, que ya limpiaba) y tsc.
+- **Online no cambia:** a `enterCountdown` solo se llega offline
+  (selección de bots, reinicio offline y entrada por portal).
+- **Tierra de nadie, dicho aquí:** `src/game.ts`, una línea y su
+  comentario, con el permiso explícito de Rafa en el encargo de esta
+  sesión.
+
 ## 2026-09-25 — [PERSONAJES] Clip de caída (offline y online), cuenta atrás animada y la sierra de Shelly online
 
 - **Qué:** los tres cambios visuales que aprobó Rafa («Sí, Sí y Sí»), más
