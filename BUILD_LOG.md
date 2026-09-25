@@ -1,5 +1,54 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [PERSONAJES] Las reapariciones online ya se cuentan
+
+- **Qué:** online, la estadística «Reapariciones» de la pantalla final
+  daba siempre 0. Salió al arreglar las caídas offline (`753ba32`, rama
+  `claude/fix/personajes-caidas-offline`).
+- **Por qué:**
+  - `matchStats.respawns` solo subía en `Critter.respawnAt`.
+  - Online nunca se llama a `respawnAt`: la reaparición la hace el
+    servidor. `Game.updateOnline` solo copia `falling` y llama a
+    `presentFallEdge`.
+  - Las caídas online sí se contaban: el flanco de subida de `falling`
+    se ve en `tickMatchStats`, que corre en cada fotograma a través de
+    `c.update`.
+- **Arreglo, solo en `src/critter.ts`:**
+  - `tickMatchStats` cuenta la reaparición con el flanco de **bajada** de
+    `falling`, si el bicho sigue vivo (`alive`).
+  - La eliminación no cuenta: el servidor baja `falling` y `alive` en el
+    mismo tick (`updateFalling` de `server/src/sim/physics.ts`, y el
+    abandono por portal), y el cliente copia `alive` antes que
+    `falling`.
+  - Offline la sigue contando `respawnAt`, que ahora limpia
+    `lastStatsFalling`. Así el paso siguiente no vuelve a ver el flanco.
+    Sin esa línea no pasa nada en `dev`, pero con `753ba32` encima
+    (`startFalling` sube `lastStatsFalling`) se contaría doble.
+  - No se tocó `present` ni `src/game.ts`.
+- **Medido.** Las sondas son headless y mudas, con el jugador Sergei.
+  La sonda online va contra un servidor local (`npm run dev` en
+  `server/`, con `precise-timers`). En ella el jugador se tira al vacío
+  tres veces: dos reapariciones y la eliminación. La verdad del servidor
+  sale de las vidas y de los flancos de cada parche de estado.
+
+  | Caso | Antes | Después | Verdad |
+  |---|---|---|---|
+  | Online, pantalla final, «Reapariciones» | 0 | **2** | 2 (vidas 0, eliminado) |
+  | Online, tras cada caída (cliente) | 0 · 0 · 0 | 1 · 2 · 2 | 1 · 2 · 2 |
+  | Offline, cae 1 y se acaba el tiempo | 1 | 1 | 1 `respawnAt` |
+  | Offline, cae hasta la eliminación | 2 | 2 | 2 `respawnAt` |
+  | Offline + `753ba32`, las dos partidas | — | 1 y 2 | 1 y 2 |
+  | Control: offline + `753ba32` sin limpiar en `respawnAt` | — | 2 y 4 ✗ | 1 y 2 |
+
+  Con `753ba32` encima, las caídas offline también cuadran: 1 y 3.
+- **Verificado:**
+  - golden 3/3 con eventos idénticos (253 · 188 · 242);
+  - `npm run check`;
+  - 304 tests de `test:sim`.
+- **Para quien integre `753ba32`:** `src/critter.ts` se combina sin
+  conflicto con este arreglo (comprobado con `git merge-tree`).
+  `BUILD_LOG.md` choca, como ya chocaba con `dev`.
+
 ## 2026-09-25 — [PERSONAJES] Una bola de nieve de la partida anterior ya no golpea en la cuenta atrás
 
 - **El fallo** (viejo, apuntado como pendiente en la entrada de abajo):

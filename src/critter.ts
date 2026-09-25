@@ -1225,9 +1225,15 @@ export class Critter {
     }
     this.lastStatsHeadbutting = this.isHeadbutting;
 
-    // Fall edge
+    // Fall edges. Up: a fall. Down while still alive: a respawn — online
+    // only, where the server respawns the critter and respawnAt never runs
+    // (offline respawnAt counts it and clears this memory, so no step sees
+    // the edge). Down dead is the elimination, not a respawn: online the
+    // server clears `falling` and `alive` on the same tick.
     if (this.falling && !this.lastStatsFalling) {
       this.matchStats.falls++;
+    } else if (!this.falling && this.lastStatsFalling && this.alive) {
+      this.matchStats.respawns++;
     }
     this.lastStatsFalling = this.falling;
 
@@ -1428,7 +1434,10 @@ export class Critter {
     this.mesh.scale.set(1, 1, 1);
     this.body.scale.y = 1.0;
     this.presentFallEdge(false);
+    // Counted here (offline), so tickMatchStats' respawn edge must not
+    // count it again on the next step.
     this.matchStats.respawns++;
+    this.lastStatsFalling = false;
   }
 
   /** Permanently eliminated (no lives left). */
