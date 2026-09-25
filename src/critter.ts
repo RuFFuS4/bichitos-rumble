@@ -758,7 +758,11 @@ export class Critter {
   private tickSawSpin(dt: number): void {
     if (this.config.name !== 'Shelly' || !this.glbMesh) return;
     const lState = this.abilityStates[2];
-    if (lState?.active && lState.windUpLeft <= 0 && lState.def.sawL) {
+    // Not under the victory clip: nothing cancels a saw the match ended in
+    // (offline 'ended' ticks no abilities; the server's endMatch cancels
+    // none), and she spun behind the end screen for as long as it stayed.
+    const celebrating = this.skeletal?.getCurrentState() === 'victory';
+    if (lState?.active && lState.windUpLeft <= 0 && lState.def.sawL && !celebrating) {
       const rate = lState.def.sawSpinSpeed ?? 22;
       this.glbMesh.rotation.y += rate * dt;
     } else if (this.glbMesh.rotation.y !== this.baseGlbRotationY) {

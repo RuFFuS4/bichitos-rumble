@@ -301,6 +301,9 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
   // select preview before this guard). Lean / sway / scale still apply
   // because those channels are untouched by Tripo / Mixamo clips.
   const skeletalLoop = critter.skeletal?.isLoopingClipActive() ?? false;
+  // Nor under an in-place clip (the fall): the game moves the critter, and
+  // a bob driven by the velocity it had before falling hopped it at the rim.
+  const noBob = skeletalLoop || (critter.skeletal?.isInPlaceClipActive() ?? false);
 
   const vMag = Math.sqrt(critter.vx * critter.vx + critter.vz * critter.vz);
   const moving = vMag > SPEED_DEADZONE;
@@ -338,10 +341,10 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
   // When a skeletal loop clip is playing, the bob/bounce are zeroed so
   // the clip's authored cadence reads cleanly. Critters without clips
   // keep the procedural baseline.
-  const idleBob = skeletalLoop
+  const idleBob = noBob
     ? 0
     : Math.sin(t * p.idleBobHz * Math.PI * 2) * p.idleBobAmp;
-  const runBounce = skeletalLoop
+  const runBounce = noBob
     ? 0
     : Math.abs(Math.sin(t * p.runBounceHz * Math.PI)) *
       p.runBounceAmp *

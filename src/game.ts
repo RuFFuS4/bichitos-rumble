@@ -719,9 +719,12 @@ export class Game {
         // critter is not frozen in bind pose while it waits).
         continue;
       }
+      // A latch for the clip event only (the drop never reads it): it
+      // holds until the model can take the clip, so a player whose GLB
+      // attaches after the first drop step (cold cache, a 2-step frame)
+      // still falls in the fall pose.
       if (!state.fallStarted) {
-        c.playSkeletal('fall', { fallback: 'idle' });
-        state.fallStarted = true;
+        state.fallStarted = c.playSkeletal('fall', { fallback: 'idle' });
       }
       state.vy -= G * dt;
       state.y += state.vy * dt;
@@ -732,8 +735,9 @@ export class Game {
         playSoundEffect('headbuttHit');
         // Force the idle clip to take over — fall has clampWhenFinished
         // so without an explicit swap the critter would freeze in its
-        // last fall-pose frame forever.
-        c.playSkeletal('idle', { force: true });
+        // last fall-pose frame forever. A short blend: the tucked legs of
+        // a fall pose hovered over the dust for the default 0.15 s.
+        c.playSkeletal('idle', { force: true, crossfade: FEEL.match.dropLandBlend });
         this.countdownDrops.delete(c);
       } else {
         c.mesh.position.y = state.y;
@@ -2117,7 +2121,7 @@ export class Game {
           // out of the fall clip, which nothing else would leave.
           for (const [c] of this.countdownDrops) {
             c.mesh.position.y = 0;
-            c.playSkeletal('idle', { force: true });
+            c.playSkeletal('idle', { force: true, crossfade: FEEL.match.dropLandBlend });
           }
           this.countdownDrops.clear();
         }
