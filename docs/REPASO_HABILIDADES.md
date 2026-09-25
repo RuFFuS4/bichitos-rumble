@@ -228,10 +228,10 @@ está abajo, por dueño.
   - ningún icono sobre el bicho invisible de otro (Mirror Trick, la
     madriguera): el 👻 solo lo ve la Kurama local, y los demás iconos
     (frenesí, veneno…) también la delataban;
-  - zonas por dueño (`isInsideZoneOfKind(…, nombre)`): offline, una
-    Kurama que copia Frozen Floor no se ve congelada en su hielo y
-    Kowalski sí. Online, una zona copiada llega como `generic` y no pinta
-    icono: aviso a DISTRIBUCIÓN;
+  - zonas por dueño (`isInsideZoneOfKind(…, nombre)`): una Kurama que
+    copia Frozen Floor no se ve congelada en su hielo y Kowalski sí.
+    Online también, desde que DISTRIBUCIÓN toma el tipo de la zona de sus
+    banderas (3b1dbd6);
   - «sin iconos mientras cae» ya lo hacía `status-icons.ts` desde
     6817ce5: no hacía falta.
 - `src/main.ts`: la nube de Kermit no le ciega a él.

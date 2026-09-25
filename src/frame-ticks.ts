@@ -46,7 +46,7 @@ export function computeCritterStatuses(c: Critter, isLocal: boolean): Set<Critte
   // 2026-04-30 final-L — Toxic Touch confused → poisoned icon.
   if (c.confusedTimer > 0) out.add('poisoned');
   if (c.config.name === 'Shelly' && c.selfTintTimer > 0) out.add('steel-shell');
-  // The ghost tells the player her trick is on (tickSharedGameplay shows
+  // The ghost tells the player her trick is on (presentStatusIcons shows
   // no icon at all over someone else's invisible critter).
   if (isLocal && c.config.name === 'Kurama' && c.invisibilityTimer > 0) out.add('decoy-ghost');
   // Frenzy slot is ability index 2 in our kits.
