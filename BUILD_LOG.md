@@ -1,5 +1,21 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [Interfaz] El HUD enseña cuándo no puedes actuar
+
+Del repaso de habilidades de PERSONAJES: hay dos momentos en que el juego
+bloquea acciones y el HUD las seguía pintando disponibles.
+
+- **Shelly anclada** (Steel Shell activo): su J no sale. El HUD le
+  pregunta a `isBlockedByAnchor`, que PERSONAJES exportó pura a petición
+  nuestra para que la regla viva en un solo sitio.
+- **Aturdido**: desde la segunda tanda del repaso bloquea el cabezazo, J,
+  K y L. Con permiso de Rafa para `game.ts` (tierra de nadie; nadie más
+  lo tocó hoy), las 4 llamadas a `updateAbilityHUD` pasan
+  `stunTimer > 0`, y J/K/L y el ⚡ táctil se atenúan mientras dure.
+- `.blocked` es gris y apagado, distinto del barrido de enfriamiento: se
+  lee «ahora no», no «recargando». Los textos de «Aturdido», «Vulnerable»
+  (×4) y «Congelado» (bola y suelo helado) quedan al día.
+
 ## 2026-09-25 — [DISTRIBUCIÓN] v1.8-terreno-v2 en producción: H4.5 entero, con guard de versión y suavizado online
 
 - **Despliegue**: merge `--no-ff` de `bf7b3ee` (el SHA verificado, no

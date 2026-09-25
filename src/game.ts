@@ -1565,7 +1565,7 @@ export class Game {
     if (this.player && (serverPhase === 'countdown' || serverPhase === 'playing')) {
       const alive = allPlayers.filter(p => p.alive).length;
       updateHUD(alive, Math.max(0, state.matchTimer ?? 0));
-      updateAbilityHUD(this.player.abilityStates);
+      updateAbilityHUD(this.player.abilityStates, this.player.stunTimer > 0);
       setCopycatTarget(this.player.config.name === 'Kurama' && this.player.lastHitTargetCritter ? this.player.lastHitTargetCritter : null);
       updateAllLivesHUD([...this.onlineCritters.values()]);
     }
@@ -2052,13 +2052,13 @@ export class Game {
         // The DOM overlay is managed by setPaused().
         if (this.paused) {
           // Still update the HUD once so cooldown bars don't snap on resume.
-          updateAbilityHUD(this.player.abilityStates);
+          updateAbilityHUD(this.player.abilityStates, this.player.stunTimer > 0);
           setCopycatTarget(this.player.config.name === 'Kurama' && this.player.lastHitTargetCritter ? this.player.lastHitTargetCritter : null);
           break;
         }
         const effectiveDt = applyHitStop(dt);
         if (effectiveDt === 0) {
-          updateAbilityHUD(this.player.abilityStates);
+          updateAbilityHUD(this.player.abilityStates, this.player.stunTimer > 0);
           setCopycatTarget(this.player.config.name === 'Kurama' && this.player.lastHitTargetCritter ? this.player.lastHitTargetCritter : null);
           break;
         }
@@ -2125,7 +2125,7 @@ export class Game {
 
         // 8. Update HUD
         updateHUD(this.activeCount, Math.max(0, this.matchTimer));
-        updateAbilityHUD(this.player.abilityStates);
+        updateAbilityHUD(this.player.abilityStates, this.player.stunTimer > 0);
         setCopycatTarget(this.player.config.name === 'Kurama' && this.player.lastHitTargetCritter ? this.player.lastHitTargetCritter : null);
         updateAllLivesHUD(this.critters);
 

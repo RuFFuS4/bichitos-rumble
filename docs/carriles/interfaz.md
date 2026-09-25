@@ -51,11 +51,11 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
     cuando `isBlockedByAnchor` (pública desde 1cb22a8) lo dice.
   - ~~«Aturdido» también impide actuar: el texto~~ → hecho el 25 («Ni se
     mueve ni actúa»).
-  - **Opcional, pendiente de Rafa: atenuar J, K y L mientras dure el
-    aturdido.** El HUD solo recibe las habilidades
-    (`updateAbilityHUD(this.player.abilityStates)`, 4 llamadas en
-    `game.ts`, tierra de nadie), y el `Critter` no marca cuál es el
-    local. Hace falta pasarle `stunTimer > 0` desde `game.ts`.
+  - ~~Atenuar J, K y L mientras dure el aturdido~~ → hecho el 25 con
+    permiso de Rafa para `game.ts`: las 4 llamadas pasan
+    `this.player.stunTimer > 0` como segundo argumento de
+    `updateAbilityHUD`. Se atenúan J/K/L (barra y botones) y el ⚡
+    táctil.
   - Sus tres retoques de `CONTENT_ES` (Grip, Fox Dash, Ice Slide) están
     bien; el test de contenido sigue verde.
   - ~~Contorno~~ → en `dev` (4748f63), las miniaturas lo reciben solas.

@@ -359,11 +359,17 @@ function resetTouchAbilityButtons(): void {
     const btn = document.querySelector<HTMLElement>(`.touch-btn-${suffix}`);
     if (!btn) continue;
     btn.querySelector('.touch-btn-icon')?.remove();
-    btn.classList.remove('active', 'on-cooldown', 'unavailable');
+    btn.classList.remove('active', 'on-cooldown', 'unavailable', 'blocked');
   }
 }
 
-export function updateAbilityHUD(states: AbilityState[]): void {
+/**
+ * Per-frame ability HUD update. `stunned` = the local player's stunTimer is
+ * running: since 2026-09-24 (PERSONAJES) a stun blocks the headbutt, J, K
+ * and L, so every action reads as blocked while it lasts.
+ */
+export function updateAbilityHUD(states: AbilityState[], stunned = false): void {
+  document.querySelector('.touch-btn-headbutt')?.classList.toggle('blocked', stunned);
   for (let i = 0; i < states.length && i < slotEls.length; i++) {
     const s = states[i];
     const el = slotEls[i];
@@ -381,10 +387,10 @@ export function updateAbilityHUD(states: AbilityState[]): void {
     el.root.classList.toggle('on-cooldown', isCooldown);
     el.touchBtn?.classList.toggle('active', s.active);
     el.touchBtn?.classList.toggle('on-cooldown', isCooldown);
-    // Can't be cast right now for a reason other than cooldown — today,
-    // a dash/blink while Shelly's Steel Shell anchors her. The rule is
-    // gameplay's own (abilities-runtime.ts); the HUD only asks it.
-    const blocked = isBlockedByAnchor(s, states);
+    // Can't be cast right now for a reason other than cooldown: a stun, or
+    // a dash/blink while Shelly's Steel Shell anchors her. The anchor rule
+    // is gameplay's own (abilities-runtime.ts); the HUD only asks it.
+    const blocked = stunned || isBlockedByAnchor(s, states);
     el.root.classList.toggle('blocked', blocked);
     el.touchBtn?.classList.toggle('blocked', blocked);
 
