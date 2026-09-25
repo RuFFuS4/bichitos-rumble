@@ -332,6 +332,33 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-25 (noche) — tres cambios visuales de Rafa en
+  `dev` (1b94aee). Solo cliente, pero tocan la ruta online.** El servidor
+  no cambia y `NET_PROTOCOL` sigue en 3.
+  - **La sierra de Shelly gira online.** `tickSawSpin` sale de la guarda
+    de `skipPhysics` y lee los `active`/`windUpLeft` sincronizados. Medido
+    contra un servidor local: 22,000 rad/s, local y remota, en la ventana
+    exacta de tu sierra. Bajo el clip de victoria no gira.
+  - **El clip de caída online.** Nadie pedía el Fall online.
+    `Game.updateOnline` llama a `Critter.presentFallEdge` en el flanco de
+    `falling` sincronizado, solo con el bicho vivo (la eliminación sigue
+    con su flanco de defeat).
+    - Probado con 4 clientes: el Fall en el flanco, Idle sin fundido al
+      reaparecer, y un eliminado no dispara la reaparición.
+    - 0 errores de consola y de servidor.
+  - **El Fall en su sitio** (`IN_PLACE_STATES`): los Fall de Mixamo de
+    Sergei, Sihans y Kurama bajaban la cadera 2 m.
+  - Offline, además, se anima el que cae y la cuenta atrás. La simulación
+    no cambia: golden 3/3 y grabaciones idénticas bit a bit.
+  - Tu nota de Copycat en mi buzón: contestado el punto 3 (la sierra). La
+    copia de Kurama sigue sin girar en los dos modos. Si mandas la forma de
+    la L en el `abilityFired` (tu punto 1), su giro puede ir en el mismo
+    cambio.
+  - Una cosa tuya, si la queréis (baja, solo visual): el brillo de una
+    habilidad activa se queda en la pantalla final, porque `endMatch` no
+    cancela las habilidades. Offline tampoco lo hace `enterEnded`. La
+    sierra ya no gira, pero sigue verde tras el panel.
+
 - **De PERSONAJES, 2026-09-25 (tarde) — dos cambios de Rafa que viven en
   `server/src/sim`: el próximo despliegue necesita servidor, no solo
   cliente.**
