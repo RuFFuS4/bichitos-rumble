@@ -369,25 +369,9 @@ if (!hasServerUrl) {
   console.info('[Main] online mode disabled (no VITE_SERVER_URL)');
 }
 
-/**
- * Build the status-set for a critter from its instantaneous state.
- * Pure: takes a Critter, returns a fresh Set<CritterStatus>. The
- * HUD layer diffs the result against its previous render so the DOM
- * only mutates when a glyph actually changes.
- *
- * Mapping rules (2026-04-29 final-K):
- *   · stunTimer > 0           → 'stunned' + 'vulnerable'
- *   · slowTimer > 0           → 'frozen' (Snowball is the only
- *                                 setter — frost cyan tint already
- *                                 paired with the icon)
- *   · selfTintTimer > 0 with Shelly's metallic tint → 'steel-shell'
- *   · invisibilityTimer > 0 + Kurama → 'decoy-ghost'
- *   · ability frenzy slot active and out of windup → 'frenzy'
- *   · standing in a 'poison' zone (and not Kermit himself)
- *                             → 'poisoned'
- *   · standing in a 'sand' zone (and not Sihans herself)
- *                             → 'slowed'
- */
+// Status icons: the mapping lives in computeCritterStatuses
+// (src/frame-ticks.ts), run with the sim.
+
 // Game loop
 //
 // Offline, the sim runs in fixed steps of 1/60 s (src/fixed-step.ts; Rafa,
@@ -438,8 +422,9 @@ function loop(now: number) {
   }
   if (!game.isPaused()) {
     const localPos = game.getLocalPlayerPos();
+    // Someone else's cloud: Kermit sees fine inside his own.
     const insidePoison = !!localPos && localPos.alive
-      && isInsideZoneOfKind(localPos.x, localPos.z, 'poison');
+      && isInsideZoneOfKind(localPos.x, localPos.z, 'poison', localPos.critterName);
     setPoisonOverlayIntensity(insidePoison ? 1 : 0);
     const allCritters = game.getActiveCritters();
     if (insidePoison) {

@@ -32,9 +32,9 @@ const EMPTY_STATUS_SET: ReadonlySet<CritterStatus> = new Set();
 /**
  * Recalculate the status-icon set for one critter. Moved verbatim from
  * src/main.ts (2026-04-30 final-polish). See status-icons.ts for the
- * rendering side.
+ * rendering side. `isLocal`: the critter the viewer controls.
  */
-export function computeCritterStatuses(c: Critter): Set<CritterStatus> {
+export function computeCritterStatuses(c: Critter, isLocal: boolean): Set<CritterStatus> {
   const out = new Set<CritterStatus>();
   if (c.stunTimer > 0) {
     out.add('stunned');
@@ -44,15 +44,21 @@ export function computeCritterStatuses(c: Critter): Set<CritterStatus> {
   // 2026-04-30 final-L — Toxic Touch confused → poisoned icon.
   if (c.confusedTimer > 0) out.add('poisoned');
   if (c.config.name === 'Shelly' && c.selfTintTimer > 0) out.add('steel-shell');
-  if (c.config.name === 'Kurama' && c.invisibilityTimer > 0) out.add('decoy-ghost');
+  // The ghost tells the player her trick is on (tickSharedGameplay shows
+  // no icon at all over someone else's invisible critter).
+  if (isLocal && c.config.name === 'Kurama' && c.invisibilityTimer > 0) out.add('decoy-ghost');
   // Frenzy slot is ability index 2 in our kits.
   const frenzy = c.abilityStates[2];
   if (frenzy?.active && frenzy.windUpLeft <= 0) out.add('frenzy');
-  // Zones — only count enemy zones (caster is exempt by name).
-  if (c.config.name !== 'Kermit' && isInsideZoneOfKind(c.x, c.z, 'poison')) out.add('poisoned');
-  if (c.config.name !== 'Sihans' && isInsideZoneOfKind(c.x, c.z, 'sand')) out.add('slowed');
+  // Zones — only someone else's: the owner is skipped by name, which is the
+  // zones' ownerKey (so offline a Kurama who copied Frozen Floor isn't
+  // frozen by her own ice, and Kowalski is by hers; online a copied zone
+  // arrives as 'generic' and shows nothing — game.ts onZoneSpawned).
+  const owner = c.config.name;
+  if (isInsideZoneOfKind(c.x, c.z, 'poison', owner)) out.add('poisoned');
+  if (isInsideZoneOfKind(c.x, c.z, 'sand', owner)) out.add('slowed');
   // 2026-04-30 final-L — Frozen Floor: critters in 'ice' zone show frozen.
-  if (c.config.name !== 'Kowalski' && isInsideZoneOfKind(c.x, c.z, 'ice')) out.add('frozen');
+  if (isInsideZoneOfKind(c.x, c.z, 'ice', owner)) out.add('frozen');
   return out;
 }
 
@@ -90,11 +96,15 @@ export function tickSharedGameplay(
   if (game.isMatchPlaying()) {
     const critters = game.getActiveCritters();
     for (const c of critters) {
-      if (!c.alive) {
+      const isLocal = c === game.player;
+      // Nothing over someone else's invisible critter (Mirror Trick, a
+      // burrow): any icon floating there would point at the one the trick
+      // hides, while the decoy stands bare (2026-09-25).
+      if (!c.alive || (!isLocal && c.invisibilityTimer > 0)) {
         setCritterStatus(c, EMPTY_STATUS_SET);
         continue;
       }
-      setCritterStatus(c, computeCritterStatuses(c));
+      setCritterStatus(c, computeCritterStatuses(c, isLocal));
     }
     updateAllStatusPositions(camera, viewport);
   }

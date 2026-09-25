@@ -2108,6 +2108,10 @@ export class Game {
         }
 
         this.matchTimer -= effectiveDt;
+        // Stats (step 5): taken before the input, since an All-in starts a
+        // fall in steps 1-3, not in checkFalloff: the player's own miss, or
+        // a bot's All-in that yeets the player.
+        const playerWasFalling = this.player.falling;
 
         // 1. Player input — suppressed under autopilot so the bot brain
         // below is the ONLY writer on the player slot.
@@ -2148,11 +2152,10 @@ export class Game {
 
         // 5. Physics
         resolveCollisions(this.critters);
-        const playerWasFalling = this.player.falling;
         checkFalloff(this.critters, this.arena);
         // Stats: record player falls only (bots falling would inflate counts).
-        // Rising edge of `falling` — checkFalloff is the only path that
-        // sets it to true, so it's safe to diff before/after this call.
+        // Rising edge of `falling` over the whole step: checkFalloff, or an
+        // All-in (see above).
         if (!playerWasFalling && this.player.falling) {
           recordFall(this.player.config.name);
         }

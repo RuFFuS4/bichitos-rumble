@@ -400,10 +400,11 @@ export interface AbilityDef {
   /** While the ability is active (wind-up excluded, like the mass buff),
    *  every push the caster takes from others is × this: headbutts and
    *  their recoil, nudges, dash hits, the Steel Shell reflect and bounce,
-   *  K and L hits, snowballs, and a Grip's yank (its distance). The mass
-   *  buff already shrinks a collision's share; this reaches the rest.
-   *  Not an All-in hit: that one throws out whoever it catches. Not a
-   *  Sinkhole's pull either: a zone, not a push, as mass doesn't touch it.
+   *  K and L hits and snowballs. The mass buff already shrinks a
+   *  collision's share; this reaches the rest. Not an All-in hit: that one
+   *  throws out whoever it catches. Not a Sinkhole's pull either: a zone,
+   *  not a push, as mass doesn't touch it. Not the Grip: the trunk brings
+   *  him all the way (Rafa, 2026-09-25: «entero»).
    *  Sergei's Frenzy 0.4 («casi inamovible», Rafa 2026-09-24). Read
    *  through Critter.knockbackScale; server mirror: knockbackScale in
    *  server/src/sim/abilities.ts. Undefined = 1. */

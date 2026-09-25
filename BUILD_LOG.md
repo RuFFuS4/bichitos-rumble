@@ -1,5 +1,40 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [PERSONAJES] Respuestas de Rafa: el Grip trae entero, el All-in apunta a 180°/s y seis arreglos en tierra de nadie
+
+- **Las cinco preguntas de la segunda tanda:**
+  - 1-3 se quedan como están:
+    - Shelly sigue volando si saca el escudo en pleno vuelo;
+    - Mirror Trick cae al vacío;
+    - el Slam no deja actuar.
+  - **4, el Grip trae entero a un Sergei en frenesí:** el tirón ya no
+    pasa por `knockbackScale`, en el cliente y en `server/src/sim`.
+  - **5, apuntado del All-in de 360 a 180°/s** (Rafa lo dejó a mi
+    criterio). A 360, un Sebastian de espaldas se giraba en 0,5 s, antes
+    de que la línea avisara. Los bots no apuntan mientras cargan, así
+    que solo cambia el juego humano: una tanda de 24 partidas da los
+    mismos 62 All-in a 360, 180 y 120.
+- **Seis arreglos en tierra de nadie** (permiso de Rafa):
+  - ningún icono sobre el bicho invisible de otro, y el 👻 solo lo ve
+    la Kurama local;
+  - los iconos de zona van por dueño;
+  - la nube de Kermit no le ciega a él;
+  - las caídas del All-in cuentan en las estadísticas;
+  - el All-in sale en las grabaciones, antes de las caídas que provoca.
+  - «Sin iconos al caer» ya existía (6817ce5).
+- **Revisión adversarial** (2 lentes): la lógica aguantó. Salieron:
+  - el orden de los eventos del All-in;
+  - los demás iconos que delataban a Kurama;
+  - docs viejos;
+  - que online el cambio necesita redesplegar el servidor (aviso a
+    DISTRIBUCIÓN).
+- **Golden regenerado** (253/188/242 eventos), 3/3 detrás:
+  - la 501 cambia desde el Grip sobre el Sergei en frenesí;
+  - la 503 gana los eventos del All-in.
+- **Tierra de nadie, dicho aquí:** `frame-ticks.ts`, `main.ts` (una
+  condición y un comentario huérfano), `game.ts` (dónde se toma
+  `playerWasFalling`) y `dev-api.ts` (una pasada de detección más).
+
 ## 2026-09-25 — [PERSONAJES] El juego simula a paso fijo: un empujón llega igual de lejos a cualquier frecuencia
 
 - **Decisión 1 del repaso de habilidades** (Rafa: «sí»). Aprobó

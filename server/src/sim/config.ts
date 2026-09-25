@@ -122,9 +122,10 @@ export const SIM = {
   allIn: {
     hitMargin: 0.55,
     missProbeStep: 0.5,
-    // Aiming while charging (2026-09-24). Online: BrawlRoom's hold-to-fire
-    // loop turns the facing toward the input (since 2026-09-25).
-    aimTurnDegPerSec: 360,
+    // Aiming while charging (2026-09-24; 360 → 180 on 2026-09-25, see
+    // FEEL.allIn). BrawlRoom's hold-to-fire loop turns the facing toward the
+    // input.
+    aimTurnDegPerSec: 180,
   },
   // Blink landing (Sand Trap, Shadow Step). Mirror of FEEL.blink.
   blink: {

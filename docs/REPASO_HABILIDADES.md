@@ -223,24 +223,31 @@ está abajo, por dueño.
 
 ## Pendiente en tierra de nadie (con permiso de Rafa)
 
+**Hechas por PERSONAJES el 2026-09-25**, con permiso de Rafa:
 - `src/frame-ticks.ts`:
-  - mientras un bicho cae no se pintan sus iconos de estado;
-  - el 👻 de Mirror Trick solo para la Kurama local (hoy la delata);
-  - `isInsideZoneOfKind(…, c.config.name)` en los iconos de veneno,
-    arena y hielo.
-- `src/main.ts:414`: `isInsideZoneOfKind(localPos.x, localPos.z,
-  'poison', localPos.critterName)`. La nube de Kermit no le ciega a él.
-- `src/game.ts`:
-  - ~2099: mover `playerWasFalling` antes de `updatePlayer`, para que la
-    caída por fallo del All-in cuente en las estadísticas;
-  - opcional: pasar `scene` a `updateBot`;
-  - opcional: `setArenaForAbilities` en el constructor de `Game`.
-- `src/tools/dev-api.ts`: registrar el flanco de `lHoldCharging` como
-  `ability_cast`/`ability_end`. Hoy el All-in no sale en las grabaciones
-  ni en los usos/min.
-- `src/tools/sidebar.ts:1424` («Reset defs»): leer el kit
-  (`CRITTER_ABILITIES`) y no `state.def`, que durante un Copycat es la
-  copia.
+  - ningún icono sobre el bicho invisible de otro (Mirror Trick, la
+    madriguera): el 👻 solo lo ve la Kurama local, y los demás iconos
+    (frenesí, veneno…) también la delataban;
+  - zonas por dueño (`isInsideZoneOfKind(…, nombre)`): offline, una
+    Kurama que copia Frozen Floor no se ve congelada en su hielo y
+    Kowalski sí. Online, una zona copiada llega como `generic` y no pinta
+    icono: aviso a DISTRIBUCIÓN;
+  - «sin iconos mientras cae» ya lo hacía `status-icons.ts` desde
+    6817ce5: no hacía falta.
+- `src/main.ts`: la nube de Kermit no le ciega a él.
+- `src/game.ts`: `playerWasFalling` se toma antes de la entrada. Así
+  cuentan en las estadísticas las caídas del All-in: el fallo propio y el
+  de un bot que echa al jugador.
+- `src/tools/dev-api.ts`: el All-in sale en las grabaciones.
+  - Su `ability_cast` es la suelta que dispara, y va antes de las caídas
+    que provoca.
+  - Una carga soltada sin disparar deja un `ability_end` «(dropped)», sin
+    `ability_cast`.
+
+Quedan, opcionales y sin pedir: `scene` en `updateBot`,
+`setArenaForAbilities` en el constructor de `Game` y el «Reset defs» del
+laboratorio (`src/tools/sidebar.ts:1424`, que debería leer el kit y no
+`state.def`, que durante un Copycat es la copia).
 
 ## Pendiente para INTERFAZ y ARENA
 
@@ -290,10 +297,13 @@ contra la foto fija de `dev`, y revisión adversarial del diff.
   punto central (`knockbackScale`) a todos los empujes. También lo tiene
   la Kurama que lo copia.
   - Cabezazo de Trunk sobre Sergei en frenesí: 1,54 → 0,62 u.
-  - El golpe del All-in y el tirón del Sinkhole quedan fuera a propósito.
+  - El golpe del All-in y el tirón del Sinkhole quedan fuera a propósito,
+    y desde el 2026-09-25 también el Grip, que lo trae entero (pregunta
+    4).
 - **All-in (5).** Carga mínima de 0,35 s: un toque dispara al cumplirse.
-  Mientras carga, el mando gira el apuntado a 360°/s, y la línea sigue la
-  puntería y se apaga al acabar. Los bots respetan el mínimo.
+  Mientras carga, el mando gira el apuntado (360°/s; 180°/s desde el
+  2026-09-25, pregunta 5), y la línea sigue la puntería y se apaga al
+  acabar. Los bots respetan el mínimo.
 - **Mirror Trick (6).** Se aleja del enemigo vivo más cercano a menos de
   10 u, girándose hacia él para que el salto hacia atrás se lea. Sin
   nadie cerca, salta hacia atrás como antes. Probado en los tres casos:
@@ -439,20 +449,33 @@ frecuencia que se juegue.
     (hoy van a 60 Hz a cualquier frecuencia);
   - que el reloj del laboratorio use `FixedStepClock`.
 
-## Preguntas abiertas para Rafa
+## Preguntas a Rafa — respondidas el 2026-09-25
 
-1. **Steel Shell**: hoy frena el movimiento de Shelly, pero no anula un
-   empujón recibido. ¿Debe anularlo también?
-2. **Mirror Trick también cae sobre el vacío** durante el truco, no solo
-   Shelly: el truco es un engaño, no un suelo. ¿De acuerdo?
-3. **El Slam de Trunk también deja sin actuar** 1,5 s a todos los que
-   pilla. En la tanda Trunk no sale más fuerte. ¿Se queda así, o solo
-   bloquea el Grip?
-4. **El Grip trae a Sergei en frenesí solo al 40 %** del camino. ¿Así, o
-   el agarre lo trae entero?
-5. **El All-in apuntando casi no falla**: un rival que huye de lado gira
-   25-60°/s y el apuntado sigue a 360°/s. ¿Se baja, por ejemplo, a
-   180°/s?
+1. **Steel Shell**: si a Shelly la lanzan y saca el escudo en pleno
+   vuelo, ¿se queda clavada o sigue volando? Rafa: **sigue volando**. El
+   escudo frena en seco lo que ella hace por sí misma, no un golpe ya
+   recibido; premia sacarlo antes del golpe. Sin cambios.
+2. **Mirror Trick cae sobre el vacío** durante el truco. Rafa: **sí, debe
+   caer**. Sin cambios.
+3. **El Slam de Trunk deja sin actuar** 1,5 s a los que pilla. Rafa:
+   **sin actuar, tampoco habilidades**. Sin cambios.
+4. **El Grip a un Sergei en frenesí.** Rafa: **entero**. Hecho: el tirón
+   ya no pasa por `knockbackScale`, en el cliente y en `server/src/sim`
+   (test en `server-knockback-scale`). El frenesí solo resiste los
+   golpes.
+5. **Velocidad de apuntado del All-in.** Rafa: «como consideres mejor y
+   más coherente». **180°/s** (antes 360), en `FEEL` y `SIM`.
+   - A un rival que corre la puntería lo sigue igual: de lado, a 5 u,
+     gira 25-60°/s visto desde Sebastian.
+   - Lo que cambia es el giro por sorpresa. A 360°/s, Sebastian cargando
+     de espaldas se giraba 180° en 0,5 s, antes de que la víctima leyera
+     la línea: reaccionar lleva ~0,25 s y salir del pasillo ~0,5 s. A
+     180°/s tarda 1 s, y 90° en 0,5 s. La línea avisa, que es para lo
+     que está, y apuntar sigue siendo ágil.
+   - Los bots no apuntan mientras cargan: disparan con el rival ya en la
+     línea. Una tanda de 24 partidas da los mismos 62 All-in a 360, 180 y
+     120°/s. Solo cambia el juego humano, también online (`BrawlRoom` lee
+     el espejo).
 6. ~~**Kermit online**: con la L, su bot pasa de ganar el 16 % al 39 %
    en la sala simulada.~~ **Respondida** (Rafa, 2026-09-25, vía
    DISTRIBUCIÓN): la L de los bots online se enciende para todos. El

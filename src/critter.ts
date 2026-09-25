@@ -527,8 +527,9 @@ export class Critter {
 
   /** × on every push this critter takes from others (Sergei's Frenzy:
    *  0.4) — the one point all knockback goes through: physics.ts
-   *  collisions, the K / L / Grip effects in abilities-runtime.ts and
-   *  the snowball. See AbilityDef.knockbackTakenMult. Server mirror:
+   *  collisions, the K / L effects in abilities-runtime.ts and the
+   *  snowball (not the Grip, which brings him all the way). See
+   *  AbilityDef.knockbackTakenMult. Server mirror:
    *  knockbackScale in server/src/sim/abilities.ts. */
   get knockbackScale(): number {
     return getKnockbackTakenMultiplier(this.abilityStates);

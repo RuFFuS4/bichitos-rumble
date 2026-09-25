@@ -206,7 +206,14 @@ export const FEEL = {
   allIn: {
     hitMargin: 0.55,          // lane half-width = caster radius + target radius + this; only targets ahead count
     missProbeStep: 0.5,       // a miss walks the dash line in these steps to the first point off the arena and falls there
-    aimTurnDegPerSec: 360,    // while charging (rooted) the stick turns the facing, and the line with it, this fast: 90° in 0.25 s, a full flip in 0.5 s. Online: BrawlRoom's hold-to-fire loop reads the mirror
+    // While charging (rooted) the stick turns the facing, and the line with
+    // it, this fast: 90° in 0.5 s, a full flip in 1 s. 360 → 180 on
+    // 2026-09-25 (Rafa left it to PERSONAJES): at 360 a Sebastian charging
+    // with his back turned flipped onto someone in 0.5 s, before they could
+    // read the line (reaction ~0.25 s + ~0.5 s to leave the lane). Bots
+    // don't aim while charging, so it only changes human play. Online:
+    // BrawlRoom's hold-to-fire loop reads the mirror.
+    aimTurnDegPerSec: 180,
   },
 
   // --- Blink landing (Sand Trap, Shadow Step). Mirror: SIM.blink ---

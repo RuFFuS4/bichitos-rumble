@@ -1219,11 +1219,10 @@ function fireGroundPound(def: AbilityDef, caster: PlayerSchema, allPlayers: Play
     const target = findGripTarget(def, caster, allPlayers)?.target;
     if (target) {
       const pull = def.gripPullDistance ?? 1.6;
-      // The yank comes knockbackScale of the way to the pull point, never
-      // past it. Mirror of the client.
-      const k = Math.min(1, knockbackScale(target));
-      target.x += (caster.x + facingX * pull - target.x) * k;
-      target.z += (caster.z + facingZ * pull - target.z) * k;
+      // The grip brings the target all the way, knockbackScale or not
+      // (Rafa, 2026-09-25: «entero»). Mirror of the client.
+      target.x = caster.x + facingX * pull;
+      target.z = caster.z + facingZ * pull;
       target.vx = 0;
       target.vz = 0;
       target.stunTimer = Math.max(target.stunTimer, def.gripStunDuration ?? 2.0);

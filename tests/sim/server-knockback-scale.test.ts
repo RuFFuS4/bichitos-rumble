@@ -1,5 +1,6 @@
 // knockbackScale on the server sim (Rafa, 2026-09-24): Sergei's Frenzy takes ×0.4 of
-// every push the sim applies (headbutt, recoil, nudge, K, grip), also when Kurama copies it.
+// every push the sim applies (headbutt, recoil, nudge, K), also when Kurama copies it.
+// Not the Grip: it brings him all the way (Rafa, 2026-09-25: «entero»).
 import { expect, it } from 'vitest';
 import type { PlayerSchema } from '../../server/src/state/PlayerSchema.js';
 import { resolveCollisions } from '../../server/src/sim/physics.js';
@@ -38,7 +39,7 @@ it('Sergei frenzy recoil on the server', () => {
   console.log('server Sergei recoil normal', hit(false), 'frenzy', hit(true));
 });
 
-it('Grip on the server yanks a frenzied Sergei 0.4 of the way', () => {
+it('Grip on the server brings a frenzied Sergei all the way, like any target', () => {
   const run = (fr: boolean) => {
     const t = player('t', 'Trunk', 0, { rotationY: Math.PI / 2 });
     const s = player('s', 'Sergei', 8);
@@ -48,7 +49,9 @@ it('Grip on the server yanks a frenzied Sergei 0.4 of the way', () => {
     for (let i = 0; i < 20; i++) tickPlayerAbilities(t, [t, s], 1 / 30, { ability1: false, ability2: false, ultimate: false });
     return s.x;
   };
-  console.log('server grip Sergei x normal', run(false), 'frenzy', run(true));
+  const normal = run(false);
+  expect(normal).toBeCloseTo(1.6, 6); // gripPullDistance in front of Trunk
+  expect(run(true)).toBeCloseTo(normal, 6);
 });
 
 it('Steel Shell reflect on a frenzied Sergei', () => {

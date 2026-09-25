@@ -375,11 +375,11 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
     playSound('groundPound');
     if (target) {
       const pull = def.gripPullDistance ?? 1.6;
-      // The yank is a push the target takes: it comes knockbackScale of
-      // the way to the pull point (a Frenzy Sergei, 0.4), never past it.
-      const k = Math.min(1, target.knockbackScale);
-      const tx = target.x + (critter.x + facingX * pull - target.x) * k;
-      const tz = target.z + (critter.z + facingZ * pull - target.z) * k;
+      // The grip brings the target all the way, knockbackScale or not: a
+      // Frenzy Sergei resists pushes, not the trunk (Rafa, 2026-09-25:
+      // «entero»).
+      const tx = critter.x + facingX * pull;
+      const tz = critter.z + facingZ * pull;
       // The lean follows the real yank: a target already inside the pull
       // distance, or off to a side, isn't moved straight at Trunk.
       let yankX = tx - target.x;

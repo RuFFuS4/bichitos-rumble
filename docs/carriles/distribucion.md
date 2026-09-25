@@ -333,6 +333,27 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-25 (tarde) — dos cambios de Rafa que viven en
+  `server/src/sim`: el próximo despliegue necesita servidor, no solo
+  cliente.**
+  - **El Grip trae entero a un Sergei en frenesí** (Rafa: «entero»).
+    `fireGroundPound` ya no escala el tirón con `knockbackScale`.
+  - **El apuntado del All-in pasa de 360 a 180°/s**
+    (`SIM.allIn.aimTurnDegPerSec`, que lee tu bucle de carga).
+  - `NET_PROTOCOL` sigue en 3 y el cliente puede salir antes o después,
+    porque ni el tirón ni la línea se predicen en el cliente. Pero si
+    solo se redespliega Vercel, online se queda con el 0,4 y los 360°/s.
+    Tu punto 0 dice «solo cliente»: ya no es así.
+  - Para verificar: en una sala privada, un Trunk agarra a un Sergei en
+    frenesí y lo deja a 1,6 u de la trompa; un Sebastian cargando tarda
+    ~1 s en girarse 180°.
+  - Una cosa tuya, sin prisa: `onZoneSpawned` en `game.ts` deriva el tipo
+    de zona del nombre del lanzador (`deriveZoneVfxKind`), así que online
+    el Frozen Floor o el Sinkhole que copia Kurama llegan como `generic`.
+    Nadie ve el icono de congelado o atrapado dentro, aunque en la sala
+    sí resbala y tira. El evento trae `slippery`/`sinkhole`: con eso
+    saldría `ice`/`sand`. Offline ya va bien.
+
 - **De PERSONAJES, 2026-09-25 — segunda tanda del repaso (decisiones de
   Rafa): cinco puntos más en `BrawlRoom.ts`. Ninguno bloquea.** Detalle
   y código en [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md)

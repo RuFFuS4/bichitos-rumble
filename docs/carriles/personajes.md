@@ -151,11 +151,11 @@ antes de commitear el JSON.
          El empujón llega igual de lejos a cualquier frecuencia, sin
          retraso añadido a 60 Hz. Cifras en `REPASO_HABILIDADES.md`
          §«Paso fijo»; herramienta: `scripts/fixed-step-probe.mjs`.
-   - [ ] Paso fijo, segundo corte (hace falta permiso aparte para
-         `frame-ticks.ts` y unas 30 líneas de `game.ts`): separar simular
-         de presentar, para que animaciones, polvo y bolas de nieve se
-         pinten a 144 Hz. Hoy van a 60 Hz a cualquier frecuencia. El
-         diseño está en `.tmp/fase2/paso-fijo-diseno.md` del worktree.
+   - [ ] Paso fijo, segundo corte (Rafa, 2026-09-25: permiso para
+         `game.ts`, «adelante»): separar simular de presentar, para que
+         animaciones, polvo y bolas de nieve se pinten a 144 Hz. Hoy van a
+         60 Hz a cualquier frecuencia. El mapa y el diseño están en
+         `.tmp/paso-fijo-2/` del worktree.
    - [ ] **Pase de balance de los golpes de dash** (`REPASO_HABILIDADES.md`
          §«Medido»). Kowalski (eliminado 49 → 65 %) y Sergei (70 → 78 %)
          pierden: les tiran más los dashes que ahora golpean, no su
@@ -165,8 +165,11 @@ antes de commitear el JSON.
    - [ ] Lo que falta en `BrawlRoom` (DISTRIBUCIÓN, S2-1 a S2-5), en tierra
          de nadie, INTERFAZ y ARENA: listado en el documento, con aviso en
          cada buzón.
-   - [ ] Preguntar a Rafa si deja tocar 6 cosas pequeñas de tierra de
-         nadie (`frame-ticks`, `main.ts:414`, `game.ts`, `dev-api.ts`).
+   - [x] Las 6 cosas pequeñas de tierra de nadie (permiso de Rafa,
+         2026-09-25), hechas: ver `REPASO_HABILIDADES.md`.
+   - [x] Las preguntas de la segunda tanda, respondidas el 2026-09-25:
+         1-3 se quedan, el Grip trae entero, y el apuntado del All-in pasa
+         a 180°/s (a criterio de PERSONAJES).
 4. **Feel pass de Kurama** (heredado de H4; receta en `NEXT_STEPS.md`).
 5. **Shaders cartoon**: Rafa eligió el 2026-09-23 contorno sobre el
    sombreado actual, no toon (punto 2). Si vuelve el toon, el precedente
@@ -346,9 +349,7 @@ Lo siguiente:
 - después, el punto 3 original del feeling: que cada Tripo corra a su
   manera.
 
-Siguen abiertas en `REPASO_HABILIDADES.md`:
-- las 6 preguntas de la segunda tanda;
-- el permiso para las 6 cosas pequeñas de tierra de nadie.
+Rafa contestó las preguntas y dio los permisos el mismo 25 (ver arriba).
 
 **2026-09-24** — la mejora gráfica del punto 2 está completa en `dev`,
 salvo las texturas nuevas de los Tripo (aparcadas: Rafa no tiene acceso a

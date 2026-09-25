@@ -733,6 +733,18 @@ Emitidos automáticamente vía polling edge-detection en `DevApi.tick`:
 | `match_started`   | Explícito desde `startMatch`                       | `lab`     |
 | `match_ended`     | Explícito desde `endMatch`                         | `lab`     |
 
+**El All-in (L de mantener)** nunca activa su ranura, así que sale por otra
+vía (2026-09-25): cuando `lHoldCharging` pasa de true → false.
+- Con el enfriamiento ya en marcha, ha disparado: `ability_cast` y
+  `ability_end` seguidos, antes de las caídas que provoca en ese paso.
+- Si no, la carga se soltó sin disparar (aturdido, caída, un bot sin
+  pasillo): solo un `ability_end` con «(dropped)» detrás del nombre, **sin
+  `ability_cast`**.
+
+**Ojo con los tiempos**: `t` es `performance.now()`, reloj de pared. A
+`--speed 8` una ventana corta entre eventos abarca varios segundos de
+partida (ERROR_LOG 2026-09-25): para eso, `scripts/fall-probe.mjs`.
+
 **Añadir un nuevo tipo**:
 
 1. Amplía la union `EventType` en `dev-api.ts`.
