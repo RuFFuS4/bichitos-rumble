@@ -43,7 +43,7 @@ import {
 } from './portal';
 // network-events es colyseus-free (imports type-only del SDK) — el SDK
 // real (network.ts) solo entra por import dinámico en connectOnline.
-import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, onShellReflected, type Room, type AbilityFiredEvent, type PlayersChangeBinder } from './network-events';
+import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, onLChargeEnd, onDashHit, onShellReflected, type Room, type AbilityFiredEvent, type PlayersChangeBinder } from './network-events';
 import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
@@ -53,7 +53,7 @@ import { triggerCameraShake, triggerHitStop, applyDashFeedback, applyImpactFeedb
 import { play as playSoundEffect } from './audio';
 import { getCritterVfxPalette } from './abilities';
 import { clearActiveZones, pushNetworkZone, deriveZoneVfxKind } from './abilities-runtime';
-import { spawnShockwaveRing, spawnFrenzyBurst, spawnDecoyAt, spawnAllInTrajectoryPreview, spawnZoneRing } from './abilities-vfx';
+import { spawnShockwaveRing, spawnFrenzyBurst, spawnDecoyAt, spawnAllInTrajectoryPreview, spawnZoneRing, type AllInPreview } from './abilities-vfx';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { clearProjectiles } from './projectiles';
 import { clearAllCritterStatus, disposeCritterStatus } from './hud/status-icons';
@@ -178,6 +178,13 @@ export class Game {
   /** Where online critters are drawn between server patches (visual only,
    *  src/net-smoothing.ts; `__game.netSmoother.config` / `.stats()`). */
   readonly netSmoother = new NetSmoother(() => ({ ...FEEL.movement, fallSpeed: FEEL.lives.fallSpeed }));
+  /** All-in aim lines of online chargers (lChargeStart → aim per frame →
+   *  lChargeEnd). */
+  private onlineAllInPreviews = new Map<string, AllInPreview>();
+  /** Lines whose charger hasn't been seen standing since lChargeStart: a
+   *  charge can start on the tick after a respawn, and the message beats
+   *  the patch with falling=false — a stale `falling` must not end it. */
+  private allInPreviewsUnconfirmed = new Set<string>();
   private lastServerPhase: string = '';                 // for transition detection
   /** When true, confirming the character select connects to server instead
    *  of starting a local match. Set by enterOnlineCharacterSelect(). */
@@ -931,6 +938,9 @@ export class Game {
     this.room = room;
     this.phase = 'online';
     this.lastServerPhase = '';
+    this.onlineAllInPreviews.forEach((p) => p.end());
+    this.onlineAllInPreviews.clear();
+    this.allInPreviewsUnconfirmed.clear();
     this.portalRedirecting = false;
     document.body.classList.add('match-active');
     document.body.classList.add('online-mode'); // CSS hides unavailable touch buttons
@@ -1101,13 +1111,32 @@ export class Game {
     // rooted with no indicator of which way he was about to dash.
     onLChargeStart(room, (ev) => {
       if (this.room !== room) return;
-      spawnAllInTrajectoryPreview(
+      this.onlineAllInPreviews.get(ev.sessionId)?.end();
+      this.onlineAllInPreviews.set(ev.sessionId, spawnAllInTrajectoryPreview(
         this.scene,
         ev.x, ev.z,
         ev.dirX, ev.dirZ,
         ev.range,
         ev.maxMs / 1000,
-      );
+      ));
+      this.allInPreviewsUnconfirmed.add(ev.sessionId);
+    });
+    // NET_PROTOCOL 3: released (fired) or dropped by a stun → line off.
+    onLChargeEnd(room, (ev) => {
+      if (this.room !== room) return;
+      this.onlineAllInPreviews.get(ev.sessionId)?.end();
+      this.onlineAllInPreviews.delete(ev.sessionId);
+      this.allInPreviewsUnconfirmed.delete(ev.sessionId);
+    });
+    // NET_PROTOCOL 3: a J dash hit — the server already pushed; same
+    // feedback as the offline rushContact (physics.ts).
+    onDashHit(room, (ev) => {
+      if (this.room !== room) return;
+      if (ev.force > 0) triggerHitStop(FEEL.hitStop.dashHit);
+      const victim = this.onlineCritters.get(ev.victimSid);
+      if (victim) applyImpactFeedback(victim, ev.nx, ev.nz);
+      playSound('headbuttHit');
+      triggerCameraShake(FEEL.shake.chargeRush);
     });
 
     // 2026-04-30 final-polish — Sihans Sinkhole real-hole sync.
@@ -1327,6 +1356,14 @@ export class Game {
       c.x = pos.x;
       c.z = pos.z;
       if (typeof p.rotationY === 'number') c.mesh.rotation.y = p.rotationY;
+      // All-in aim line follows the charger's aim (the server turns it).
+      const preview = this.onlineAllInPreviews.get(sid);
+      if (preview) {
+        const down = p.falling || p.alive === false;
+        if (!down) this.allInPreviewsUnconfirmed.delete(sid);
+        if (down && !this.allInPreviewsUnconfirmed.has(sid)) { preview.end(); this.onlineAllInPreviews.delete(sid); }
+        else if (!down) preview.aim(c.x, c.z, Math.sin(c.mesh.rotation.y), Math.cos(c.mesh.rotation.y));
+      }
       c.vx = p.vx ?? 0;
       c.vz = p.vz ?? 0;
       // Alive edge detection — online matches mark `alive=false` from
@@ -1622,23 +1659,22 @@ export class Game {
       playSoundEffect('abilityFire');
     } else if (ev.type === 'blink') {
       // Cheeto Shadow Step (and any future blink) — origin afterimage
-      // ring at the broadcast position. The server has already moved
-      // the player; the next state patch teleports them visually.
+      // ring where the caster WAS. The event is sent after the server
+      // moved the player (ev.x/ev.z = landing); NET_PROTOCOL 3 carries
+      // the origin. The next state patch teleports them visually.
       // Tinted with the caster's pound palette so the blink reads as
       // the same identity colour as their other K-slot VFX would.
-      spawnShockwaveRing(this.scene, ev.x, ev.z, 1.4, palette?.pound);
+      const ox = ev.originX ?? ev.x, oz = ev.originZ ?? ev.z;
+      spawnShockwaveRing(this.scene, ox, oz, 1.4, palette?.pound);
       applyDashFeedback(c);
       playSoundEffect('abilityFire');
       // 2026-04-29 K-session — Sihans Burrow Rush online lectura.
-      // The server doesn't carry an "isBurrow" flag in the event,
-      // but the broadcast position (ev.x, ev.z) is the ORIGIN of
-      // the blink, and only Sihans uses a blink with zone-at-origin.
-      // We mirror the offline path: ghost the critter for 0.30 s
-      // and spawn extra dust at the broadcast origin so the
-      // online viewer sees the same "se hundió aquí" beat. The
-      // destination dust is implicit — `spawnShockwaveRing`
-      // already paints a ring at the origin; the next state patch
-      // teleports the visible mesh to the new position.
+      // The server doesn't carry an "isBurrow" flag in the event, and
+      // only Sihans uses a blink with zone-at-origin. We mirror the
+      // offline path: ghost the critter for 0.30 s and spawn extra
+      // dust at the origin so the online viewer sees the same "se
+      // hundió aquí" beat. The next state patch teleports the visible
+      // mesh to the new position.
       if (c.config.name === 'Sihans') {
         // Hard cap: even if state-sync drops the cleanup we only
         // ever ghost for 0.30 s here, never more. The state-loop
@@ -1647,7 +1683,7 @@ export class Game {
         c.invisibilityTimer = Math.min(0.30, Math.max(c.invisibilityTimer, 0.30));
         for (let i = 0; i < 8; i++) {
           const a = (i / 8) * Math.PI * 2;
-          spawnDustPuff(this.scene, ev.x + Math.cos(a) * 0.5, 0, ev.z + Math.sin(a) * 0.5);
+          spawnDustPuff(this.scene, ox + Math.cos(a) * 0.5, 0, oz + Math.sin(a) * 0.5);
         }
       }
     } else if (ev.type === 'ground_pound') {
@@ -1669,7 +1705,9 @@ export class Game {
       // duration. Server already moves Kurama to the escape spot
       // via state sync, so we don't reposition here.
       if (c.config.name === 'Kurama') {
-        spawnDecoyAt(this.scene, c, 2.8, ev.x, ev.z, ev.rotationY);
+        // NET_PROTOCOL 3: the decoy stays where Kurama WAS (origin), not
+        // where she lands (S2-4).
+        spawnDecoyAt(this.scene, c, 2.8, ev.originX ?? ev.x, ev.originZ ?? ev.z, ev.originRotY ?? ev.rotationY);
         c.invisibilityTimer = Math.max(c.invisibilityTimer, 2.8);
       }
     } else if (ev.type === 'frenzy') {

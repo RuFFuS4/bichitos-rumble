@@ -1,5 +1,72 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [DISTRIBUCIÓN] v1.9 preparada: BrawlRoom ejecuta las habilidades como el sim (protocolo 3)
+
+- **Qué**: rama `claude/feature/distribucion-brawlroom-v19` sobre `dev`
+  `39318ae`. Sin desplegar: falta el visto bueno de Rafa.
+  - Del repaso de PERSONAJES (`docs/REPASO_HABILIDADES.md`): los 11
+    puntos menos el 9 (Sinkhole, espera el getter de ARENA) y S2-1..S2-5.
+  - La L de los bots online (`SIM.bots.ultimateOnline = true`; Rafa,
+    pregunta 6).
+  - El paso fijo: 2 sub-pasos de integración por tick en la sala, y
+    repetidos en el suavizado.
+  - `NET_PROTOCOL` 3, por los mensajes nuevos (`dashHit`, `lChargeEnd`,
+    origen en `abilityFired`).
+- **Verificado** (sobre `46007a7`):
+  - check; `test:sim` 258/258; golden 3/3; smoke 4/4; tsc del servidor;
+    `docker build` + `docker run` con `/health` → `protocol: 3` y
+    `POST {}` → 523 `client_outdated 1<3`.
+  - Guard contra el servidor local: protocolos 1 y 2 (el cliente v1.8)
+    rebotan con «recarga»; el 3 entra y recibe su eco.
+  - Tanda online sin clientes (el `online-sim` de PERSONAJES, 216
+    partidas por modo, semillas 9000):
+    - 0 errores y 0 L de bot fuera de su condición;
+    - Kermit gana el 37 % de sus partidas (el 39 % con la sala vieja).
+  - En vivo: 5 salas de 4 navegadores mudos contra el servidor local,
+    pulsando J/K/L de los 9 bichos.
+    - Toda pulsación con la habilidad lista se ejecuta; 0 errores.
+    - Llegan los 8 tipos de mensaje (`abilityFired`, `dashHit`, `lPulse`,
+      `lAllInResolve`, zonas, proyectiles…).
+    - Los aturdidos no lanzan: el Slam de Trunk tapaba la K de Kurama y
+      Shelly.
+    - Capturas de cada L y de la línea del All-in.
+  - Suavizado: 8 grabaciones contra el servidor v1.9 (LAN y RTT
+    80/160), re-simuladas con el banco:
+    - tirón de crucero p95 ≤ 0,28 px, salvo un pico de 1,91 px de un
+      Kurama bot en una (no se repite en otras 4, ni con Kurama local);
+    - pasada al parar p99 ≤ 1,9 px (v1.8 medía hasta 8,3);
+    - réplica exacta.
+  - Revisión adversarial del diff: 4 revisores y un verificador por
+    dimensión. De 13 hallazgos, 11 confirmados, todos arreglados en la
+    rama salvo el hielo en la predicción, que no bloquea.
+- **Encontrado por el camino**:
+  1. **All-in instantáneo, ya en producción.** La carga online arrancaba
+     en el flanco de la L. Si la mantenías mientras acababa el cooldown o
+     un aturdido, la L entraba por la activación estándar: sin carga, sin
+     línea y sin el mínimo de 0,35 s. Ahora arranca mientras la L está
+     mantenida, como offline, y la L de carga no llega nunca a
+     `tickPlayerAbilities`. De paso, un tick sin mensaje de input ya no
+     suelta la carga.
+  2. **Diente de sierra del 13 %.** Pintar dentro del tick la forma de los
+     sub-pasos lo metía en el suavizado. Ahora los sub-pasos dan dónde
+     acaba cada tick y dentro se interpola en línea recta.
+  3. Con 2 sub-pasos el servidor frena en un 16 % menos de recorrido, y a
+     un rival que para se le ve pasarse algo más en el test sintético.
+     Umbrales recalibrados, y los 5 mutantes de las reglas de frenada
+     siguen cayendo.
+- **Lecciones**:
+  1. **Nada de tocar `src/` ni `server/` con una prueba en vivo en
+     marcha.** `tsx watch` reinicia la sala y Vite recarga la página: una
+     grabación salió con 168 parches de 500.
+  2. **Una prueba de habilidades en vivo tiene que anotar si el bicho
+     estaba aturdido al pulsar.** Si no, un bloqueo correcto parece un
+     fallo.
+  3. **El comodín `onMessage('*')` del SDK solo recibe los tipos sin
+     handler.** Para contar todos los mensajes hay que envolver
+     `room.dispatchMessage`.
+- **Falta**: capturas y visto bueno de Rafa, despliegue con el runbook, y
+  el Sinkhole online cuando ARENA exponga el layout.
+
 ## 2026-09-25 — [Interfaz] El HUD enseña cuándo no puedes actuar
 
 Del repaso de habilidades de PERSONAJES: hay dos momentos en que el juego

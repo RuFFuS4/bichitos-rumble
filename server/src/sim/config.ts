@@ -27,7 +27,7 @@ export const SIM = {
     // live loop too once the fixed step lands). A push that integrates at
     // 1/30 carries farther: the K 29 % more, Cone Pulse 10.8 u vs 5.8
     // (docs/REPASO_HABILIDADES_INFORME.md B1). Reader: BrawlRoom's
-    // integrate step (DISTRIBUCIÓN wires it; until then, one per tick).
+    // integrate step (wired 2026-09-25) and src/net-smoothing.ts via FEEL.
     // Mirror of FEEL.movement.integrationSubsteps, which net-smoothing reads.
     integrationSubsteps: 2,
   },
@@ -53,15 +53,13 @@ export const SIM = {
   },
 
   bots: {
-    // Deploy gate for the online bots' L (Rafa, 2026-09-24: «10 sí»). OFF
-    // until BrawlRoom runs every L the way this sim does: today its saw and
-    // ram passes add their impulse on every contact tick (no rehit window)
-    // and its own pushes skip knockbackScale. With bots casting in every
-    // match that broke online games (measured: 27 % shorter, L falls ×2.6).
-    // DISTRIBUCIÓN turns it on in the BrawlRoom slice that lands those
-    // fixes (docs/REPASO_HABILIDADES.md). Client-only: offline bots always
-    // cast their L.
-    ultimateOnline: false as boolean,
+    // Deploy gate for the online bots' L (Rafa, 2026-09-24: «10 sí»). ON
+    // since the BrawlRoom slice that runs every L the way this sim does
+    // (rehit window on the saw/ram/touch contacts, set velocity,
+    // knockbackScale on the room's own pushes — DISTRIBUCIÓN, 2026-09-25).
+    // Rafa, pregunta 6: «encender para todos», aunque Kermit quede fuerte;
+    // su balance va aparte. Client-only: offline bots always cast their L.
+    ultimateOnline: true as boolean,
     // Fraction of the player's acceleration a bot runs with. Online bots
     // used to push at the full 1.0 while offline ones ran at 0.55; both
     // are 0.7 since 2026-09-21. Mirror of FEEL.bots.moveAccelFactor.
@@ -119,23 +117,21 @@ export const SIM = {
     slowDuringWindUp: 0.1,
     cooldown: 18.0,
   },
-  // Sebastian's All-in resolution. Mirror of FEEL.allIn. Reader pending:
-  // BrawlRoom's All-in pass (DISTRIBUCIÓN) still resolves with its own
-  // numbers.
+  // Sebastian's All-in resolution. Mirror of FEEL.allIn. Read by BrawlRoom's
+  // All-in pass and hold-to-fire loop (since 2026-09-25).
   allIn: {
     hitMargin: 0.55,
     missProbeStep: 0.5,
-    // Aiming while charging (2026-09-24). No reader yet: pending in
-    // BrawlRoom's integrate step (DISTRIBUCIÓN, buzón fase 2); online the
-    // charge keeps the facing it started with until then.
+    // Aiming while charging (2026-09-24). Online: BrawlRoom's hold-to-fire
+    // loop turns the facing toward the input (since 2026-09-25).
     aimTurnDegPerSec: 360,
   },
   // Blink landing (Sand Trap, Shadow Step). Mirror of FEEL.blink.
   blink: {
     landingProbeStep: 0.5,
   },
-  // Cone Pulse (Cheeto L) waves. Mirror of FEEL.conePulse. Reader pending:
-  // BrawlRoom's Cone Pulse pass (DISTRIBUCIÓN) still writes 1.4 and 2.0.
+  // Cone Pulse (Cheeto L) waves. Mirror of FEEL.conePulse. Read by
+  // BrawlRoom's Cone Pulse pass (since 2026-09-25).
   conePulse: {
     waveStep: 1.4,
     waveThickness: 2.0,

@@ -124,6 +124,9 @@ export interface NetMovement {
   velocityDeadZone: number;
   /** u/s — velocidad de caída al vacío (FEEL.lives.fallSpeed). */
   fallSpeed: number;
+  /** Integraciones por tick del servidor (FEEL.movement.integrationSubsteps,
+   *  espejo de SIM). Sin el campo, 1 (servidores anteriores a v1.9). */
+  integrationSubsteps?: number;
 }
 
 /** Dónde pintar el bicho este frame. `y` = desplazamiento vertical de la
@@ -399,10 +402,18 @@ export class NetSmoother {
   }
 
   /** Posición de servidor predicha a `age` s del último estado: el paso de
-   *  integración de BrawlRoom (sumar empuje → mover → fricción → zona muerta
-   *  → tope), tick a tick. */
+   *  integración de BrawlRoom tick a tick — sumar el empuje del mando (uno
+   *  por tick) y, en cada uno de sus `integrationSubsteps` sub-pasos, mover
+   *  → fricción → zona muerta → tope. Los sub-pasos dan dónde ACABA cada
+   *  tick; dentro del tick se interpola en línea recta. El servidor solo
+   *  existe en los ticks: pintar la forma de los sub-pasos metía un diente
+   *  de sierra de velocidad del 13 % a 30 Hz (medido con el banco). */
   private predict(tr: Track | undefined, brake: boolean, x: number, z: number, vx: number, vz: number, age: number, mv: NetMovement): [number, number] {
     const dt = 1 / this.config.serverTickHz;
+    const n = Math.max(1, Math.round(mv.integrationSubsteps ?? 1));
+    const h = dt / n;
+    // Fricción por tick = (fricción por sub-paso)^n: la deducción del empuje
+    // (estimateDrive) no depende de los sub-pasos.
     const fDrive = Math.pow(0.5, dt / mv.frictionHalfLife);
     let dx = 0, dz = 0;
     if (!brake) {
@@ -410,23 +421,32 @@ export class NetSmoother {
       dx = tr && Number.isFinite(tr.dx) ? tr.dx : vx * (1 / fDrive - 1);
       dz = tr && Number.isFinite(tr.dz) ? tr.dz : vz * (1 / fDrive - 1);
     }
-    const f = brake ? Math.pow(0.5, dt / mv.idleFrictionHalfLife) : fDrive;
+    const fSub = Math.pow(0.5, h / (brake ? mv.idleFrictionHalfLife : mv.frictionHalfLife));
     // Zona muerta del servidor: solo en inercia, que incluye un empuje que
     // ni a velocidad terminal supera el umbral (BrawlRoom, pushTerminal).
     const coasting = brake || (Math.hypot(dx, dz) / dt) * mv.frictionHalfLife / Math.LN2 < mv.velocityDeadZone;
-    // Hacia atrás (frame anterior al estado): lineal con la v del tick siguiente.
-    if (age <= 0) return [x + (vx + dx) * age, z + (vz + dz) * age];
-    for (let ticks = age / dt; ticks > 0; ticks -= 1) {
-      const frac = Math.min(1, ticks);
+    const tick = (): void => {
       let wx = vx + dx, wz = vz + dz;
-      x += wx * dt * frac; z += wz * dt * frac;
-      wx *= f; wz *= f;
-      const s = Math.hypot(wx, wz);
-      if (coasting && s < mv.velocityDeadZone) { wx = 0; wz = 0; }
-      else if (s > mv.maxSpeed) { wx *= mv.maxSpeed / s; wz *= mv.maxSpeed / s; }
+      for (let s = 0; s < n; s++) {
+        x += wx * h; z += wz * h;
+        wx *= fSub; wz *= fSub;
+        const sp = Math.hypot(wx, wz);
+        if (coasting && sp < mv.velocityDeadZone) { wx = 0; wz = 0; }
+        else if (sp > mv.maxSpeed) { wx *= mv.maxSpeed / sp; wz *= mv.maxSpeed / sp; }
+      }
       vx = wx; vz = wz;
-    }
-    return [x, z];
+    };
+    // Tick a medias (y, con age ≤ 0, el frame anterior al estado): la
+    // fracción del recorrido de ese tick entero.
+    const partial = (frac: number): [number, number] => {
+      const x0 = x, z0 = z;
+      tick();
+      return [x0 + (x - x0) * frac, z0 + (z - z0) * frac];
+    };
+    if (age <= 0) return partial(age / dt);
+    let ticks = age / dt;
+    for (; ticks >= 1; ticks -= 1) tick();
+    return ticks > 1e-9 ? partial(ticks) : [x, z];
   }
 
   /** Lo que trae este frame para el bicho y, si es un estado nuevo, su
