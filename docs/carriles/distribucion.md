@@ -6,17 +6,23 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Pendiente (por orden)
 
-0. **v1.9 — preparada, falta el visto bueno de Rafa y desplegar.**
+0. **v1.9 — ✅ EN PRODUCCIÓN desde el 2026-09-25 a las 02:10 UTC**
+   (main `a37791b` = `dev` `a09ec8a`, tag `v1.9-habilidades-online`).
    `BrawlRoom` ejecuta las habilidades como el sim (repaso de PERSONAJES
    menos el Sinkhole), la L de los bots online, el paso fijo con 2
    sub-pasos y `NET_PROTOCOL` 3.
-   - Verificación completa en BUILD_LOG (2026-09-25, DISTRIBUCIÓN, v1.9).
-   - Capturas en `.tmp/v19-live/shots/` del worktree de distribución.
-   - **Al desplegar** (runbook de abajo, el SHA exacto verificado):
-     - comprobar `/health` → `protocol: 3`;
-     - un cliente v1.8 que siga abierto verá «recarga»: es lo esperado;
-     - las cifras de balance online cambian (sub-pasos + L de los bots):
-       Kermit fuerte, decisión de Rafa.
+   - Verificación, ventana (Vercel 32 s, Railway 59 s) y comprobaciones
+     de después en BUILD_LOG (2026-09-25, DISTRIBUCIÓN, v1.9).
+   - Rollback: Vercel `dpl_AozQKczWU5Zn3pCZBBT6eH1VYeDq` (784779f) y
+     Railway, el despliegue de 784779f. Siempre los dos lados.
+   - **Queda de Rafa, a mano:**
+     - una pestaña v1.8 abierta tiene que recibir «recarga»;
+     - 2 pestañas en sala privada, con un Sebastian que cargue el
+       All-in;
+     - Sentry sin issues nuevos;
+     - el A/B del suavizado del punto 1.
+   - Las cifras de balance online cambian (sub-pasos + L de los bots):
+     Kermit queda fuerte, decisión de Rafa.
 
 1. **v1.8 (H4.5) — ✅ EN PRODUCCIÓN desde el 2026-09-24 a las 22:00 UTC**
    (main `784779f` = `bf7b3ee`, tag `v1.8-terreno-v2`). Comprobaciones de

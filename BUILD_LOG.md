@@ -1,9 +1,39 @@
 # Build Log — Bichitos Rumble
 
-## 2026-09-25 — [DISTRIBUCIÓN] v1.9 preparada: BrawlRoom ejecuta las habilidades como el sim (protocolo 3)
+## 2026-09-25 — [DISTRIBUCIÓN] v1.9 en producción: BrawlRoom ejecuta las habilidades como el sim (protocolo 3)
 
+- **Despliegue** (visto bueno de Rafa a las capturas):
+  - merge `--no-ff` de `a09ec8a` (el SHA verificado de `dev`) → `main`
+    `a37791b`, tag `v1.9-habilidades-online`;
+  - push a las 02:09:36 UTC; `check` y `test:sim` en verde sobre el
+    merge, que es idéntico en contenido a `a09ec8a`.
+  - **Ventana, medida con un bucle de `curl`**: Vercel sirvió la build
+    nueva a los **32 s** (`index-CN8Xgfp3.js`) y Railway el proceso
+    nuevo a los **59 s** (en v1.8, ~38 s y ~2 min).
+  - Partidas vivas: desde aquí no se ven (el matchmaker no lista salas
+    por GET y `/health` no las cuenta). Se desplegó a las 04:09 hora de
+    España.
+  - **Comprobado después**, sin crear datos:
+    - `/health` → `protocol: 3`, `protocolGuard: "on"`;
+    - `/api/leaderboard` 200;
+    - `POST /matchmake/joinOrCreate/brawl {}` → 523
+      `client_outdated 1<3` a través del edge;
+    - `/` con `max-age=0`; `index-*.js` y los GLB con `?v=`,
+      `immutable`;
+    - release de Sentry `a37791b`;
+    - www en un navegador mudo, normal y con `?ref=itch`: 0 errores y 0
+      respuestas 4xx, sin entrar al online.
+  - **Rollback**, si hiciera falta, siempre de los dos lados: Vercel
+    `dpl_AozQKczWU5Zn3pCZBBT6eH1VYeDq` (784779f, v1.8) y Railway, el
+    despliegue de 784779f.
+  - **Queda de Rafa, a mano**:
+    - una pestaña v1.8 que siga abierta tiene que recibir «recarga»;
+    - 2 pestañas en una sala privada, con un Sebastian que cargue el
+      All-in;
+    - Sentry sin issues nuevos en 30-60 min;
+    - el A/B del suavizado contra Railway, que venía de v1.8.
 - **Qué**: rama `claude/feature/distribucion-brawlroom-v19` sobre `dev`
-  `39318ae`. Sin desplegar: falta el visto bueno de Rafa.
+  `39318ae`.
   - Del repaso de PERSONAJES (`docs/REPASO_HABILIDADES.md`): los 11
     puntos menos el 9 (Sinkhole, espera el getter de ARENA) y S2-1..S2-5.
   - La L de los bots online (`SIM.bots.ultimateOnline = true`; Rafa,
@@ -64,8 +94,7 @@
   3. **El comodín `onMessage('*')` del SDK solo recibe los tipos sin
      handler.** Para contar todos los mensajes hay que envolver
      `room.dispatchMessage`.
-- **Falta**: capturas y visto bueno de Rafa, despliegue con el runbook, y
-  el Sinkhole online cuando ARENA exponga el layout.
+- **Falta**: el Sinkhole online, cuando ARENA exponga el layout.
 
 ## 2026-09-25 — [Interfaz] El HUD enseña cuándo no puedes actuar
 
