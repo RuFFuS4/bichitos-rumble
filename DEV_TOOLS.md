@@ -207,6 +207,16 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     recibe (stun, slow, confused…).
   - La L de Sebastian, que es de mantener, se mantiene `--hold` pasos.
   - Sirve para revisar habilidades con pruebas.
+- **Por qué cae un bicho** (2026-09-25): con el dev server vivo,
+  `node scripts/fall-probe.mjs --critter=Kowalski [--matches=40]
+  [--seed=4000] [--feel=sec.key=val]`.
+  - Juega partidas con el bicho en autopiloto. Cada caída se clasifica en
+    tiempo de simulación: `contact` (rival a menos de 1,3 u en el último
+    medio segundo), `alone` o `floor` (se hundió la baldosa).
+  - Cuenta además las caídas justo después de su propia J.
+  - La tanda dice cuánto cae un bicho; esto dice por qué. Las grabaciones
+    de la tanda no sirven para ventanas cortas: sus eventos llevan el
+    reloj de pared (ERROR_LOG 2026-09-25).
 - **Servidor «foto fija» para capturas largas** (2026-09-24):
   `npx vite --config scripts/vite.snapshot.config.mjs --port 5182
   --strictPort` levanta un segundo servidor sin vigilancia de ficheros ni

@@ -104,8 +104,11 @@ bloquea acciones y el HUD las seguía pintando disponibles.
   cuando `BrawlRoom` ejecute las L como el sim.
 - **Medido** (dos juegos de semillas, 40-80 apariciones por bicho):
   - Sebastian, Cheeto y Kurama ganan, porque sus dashes golpean.
-  - **Kowalski pierde** (eliminado 49 → 65 %): se sale él solo
-    deslizando. Es el siguiente paso del carril.
+  - **Kowalski pierde** (eliminado 49 → 65 %). No es por su
+    deslizamiento: le tiran más los golpes de dash de los demás (sonda
+    en tiempo de simulación). Una primera lectura culpaba al
+    deslizamiento; estaba mal medida y se corrigió el mismo día
+    (ERROR_LOG).
   - Sergei queda el peor con bots (78 %).
   - La dispersión sube de 11,5 a 13,0 puntos.
 - **Golden** regenerado: las J golpean, los aturdidos no lanzan y los

@@ -346,20 +346,24 @@ lo mismo.
 - La dispersión del «eliminado» sube de 11,5 a 13,0 puntos.
 - Ganan los dashes que ahora golpean fuerte: Sebastian y Cheeto. Todo el
   que se queda quieto cargando algo queda más expuesto a esos golpes.
-- **Kowalski pierde por el Ice Slide largo.** Se cae en el 21 % de los
-  deslizamientos, frente al 15,5 % de antes (≤1,2 s tras lanzarlo, 454
-  y 503 usos). En 81 de esas 93 caídas no había ningún rival a menos de
-  1,3 u: se sale él solo, a menudo por el anillo de 8,5 u que se hunde.
-  - La sonda del bot ya mira hasta el final del deslizamiento (6,5 u),
-    y el suelo vivo es casi convexo: muestrear más puntos apenas
-    cambiaría nada.
-  - Lo probable es el volante del bot durante el deslizamiento (curva
-    el recorrido) y los anillos avisados, que la sonda aún da por
-    buenos.
-  - **Siguiente paso de PERSONAJES**: enseñar al bot a no girar el
-    deslizamiento hacia el borde. Si no basta, bajar
-    `slideFrictionMult` de 3 a 2: sigue deslizando, ~3,8 u en vez de
-    ~4,7.
+- **Kowalski pierde por los golpes de los demás, no por su Ice Slide.**
+  Lo midió una sonda paso a paso en tiempo de simulación: 40 partidas
+  por lado, Kowalski como jugador, con cada caída clasificada.
+  - Caídas en los 1,2 s tras su Ice Slide: 4,2 → 5,1 % de los
+    deslizamientos. Es lo mismo; el deslizamiento largo no lo tira.
+  - Caídas con un rival a menos de 1,3 u: de 1,41 a 1,70 por minuto
+    (+20 %). Son los golpes de dash nuevos.
+  - Caídas solo: de 0,90 a 1,09 por minuto. Caídas por suelo hundido:
+    de 0,28 a 0,09.
+  - *Corregido el mismo día*: la primera versión de esta nota culpaba
+    al deslizamiento. Medía ventanas de 1,2 s sobre las grabaciones de
+    la tanda, pero sus eventos llevan el reloj de pared
+    (`performance.now()`): a velocidad 8×, esa ventana cubría varios
+    segundos de partida (ERROR_LOG, 2026-09-25).
+  - **Siguiente paso de PERSONAJES**: un pase de balance de los golpes
+    de dash, que castigan al que se queda quieto. Kowalski lanza la
+    bola y Sergei el Shockwave con carga previa, y ninguno de los dos
+    tiene un dash que golpee fuerte.
 - **Sergei** ya era de los más débiles con bots (70 %) y queda el peor
   (78 %). Su golpe de dash (22) es el más flojo. Queda para un pase de
   balance con más partidas: hoy la tanda tiene ±8 puntos de ruido.

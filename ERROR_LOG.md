@@ -1,5 +1,29 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-25] Ventanas de tiempo medidas con el reloj de pared: culpé al Ice Slide sin motivo
+- **Where**: análisis de las grabaciones de `run-match-batch.mjs
+  --dump-recordings` (script de un día, no del repo). Conclusión
+  publicada en dev (1cb22a8) y corregida el mismo día.
+- **Symptom**: tras la segunda tanda, Kowalski sale eliminado más a
+  menudo (49 → 65 %). Al contar sus caídas «≤ 1,2 s tras el Ice Slide»
+  en las grabaciones, salía un 21 % de los deslizamientos, frente al 15,5
+  % de antes, y casi siempre sin nadie cerca. La conclusión fue que se
+  salía él solo deslizando, y el siguiente paso propuesto, enseñar al
+  bot a no deslizar hacia el borde.
+- **Cause**: `GameplayEvent.t` es `performance.now()`, reloj de pared.
+  La tanda corre a `--speed 8`, así que 1,2 s de pared son varios
+  segundos de partida: la ventana cogía casi cualquier caída. Una sonda
+  que cuenta en pasos de simulación (`scripts/fall-probe.mjs`) da 4,2 →
+  5,1 %, lo mismo. Lo que sube es la caída con contacto: 1,41 → 1,70
+  por minuto, los golpes de dash nuevos de los demás.
+- **Fix**: documentos corregidos (`REPASO_HABILIDADES.md` §«Medido»,
+  BUILD_LOG, carril), y `fall-probe.mjs` al repo.
+- **Lección**:
+  - En las grabaciones, los tiempos entre eventos solo valen a
+    velocidad 1. Para ventanas cortas, cuenta pasos de simulación.
+  - Antes de proponer un arreglo, mide el mecanismo con un instrumento
+    cuyo reloj conozcas.
+
 ### [2026-09-24] El repaso de habilidades destapa bugs de producción de hace meses
 - **Where**: `src/abilities-runtime.ts`, `src/critter.ts` y
   `server/src/sim/abilities.ts`. Detalle en `docs/REPASO_HABILIDADES.md`.

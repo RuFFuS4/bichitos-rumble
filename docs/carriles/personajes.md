@@ -148,13 +148,12 @@ antes de commitear el JSON.
 
          Además, `SIM.movement.integrationSubsteps` con su espejo en `FEEL`
          para el suavizado de DISTRIBUCIÓN.
-   - [ ] **Kowalski se cae con su Ice Slide largo** (bots: eliminado
-         49 → 65 %, `REPASO_HABILIDADES.md` §«Medido»).
-         1. Que el bot no gire el deslizamiento hacia el borde.
-         2. Si no basta, `slideFrictionMult` de 3 a 2.
-
-         Sergei queda el peor con bots (78 %): pase de balance con más
-         partidas.
+   - [ ] **Pase de balance de los golpes de dash** (`REPASO_HABILIDADES.md`
+         §«Medido»). Kowalski (eliminado 49 → 65 %) y Sergei (70 → 78 %)
+         pierden: les tiran más los dashes que ahora golpean, no su
+         propio deslizamiento. Medir con `scripts/fall-probe.mjs`, que
+         da la causa de cada caída en tiempo de simulación, y con más
+         partidas que la tanda, que tiene ±8 puntos de ruido.
    - [ ] Lo que falta en `BrawlRoom` (DISTRIBUCIÓN, S2-1 a S2-5), en tierra
          de nadie, INTERFAZ y ARENA: listado en el documento, con aviso en
          cada buzón.
@@ -303,7 +302,7 @@ acentos de arranque y frenada) y las dos tandas del repaso de habilidades
 los ficheros de otro carril (memoria `feedback_physics_permission`).
 
 Lo siguiente:
-- que el bot de Kowalski no se salga deslizando (punto 3, medido);
+- el pase de balance de los golpes de dash (Kowalski y Sergei pierden);
 - el paso fijo de simulación (punto 3), con su diseño ya escrito;
 - después, el punto 3 original del feeling: que cada Tripo corra a su
   manera.
