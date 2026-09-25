@@ -1,5 +1,43 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [PERSONAJES] Clip de caída (offline y online), cuenta atrás animada y la sierra de Shelly online
+
+- **Qué:** los tres cambios visuales que aprobó Rafa («Sí, Sí y Sí»), más
+  lo que salió al hacerlos.
+  - **El que cae al vacío se anima.** Offline no se presentaba: quedaba
+    congelado 0,8 s y el golpe se reanudaba al reaparecer. Online nadie
+    pedía el Fall. Ahora `Critter.presentFallEdge` sirve a las dos vías.
+  - **El Fall, en su sitio** (`IN_PLACE_STATES` en `critter-skeletal.ts`).
+    Los Fall de Mixamo de Sergei, Sihans y Kurama bajan la cadera unos
+    2 m, y el bicho habría saltado hasta 2,5 u en el borde.
+  - **La cuenta atrás se anima:** Idle en lo alto, Fall en la bajada, y el
+    paso a Idle termina justo al tocar el suelo (`FEEL.match.dropLandBlend`,
+    0,1 s). Antes las piernas recogidas flotaban hasta 0,28 u sobre el
+    polvo; ahora quedan a menos de 0,007 u.
+  - **La sierra de Shelly gira online** (22,000 rad/s medidos), y ya no
+    gira bajo la victoria.
+- **Cómo se hizo:** tres diseños con su crítico y tres sondas con
+  capturas (caída de los 9, cuenta atrás de los 9, online contra un
+  servidor local). Después, dos revisiones adversariales con un escéptico
+  por hallazgo, seis arreglos y una reverificación. Esta vio que acortar el
+  fundido del aterrizaje no bajaba la flotación, y el fundido pasó a
+  terminar al tocar el suelo.
+- **La simulación no cambia:** golden 3/3 y grabaciones idénticas bit a bit
+  tras cada commit. Ninguna fuga de presentación a simulación a 30, 60 y
+  144 Hz. 304 tests, smoke 4/4.
+- **Tierra de nadie, dicho aquí:** `src/game.ts`, con el permiso de Rafa
+  para estos cambios visuales:
+  - `presentFrame` ('playing' y 'countdown');
+  - el flanco de caída en `updateOnline`;
+  - el pestillo y el fundido del aterrizaje de la cuenta atrás;
+  - la red del «¡YA!».
+- **Pendiente:**
+  - el brillo de una habilidad activa sigue en la pantalla final, en los
+    dos modos (ni `enterEnded` ni `endMatch` cancelan);
+  - dos fallos viejos, con tarea aparte: la estadística de caídas del
+    final offline siempre da 0, y `enterCountdown` no limpia los
+    proyectiles.
+
 ## 2026-09-25 — [DISTRIBUCIÓN] v1.10-paso-fijo en producción: paso fijo en el juego, Grip entero, All-in a 180°/s
 
 - **Despliegue** (Rafa: «prepáralo y despliégalo»):
