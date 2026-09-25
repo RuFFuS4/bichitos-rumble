@@ -388,9 +388,11 @@ lo mismo.
 5. **El All-in apuntando casi no falla**: un rival que huye de lado gira
    25-60°/s y el apuntado sigue a 360°/s. ¿Se baja, por ejemplo, a
    180°/s?
-6. **Kermit online**: con la L, su bot pasa de ganar el 16 % al 39 % en
-   la sala simulada. Hoy no ocurre, porque el interruptor está apagado,
-   pero hay que decidirlo antes de encenderlo.
+6. ~~**Kermit online**: con la L, su bot pasa de ganar el 16 % al 39 %
+   en la sala simulada.~~ **Respondida** (Rafa, 2026-09-25, vía
+   DISTRIBUCIÓN): la L de los bots online se enciende para todos. El
+   balance de Kermit, si hace falta, va en un pase aparte. El interruptor
+   lo enciende DISTRIBUCIÓN con S2-2.
 
 ## Pendiente para DISTRIBUCIÓN (segunda tanda)
 
