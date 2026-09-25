@@ -149,7 +149,6 @@ export const FEEL = {
     anticipation: {
       duration: 0.12,         // wind-up time (readable but quick)
       headRetract: -0.30,     // head pulls back (visible coil)
-      bodySquash: 0.70,       // body compresses during wind-up
     },
     lunge: {
       duration: 0.15,         // snap forward (shorter = sharper)
