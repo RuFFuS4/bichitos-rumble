@@ -207,6 +207,25 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     recibe (stun, slow, confused…).
   - La L de Sebastian, que es de mantener, se mantiene `--hold` pasos.
   - Sirve para revisar habilidades con pruebas.
+- **¿Simula igual a cualquier frecuencia?** (2026-09-25): con el dev
+  server vivo, `node scripts/fixed-step-probe.mjs [--hz=30,60,144,240]
+  [--push=25] [--jitter=0.2] [--json]`.
+  - Mueve el juego real (`index.html`, el bucle de `main.ts`) con un reloj
+    de `requestAnimationFrame` virtual, a cada frecuencia.
+  - Mide:
+    - cuánto desliza un bicho empujado;
+    - la velocidad al andar;
+    - los fotogramas de retraso entre la tecla y el movimiento dibujado;
+    - la suavidad de ese movimiento (CV de lo que se mueve por
+      fotograma);
+    - cuántos pasos de simulación hace cada fotograma: a 60 Hz tiene que
+      ser 1 siempre.
+  - `--jitter` mete ruido en las marcas de tiempo y las redondea a 0,1 ms,
+    como un navegador de verdad.
+  - Con el paso fijo (`src/fixed-step.ts`), el deslizamiento y la
+    velocidad tienen que salir iguales a cualquier frecuencia.
+  - El retraso es de 1 fotograma hasta 144 Hz. Por encima puede llegar a
+    un paso (1/60 s).
 - **Por qué cae un bicho** (2026-09-25): con el dev server vivo,
   `node scripts/fall-probe.mjs --critter=Kowalski [--matches=40]
   [--seed=4000] [--feel=sec.key=val]`.

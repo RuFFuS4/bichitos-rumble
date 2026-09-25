@@ -1,5 +1,40 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [PERSONAJES] El juego simula a paso fijo: un empujón llega igual de lejos a cualquier frecuencia
+
+- **Decisión 1 del repaso de habilidades** (Rafa: «sí»). Aprobó
+  `main.ts` y, el 25, unas 6 líneas de `game.ts`.
+- **Qué hace** (`src/fixed-step.ts`):
+  - el juego offline simula en pasos de 1/60 s, como el laboratorio, el
+    golden y la tanda;
+  - los bichos se dibujan interpolados en el instante real, con sombras e
+    iconos detrás;
+  - online no cambia.
+- **Medido en el juego real** (`scripts/fixed-step-probe.mjs`, reloj de
+  fotogramas virtual):
+  - antes, el mismo empujón deslizaba +15 % a 30 Hz, +74 % a 144 Hz y
+    −15 % a 240 Hz, y andar iba de 3,05 a 3,80 u/s según la frecuencia;
+  - ahora, 2,877 u y 3,54 u/s a cualquier frecuencia, y a 60 Hz es
+    idéntico a antes.
+- **La revisión adversarial encontró tres fallos, arreglados:**
+  - a 60 Hz, el ruido de las marcas de tiempo daba fotogramas de 2, 0 y
+    1 pasos: el reloj ahora se engancha al ritmo de la pantalla, 1 ms
+    dentro del paso;
+  - el tirón del Grip se corregía dos veces;
+  - los teletransportes cortos se deslizaban
+    (`Critter.markTeleported`).
+
+  Con ±0,2 ms de ruido, 60 Hz da 1 paso en cada fotograma.
+- **Verificado**: 278 tests (20 del reloj y la interpolación), golden
+  3/3 sin regenerar, smoke 4/4, `check`.
+- **Tierra de nadie, dicho aquí**:
+  - `main.ts`: el bucle;
+  - `game.ts`: `isOnlinePhase()` nueva y `syncCritterShadows` pasa a
+    pública.
+- **Queda un segundo corte** (con permiso aparte): separar simular de
+  presentar, para que animaciones, polvo y bolas de nieve se pinten a
+  144 Hz. Hoy van a 60 Hz a cualquier frecuencia.
+
 ## 2026-09-25 — [DISTRIBUCIÓN] v1.9 en producción: BrawlRoom ejecuta las habilidades como el sim (protocolo 3)
 
 - **Despliegue** (visto bueno de Rafa a las capturas):

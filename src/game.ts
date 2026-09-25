@@ -433,6 +433,12 @@ export class Game {
     return false;
   }
 
+  /** True while following a server room: the main loop keeps its
+   *  per-frame path there instead of fixed sim steps (src/fixed-step.ts). */
+  public isOnlinePhase(): boolean {
+    return this.phase === 'online';
+  }
+
   // -------------------------------------------------------------------------
   // Phase transitions
   // -------------------------------------------------------------------------
@@ -2253,8 +2259,10 @@ export class Game {
    * y lo devuelve al desaparecer. La sombra sigue la posición del critter
    * y se desvanece al despegar del suelo (salto, caída), que es lo que
    * hace legible la altura en un juego cenital.
+   * Pública: el bucle offline la repite con la pose interpolada antes de
+   * pintar (src/fixed-step.ts).
    */
-  private syncCritterShadows(): void {
+  public syncCritterShadows(): void {
     const active = this.getActiveCritters();
     for (const [c, slot] of this.critterShadowSlots) {
       if (!active.includes(c)) {

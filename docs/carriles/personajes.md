@@ -140,14 +140,22 @@ antes de commitear el JSON.
            como el sim.
          - **No** se toca Toxic Touch: que se inviertan todos los
            controles es la intención.
-   - [ ] **Paso fijo de simulación** (decisión 1, permiso para `main.ts`).
-         El diseño, opción (a), está en `.tmp/fase2/paso-fijo-diseno.md`
-         del worktree. Van dos commits:
-         1. `src/fixed-step.ts` y el bucle de `main.ts`;
-         2. separar simular de presentar en `Critter` y en `frame-ticks`.
+   - [x] **Paso fijo de simulación** (decisión 1), primer corte hecho el
+         2026-09-25:
+         - `src/fixed-step.ts` y el bucle de `main.ts`;
+         - en `game.ts`, `isOnlinePhase()` y `syncCritterShadows` pública,
+           con permiso de Rafa;
+         - `SIM.movement.integrationSubsteps` con su espejo en `FEEL`,
+           para DISTRIBUCIÓN.
 
-         Además, `SIM.movement.integrationSubsteps` con su espejo en `FEEL`
-         para el suavizado de DISTRIBUCIÓN.
+         El empujón llega igual de lejos a cualquier frecuencia, sin
+         retraso añadido a 60 Hz. Cifras en `REPASO_HABILIDADES.md`
+         §«Paso fijo»; herramienta: `scripts/fixed-step-probe.mjs`.
+   - [ ] Paso fijo, segundo corte (hace falta permiso aparte para
+         `frame-ticks.ts` y unas 30 líneas de `game.ts`): separar simular
+         de presentar, para que animaciones, polvo y bolas de nieve se
+         pinten a 144 Hz. Hoy van a 60 Hz a cualquier frecuencia. El
+         diseño está en `.tmp/fase2/paso-fijo-diseno.md` del worktree.
    - [ ] **Pase de balance de los golpes de dash** (`REPASO_HABILIDADES.md`
          §«Medido»). Kowalski (eliminado 49 → 65 %) y Sergei (70 → 78 %)
          pierden: les tiran más los dashes que ahora golpean, no su
@@ -327,7 +335,8 @@ los ficheros de otro carril (memoria `feedback_physics_permission`).
 
 Lo siguiente:
 - el pase de balance de los golpes de dash (Kowalski y Sergei pierden);
-- el paso fijo de simulación (punto 3), con su diseño ya escrito;
+- el segundo corte del paso fijo, si Rafa da permiso para
+  `frame-ticks.ts` y `game.ts`;
 - después, el punto 3 original del feeling: que cada Tripo corra a su
   manera.
 

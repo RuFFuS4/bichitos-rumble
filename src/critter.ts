@@ -483,6 +483,16 @@ export class Critter {
   set x(v: number) { this.mesh.position.x = v; }
   get z(): number { return this.mesh.position.z; }
   set z(v: number) { this.mesh.position.z = v; }
+
+  /** Bumped by markTeleported. Read by the fixed-step renderer only. */
+  teleportSerial = 0;
+
+  /** The sim moved this critter by assignment, not by velocity (blink,
+   *  yank, respawn): the renderer draws it at the new spot instead of
+   *  sliding it between the two sim poses (src/fixed-step.ts). */
+  markTeleported(): void {
+    this.teleportSerial++;
+  }
   get radius(): number { return this.rosterEntry?.physicsRadius ?? HEAD_RADIUS; }
 
   get isImmune(): boolean {
@@ -1317,6 +1327,7 @@ export class Critter {
     this.falling = false;
     this.x = x;
     this.z = z;
+    this.markTeleported();
     this.vx = 0;
     this.vz = 0;
     // Face the arena centre — same rule as initial spawn, so a respawned
@@ -1445,6 +1456,7 @@ export class Critter {
     this.mesh.visible = true;
     this.x = x;
     this.z = z;
+    this.markTeleported();
     this.vx = 0;
     this.vz = 0;
     this.lives = FEEL.lives.default;

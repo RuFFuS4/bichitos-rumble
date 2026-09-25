@@ -30,6 +30,9 @@ import { initOnlineBeltToast } from './online-belt-toast';
 import { isInsideZoneOfKind, setArenaForAbilities } from './abilities-runtime';
 import { initSceneAtmosphere } from './scene-atmosphere';
 import { tickSharedGameplay } from './frame-ticks';
+import { FixedStepClock, PoseInterpolator, SIM_STEP, MAX_FRAME_DT } from './fixed-step';
+import type { Critter } from './critter';
+import { updateAllStatusPositions } from './hud/status-icons';
 import { initStatusLegend } from './hud/status-legend';
 import { getPreviewPackId } from './arena-decor-layouts';
 
@@ -386,28 +389,53 @@ if (!hasServerUrl) {
  *                             → 'slowed'
  */
 // Game loop
+//
+// Offline, the sim runs in fixed steps of 1/60 s (src/fixed-step.ts; Rafa,
+// decision 1 of the ability review, 2026-09-24): a push carries the same
+// at 30, 60 or 144 Hz, and the live game matches the lab, the golden and
+// the batch runner. Each frame runs the steps that take the sim up to (or
+// just past) the real clock and draws the critters at the real instant,
+// between their last two sim poses — at 60 Hz that is one step per frame,
+// drawn 1 ms short of its end: no added lag to speak of. Online keeps the
+// per-frame path: the server is authoritative and net-smoothing owns the
+// local motion.
+const clock = new FixedStepClock();
+const pose = new PoseInterpolator<Critter>();
 let lastTime = performance.now();
 function loop(now: number) {
-  const dt = Math.min((now - lastTime) / 1000, 0.05); // cap dt
+  const frameDt = Math.min(Math.max((now - lastTime) / 1000, 0), MAX_FRAME_DT);
+  // Per-frame presentation (camera, preview, online) keeps its old cap.
+  const dt = Math.min(frameDt, 0.05);
   lastTime = now;
 
   // Ensure canvas matches viewport (guards against late-layout edge cases)
   if (renderer.domElement.width === 0) {
     syncSize(camera, renderer);
   }
-
-  game.update(dt);
-  // Dust puff pool tick — no-op when empty. Lives outside game.update so
-  // puffs keep animating even through edge phase transitions.
-  // EXCEPT when the offline pause menu is up: if we keep advancing
-  // puff lifetimes, an in-flight ring would keep expanding behind the
-  // menu and look like gameplay never actually froze.
-  // Gameplay subsystem ticks (dust / zones / L / projectiles / status
-  // icons) — shared with the match lab, see src/frame-ticks.ts.
-  tickSharedGameplay(dt, game, scene, camera, {
+  const viewport = {
     width: renderer.domElement.clientWidth,
     height: renderer.domElement.clientHeight,
-  });
+  };
+
+  // Gameplay subsystem ticks (dust / zones / L / projectiles / status
+  // icons) run with the sim — shared with the match lab, see
+  // src/frame-ticks.ts.
+  let alpha = -1; // ≥ 0: draw the critters interpolated by it
+  if (game.isOnlinePhase()) {
+    clock.reset();
+    pose.clear();
+    game.update(dt);
+    tickSharedGameplay(dt, game, scene, camera, viewport);
+  } else {
+    const tick = clock.advance(frameDt);
+    for (let i = 0; i < tick.steps; i++) {
+      pose.capture(game.getActiveCritters());
+      game.update(SIM_STEP);
+      tickSharedGameplay(SIM_STEP, game, scene, camera, viewport);
+      if (game.isOnlinePhase()) break; // joined a room mid-frame
+    }
+    if (!game.isOnlinePhase()) alpha = tick.alpha;
+  }
   if (!game.isPaused()) {
     const localPos = game.getLocalPlayerPos();
     const insidePoison = !!localPos && localPos.alive
@@ -471,7 +499,19 @@ function loop(now: number) {
     }
     updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
   }
-  renderer.render(scene, camera);
+  // Draw the interpolated pose; what follows the critters on screen
+  // (blob shadows, status icons) follows it too. The sim pose comes back
+  // right after the render.
+  if (alpha >= 0) {
+    pose.apply(game.getActiveCritters(), alpha);
+    game.syncCritterShadows();
+    if (game.isMatchPlaying()) updateAllStatusPositions(camera, viewport);
+  }
+  try {
+    renderer.render(scene, camera);
+  } finally {
+    pose.restore();
+  }
   // Preview renders only when visible; cheap no-op otherwise
   tickPreview(dt);
   requestAnimationFrame(loop);

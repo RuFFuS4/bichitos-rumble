@@ -332,6 +332,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
         critter.z = nz;
         critter.mesh.position.x = nx;
         critter.mesh.position.z = nz;
+        critter.markTeleported();
         critter.vx = 0;
         critter.vz = 0;
         // 4 — a little dust at arrival: whoever watches closely can
@@ -396,6 +397,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       target.z = tz;
       target.mesh.position.x = tx;
       target.mesh.position.z = tz;
+      target.markTeleported(); // the slide is applyYankVisual's, not the renderer's
       target.vx = 0;
       target.vz = 0;
       stun(target, def.gripStunDuration ?? 2.0);
@@ -1002,6 +1004,7 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
   critter.z = targetZ;
   critter.mesh.position.x = targetX;
   critter.mesh.position.z = targetZ;
+  critter.markTeleported();
   critter.vx = 0;
   critter.vz = 0;
   spawnShockwaveRing(scene, targetX, targetZ, 1.4, palette);
@@ -1431,6 +1434,7 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     critter.z += dirZ * arrivalT;
     critter.mesh.position.x = critter.x;
     critter.mesh.position.z = critter.z;
+    critter.markTeleported();
     critter.vx = 0;
     critter.vz = 0;
     // BLOQUE FINAL micropass v2 — Rafa: "si choca con alguien debe
@@ -1449,6 +1453,7 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     hit.z += dirZ * (range * 0.8);
     hit.mesh.position.x = hit.x;
     hit.mesh.position.z = hit.z;
+    hit.markTeleported();
     if (!hit.falling && hit.alive) hit.startFalling();
     applyImpactFeedback(hit, dirX, dirZ);
     triggerHitStop(FEEL.hitStop.headbutt);
@@ -1467,6 +1472,7 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     const [fx, fz] = firstPointOffArena(critter.x, critter.z, dirX, dirZ);
     critter.x = fx;
     critter.z = fz;
+    critter.markTeleported();
     critter.startFalling();
     spawnShockwaveRing(scene, critter.x, critter.z, 1.4, palette);
     triggerCameraShake(FEEL.shake.headbutt * 0.9);

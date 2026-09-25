@@ -389,6 +389,56 @@ lo mismo.
   - una acción del calentamiento ya no cae dentro de la toma. Antes
     aturdía al muñeco cercano en todas las tomas de Kurama.
 
+## Paso fijo de simulación (decisión 1), hecho el 2026-09-25
+
+El juego offline simula en pasos de 1/60 s, como el laboratorio, el
+golden y la tanda. Así, un empujón llega igual de lejos se juegue a la
+frecuencia que se juegue.
+
+- **Permiso**: Rafa aprobó `main.ts` y, el 25, unas 6 líneas de
+  `game.ts`: `isOnlinePhase()` y `syncCritterShadows` pública.
+- **Cómo funciona** (`src/fixed-step.ts`, puro, con sus tests):
+  - Cada fotograma ejecuta los pasos que llevan la simulación hasta el
+    reloj real o un poco más allá.
+  - Los bichos se dibujan en el instante real, entre sus dos últimas
+    poses de simulación. La pose interpolada solo se pone para pintar.
+  - Las sombras y los iconos de estado siguen a la pose dibujada.
+  - Se simula por delante del reloj, no por detrás como en el libro:
+    dibujar el paso pasado añadiría 16,7 ms de retraso a 60 Hz.
+  - Cuando la pantalla va a 60 o a 30 Hz (±0,25 ms por fotograma), el
+    reloj se engancha a su ritmo y se sienta 1 ms dentro del paso.
+    - Sentado justo en el límite, el ruido de las marcas de tiempo del
+      navegador (redondeadas a 0,1 ms) hacía fotogramas de 2, 0 y 1
+      pasos. Animaciones, giros, bolas y polvo, que no se interpolan,
+      iban a trompicones. Lo vio la revisión adversarial.
+    - Con ±0,2 ms de ruido, 60 Hz da ahora 1 paso en cada fotograma, y
+      30 Hz, 2.
+  - El código que teletransporta a un bicho lo marca
+    (`Critter.markTeleported`): blink, señuelo, tirón del Grip, All-in,
+    reaparición y reinicio. Se dibuja en el sitio nuevo, sin
+    deslizarse, y el tirón del Grip no se corrige dos veces.
+- **Online no cambia**: sigue por fotograma y manda el servidor.
+- **Medido en el juego real** (`scripts/fixed-step-probe.mjs`, reloj de
+  fotogramas virtual):
+
+  | | 30 Hz | 60 Hz | 144 Hz | 240 Hz |
+  |---|---|---|---|---|
+  | Deslizamiento tras un empujón, antes | +15 % | 2,877 u | +74 % | −15 % |
+  | Deslizamiento, ahora | igual | 2,877 u | igual | igual |
+  | Velocidad al andar, antes → ahora (u/s) | 3,80 → 3,54 | 3,54 → 3,54 | 3,40 → 3,54 | 3,05 → 3,54 |
+
+  - A 60 Hz el juego es idéntico al de antes: mismo recorrido, y el
+    bicho se mueve en el fotograma siguiente a la tecla (se dibuja 1 ms
+    por detrás del último paso).
+  - A 240 Hz la entrada se lee cada paso, así que puede tardar hasta
+    16,7 ms en notarse. Es el precio de simular a 60 Hz.
+  - El movimiento dibujado es uniforme a cualquier frecuencia.
+- **Queda para un segundo corte** (tierra de nadie, con permiso aparte):
+  - separar simular de presentar en `Critter`, `Game` y `frame-ticks`,
+    para que animaciones, polvo y bolas de nieve se pinten a 144 Hz
+    (hoy van a 60 Hz a cualquier frecuencia);
+  - que el reloj del laboratorio use `FixedStepClock`.
+
 ## Preguntas abiertas para Rafa
 
 1. **Steel Shell**: hoy frena el movimiento de Shelly, pero no anula un

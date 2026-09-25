@@ -1,0 +1,159 @@
+// ---------------------------------------------------------------------------
+// fixed-step — the offline game simulates in steps of exactly 1/60 s
+// ---------------------------------------------------------------------------
+//
+// Rafa, 2026-09-24 (decision 1 of the ability review): a push must carry
+// the same whatever the monitor's refresh rate. With the frame's dt fed
+// straight into the physics it didn't: the K pushed −27 % at 144 Hz and
+// +29 % at 30 Hz (docs/REPASO_HABILIDADES_INFORME.md B1). The lab, the
+// golden and the batch runner already simulate at a fixed 1/60 — the
+// numbers everything is tuned at — so the live loop now does too.
+//
+// Two pieces, both pure (no three, no DOM):
+//   - FixedStepClock turns real frame time into whole sim steps. The sim
+//     runs up to one step AHEAD of the real clock, and alpha says where
+//     "now" falls inside the last step.
+//   - PoseInterpolator draws each critter between its last two sim poses
+//     by that alpha, so at 144 Hz (0-1 steps per frame) motion stays
+//     smooth instead of stepping every other frame. The sim pose lives on
+//     mesh.position itself (Critter.x/z are getters on it), so the
+//     interpolated pose is swapped in just for the render and restored
+//     right after.
+//
+// Why ahead and not behind (the textbook "Fix your timestep" draws the
+// PAST step): at 60 Hz that would show every frame one step late, 16.7 ms
+// of extra input lag for most players. Ahead, a 60 Hz frame runs one step
+// and draws it 1 ms short of its end (PHASE_MARGIN), like the old
+// per-frame loop, and the input still applies from the step it was read
+// in.
+//
+// Online doesn't use any of this: the server is authoritative and the
+// client keeps its per-frame path (src/main.ts).
+// ---------------------------------------------------------------------------
+
+/** The sim step, s. Server mirror: SIM.tickRate × SIM.movement.integrationSubsteps. */
+export const SIM_STEP = 1 / 60;
+/** Most steps one frame may run; beyond that the game slows down instead
+ *  of spiralling (below 15 fps with MAX_FRAME_DT). */
+export const MAX_STEPS_PER_FRAME = 4;
+/** Longest frame the clock accepts, s: a tab coming back from the
+ *  background doesn't try to catch up seconds of play. */
+export const MAX_FRAME_DT = 0.1;
+/** A move longer than this in one step is drawn at the new spot instead of
+ *  sliding through the arena, even if nobody flagged it as a teleport
+ *  (PoseTarget.teleportSerial). */
+export const SNAP_DISTANCE = 3.0;
+/** A frame within this of a whole number of steps (60 Hz, 30 Hz…) counts
+ *  as exactly that many, s: the display is locked to the sim's cadence.
+ *  ±0.25 ms is ±1.5 % at 60 Hz; 120 and 144 Hz never lock. */
+export const CADENCE_SNAP = 0.00025;
+/** While locked, the display sits this far behind the end of the newest
+ *  step, s. A 60 Hz display left ON the step boundary flips between 2,
+ *  0 and 1 steps per frame with the rAF timestamps' jitter and 0.1 ms
+ *  rounding, and everything that isn't interpolated (animations, facing,
+ *  projectiles, dust) stutters (review, 2026-09-25). 1 ms inside the step
+ *  absorbs that jitter and costs 1 ms of display lag. */
+const PHASE_MARGIN = 0.001;
+/** While locked, how fast the phase eases back to PHASE_MARGIN after a
+ *  hitch, s per frame: ~10 frames, the sim 5 % off meanwhile. */
+const RESYNC_PER_FRAME = 0.05 * SIM_STEP;
+
+/** Tolerance so 1/60-sized frames don't lose a step to float rounding. */
+const STEP_EPSILON = 1e-6;
+
+export class FixedStepClock {
+  /** Real time minus sim time, s: ≤ 0 after each frame (the sim is ahead). */
+  private lag = 0;
+
+  /**
+   * Adds one frame of real time. Returns how many sim steps to run now so
+   * the sim reaches or passes the real clock, and alpha ∈ (0, 1]: where the
+   * real "now" falls inside the last step (1 = at its end). A backlog past
+   * MAX_STEPS_PER_FRAME is dropped (slow motion, never a spiral).
+   */
+  advance(frameDt: number): { steps: number; alpha: number } {
+    let dt = Math.min(Math.max(frameDt, 0), MAX_FRAME_DT);
+    const whole = Math.round(dt / SIM_STEP);
+    const locked = whole >= 1 && Math.abs(dt - whole * SIM_STEP) <= CADENCE_SNAP;
+    if (locked) dt = whole * SIM_STEP;
+    this.lag += dt;
+    let steps = Math.max(0, Math.ceil(this.lag / SIM_STEP - STEP_EPSILON));
+    if (steps > MAX_STEPS_PER_FRAME) {
+      steps = MAX_STEPS_PER_FRAME;
+      this.lag = SIM_STEP * steps;
+    }
+    this.lag -= steps * SIM_STEP;
+    if (locked) {
+      const toPhase = -PHASE_MARGIN - this.lag;
+      this.lag += Math.max(-RESYNC_PER_FRAME, Math.min(RESYNC_PER_FRAME, toPhase));
+    }
+    return { steps, alpha: Math.min(1, Math.max(1 + this.lag / SIM_STEP, STEP_EPSILON)) };
+  }
+
+  reset(): void {
+    this.lag = 0;
+  }
+}
+
+/** Anything drawn at mesh.position whose sim pose lives there too. */
+export interface PoseTarget {
+  readonly mesh: { readonly position: { x: number; y: number; z: number } };
+  /** Bumped by the sim when it moves the target by assignment instead of
+   *  by velocity (Critter.markTeleported): drawn at the new spot, never in
+   *  between. */
+  readonly teleportSerial?: number;
+}
+
+interface Pose { x: number; y: number; z: number }
+
+export class PoseInterpolator<T extends PoseTarget> {
+  /** Pose (and teleport serial) of each target before the last sim step. */
+  private readonly previous = new Map<T, Pose & { serial: number | undefined }>();
+  /** Sim poses swapped out while an interpolated one is drawn. */
+  private readonly swapped = new Map<T, Pose>();
+
+  /** Call right before each sim step: remembers where everyone was. */
+  capture(targets: readonly T[]): void {
+    this.previous.clear();
+    for (const t of targets) {
+      const p = t.mesh.position;
+      this.previous.set(t, { x: p.x, y: p.y, z: p.z, serial: t.teleportSerial });
+    }
+  }
+
+  /**
+   * Moves every target to lerp(previous, sim, alpha) for drawing. Targets
+   * with no previous pose (new this step), teleported this step, or that
+   * jumped more than SNAP_DISTANCE stay at their sim pose. Pair every
+   * apply with restore.
+   */
+  apply(targets: readonly T[], alpha: number): void {
+    this.swapped.clear();
+    for (const t of targets) {
+      const prev = this.previous.get(t);
+      if (!prev || prev.serial !== t.teleportSerial) continue;
+      const p = t.mesh.position;
+      const dx = p.x - prev.x, dy = p.y - prev.y, dz = p.z - prev.z;
+      if (dx * dx + dy * dy + dz * dz > SNAP_DISTANCE * SNAP_DISTANCE) continue;
+      this.swapped.set(t, { x: p.x, y: p.y, z: p.z });
+      p.x = prev.x + dx * alpha;
+      p.y = prev.y + dy * alpha;
+      p.z = prev.z + dz * alpha;
+    }
+  }
+
+  /** Puts the sim poses back after drawing. */
+  restore(): void {
+    for (const [t, pose] of this.swapped) {
+      const p = t.mesh.position;
+      p.x = pose.x; p.y = pose.y; p.z = pose.z;
+    }
+    this.swapped.clear();
+  }
+
+  /** Forgets everything (entering online, leaving the offline path). */
+  clear(): void {
+    this.restore();
+    this.previous.clear();
+  }
+}
