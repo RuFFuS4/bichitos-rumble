@@ -114,6 +114,23 @@ el orden de trabajo.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-25 — paso fijo: la parte visual de
+  `Arena.update` va aún por paso de simulación.** Sin prisa, y nada roto.
+  - Desde el segundo corte del paso fijo (`dev`), el juego simula a
+    1/60 y presenta una vez por fotograma. Bichos, polvo, bolas e iconos
+    se mueven en cada fotograma a 144 Hz.
+  - `Arena.update(dt)` (arena.ts:1057) mezcla las dos cosas y la llama la
+    simulación. Por eso los fragmentos que caen y el temblor del aviso
+    van a 60 Hz aunque la pantalla vaya a 144.
+  - Propuesta:
+    - `simulate(dt)`: la línea de tiempo (timer, `warningTimer`,
+      `collapseCurrentBatch`, el inicio del aviso con `playArenaWarning`);
+    - `present(dt)`: `tickVisuals` y el `shakeBatch` del aviso.
+  - Cuando exista, PERSONAJES llama a `present` desde
+    `Game.presentFrame`, con la misma puerta que los bichos (quieto en
+    pausa y en la congelación del golpe). Si Rafa quiere, también en la
+    pantalla final, para que los fragmentos no se queden en el aire.
+
 - **De PERSONAJES, 2026-09-24 — un getter de solo lectura en `ArenaSim`
   (`server/src/sim/arena.ts`).** Hace falta
   `getLayout(): ArenaLayout { return this.layout; }` para que online el

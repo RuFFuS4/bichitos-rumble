@@ -151,11 +151,15 @@ antes de commitear el JSON.
          El empujón llega igual de lejos a cualquier frecuencia, sin
          retraso añadido a 60 Hz. Cifras en `REPASO_HABILIDADES.md`
          §«Paso fijo»; herramienta: `scripts/fixed-step-probe.mjs`.
-   - [ ] Paso fijo, segundo corte (Rafa, 2026-09-25: permiso para
-         `game.ts`, «adelante»): separar simular de presentar, para que
-         animaciones, polvo y bolas de nieve se pinten a 144 Hz. Hoy van a
-         60 Hz a cualquier frecuencia. El mapa y el diseño están en
+   - [x] Paso fijo, segundo corte (Rafa, 2026-09-25: permiso para
+         `game.ts`, «adelante»), hecho el mismo día. Simular va por paso
+         y presentar por fotograma: animación, efectos, polvo, bolas e
+         iconos se mueven en cada fotograma a 144 y 240 Hz. Cifras en
+         `REPASO_HABILIDADES.md` §«Segundo corte»; mapa y diseño en
          `.tmp/paso-fijo-2/` del worktree.
+   - [ ] Preguntar a Rafa por tres cambios visuales seguros: clip de
+         caída offline, clips en la cuenta atrás y sierra de Shelly
+         online.
    - [ ] **Pase de balance de los golpes de dash** (`REPASO_HABILIDADES.md`
          §«Medido»). Kowalski (eliminado 49 → 65 %) y Sergei (70 → 78 %)
          pierden: les tiran más los dashes que ahora golpean, no su
@@ -376,8 +380,6 @@ los ficheros de otro carril (memoria `feedback_physics_permission`).
 
 Lo siguiente:
 - el pase de balance de los golpes de dash (Kowalski y Sergei pierden);
-- el segundo corte del paso fijo, si Rafa da permiso para
-  `frame-ticks.ts` y `game.ts`;
 - después, el punto 3 original del feeling: que cada Tripo corra a su
   manera.
 
