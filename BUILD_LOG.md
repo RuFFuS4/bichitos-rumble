@@ -1,5 +1,74 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [DISTRIBUCIÓN] v1.10-paso-fijo en producción: paso fijo en el juego, Grip entero, All-in a 180°/s
+
+- **Despliegue** (Rafa: «prepáralo y despliégalo»):
+  - merge `--no-ff` de `ea77e62` (el SHA verificado de `dev`) → `main`
+    `bb819bb`, tag `v1.10-paso-fijo`. Push a las 13:45:50 UTC;
+  - `check` y 304 tests sobre el merge, idéntico en contenido a
+    `ea77e62`;
+  - `NET_PROTOCOL` sigue en 3: las pestañas v1.9 abiertas siguen jugando
+    y no hay «recarga».
+  - **Ventana**: Vercel a los **37 s** (`index-sR0DHhDE.js`) y Railway a
+    los **67 s**. Sin cambio de protocolo, Railway se detecta porque el
+    uptime vuelve a empezar.
+  - **Comprobado después**:
+    - `/health` con protocolo 3 y guard `on`;
+    - leaderboard 200;
+    - `POST {}` → 523 `client_outdated 1<3`;
+    - cabeceras de caché;
+    - release de Sentry `bb819bb`;
+    - www normal y con `?ref=itch` sin errores ni 4xx.
+  - **Rollback**, siempre los dos lados: Vercel
+    `dpl_7Uw3pUgKFcJ9VBnEqS3C7QPfmoEQ` (a37791b, v1.9) y Railway, el
+    despliegue de a37791b.
+- **Qué salió**:
+  - PERSONAJES, el juego a paso fijo de 1/60:
+    - la simulación en pasos de 1/60 y la presentación a cada
+      fotograma;
+    - el reloj enganchado también en Safari/iOS;
+  - el Grip trae entero a un Sergei en frenesí;
+  - el All-in apunta a 180°/s;
+  - seis arreglos de tierra de nadie;
+  - las zonas que copia Kurama, online como hielo y arena.
+- **Cambio de SHA en la preparación**: se congeló `3b1dbd6` y se verificó
+  entero. La revisión adversarial confirmó que en Safari/iOS (marcas de
+  rAF redondeadas a 1 ms) el reloj del paso fijo no se enganchaba nunca.
+  En un iPhone offline, lo no interpolado iba a tirones.
+  - El segundo corte de PERSONAJES (`12cec85`: presentación a cada
+    fotograma) ya quitaba el tirón visible. Su arreglo del enganche
+    (`ea77e62`) deja 1 paso por frame a 60 Hz y 2 a 30 Hz en todas las
+    fases.
+  - Se desplegó `ea77e62`, verificado de nuevo, en vez de `3b1dbd6`.
+- **Verificado** (sobre `3b1dbd6`, y lo que cambió después de nuevo
+  sobre `12cec85` y `ea77e62`):
+  - check, 304 tests, golden 3/3, smoke 4/4, tsc de los dos lados;
+  - Docker con guard (el servidor no cambia desde `3b1dbd6`);
+  - `BrawlRoom` sin clientes:
+    - un Sergei en frenesí queda a 1,60 u de la trompa, como uno
+      normal;
+    - Sebastian cargando gira 90° en 0,5 s y 180° en 1 s;
+  - sonda del paso fijo a 30/60/144/240 Hz: mismo empujón (2,877 u),
+    una presentación por frame, 0 fugas del sim a la presentación, el
+    hit stop dura lo mismo a cualquier tasa. Con marcas de 1 ms en 3
+    fases: 1×60 y 2×30;
+  - 12 salas online de 4 clientes en tres tandas: 0 errores, ninguna
+    habilidad lista sin ejecutarse, sin líneas del All-in colgadas;
+  - revisiones adversariales de los dos tramos (5 y 3 revisores con
+    verificador). Del primero, el hallazgo de Safari. Del segundo, 0
+    hallazgos.
+- **Lección: el banco del suavizado y los parones del navegador sin
+  pantalla.**
+  - Cada grabación tiene uno o dos parones del hilo principal de
+    220-330 ms. El navegador deja de leer mensajes y el banco lo ve como
+    un hueco de red de 270-460 ms, mientras sigue pintando a 60/144 Hz.
+  - Si coincide con la frenada de un rival, el banco da pasadas de 5-24
+    px que en el juego no se ven así.
+  - Salen igual en las grabaciones de v1.9 (el mismo módulo, que dio
+    ≤ 1,9 px sin coincidencias). No es una regresión: es el banco.
+  - Para juzgar la pasada de los rivales hay que descartar las frenadas
+    que caen en un parón (el peor frame está en la grabación).
+
 ## 2026-09-25 — [PERSONAJES] El paso fijo se engancha también en Safari e iOS
 
 - **Qué:** `FixedStepClock` decide si la pantalla va a la cadencia de la

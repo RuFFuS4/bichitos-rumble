@@ -6,53 +6,32 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Pendiente (por orden)
 
-0. **v1.9 — ✅ EN PRODUCCIÓN desde el 2026-09-25 a las 02:10 UTC**
-   (main `a37791b` = `dev` `a09ec8a`, tag `v1.9-habilidades-online`).
-   `BrawlRoom` ejecuta las habilidades como el sim (repaso de PERSONAJES
-   menos el Sinkhole), la L de los bots online, el paso fijo con 2
-   sub-pasos y `NET_PROTOCOL` 3.
-   - Verificación, ventana (Vercel 32 s, Railway 59 s) y comprobaciones
-     de después en BUILD_LOG (2026-09-25, DISTRIBUCIÓN, v1.9).
-   - Rollback: Vercel `dpl_AozQKczWU5Zn3pCZBBT6eH1VYeDq` (784779f) y
-     Railway, el despliegue de 784779f. Siempre los dos lados.
+0. **v1.10 — ✅ EN PRODUCCIÓN desde el 2026-09-25 a las 13:47 UTC**
+   (main `bb819bb` = `dev` `ea77e62`, tag `v1.10-paso-fijo`).
+   - Qué lleva:
+     - el juego a paso fijo de 1/60 con presentación a cada fotograma,
+       también en Safari/iOS;
+     - el Grip entero y el All-in a 180°/s;
+     - los seis arreglos de tierra de nadie de PERSONAJES;
+     - las zonas que copia Kurama, online como hielo y arena.
+   - `NET_PROTOCOL` 3: nadie ve «recarga».
+   - Verificación, ventana (Vercel 37 s, Railway 67 s), comprobaciones y
+     el cambio de SHA (`3b1dbd6` → `ea77e62` por Safari) en BUILD_LOG
+     (2026-09-25, DISTRIBUCIÓN, v1.10).
+   - Rollback: Vercel `dpl_7Uw3pUgKFcJ9VBnEqS3C7QPfmoEQ` (a37791b, v1.9) y
+     Railway, el despliegue de a37791b. Siempre los dos lados.
    - **Queda de Rafa, a mano:**
-     - una pestaña v1.8 abierta tiene que recibir «recarga»;
-     - 2 pestañas en sala privada, con un Sebastian que cargue el
-       All-in;
      - Sentry sin issues nuevos;
-     - el A/B del suavizado del punto 1.
-   - Las cifras de balance online cambian (sub-pasos + L de los bots):
-     Kermit queda fuerte, decisión de Rafa.
-   - **Ya en `dev` para el próximo despliegue** (avisos de PERSONAJES,
-     2026-09-25). **Van cliente Y servidor**: si solo sale Vercel, online
-     se queda como hoy. `NET_PROTOCOL` sigue en 3, así que no hay
-     «recarga».
-     - `5f8c9d9` (cliente): el juego offline simula a paso fijo de 1/60,
-       como los 2 sub-pasos del servidor. La ruta online de `main.ts` no
-       cambia (`game.update(dt)` por frame, con el reloj del paso fijo
-       reiniciado), así que el suavizado tampoco. Comprobado: 278 tests
-       y el tsc del servidor en verde.
-     - `f22d8ca` (servidor, `server/src/sim`), respuestas de Rafa:
-       - el Grip trae entero a un Sergei en frenesí (`fireGroundPound`
-         ya no escala el tirón con `knockbackScale`);
-       - el All-in apunta a 180°/s (`SIM.allIn.aimTurnDegPerSec`, que lee
-         el bucle de carga de `BrawlRoom`).
-     - Verificación al desplegar:
-       - una partida offline a 60 Hz y otra a 144 Hz;
-       - una sala online de 4 clientes (`.tmp/ability-live.mjs` del
-         worktree), donde Trunk agarra a un Sergei en frenesí y lo deja a
-         1,6 u de la trompa;
-       - un Sebastian que carga tarda ~1 s en girarse 180°.
-   - Cliente, también en `dev` (con permiso de Rafa para `game.ts`,
-     2026-09-25): el Frozen Floor o el Sinkhole que copia Kurama salen
-     ya online como hielo y arena (`onZoneSpawned` toma el tipo de las
-     banderas del evento), con su icono de congelado o ralentizado
-     dentro.
-     - Medido en vivo con 4 clientes: antes `generic`, después `ice` y
-       `sand`; las zonas propias, igual que antes.
-     - Queda una diferencia de color, ya sabida: online el anillo sale
-       con la paleta del lanzador y offline con los colores de cada
-       zona. Así, la copia de Kurama se ve magenta.
+     - jugar offline en un iPhone y en un monitor de 144 Hz: debe ir
+       igual de fluido y empujar lo mismo;
+     - 2 pestañas en una sala privada, con un Sebastian que cargue el
+       All-in;
+     - el A/B del suavizado, pendiente desde v1.8.
+   - Lo que queda de v1.9 (Sinkhole online, hielo en la predicción) sigue
+     en el punto 11.
+   - Diferencia sabida, sin arreglar: online el anillo de una zona sale
+     con la paleta del lanzador y offline con los colores de cada zona.
+     La copia de Kurama se ve magenta.
 
 1. **v1.8 (H4.5) — ✅ EN PRODUCCIÓN desde el 2026-09-24 a las 22:00 UTC**
    (main `784779f` = `bf7b3ee`, tag `v1.8-terreno-v2`). Comprobaciones de

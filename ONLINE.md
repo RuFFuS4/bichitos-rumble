@@ -7,16 +7,17 @@ sincronización cliente↔servidor.
 
 ## Estado del deploy (comprobado el 2026-09-25)
 
-> **El online está VIVO en producción** con `v1.9-habilidades-online`
-> (main `a37791b`, desplegado el 2026-09-25 a las 02:10 UTC; antes,
-> `v1.8-terreno-v2` y `v1.7-h4-social`). Comprobado tras desplegar:
+> **El online está VIVO en producción** con `v1.10-paso-fijo` (main
+> `bb819bb`, desplegado el 2026-09-25 a las 13:47 UTC; antes,
+> `v1.9-habilidades-online`, `v1.8-terreno-v2` y `v1.7-h4-social`).
+> Comprobado tras desplegar:
 > - `https://bichitos-rumble-production.up.railway.app/health` responde
 >   `protocol: 3` y `protocolGuard: "on"`;
 > - `/api/leaderboard` devuelve los 5 cinturones (el volumen de la DB
 >   está montado);
 > - el bundle de `www.bichitosrumble.com` apunta a ese `wss://`.
 >
-> Detalle en BUILD_LOG (2026-09-25, v1.9).
+> Detalle en BUILD_LOG (2026-09-25, v1.9 y v1.10).
 >
 > - **Cómo se despliega**: Railway construye `server/Dockerfile`
 >   (multi-stage `node:22-alpine`) y Vercel `npm run build`, **los dos
@@ -471,6 +472,12 @@ el A/B.
 - `scripts/net-smoothing-bench.mjs`: re-simula las grabaciones con el
   módulo real a otras tasas y con `--set clave=valor`, sin tocar el
   juego. Imprime los umbrales del plan.
+  - **Ojo con los parones del navegador sin pantalla.** Cada grabación
+    trae uno o dos parones del hilo principal de 220-330 ms. El banco los
+    ve como huecos de red, y si coinciden con la frenada de un rival da
+    pasadas de 5-24 px que en el juego no se ven así. Antes de dar una
+    pasada por mala, mira si su frenada cae en uno (BUILD_LOG
+    2026-09-25, v1.10).
 - `tests/sim/net-smoothing.test.ts`: servidor de mentira que integra como
   `BrawlRoom`.
 
