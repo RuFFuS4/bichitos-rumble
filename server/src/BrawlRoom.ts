@@ -1529,41 +1529,50 @@ export class BrawlRoom extends Room {
       data.allInDirZ = undefined;
     }
 
-    // 3. Integrate position + friction + dead zone + max speed cap + facing
+    // 3. Integrate position + friction + dead zone + max speed cap + facing,
+    // en SIM.movement.integrationSubsteps sub-pasos de h = dt/n (paso fijo:
+    // 30 Hz × 2 = una integración cada 1/60 s, la del juego offline). A 1/30
+    // un empujón llegaba más lejos: la K un 29 % más y el Cone Pulse 10,8 u
+    // frente a 5,8. El empuje del mando (paso 1) sigue siendo uno por tick.
+    // src/net-smoothing.ts repite esta cuenta: si cambia, avisa (ONLINE.md).
+    const substeps = SIM.movement.integrationSubsteps;
+    const h = dt / substeps;
     for (const p of players) {
       if (!p.alive || p.falling) continue;
       const data = this.internal.get(p.sessionId);
       if (!data) continue;
 
-      p.x += p.vx * dt;
-      p.z += p.vz * dt;
+      for (let s = 0; s < substeps; s++) {
+        p.x += p.vx * h;
+        p.z += p.vz * h;
 
-      // Hielo (Frozen Floor): la vida media de la fricción la multiplica la
-      // ZONA (punto 10; antes un ×5 fijo aquí), y el Ice Slide la del propio
-      // bicho (frictionScale, S2-3). Mismo orden que Critter.update.
-      const ice = getSlipperyZone(p, this.activeZones);
-      let halfLife = data.hasInput ? SIM.movement.frictionHalfLife : SIM.movement.idleFrictionHalfLife;
-      if (ice) halfLife *= ice.frictionMult;
-      halfLife *= frictionScale(p);
-      const friction = Math.pow(0.5, dt / halfLife);
-      p.vx *= friction;
-      p.vz *= friction;
+        // Hielo (Frozen Floor): la vida media de la fricción la multiplica la
+        // ZONA (punto 10; antes un ×5 fijo aquí), y el Ice Slide la del
+        // propio bicho (frictionScale, S2-3). Mismo orden que Critter.update.
+        const ice = getSlipperyZone(p, this.activeZones);
+        let halfLife = data.hasInput ? SIM.movement.frictionHalfLife : SIM.movement.idleFrictionHalfLife;
+        if (ice) halfLife *= ice.frictionMult;
+        halfLife *= frictionScale(p);
+        const friction = Math.pow(0.5, h / halfLife);
+        p.vx *= friction;
+        p.vz *= friction;
 
-      // Zona muerta solo en inercia — espejo de src/critter.ts
-      // (docs/FEELING.md §7.4 y §7.7). Con input, anular la velocidad por
-      // debajo del umbral se comía justo la que el bicho estaba ganando
-      // (a 30 Hz, Shelly ralentizada o en el hielo). "Inercia" incluye un
-      // empuje que ni a velocidad terminal supera el umbral (stick con
-      // deriva, bicho enraizado).
-      const speed = Math.sqrt(p.vx * p.vx + p.vz * p.vz);
-      const pushTerminal = (data.moveAccel * halfLife) / Math.LN2;
-      const coasting = !data.hasInput || pushTerminal < SIM.movement.velocityDeadZone;
-      if (coasting && speed < SIM.movement.velocityDeadZone) {
-        p.vx = 0;
-        p.vz = 0;
-      } else if (speed > SIM.movement.maxSpeed) {
-        p.vx = (p.vx / speed) * SIM.movement.maxSpeed;
-        p.vz = (p.vz / speed) * SIM.movement.maxSpeed;
+        // Zona muerta solo en inercia — espejo de src/critter.ts
+        // (docs/FEELING.md §7.4 y §7.7). Con input, anular la velocidad por
+        // debajo del umbral se comía justo la que el bicho estaba ganando
+        // (a 30 Hz, Shelly ralentizada o en el hielo). "Inercia" incluye un
+        // empuje que ni a velocidad terminal supera el umbral (stick con
+        // deriva, bicho enraizado).
+        const speed = Math.sqrt(p.vx * p.vx + p.vz * p.vz);
+        const pushTerminal = (data.moveAccel * halfLife) / Math.LN2;
+        const coasting = !data.hasInput || pushTerminal < SIM.movement.velocityDeadZone;
+        if (coasting && speed < SIM.movement.velocityDeadZone) {
+          p.vx = 0;
+          p.vz = 0;
+        } else if (speed > SIM.movement.maxSpeed) {
+          p.vx = (p.vx / speed) * SIM.movement.maxSpeed;
+          p.vz = (p.vz / speed) * SIM.movement.maxSpeed;
+        }
       }
 
       // Facing follows the player's OWN movement: a shove never turns it
@@ -1590,8 +1599,8 @@ export class BrawlRoom extends Room {
     for (const r of reflects) {
       this.broadcast('shellReflected', r);
     }
-    for (const h of dashHits) {
-      this.broadcast('dashHit', h);
+    for (const hit of dashHits) {
+      this.broadcast('dashHit', hit);
     }
 
     // 5. Falloff detection — uses the authoritative fragment layout

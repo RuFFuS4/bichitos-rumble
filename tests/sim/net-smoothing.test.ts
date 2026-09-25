@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // Suavizado online (src/net-smoothing.ts) contra un servidor de mentira que
-// integra EXACTAMENTE como el paso de BrawlRoom (v += empuje; x += v·dt;
-// v *= f; zona muerta en inercia con pushTerminal; tope maxSpeed) con los
-// números de SIM, manda parches a 20 Hz (1 y 2 ticks alternos) con
+// integra EXACTAMENTE como el paso de BrawlRoom (v += empuje, uno por tick;
+// y en cada sub-paso h = dt/integrationSubsteps: x += v·h; v *= f(h); zona
+// muerta en inercia con pushTerminal; tope maxSpeed) con los números de SIM, manda parches a 20 Hz (1 y 2 ticks alternos) con
 // matchTimer, y un cliente que pinta a 60 o 144 Hz. Lo que se mide es lo que
 // se ve: saltos por frame, frames parados y distancia a la trayectoria del
 // servidor. 0,07 u ≈ 3 px a 1080p con la cámara de juego (43,8 px/u).
@@ -14,6 +14,15 @@ import { FEEL } from '../../src/gamefeel';
 import { NET_SMOOTHING, NetSmoother, type NetPlayerState, type NetMovement } from '../../src/net-smoothing';
 
 const DT = 1 / SIM.tickRate;
+const SUB = SIM.movement.integrationSubsteps;
+/** En crucero, lo que avanza un tick entre la v publicada × dt: el tick
+ *  arranca con v/f (el empuje repone lo que frenó la fricción) y la frena en
+ *  SUB sub-pasos. Con 1 sub-paso es 1/f. */
+const cruiseLead = () => {
+  const f = Math.pow(0.5, DT / SIM.movement.frictionHalfLife);
+  const fs = Math.pow(f, 1 / SUB);
+  return (1 / f) * ((1 - f) / (1 - fs)) / SUB;
+};
 const cfg = () => ({ ...NET_SMOOTHING, mode: 'dr' as const, remotes: true });
 const movement = (): NetMovement => ({ ...FEEL.movement, fallSpeed: FEEL.lives.fallSpeed });
 
@@ -35,14 +44,17 @@ function simulate(ticks: number, speed: number, input: (n: number) => [number, n
     const has = Math.hypot(mx, mz) > 0.01;
     const moveAccel = Math.hypot(mx, mz) * accel;
     vx += mx * accel * DT; vz += mz * accel * DT;
-    x += vx * DT; z += vz * DT;
     const hl = has ? SIM.movement.frictionHalfLife : SIM.movement.idleFrictionHalfLife;
-    const f = Math.pow(0.5, DT / hl);
-    vx *= f; vz *= f;
-    const s = Math.hypot(vx, vz);
+    const h = DT / SUB;
+    const f = Math.pow(0.5, h / hl);
     const coasting = !has || (moveAccel * hl) / Math.LN2 < SIM.movement.velocityDeadZone;
-    if (coasting && s < SIM.movement.velocityDeadZone) { vx = 0; vz = 0; }
-    else if (s > SIM.movement.maxSpeed) { vx *= SIM.movement.maxSpeed / s; vz *= SIM.movement.maxSpeed / s; }
+    for (let k = 0; k < SUB; k++) {
+      x += vx * h; z += vz * h;
+      vx *= f; vz *= f;
+      const s = Math.hypot(vx, vz);
+      if (coasting && s < SIM.movement.velocityDeadZone) { vx = 0; vz = 0; }
+      else if (s > SIM.movement.maxSpeed) { vx *= SIM.movement.maxSpeed / s; vz *= SIM.movement.maxSpeed / s; }
+    }
     out.push({ n, mt: 90 - n * DT, x, z, vx, vz, alive: true, falling: false, fallY: 0, input: [mx, mz] });
   }
   return out;
@@ -94,11 +106,16 @@ describe('net-smoothing — crucero', () => {
     expect(NET_SMOOTHING.serverTickHz).toBe(SIM.tickRate);
   });
 
-  it('en crucero el bicho recorre 1/f veces la v publicada (por eso no vale extrapolar con v)', () => {
+  it('en crucero el bicho recorre más que la v publicada (por eso no vale extrapolar con v)', () => {
     const t = simulate(120, 14, straight);
     const a = t[100], b = t[101];
     const lead = (b.x - a.x) / DT / a.vx;
-    expect(lead).toBeCloseTo(Math.pow(2, DT / SIM.movement.frictionHalfLife), 3); // ≈ 1,335
+    expect(lead).toBeCloseTo(cruiseLead(), 3); // ≈ 1,245 con 2 sub-pasos (1,335 con 1)
+    expect(lead).toBeGreaterThan(1.1);
+  });
+
+  it('el cliente integra con los sub-pasos del servidor (FEEL es espejo de SIM)', () => {
+    expect(FEEL.movement.integrationSubsteps).toBe(SIM.movement.integrationSubsteps);
   });
 
   for (const hz of [60, 144]) {
@@ -125,6 +142,12 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
   // rebotar; frenarlo en el acto daba 0 de pasada pero un diente de sierra
   // de velocidad de ~200 ms a RTT 160 (4,1 → 1,4 → 4,3 u/s, medido en
   // navegador). Un remoto, que lo deduce, se pasa ≤ 0,018 u.
+  // Con 2 sub-pasos por tick (v1.9) el servidor frena en un 16 % menos de
+  // recorrido (0,153 u en vez de 0,182 al soltar a 3 u/s) y más de golpe:
+  // el local se pasa 0,0065-0,0088 u y, entre frame y frame de la frenada,
+  // un paso llega a ser un 19 % mayor que el anterior (1,11 antes); el remoto,
+  // que se entera un parche tarde, se pasa 0,019-0,039 u (1,7 px). Umbrales
+  // recalibrados sobre eso; el diente de sierra de arriba (×3) sigue fuera.
   for (const local of [true, false]) {
     for (const latencyMs of [10, 40, 80]) {
       it(`al soltar el mando no se pasa de largo ni rebota (${local ? 'local' : 'remoto'}, ${latencyMs} ms)`, () => {
@@ -132,7 +155,7 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
         const rest = ticks[ticks.length - 1].x;
         const frames = play(ticks, 144, { local, latencyMs });
         const maxX = Math.max(...frames.map((f) => f.x));
-        expect(maxX - rest).toBeLessThan(local ? 0.01 : 0.03);
+        expect(maxX - rest).toBeLessThan(local ? 0.012 : 0.05);
         // nunca retrocede (el rebote que se veía al parar)…
         for (let i = 1; i < frames.length; i++) {
           expect(frames[i].x - frames[i - 1].x).toBeGreaterThan(local ? -0.002 : -0.01);
@@ -143,7 +166,7 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
           const steps = frames.filter((f) => f.t > tRelease - 0.05).map((f, i, a) => (i ? f.x - a[i - 1].x : 0)).slice(1);
           const peak = steps.findIndex((d, i) => i > 0 && d < steps[i - 1] * 0.9);   // empieza a frenar
           for (let i = Math.max(1, peak + 1); i < steps.length && steps[i - 1] > 1e-3; i++) {
-            expect(steps[i]).toBeLessThan(steps[i - 1] * 1.1 + 1e-4);
+            expect(steps[i]).toBeLessThan(steps[i - 1] * 1.25 + 1e-4);
           }
         }
         expect(Math.abs(frames[frames.length - 1].x - rest)).toBeLessThan(0.005);
@@ -155,7 +178,7 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
     const ticks = simulate(150, 14, (n) => (n <= 90 ? [1, 0] : [0, 0]));
     const rest = ticks[ticks.length - 1].x;
     const frames = play(ticks, 144, { local: true, latencyMs: 40, rtt: false });
-    expect(Math.max(...frames.map((f) => f.x)) - rest).toBeLessThan(0.03);
+    expect(Math.max(...frames.map((f) => f.x)) - rest).toBeLessThan(0.05);
   });
 
   it('un rival quieto al que golpean frena con la fricción de parada, sin retroceder', () => {
@@ -243,7 +266,8 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
       const frames = play(ticks, 60, { local, latencyMs: 40 });
       const stop = ticks.findIndex((t) => t.n > 60 && t.vx === 0);
       const after = frames.filter((f) => f.t > ticks[stop].n * DT);
-      for (let i = 1; i < after.length; i++) expect(after[i].x - after[i - 1].x).toBeGreaterThan(-1e-3);
+      // Lo que queda es la corrección de la pasada (≤ 0,002 u/frame con 2 sub-pasos).
+      for (let i = 1; i < after.length; i++) expect(after[i].x - after[i - 1].x).toBeGreaterThan(-3e-3);
     }
   });
 
@@ -354,8 +378,12 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
       sm.beginFrame(tMs, last.mt, true);
       p = sm.place(key, last, true, 1 / 60);
     }
-    const lead = Math.pow(2, DT / SIM.movement.frictionHalfLife);
-    expect(p.x - last.x).toBeLessThanOrEqual(last.vx * lead * NET_SMOOTHING.maxExtrapolation + 1e-6);
+    // Lo que el servidor avanzaría en maxExtrapolation, más lo que un sub-paso
+    // a la velocidad de arranque del tick (v/f) saca a la media del tick.
+    const f = Math.pow(0.5, DT / SIM.movement.frictionHalfLife);
+    const bound = last.vx * (cruiseLead() * NET_SMOOTHING.maxExtrapolation + (1 / f - cruiseLead()) * DT / SUB);
+    expect(p.x - last.x).toBeLessThanOrEqual(bound + 1e-6);
+    expect(p.x - last.x).toBeGreaterThan(last.vx * NET_SMOOTHING.maxExtrapolation);
   });
 
   it('un frame largo (pestaña en segundo plano) salta al presente', () => {

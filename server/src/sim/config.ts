@@ -27,7 +27,7 @@ export const SIM = {
     // live loop too once the fixed step lands). A push that integrates at
     // 1/30 carries farther: the K 29 % more, Cone Pulse 10.8 u vs 5.8
     // (docs/REPASO_HABILIDADES_INFORME.md B1). Reader: BrawlRoom's
-    // integrate step (DISTRIBUCIÓN wires it; until then, one per tick).
+    // integrate step (wired 2026-09-25) and src/net-smoothing.ts via FEEL.
     // Mirror of FEEL.movement.integrationSubsteps, which net-smoothing reads.
     integrationSubsteps: 2,
   },
@@ -117,23 +117,21 @@ export const SIM = {
     slowDuringWindUp: 0.1,
     cooldown: 18.0,
   },
-  // Sebastian's All-in resolution. Mirror of FEEL.allIn. Reader pending:
-  // BrawlRoom's All-in pass (DISTRIBUCIÓN) still resolves with its own
-  // numbers.
+  // Sebastian's All-in resolution. Mirror of FEEL.allIn. Read by BrawlRoom's
+  // All-in pass and hold-to-fire loop (since 2026-09-25).
   allIn: {
     hitMargin: 0.55,
     missProbeStep: 0.5,
-    // Aiming while charging (2026-09-24). No reader yet: pending in
-    // BrawlRoom's integrate step (DISTRIBUCIÓN, buzón fase 2); online the
-    // charge keeps the facing it started with until then.
+    // Aiming while charging (2026-09-24). Online: BrawlRoom's hold-to-fire
+    // loop turns the facing toward the input (since 2026-09-25).
     aimTurnDegPerSec: 360,
   },
   // Blink landing (Sand Trap, Shadow Step). Mirror of FEEL.blink.
   blink: {
     landingProbeStep: 0.5,
   },
-  // Cone Pulse (Cheeto L) waves. Mirror of FEEL.conePulse. Reader pending:
-  // BrawlRoom's Cone Pulse pass (DISTRIBUCIÓN) still writes 1.4 and 2.0.
+  // Cone Pulse (Cheeto L) waves. Mirror of FEEL.conePulse. Read by
+  // BrawlRoom's Cone Pulse pass (since 2026-09-25).
   conePulse: {
     waveStep: 1.4,
     waveThickness: 2.0,
