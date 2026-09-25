@@ -206,7 +206,7 @@ export const FEEL = {
   allIn: {
     hitMargin: 0.55,          // lane half-width = caster radius + target radius + this; only targets ahead count
     missProbeStep: 0.5,       // a miss walks the dash line in these steps to the first point off the arena and falls there
-    aimTurnDegPerSec: 360,    // while charging (rooted) the stick turns the facing, and the line with it, this fast: 90° in 0.25 s, a full flip in 0.5 s. Online reader pending in BrawlRoom (DISTRIBUCIÓN)
+    aimTurnDegPerSec: 360,    // while charging (rooted) the stick turns the facing, and the line with it, this fast: 90° in 0.25 s, a full flip in 0.5 s. Online: BrawlRoom's hold-to-fire loop reads the mirror
   },
 
   // --- Blink landing (Sand Trap, Shadow Step). Mirror: SIM.blink ---
@@ -214,8 +214,8 @@ export const FEEL = {
     landingProbeStep: 0.5,    // a target off live floor steps back toward the origin in these steps; none on floor = stay put
   },
 
-  // --- Cone Pulse (Cheeto L) waves. Mirror: SIM.conePulse, which the room
-  // doesn't read yet: BrawlRoom writes its own 1.4 / 2.0 (DISTRIBUCIÓN) ---
+  // --- Cone Pulse (Cheeto L) waves. Mirror: SIM.conePulse, read by
+  // BrawlRoom's Cone Pulse pass ---
   // Pulse N is a band waveThickness wide centred N × waveStep ahead, so the
   // last one (pulseCount 6) reaches 6 × 1.4 + 1.0 = 9.4 u: the depth of the
   // cone its entry wedge paints (abilities-runtime spawnLEntryVfx).

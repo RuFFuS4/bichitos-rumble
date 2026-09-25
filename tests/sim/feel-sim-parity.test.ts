@@ -85,9 +85,6 @@ const PAIRS: Array<[string, number, number]> = [
   ['chargeRush.windUp', FEEL.chargeRush.windUp, SIM.chargeRush.windUp],
   ['allIn.hitMargin', FEEL.allIn.hitMargin, SIM.allIn.hitMargin],
   ['allIn.missProbeStep', FEEL.allIn.missProbeStep, SIM.allIn.missProbeStep],
-  // aimTurnDegPerSec and conePulse pin the value only: BrawlRoom doesn't
-  // read them yet (pending, DISTRIBUCIÓN buzón fase 2), so green here is
-  // not online parity until it does.
   ['allIn.aimTurnDegPerSec', FEEL.allIn.aimTurnDegPerSec, SIM.allIn.aimTurnDegPerSec],
   ['blink.landingProbeStep', FEEL.blink.landingProbeStep, SIM.blink.landingProbeStep],
   ['conePulse.waveStep', FEEL.conePulse.waveStep, SIM.conePulse.waveStep],

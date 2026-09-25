@@ -249,9 +249,9 @@ export function findGripTarget(
  * Stun `target` for at least `seconds` (a stun never shortens a longer
  * one). A stunned critter doesn't act (Critter.stunTimer), so an All-in
  * charge it was holding drops unreleased — no dash, no cooldown — as on a
- * fall. Server: the grip and slam write the same max; the charge lives in
- * BrawlRoom's hold-to-fire loop, where dropping it on the stun (and sending
- * `lChargeEnd` so the line goes) is pending (DISTRIBUCIÓN, buzón fase 2).
+ * fall. Server: the grip and slam write the same max; BrawlRoom's
+ * hold-to-fire loop drops the charge on the stun and sends `lChargeEnd`
+ * so the line goes (since v1.9).
  */
 function stun(target: Critter, seconds: number): void {
   target.stunTimer = Math.max(target.stunTimer, seconds);
@@ -1639,9 +1639,8 @@ export function startSebastianAllInCharge(critter: Critter, scene: THREE.Scene):
  * stands aside and the move input turns the facing instead, toward the
  * pushed direction at FEEL.allIn.aimTurnDegPerSec, the short way round.
  * No input keeps the aim. The line follows the facing and the caster (a
- * shove moves him). Server: pending in BrawlRoom's integrate step, with
- * SIM.allIn.aimTurnDegPerSec (DISTRIBUCIÓN, buzón fase 2); online the
- * charge still keeps the facing it started with.
+ * shove moves him). Server: BrawlRoom's hold-to-fire loop turns the
+ * facing the same way, with SIM.allIn.aimTurnDegPerSec (since v1.9).
  */
 export function advanceAllInCharge(critter: Critter, dt: number): void {
   critter.lHoldChargeTime += dt;

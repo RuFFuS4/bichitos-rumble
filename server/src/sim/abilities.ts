@@ -421,8 +421,7 @@ const CRITTER_ABILITY_KITS: Record<string, readonly AbilityDef[]> = {
       // yeet on contact (BrawlRoom.ts paired with explicit fall flow).
       allInHitForce: 220, allInMissSelfForce: 130,
       holdToFireL: true, holdToFireMaxMs: 3000,
-      // 2026-09-24: shortest charge 0.35 s. No reader yet: pending in
-      // BrawlRoom's hold loop (DISTRIBUCIÓN, buzón fase 2).
+      // 2026-09-24: shortest charge 0.35 s. Read by BrawlRoom's hold loop.
       holdToFireMinMs: 350 },
   ],
 };
@@ -443,10 +442,9 @@ const copycatDefs = new WeakMap<PlayerSchema, AbilityDef>();
 
 /** The L def the room's per-tick L passes must read for `player`: the
  *  Copycat copy while one is live, else the kit's. Mirror of the client's
- *  `abilityStates[2].def`. DEPLOY BLOCKER until BrawlRoom's passes 2.e/2.g
- *  read it instead of `getAbilityKit(...)[2]` (DISTRIBUCIÓN): without
- *  that, online, a Kurama copying Shelly, Cheeto or Kermit gets the buff
- *  alone. */
+ *  `abilityStates[2].def`. Every L read in BrawlRoom goes through it (a
+ *  bare `getAbilityKit(...)[2]` there would give a Kurama copying Shelly,
+ *  Cheeto or Kermit the buff alone). */
 export function getLDef(player: PlayerSchema): AbilityDef | undefined {
   return copycatDefs.get(player) ?? getAbilityKit(player.critterName)[2];
 }
@@ -455,9 +453,9 @@ export function getLDef(player: PlayerSchema): AbilityDef | undefined {
  * × on every push `player` takes from others (Sergei's Frenzy: 0.4): its
  * active abilities' `knockbackTakenMult`, wind-up excluded, the L read
  * through getLDef so a Copycat of Sergei resists too. Used by the
- * collisions (./physics.ts) and the K effects here; BrawlRoom's own
- * pushes (snowball, Cone Pulse, Saw, ram) must read it as well
- * (DISTRIBUCIÓN). Mirror of the client's Critter.knockbackScale.
+ * collisions (./physics.ts), the K effects here and BrawlRoom's own pushes
+ * (snowball, Cone Pulse, Saw, ram). Mirror of the client's
+ * Critter.knockbackScale.
  */
 export function knockbackScale(player: PlayerSchema): number {
   const kit = getAbilityKit(player.critterName);
@@ -473,10 +471,9 @@ export function knockbackScale(player: PlayerSchema): number {
 
 /**
  * × on `player`'s own friction half-life (Kowalski's Ice Slide: 3): its
- * active abilities' `slideFrictionMult`, wind-up excluded. No caller yet:
- * BrawlRoom's integrate step must multiply its half-life by it, like the
- * ice's frictionMult (DISTRIBUCIÓN, buzón fase 2); until then Ice Slide
- * doesn't glide online. Mirror of the client's Critter.frictionScale.
+ * active abilities' `slideFrictionMult`, wind-up excluded. BrawlRoom's
+ * integrate step multiplies its half-life by it, like the ice's
+ * frictionMult. Mirror of the client's Critter.frictionScale.
  */
 export function frictionScale(player: PlayerSchema): number {
   const kit = getAbilityKit(player.critterName);
@@ -493,9 +490,7 @@ export function frictionScale(player: PlayerSchema): number {
  *  m − (m − 1)·2^(−T/(h·m)), m = `slideFrictionMult`, T its duration, h
  *  the friction half-life. 1 without a glide. The bot's edge probe
  *  (./bot.ts) reaches that much farther. Mirror of the client's
- *  dashGlideFactor (src/abilities-runtime.ts). Until BrawlRoom calls
- *  `frictionScale`, the online Kowalski bot probes 6.5 u for a slide that
- *  stops at the plain dash's: more careful, never less. */
+ *  dashGlideFactor (src/abilities-runtime.ts). */
 export function dashGlideFactor(def: AbilityDef): number {
   const m = def.slideFrictionMult ?? 1;
   return m - (m - 1) * Math.pow(0.5, def.duration / (SIM.movement.frictionHalfLife * m));
@@ -592,9 +587,8 @@ export function cancelActiveAbilities(player: PlayerSchema): void {
  *  pair, not every tick the victim stays in reach. Remaining cooldown per
  *  victim. Mirror of the client helpers in abilities-runtime.ts: the room
  *  ages each caster once per tick (`ageContactRehit`) and asks
- *  `takeContactHit` before applying a contact hit. Callers pending in
- *  BrawlRoom's contact passes (DISTRIBUCIÓN); until then online still
- *  hits every tick. */
+ *  `takeContactHit` before applying a contact hit (BrawlRoom's contact
+ *  passes). */
 const contactRehit = new WeakMap<PlayerSchema, Map<PlayerSchema, number>>();
 
 export function ageContactRehit(caster: PlayerSchema, dt: number): void {

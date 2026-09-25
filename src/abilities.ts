@@ -113,8 +113,8 @@ export interface AbilityDef {
    *  window (wind-up excluded), so the dash impulse decays that many
    *  times slower and the critter glides instead of stopping short.
    *  Read through Critter.frictionScale; server mirror: frictionScale in
-   *  server/src/sim/abilities.ts, not called by BrawlRoom yet
-   *  (DISTRIBUCIÓN, buzón fase 2). Undefined = 1. */
+   *  server/src/sim/abilities.ts, read by BrawlRoom's integrate step.
+   *  Undefined = 1. */
   slideFrictionMult?: number;
 
   /** When the ability ends (state.active flips false), force the
@@ -352,8 +352,7 @@ export interface AbilityDef {
   holdToFireMaxMs?: number;
   /** Shortest charge that resolves: letting go earlier doesn't fire at
    *  once, it fires when this is reached (2026-09-24). Undefined = 0.
-   *  Online reader pending: BrawlRoom's hold loop (DISTRIBUCIÓN, buzón
-   *  fase 2). */
+   *  Online: read by BrawlRoom's hold-to-fire loop (since v1.9). */
   holdToFireMinMs?: number;
 
   /** Kermit Toxic Touch: during frenzy, contact with another

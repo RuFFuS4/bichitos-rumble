@@ -536,17 +536,16 @@ export class Critter {
 
   /** × on this critter's friction half-life from its own abilities (Ice
    *  Slide glides: AbilityDef.slideFrictionMult). Server mirror:
-   *  frictionScale in server/src/sim/abilities.ts, which BrawlRoom doesn't
-   *  call yet (DISTRIBUCIÓN, buzón fase 2). */
+   *  frictionScale in server/src/sim/abilities.ts, read by BrawlRoom's
+   *  integrate step. */
   get frictionScale(): number {
     return getFrictionMultiplier(this.abilityStates);
   }
 
   startHeadbutt(): void {
     if (this.headbuttCooldown > 0 || this.isHeadbutting || this.headbuttAnticipating || this.isImmune) return;
-    // Stunned: no action starts. Server: pending in BrawlRoom's headbutt
-    // trigger (DISTRIBUCIÓN, buzón fase 2); online a stunned player still
-    // headbutts until it lands.
+    // Stunned: no action starts. Server: BrawlRoom's headbutt trigger has
+    // the same gate (since v1.9).
     if (this.stunTimer > 0) return;
     this.headbuttAnticipating = true;
     this.anticipationTimer = FEEL.headbutt.anticipation.duration;
@@ -659,8 +658,7 @@ export class Critter {
     // Floor) multiply the half-life by the ice's `frictionMult`, so
     // velocity decays slower and the critter slides. So does a gliding
     // dash of its own (Ice Slide: frictionScale). Server: BrawlRoom's
-    // integrate step has the ice; frictionScale is pending there
-    // (DISTRIBUCIÓN, buzón fase 2), so online Ice Slide doesn't glide yet.
+    // integrate step, same order, both factors.
     let halfLife = this.hasInput ? FEEL.movement.frictionHalfLife : FEEL.movement.idleFrictionHalfLife;
     const ice = getSlipperyZone(this.x, this.z, this.config.name);
     if (ice) halfLife *= ice.frictionMult;
@@ -696,8 +694,7 @@ export class Critter {
     // 180° in mid-flight, turn its back on whoever hit it and fire its next
     // headbutt the wrong way (FEELING §7.10). Coasting keeps the facing.
     // Charging the All-in, the aim owns the facing (advanceAllInCharge).
-    // Mirror: BrawlRoom's integrate step, all but the charging exception,
-    // which is pending there with the aim (DISTRIBUCIÓN, buzón fase 2).
+    // Mirror: BrawlRoom's integrate step, charging exception included.
     if (!this.lHoldCharging && (Math.abs(this.vx) > 0.1 || Math.abs(this.vz) > 0.1) &&
         this.hasInput && this.vx * this.moveX + this.vz * this.moveZ > 0) {
       this.mesh.rotation.y = Math.atan2(this.vx, this.vz);

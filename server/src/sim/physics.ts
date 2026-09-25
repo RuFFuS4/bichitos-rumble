@@ -30,7 +30,6 @@ interface InternalLike {
    *  resolution, the Cone Pulse edge) that a fall must clear. */
   lHoldCharging?: boolean;
   lHoldChargeTime?: number;
-  lHoldPrevInput?: boolean;
   allInActive?: boolean;
   pulseLastActive?: boolean;
 }
@@ -305,7 +304,6 @@ export function startFalling(p: PlayerSchema, data: InternalLike | undefined): v
   data.respawnTimer = SIM.lives.respawnDelay;
   data.lHoldCharging = false;
   data.lHoldChargeTime = 0;
-  data.lHoldPrevInput = false;
   data.allInActive = false;
   data.pulseLastActive = false;
 }

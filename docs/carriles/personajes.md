@@ -325,6 +325,12 @@ antes de commitear el JSON.
   estaba en producción. Mantener la L mientras acababa el cooldown, o
   pulsarla aturdido, la metía por la activación estándar sin carga ni
   mínimo.
+  → *Hecho el 2026-09-25:*
+  - *los comentarios dicen ya lo que hace `BrawlRoom`, incluidos los de
+    `getLDef`, `knockbackScale` y `dashGlideFactor` en
+    `server/src/sim/abilities.ts`, y el de la paridad en
+    `feel-sim-parity`;*
+  - *`lHoldPrevInput`, fuera de `server/src/sim/physics.ts`.*
 
 ## Cómo retomar
 
