@@ -7,7 +7,7 @@ import { getRosterEntry, type RosterEntry } from './roster';
 import { loadModelWithAnimations } from './model-loader';
 import { SkeletalAnimator, type SkeletalState } from './critter-skeletal';
 import { createCritterParts } from './critter-parts';
-import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, runShare, type AnimationPersonality } from './critter-animation';
+import { deriveAnimationPersonality, tickProceduralAnimation, runPlaybackRate, runShare, resetAccents, type AnimationPersonality } from './critter-animation';
 import { deriveCritterStats } from './pws-stats';
 import { measurePosedBox } from './posed-bounds';
 import { attachOutline, normalizeCritterMaterials, setOutlineVisible, type CritterOutline } from './critter-look';
@@ -813,10 +813,11 @@ export class Critter {
       glowIntensity = intensity;
     };
 
-    // --- Headbutt states ---
-    if (this.headbuttAnticipating) {
+    // --- Headbutt states --- (not while falling: a fall freezes the flags
+    // until the respawn clears them, here and on the server)
+    if (!this.falling && this.headbuttAnticipating) {
       glow(G.headbuttWindUp.hex, G.headbuttWindUp.intensity);
-    } else if (this.isHeadbutting) {
+    } else if (!this.falling && this.isHeadbutting) {
       glow(G.headbutt.hex, G.headbutt.intensity);
     }
 
@@ -903,6 +904,8 @@ export class Critter {
     // (tint, ghost). The respawn blink made the steel shell read as
     // intangible — the opposite of a wall you bounce off.
     const selfBuff = this.abilityStates.some((s) => s.active && s.windUpLeft <= 0 && s.def.selfBuffOnly);
+    // Nor while falling: a fall cancels the self-buff but not the immunity
+    // it granted, and the drop blinked "invulnerable" at 15 % opacity.
     if (this.invisibilityTimer > 0) {
       // v0.11 — Kurama Mirror Trick. Mesh ghosted while the decoy
       // tricks bots and other players.
@@ -925,7 +928,7 @@ export class Critter {
         mat.opacity = ghostAlpha;
         mat.depthWrite = false;
       }
-    } else if (this.immunityTimer > 0 && !selfBuff) {
+    } else if (this.immunityTimer > 0 && !selfBuff && !this.falling) {
       const phase = (Date.now() * 0.001 * FEEL.lives.blinkRate) % 1;
       const visible = phase < 0.5;
       if (!visible) translucent = true;
@@ -1406,7 +1409,9 @@ export class Critter {
     this.mesh.scale.set(1, 1, 1);
     this.body.scale.y = 1.0;
     // Play a respawn clip if present; falls back to idle automatically.
-    this.playSkeletal('respawn', { fallback: 'idle' });
+    // No crossfade: a teleport, so the fall pose doesn't linger at the
+    // spawn point.
+    this.playSkeletal('respawn', { fallback: 'idle', crossfade: 0 });
     this.matchStats.respawns++;
   }
 
@@ -1457,8 +1462,9 @@ export class Critter {
   }
 
   /** A teleport (respawn, new match) is neither a run nor a turn: drop
-   *  the ground-speed history and the turn lag so the model doesn't
-   *  sprint in place or spin on the spot when it reappears. */
+   *  the ground-speed history, the turn lag, the accents and the root's
+   *  lean and sway, so the model doesn't sprint in place, spin, lurch or
+   *  straighten up on the spot when it reappears. */
   private resetVisualMotion(): void {
     this.groundSpeed = 0;
     this.groundVX = 0;
@@ -1471,7 +1477,12 @@ export class Critter {
     // the spawn facing after this (reset() is followed by game placement).
     this.lastFacingY = NaN;
     if (this.visualPivot) this.visualPivot.rotation.y = 0;
+    if (this.glbMesh) {
+      this.glbMesh.rotation.x = 0;
+      this.glbMesh.rotation.z = 0;
+    }
     cancelYankVisual(this);
+    resetAccents(this);
   }
 
   /** Ground velocity from the position delta of this step. Jumps faster

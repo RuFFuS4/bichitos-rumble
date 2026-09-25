@@ -2326,7 +2326,8 @@ export class Game {
         // and no effect ages before the freeze.
         if (this.paused || (this.lastStepFrozen && !this.livePending)) break;
         const presentDt = this.lastStepFrozen || isHitStopActive() ? 0 : dt;
-        for (const c of this.critters) if (c.alive && !c.falling) c.present(presentDt);
+        // Falling critters too, as in 'ended': the fall clip plays on the way down.
+        for (const c of this.critters) if (c.alive) c.present(presentDt);
         this.livePending = false;
         break;
       }

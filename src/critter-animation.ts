@@ -259,6 +259,14 @@ function tickAccents(critter: Critter, dt: number, quiet: boolean): { start: num
   return { start: s.start, stop: s.stop, state: s };
 }
 
+/** A teleport (respawn, new match) starts the accents afresh: the forward
+ *  speed from before it would read as dropping to 0 in one sample, a brake
+ *  or a start the critter never made (a fall stops the sample clock).
+ *  Visual only. */
+export function resetAccents(critter: Critter): void {
+  accentState.delete(critter);
+}
+
 // Lerp speeds (per second). Higher = snappier transitions. Tuned at 1/60 s
 // steps; applied through lerpFactor so they feel the same at any frame rate.
 const LEAN_LERP_RUN = 10;
