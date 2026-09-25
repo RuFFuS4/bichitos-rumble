@@ -25,6 +25,7 @@ const PAIRS: Array<[string, number, number]> = [
   ['movement.maxSpeed', FEEL.movement.maxSpeed, SIM.movement.maxSpeed],
   ['movement.accelerationScale', FEEL.movement.accelerationScale, SIM.movement.accelerationScale],
   ['movement.velocityDeadZone', FEEL.movement.velocityDeadZone, SIM.movement.velocityDeadZone],
+  ['movement.integrationSubsteps', FEEL.movement.integrationSubsteps, SIM.movement.integrationSubsteps],
   ['headbutt.anticipation', FEEL.headbutt.anticipation.duration, SIM.headbutt.anticipation],
   ['headbutt.lunge', FEEL.headbutt.lunge.duration, SIM.headbutt.lunge],
   ['headbutt.cooldown', FEEL.headbutt.cooldown, SIM.headbutt.cooldown],
@@ -101,5 +102,9 @@ describe('FEEL ↔ SIM parity (client and server simulate with the same numbers)
 
   it('a bot never out-accelerates a player (moveAccelFactor ≤ 1)', () => {
     expect(SIM.bots.moveAccelFactor).toBeLessThanOrEqual(1);
+  });
+
+  it('online integrates every 1/60 s, the step the offline game is tuned at', () => {
+    expect(SIM.tickRate * SIM.movement.integrationSubsteps).toBe(60);
   });
 });

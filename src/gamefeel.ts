@@ -18,6 +18,10 @@ export const FEEL = {
     // Espejo: SIM.movement.accelerationScale. docs/FEELING.md §7.
     accelerationScale: 2.2,
     velocityDeadZone: 0.15,   // below this speed → snap to 0 (kills micro-drift)
+    // The SERVER's integrations per 30 Hz tick (SIM.movement.integrationSubsteps,
+    // mirror): 2 = one every 1/60 s, like the offline game. Not read by the
+    // offline sim; src/net-smoothing.ts replays the server's step with it.
+    integrationSubsteps: 2,
   },
 
   // --- Locomoción visual (feeling, 2026-09-21) ---

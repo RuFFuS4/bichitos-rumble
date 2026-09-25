@@ -22,6 +22,14 @@ export const SIM = {
     maxSpeed: 20,
     accelerationScale: 2.2, // 1.6 → 2.2 on 2026-09-21 (docs/FEELING.md §7) — mirror of FEEL
     velocityDeadZone: 0.15,
+    // Integrations per tick: 30 Hz × 2 = one every 1/60 s, the step the
+    // offline game is tuned at (lab, golden and batch run fixed 1/60; the
+    // live loop too once the fixed step lands). A push that integrates at
+    // 1/30 carries farther: the K 29 % more, Cone Pulse 10.8 u vs 5.8
+    // (docs/REPASO_HABILIDADES_INFORME.md B1). Reader: BrawlRoom's
+    // integrate step (DISTRIBUCIÓN wires it; until then, one per tick).
+    // Mirror of FEEL.movement.integrationSubsteps, which net-smoothing reads.
+    integrationSubsteps: 2,
   },
 
   headbutt: {
