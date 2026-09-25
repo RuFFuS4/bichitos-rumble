@@ -210,8 +210,13 @@ const HEADBUTT_LUNGE_FORWARD  = 0.14;  // small forward Y drop + Z offset on lun
 
 /** Per critter, visual state only: the smoothed forward acceleration, and
  *  the smoothed lean the accents ride on (so they keep their snap instead
- *  of being eased by the slow run-lean lerp). */
-const accentState = new WeakMap<Critter, { prevForward: number; accel: number; pitch: number; start: number; stop: number }>();
+ *  of being eased by the slow run-lean lerp). `raw` is the acceleration
+ *  over the last two ground-speed samples (`sampleTime`: the newer one's
+ *  sim time). */
+const accentState = new WeakMap<Critter, {
+  prevForward: number; accel: number; pitch: number; start: number; stop: number;
+  sampleTime: number; raw: number;
+}>();
 
 /**
  * Start / stop accents, 0..1 each: how hard the MODEL is speeding up or
@@ -226,12 +231,24 @@ function tickAccents(critter: Critter, dt: number, quiet: boolean): { start: num
   const forward = critter.forwardGroundSpeed();
   let s = accentState.get(critter);
   if (!s) {
-    s = { prevForward: forward, accel: 0, pitch: critter.glbMesh?.rotation.x ?? 0, start: 0, stop: 0 };
+    s = {
+      prevForward: forward, accel: 0, pitch: critter.glbMesh?.rotation.x ?? 0, start: 0, stop: 0,
+      sampleTime: critter.groundSampleTime, raw: 0,
+    };
     accentState.set(critter, s);
   }
-  const raw = dt > 0 ? (forward - s.prevForward) / dt : 0;
-  s.prevForward = forward;
-  s.accel += (raw - s.accel) * lerpFactor(1 / loco.accentSmoothing, dt);
+  // The ground speed only changes when a sim step runs (observeStep): at
+  // 144 Hz a per-frame derivative is a train of spikes and zeros, and the
+  // lean zig-zagged at the step beat. Take it once per new sample, over
+  // the sim time between samples, and hold it in between. One step per
+  // frame (60 Hz, online) gives the old per-frame value.
+  const sampleDt = critter.groundSampleTime - s.sampleTime;
+  if (sampleDt > 0) {
+    s.raw = (forward - s.prevForward) / sampleDt;
+    s.prevForward = forward;
+    s.sampleTime = critter.groundSampleTime;
+  }
+  s.accel += (s.raw - s.accel) * lerpFactor(1 / loco.accentSmoothing, dt);
   const silent = quiet || isKnockbackLeaning(critter);
   const a = s.accel / Math.max(0.1, runTopSpeed(critter));
   const start = silent ? 0 : Math.min(1, Math.max(0, a / loco.accentStartFull));

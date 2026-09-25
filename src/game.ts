@@ -213,6 +213,10 @@ export class Game {
   private readonly presentClock = new PresentClock();
   /** The newest 'playing' step froze (hit stop, or the lab at speed 0). */
   private lastStepFrozen = false;
+  /** A live (unfrozen) 'playing' step ran since the critters last
+   *  presented: a frame that runs the blow's step and then a frozen one
+   *  (30 Hz, a hitch) must still put the blow on screen. */
+  private livePending = false;
   /** Set after the nickname modal resolves (or from localStorage cache)
    *  when the player enters online mode. Sent with match-result writes so
    *  the server can credit stats to the right player row. Null offline. */
@@ -581,6 +585,7 @@ export class Game {
     // A new match starts unfrozen (gamefeel.resetHitStop).
     resetHitStop();
     this.lastStepFrozen = false;
+    this.livePending = false;
     this.arena.buildFromSeed(matchSeed, offlinePack);
     const roster = buildMatchRoster(
       playerConfig,
@@ -2126,6 +2131,7 @@ export class Game {
         const effectiveDt = applyHitStop(dt);
         this.presentClock.onStep(effectiveDt);
         this.lastStepFrozen = effectiveDt === 0;
+        if (effectiveDt > 0) this.livePending = true;
         if (effectiveDt === 0) {
           updateAbilityHUD(this.player.abilityStates, this.player.stunTimer > 0);
           setCopycatTarget(this.player.config.name === 'Kurama' && this.player.lastHitTargetCritter ? this.player.lastHitTargetCritter : null);
@@ -2289,8 +2295,11 @@ export class Game {
     this.presentFrame(this.presentClock.onFrame(alpha));
   }
 
-  /** One step and one frame at once: online, the lab. Same per-call result
-   *  as the old update(). */
+  /** One step and one frame at once: online, the lab's clock mode and
+   *  requestStep. The simulation is the old update()'s, bit for bit; the
+   *  presentation now runs after the step's physics (a step that lands a
+   *  hit presents with 0 s; the presented set is taken after falls and
+   *  respawns), as in the live game. */
   update(dt: number): void {
     this.simulate(dt);
     this.presentFrame(this.presentClock.onFrame(1));
@@ -2308,15 +2317,17 @@ export class Game {
         for (const c of this.critters) c.present(dt);
         break;
       case 'playing': {
-        // Paused, or a frozen step: nothing moves, so the freeze holds the
-        // frame of the blow (with showImpactFrame for the victim) at any
-        // refresh rate. The step that lands the blow isn't frozen yet: it
-        // presents with 0 s, so its changes (the attacker's lunge, the
-        // slammer's landing squash) reach the screen and no effect ages
-        // before the freeze.
-        if (this.paused || this.lastStepFrozen) break;
-        const presentDt = isHitStopActive() ? 0 : dt;
+        // Paused, or frozen with nothing new to show: nothing moves, so the
+        // freeze holds the frame of the blow (with showImpactFrame for the
+        // victim) at any refresh rate. The step that lands the blow isn't
+        // frozen yet, and may be followed by frozen ones in the same frame
+        // (30 Hz, a hitch): it presents with 0 s, so its changes (the
+        // attacker's lunge, the slammer's landing squash) reach the screen
+        // and no effect ages before the freeze.
+        if (this.paused || (this.lastStepFrozen && !this.livePending)) break;
+        const presentDt = this.lastStepFrozen || isHitStopActive() ? 0 : dt;
         for (const c of this.critters) if (c.alive && !c.falling) c.present(presentDt);
+        this.livePending = false;
         break;
       }
       case 'ended':
@@ -2451,6 +2462,7 @@ export class Game {
     // freeze its first steps.
     resetHitStop();
     this.lastStepFrozen = false;
+    this.livePending = false;
     this.arena.reset();
     // Review 2026-08-24: sin estas limpiezas, una Poison Cloud (ttl 10s)
     // o un Snowball en vuelo de la partida anterior CONTAMINAN la

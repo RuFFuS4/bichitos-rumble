@@ -216,18 +216,18 @@ async function measure(hz) {
  * and holds everything still; it has to show the same picture, for about
  * the same time, at every refresh rate.
  */
-async function measureHitstop(hz) {
+async function measureHitstop(hz, gap = 1.3) {
   const page = await openGame();
   await startMatch(page, hz);
-  await page.evaluate(() => {
+  await page.evaluate((gap) => {
     const g = window.__game;
     const [p, v, a, b] = g.critters;
     for (const c of [v, a, b]) { c.stunTimer = 1e9; c.vx = 0; c.vz = 0; c.immunityTimer = 0; }
     p.immunityTimer = 0; p.vx = 0; p.vz = 0; p.headbuttCooldown = 0;
     p.x = -4; p.z = 0; p.mesh.rotation.y = Math.PI / 2; // facing +x
-    v.x = -2.7; v.z = 0;
+    v.x = -4 + gap; v.z = 0;
     a.x = 0; a.z = 7; b.x = 0; b.z = -7;
-  });
+  }, gap);
   await frames(page, hz, Math.max(2, Math.round(hz * 0.3)));
   await page.evaluate(() => window.__game.critters[0].startHeadbutt());
   const rows = [];
@@ -246,7 +246,7 @@ async function measureHitstop(hz) {
   }
   await page.close();
   const hitAt = rows.findIndex((r) => r.hit);
-  if (hitAt < 0) return { hz, error: 'no hit' };
+  if (hitAt < 0) return { hz, gap, error: 'no hit' };
   // The freeze: from the hit frame, the frames whose attacker animation
   // doesn't move.
   let n = 1;
@@ -254,7 +254,7 @@ async function measureHitstop(hz) {
   const h = rows[hitAt];
   const still = rows.slice(hitAt, hitAt + n).every((r) => r.pSy === h.pSy && r.vSy === h.vSy && r.vEm === h.vEm && r.pEm === h.pEm);
   return {
-    hz, freezeFrames: n, freezeMs: +(n * 1000 / hz).toFixed(1), stillDuringFreeze: still,
+    hz, gap, freezeFrames: n, freezeMs: +(n * 1000 / hz).toFixed(1), stillDuringFreeze: still,
     victimScaleY: +h.vSy.toFixed(4), victimFlash: +h.vEm.toFixed(4),
     attackerScaleY: +h.pSy.toFixed(4), attackerGlow: +h.pEm.toFixed(4),
   };
@@ -315,7 +315,9 @@ for (const hz of RATES) rows.push(await measure(hz));
 const ref = rows.find((r) => r.hz === 60)?.carry;
 for (const r of rows) r.carryVs60 = ref && r.carry !== null ? `${(100 * (r.carry / ref - 1)).toFixed(1)} %` : '—';
 const hitstop = [];
-if (opt.hitstop) for (const hz of RATES) hitstop.push(await measureHitstop(hz));
+// Several gaps put the blow on different steps of the frame (at 30 Hz, the
+// first or the second of its two), where the attacker's pose must show too.
+if (opt.hitstop) for (const hz of RATES) for (const gap of [1.12, 1.17, 1.22, 1.27]) hitstop.push(await measureHitstop(hz, gap));
 const snowball = [];
 if (opt.snowball) for (const hz of RATES) snowball.push(await measureSnowball(hz));
 await browser.close();

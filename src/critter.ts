@@ -1471,8 +1471,16 @@ export class Critter {
    *  server patches; offline it is exact, and smoothing it only made the
    *  legs lag the body — the foot slid ~8 cm at every stop (FEELING §7.11).
    *  Visual only. */
+  /** Sim time of the latest ground-speed sample (one per step offline, one
+   *  per frame online): the accents differentiate the forward speed over
+   *  it (critter-animation tickAccents) — over the time shown instead, a
+   *  step every 2 or 3 frames at 144 Hz made the lean zig-zag. Visual
+   *  only. */
+  groundSampleTime = 0;
+
   private trackGroundSpeed(dt: number): void {
     if (dt <= 0) return;
+    this.groundSampleTime += dt;
     if (Number.isFinite(this.groundX)) {
       const vx = (this.x - this.groundX) / dt;
       const vz = (this.z - this.groundZ) / dt;
