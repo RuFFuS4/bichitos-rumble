@@ -551,7 +551,9 @@ export class BrawlRoom extends Room {
 
   /** Reset every held-input flag for a seat — used on bot takeover (the
    *  bot AI starts from a clean slate) and on reconnect handback (the
-   *  returning human starts without ghost inputs). */
+   *  returning human starts without ghost inputs). An All-in charge the
+   *  human was holding drops unreleased: the bot that covers the seat
+   *  must not fire it blind (online bots never use the All-in). */
   private clearHeldInputs(sid: string): void {
     const data = this.internal.get(sid);
     if (!data) return;
@@ -561,6 +563,11 @@ export class BrawlRoom extends Room {
     data.inputAbility1 = false;
     data.inputAbility2 = false;
     data.inputUltimate = false;
+    if (data.lHoldCharging) {
+      data.lHoldCharging = false;
+      data.lHoldChargeTime = 0;
+      this.broadcast('lChargeEnd', { sessionId: sid });
+    }
   }
 
   onDispose() {
