@@ -108,6 +108,17 @@ const HEAVY_STATES = new Set<SkeletalState>([
   'hit',
 ]);
 
+/**
+ * States whose motion the game owns, so their clip plays in place: the
+ * skeleton root's translation (Mixamo's Hips, Tripo's Root) is dropped and
+ * the root stays at its rest spot, the idle's. The game moves a falling
+ * critter (the void fall, the countdown drop), and the Mixamo Fall clips of
+ * Sergei, Sihans and Kurama drop their hips ~2 m to the floor: as authored
+ * the critter hopped up at the rim, jumped back up whenever the loop
+ * wrapped, and landed floating over its dust (2026-09-25).
+ */
+const IN_PLACE_STATES = new Set<SkeletalState>(['fall']);
+
 /** How long (seconds) a state swap takes to blend. Short but not snap. */
 const DEFAULT_CROSSFADE = 0.15;
 
@@ -280,6 +291,7 @@ export class SkeletalAnimator {
         this.resolveSources[state] = 'missing';
         continue;
       }
+      if (IN_PLACE_STATES.has(state)) clip = withoutRootTranslation(clip, root);
 
       const action = this.mixer.clipAction(clip);
       // Loop policy: explicit `meta.loop` from the override wins; else
@@ -791,6 +803,26 @@ function isClipEffectivelyStatic(clip: THREE.AnimationClip, eps = 1e-3): boolean
     }
   }
   return true;
+}
+
+/**
+ * `clip` without the translation of the skeleton's root joints (bones whose
+ * parent isn't a bone), for IN_PLACE_STATES: with no track driving it, the
+ * mixer leaves the root at its rest position. A new clip when there's
+ * anything to drop — the loaded ones are shared through the model cache —
+ * else `clip` itself.
+ */
+function withoutRootTranslation(clip: THREE.AnimationClip, root: THREE.Object3D): THREE.AnimationClip {
+  const rootJoints = new Set<string>();
+  root.traverse((o) => {
+    if ((o as THREE.Bone).isBone && !(o.parent as THREE.Bone | null)?.isBone) rootJoints.add(o.name);
+  });
+  const tracks = clip.tracks.filter((t) => {
+    const { nodeName, propertyName } = THREE.PropertyBinding.parseTrackName(t.name);
+    return !(propertyName === 'position' && rootJoints.has(nodeName));
+  });
+  if (tracks.length === clip.tracks.length) return clip;
+  return new THREE.AnimationClip(clip.name, clip.duration, tracks, clip.blendMode);
 }
 
 /**
