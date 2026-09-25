@@ -23,16 +23,32 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
      - el A/B del suavizado del punto 1.
    - Las cifras de balance online cambian (sub-pasos + L de los bots):
      Kermit queda fuerte, decisión de Rafa.
-   - **Ya en `dev` para el próximo despliegue** (aviso de PERSONAJES,
-     2026-09-25):
-     - `5f8c9d9`: el juego offline simula a paso fijo de 1/60, como los
-       2 sub-pasos del servidor. Es solo cliente: no cambia el protocolo
-       ni hace falta servidor.
-     - La ruta online de `main.ts` queda igual (`game.update(dt)` por
-       frame y el reloj del paso fijo reiniciado), así que el suavizado
-       no cambia. Comprobado: 278 tests y el tsc del servidor en verde.
-     - Al desplegarlo, en la verificación: una partida offline a 60 y a
-       144 Hz, y una online.
+   - **Ya en `dev` para el próximo despliegue** (avisos de PERSONAJES,
+     2026-09-25). **Van cliente Y servidor**: si solo sale Vercel, online
+     se queda como hoy. `NET_PROTOCOL` sigue en 3, así que no hay
+     «recarga».
+     - `5f8c9d9` (cliente): el juego offline simula a paso fijo de 1/60,
+       como los 2 sub-pasos del servidor. La ruta online de `main.ts` no
+       cambia (`game.update(dt)` por frame, con el reloj del paso fijo
+       reiniciado), así que el suavizado tampoco. Comprobado: 278 tests
+       y el tsc del servidor en verde.
+     - `f22d8ca` (servidor, `server/src/sim`), respuestas de Rafa:
+       - el Grip trae entero a un Sergei en frenesí (`fireGroundPound`
+         ya no escala el tirón con `knockbackScale`);
+       - el All-in apunta a 180°/s (`SIM.allIn.aimTurnDegPerSec`, que lee
+         el bucle de carga de `BrawlRoom`).
+     - Verificación al desplegar:
+       - una partida offline a 60 Hz y otra a 144 Hz;
+       - una sala online de 4 clientes (`.tmp/ability-live.mjs` del
+         worktree), donde Trunk agarra a un Sergei en frenesí y lo deja a
+         1,6 u de la trompa;
+       - un Sebastian que carga tarda ~1 s en girarse 180°.
+   - **Pendiente, de otro día y con permiso de Rafa** (`game.ts` es
+     tierra de nadie y PERSONAJES ya lo tocó el 2026-09-25): el Frozen
+     Floor o el Sinkhole que copia Kurama llegan online como `generic`,
+     sin icono de congelado o atrapado (nota en el Buzón). Arreglo de una
+     línea en `onZoneSpawned`: `ev.slippery ? 'ice' : ev.sinkhole ?
+     'sand' : deriveZoneVfxKind(...)`, como el offline.
 
 1. **v1.8 (H4.5) — ✅ EN PRODUCCIÓN desde el 2026-09-24 a las 22:00 UTC**
    (main `784779f` = `bf7b3ee`, tag `v1.8-terreno-v2`). Comprobaciones de
