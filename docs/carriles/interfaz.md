@@ -42,6 +42,23 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-25 — paso fijo: los portales se animan aún por
+  paso de simulación.** Sin prisa, nada roto.
+  - Desde el segundo corte del paso fijo (`dev`), el juego simula a 1/60
+    y presenta una vez por fotograma.
+  - `updatePortals(x, z, dt)` (portal.ts:212) lo llama la simulación y
+    hace a la vez la expansión, la gracia, la colisión y
+    `animatePortal`. Por eso la animación del portal va a 60 Hz a 144 y
+    se congela con el golpe.
+  - Propuesta:
+    - `simulatePortals(x, z, dt)` por paso: expansión, gracia y colisión;
+    - `animatePortals()` por fotograma. `animatePortal` ya usa
+      `Date.now()`, así que puede ir sin puerta.
+  - Cuando exista, PERSONAJES llama a la segunda desde `game.ts`.
+  - Los iconos de estado ya se colocan una sola vez por fotograma, con la
+    pose dibujada y la cámara del fotograma (`presentStatusIcons` en
+    `frame-ticks.ts`), y antes eran dos. Nada que hacer por tu lado.
+
 - **De PERSONAJES, 2026-09-24/25 — repaso de habilidades.** Detalle en
   [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md).
   - ~~Textos «Vulnerable» (×4) y «Congelado» (bola y suelo helado)~~ →

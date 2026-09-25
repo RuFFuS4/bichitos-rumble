@@ -228,10 +228,10 @@ está abajo, por dueño.
   - ningún icono sobre el bicho invisible de otro (Mirror Trick, la
     madriguera): el 👻 solo lo ve la Kurama local, y los demás iconos
     (frenesí, veneno…) también la delataban;
-  - zonas por dueño (`isInsideZoneOfKind(…, nombre)`): offline, una
-    Kurama que copia Frozen Floor no se ve congelada en su hielo y
-    Kowalski sí. Online, una zona copiada llega como `generic` y no pinta
-    icono: aviso a DISTRIBUCIÓN;
+  - zonas por dueño (`isInsideZoneOfKind(…, nombre)`): una Kurama que
+    copia Frozen Floor no se ve congelada en su hielo y Kowalski sí.
+    Online también, desde que DISTRIBUCIÓN toma el tipo de la zona de sus
+    banderas (3b1dbd6);
   - «sin iconos mientras cae» ya lo hacía `status-icons.ts` desde
     6817ce5: no hacía falta.
 - `src/main.ts`: la nube de Kermit no le ciega a él.
@@ -443,11 +443,80 @@ frecuencia que se juegue.
   - A 240 Hz la entrada se lee cada paso, así que puede tardar hasta
     16,7 ms en notarse. Es el precio de simular a 60 Hz.
   - El movimiento dibujado es uniforme a cualquier frecuencia.
-- **Queda para un segundo corte** (tierra de nadie, con permiso aparte):
-  - separar simular de presentar en `Critter`, `Game` y `frame-ticks`,
-    para que animaciones, polvo y bolas de nieve se pinten a 144 Hz
-    (hoy van a 60 Hz a cualquier frecuencia);
-  - que el reloj del laboratorio use `FixedStepClock`.
+### Segundo corte: la presentación va por fotograma (2026-09-25)
+
+Rafa: «tienes permiso para `game.ts`, adelante con el paso fijo».
+
+- **Qué había.** Con el primer corte la posición ya se interpolaba, pero
+  el resto de lo que se ve corría por paso de simulación: a 144 Hz, 0 o
+  1 veces por fotograma. Eso incluía la animación, el balanceo, el
+  brillo, los efectos de golpe, el polvo, la bola de nieve, los iconos y
+  las sombras.
+- **Cómo se diseñó:**
+  - un mapa de cuatro lectores, que clasificaron cada línea como
+    simulación o presentación;
+  - un diseño con plan de commits (`.tmp/paso-fijo-2/diseno.md` del
+    worktree);
+  - dos críticas adversariales, que salvaron la imagen congelada del
+    golpe (el atacante se habría congelado en la pose de antes del
+    golpe) y un `fall-probe` que habría dado «0 caídas» en silencio.
+- **Qué hace:**
+  - `Critter`, `Game` y `frame-ticks` se parten en simular (por paso) y
+    presentar (por fotograma).
+  - La presentación avanza con el tiempo de juego mostrado
+    (`PresentClock`): 0 en pausa y congelación, K pasos en cámara lenta.
+  - Lo que tiene que ver cada paso (estadísticas, velocidad de suelo,
+    flancos de los clips) se queda por paso.
+  - Las interpolaciones de presentación no dependen del ritmo
+    (`lerpFactor`).
+  - Bola de nieve y anillos de zona interpolados.
+  - Online, el laboratorio en modo reloj, la vista previa y animlab
+    siguen igual.
+- **Medido** (`scripts/fixed-step-probe.mjs`, el juego real con reloj
+  virtual; «antes» es el primer corte):
+
+  | | 60 Hz | 144 Hz | 240 Hz |
+  |---|---|---|---|
+  | Presentaciones por fotograma, antes → ahora | 1 → 1 | 0 o 1 → 1 | 0 o 1 → 1 |
+  | Variación del avance de la animación por fotograma | 0 → 0 | 1,18 → 0 | 1,73 → 0 |
+  | Variación del movimiento de la bola de nieve | 0 → 0 | 1,19 → 0 | — → 0 |
+
+  - Con ±0,2 ms de ruido en el reloj, la animación varía 0,009 a 60 Hz
+    y 0,02 a 144 Hz: el propio ruido.
+  - Ninguna fuga: en ningún fotograma cambia nada de lo que es de la
+    simulación después de su último paso.
+  - La congelación del golpe es la misma imagen a 30, 60, 144 y 240 Hz
+    y la misma que antes: víctima aplastada y con destello, atacante ya
+    embistiendo. Dura ~100 ms y está quieta.
+- **La simulación no cambia**, probado de dos formas:
+  - golden 3/3 tras cada commit;
+  - las grabaciones del golden, con eventos, posiciones y velocidades,
+    idénticas bit a bit a la línea base. También con el laboratorio
+    presentando una vez cada 8 pasos, que es la prueba de que presentar
+    no alimenta la simulación.
+- **Revisión adversarial final** (3 lentes y un escéptico por
+  hallazgo). Tres confirmados, los tres arreglados:
+  - Si el golpe caía en un paso que no era el último de su fotograma
+    (30 Hz, un tirón), el atacante se congelaba en la pose de antes.
+    Ahora la sonda lo prueba en 4 posiciones del golpe.
+  - La inclinación de arranque y frenada zigzagueaba a 144 Hz. Ahora
+    toma la aceleración por muestra de simulación, y cambia de sentido
+    las mismas 3-4 veces a 60, 144 y 240 Hz.
+  - Un comentario prometía de más.
+- **De paso**, arreglada una carrera del ejecutor de tandas: si miraba
+  justo al acabar la partida, cerraba la grabación sin el `match_ended`,
+  y el golden daba un falso «cambio de balance» (ERROR_LOG).
+- **Queda fuera, para otros carriles o para Rafa:**
+  - `Arena.update` y los portales siguen por paso. Son de ARENA e
+    INTERFAZ: aviso en sus buzones.
+  - Tres cambios visuales que necesitan tu sí:
+    - que se vea el clip de caída offline (hoy el bicho que cae se queda
+      quieto);
+    - que se muevan los clips durante la cuenta atrás;
+    - que la sierra de Shelly gire también online.
+  - La línea del All-in se reorienta por paso (saltos de 3° a 144 Hz).
+  - Un toque de tecla de menos de 16,7 ms puede caer entre dos pasos.
+    Ya pasaba a 60 Hz, y un toque humano dura 40-100 ms.
 
 ## Preguntas a Rafa — respondidas el 2026-09-25
 

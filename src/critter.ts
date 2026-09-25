@@ -555,21 +555,29 @@ export class Critter {
     this.playSkeletal('headbutt_anticip', { fallback: 'headbutt_lunge' });
   }
 
+  /**
+   * One step and one frame at once: online (the server simulated; only the
+   * per-step observers and the presentation run), the character preview,
+   * animlab, calibrate, and Game.update (the lab, online). The offline live
+   * loop calls simulate() per fixed step and present() per frame instead
+   * (src/fixed-step.ts).
+   */
   update(dt: number): void {
-    // Online mode: server is authoritative. Run only visual animations.
-    // Position/velocity/isHeadbutting/etc. are set externally before this
-    // call from the network state. We still need bobbing, emissive, hit
-    // flash, scale feedback, and knockback tilt for visual parity.
+    this.simulate(dt);
+    this.present(dt);
+  }
+
+  /**
+   * One fixed step of this critter's gameplay (offline): timers, the
+   * headbutt state machine, integration, friction, dead zone, speed cap and
+   * facing; then the per-step observers. The skeletal play() calls in here
+   * are presentation EVENTS the sim raises and never reads back. Online the
+   * server is authoritative (position, velocity, flags are set from the
+   * network state before this): only the observers run.
+   */
+  simulate(dt: number): void {
     if (this.skipPhysics) {
-      // Online mode: server is authoritative. Procedural animation still
-      // runs because it reads vx/vz/abilityStates (all set from server
-      // each tick before update() is called).
-      this.tickMatchStats();
-      this.tickSkeletal(dt);
-      tickProceduralAnimation(this, dt);
-      this.updateVisuals();
-      this.tickFeedback(dt);
-      tickDecoy(this, dt);
+      this.observeStep(dt);
       return;
     }
 
@@ -590,44 +598,18 @@ export class Critter {
     if (this.stunTimer > 0) this.stunTimer = Math.max(0, this.stunTimer - dt);
     // 2026-04-30 — Kermit Toxic Touch confused countdown.
     if (this.confusedTimer > 0) this.confusedTimer = Math.max(0, this.confusedTimer - dt);
-    // 2026-04-30 — Shelly Saw Shell spin. While the frenzy slot
-    // (index 2) is active and `sawL` is set, rotate the GLB sub-
-    // group rapidly on its Y axis. We rotate the inner glbMesh
-    // (not the outer this.mesh) because this.mesh's rotation.y
-    // is owned by the movement system (it follows velocity each
-    // frame). The glbMesh is a child group so the visual spin
-    // composes on top without fighting the facing logic.
-    //
-    // 2026-04-29 hot-fix — gate to Shelly only AND reset to the
-    // cached `baseGlbRotationY` (not 0). Earlier draft of this
-    // block ran for every critter and reset to 0 every frame,
-    // which destroyed the entry.rotation set in attachGlbMesh
-    // (Tripo critters ship with rotation: -π/2) — Sergei, Shelly,
-    // Kermit, Kowalski and Cheeto were all rendering at the wrong
-    // angle as a result.
-    if (this.config.name === 'Shelly' && this.glbMesh) {
-      const lState = this.abilityStates[2];
-      if (lState?.active && lState.windUpLeft <= 0 && lState.def.sawL) {
-        const rate = lState.def.sawSpinSpeed ?? 22;
-        this.glbMesh.rotation.y += rate * dt;
-      } else if (this.glbMesh.rotation.y !== this.baseGlbRotationY) {
-        this.glbMesh.rotation.y = this.baseGlbRotationY;
-      }
-    }
 
     // Headbutt cooldown
     if (this.headbuttCooldown > 0) this.headbuttCooldown -= dt;
 
-    // Headbutt anticipation phase (brief wind-up)
+    // Headbutt anticipation phase (brief wind-up). The head pose is
+    // presentation (applyHeadbuttPose).
     if (this.headbuttAnticipating) {
       this.anticipationTimer -= dt;
-      this.head.position.z = FEEL.headbutt.anticipation.headRetract;
-      this.body.scale.y = FEEL.headbutt.anticipation.bodySquash;
       if (this.anticipationTimer <= 0) {
         this.headbuttAnticipating = false;
         this.isHeadbutting = true;
         this.headbuttTimer = FEEL.headbutt.lunge.duration;
-        this.body.scale.y = 1.0;
         // Micro-lunge: critter steps into the hit
         const angle = this.mesh.rotation.y;
         this.vx += Math.sin(angle) * FEEL.headbutt.lunge.velocityBoost;
@@ -641,7 +623,6 @@ export class Critter {
     // Headbutt lunge phase
     if (this.isHeadbutting) {
       this.headbuttTimer -= dt;
-      this.head.position.z = FEEL.headbutt.lunge.headExtend;
       if (this.headbuttTimer <= 0) {
         this.isHeadbutting = false;
         this.headbuttCooldown = this.config.headbuttCooldown ?? FEEL.headbutt.cooldown;
@@ -701,9 +682,37 @@ export class Critter {
       this.mesh.rotation.y = Math.atan2(this.vx, this.vz);
     }
 
-    // Per-match stat edges (headbutt / fall / ability). Ordered before
-    // skeletal/procedural so a same-frame stats read reflects this tick.
+    this.observeStep(dt);
+  }
+
+  /**
+   * Presentation bookkeeping that must see EVERY step, even when a frame
+   * runs 0 or several: the per-match stat edges, the ground velocity (the
+   * position delta over the step — exact and frame-rate independent; it
+   * drives the legs' cadence and the idle/run blend) and the ability-clip
+   * edges (a window shorter than a frame would be missed per frame, and
+   * cancelActiveAbilities resets their memory from the sim). Nothing in
+   * the sim reads any of it.
+   */
+  private observeStep(dt: number): void {
     this.tickMatchStats();
+    this.trackGroundSpeed(dt);
+    this.tickAbilityClipEdges();
+  }
+
+  /**
+   * Once per rendered frame: saw spin, headbutt head pose, skeleton,
+   * procedural pose, glow, feedback, decoy. `dt`: game time shown since the
+   * last call (0 holds everything still). Runs inside the pose.apply /
+   * restore window, so position reads get the drawn pose; it must never
+   * write mesh.position (restore would undo it) nor anything the sim reads.
+   */
+  present(dt: number): void {
+    // Online keeps today's look: the server doesn't sync these (follow-up).
+    if (!this.skipPhysics) {
+      this.tickSawSpin(dt);
+      this.applyHeadbuttPose();
+    }
 
     // Skeletal animation layer (no-op if this critter has no clips). Runs
     // BEFORE procedural so procedural can read the skeletal state and
@@ -720,6 +729,38 @@ export class Critter {
     this.tickFeedback(dt);
     // Mirror Trick decoy: its life is game time, like everything here.
     tickDecoy(this, dt);
+  }
+
+  /**
+   * Shelly's Saw Shell spin. While the frenzy slot (index 2) is active and
+   * `sawL` is set, rotate the GLB sub-group rapidly on its Y axis. We rotate
+   * the inner glbMesh (not the outer this.mesh) because this.mesh's
+   * rotation.y is owned by the movement system (it follows velocity each
+   * step). The glbMesh is a child group so the visual spin composes on top
+   * without fighting the facing logic.
+   *
+   * 2026-04-29 hot-fix — gate to Shelly only AND reset to the cached
+   * `baseGlbRotationY` (not 0). Earlier draft of this block ran for every
+   * critter and reset to 0 every frame, which destroyed the entry.rotation
+   * set in attachGlbMesh (Tripo critters ship with rotation: -π/2) —
+   * Sergei, Shelly, Kermit, Kowalski and Cheeto were all rendering at the
+   * wrong angle as a result.
+   */
+  private tickSawSpin(dt: number): void {
+    if (this.config.name !== 'Shelly' || !this.glbMesh) return;
+    const lState = this.abilityStates[2];
+    if (lState?.active && lState.windUpLeft <= 0 && lState.def.sawL) {
+      const rate = lState.def.sawSpinSpeed ?? 22;
+      this.glbMesh.rotation.y += rate * dt;
+    } else if (this.glbMesh.rotation.y !== this.baseGlbRotationY) {
+      this.glbMesh.rotation.y = this.baseGlbRotationY;
+    }
+  }
+
+  /** Head pulled back in the headbutt wind-up, thrust out in the lunge. */
+  private applyHeadbuttPose(): void {
+    if (this.headbuttAnticipating) this.head.position.z = FEEL.headbutt.anticipation.headRetract;
+    else if (this.isHeadbutting) this.head.position.z = FEEL.headbutt.lunge.headExtend;
   }
 
   /** Game feel visual systems (visual-only, no gameplay logic). Runs AFTER
@@ -739,9 +780,10 @@ export class Critter {
   }
 
   /** Put the first frame of a just-applied impact on screen now. The hit
-   *  stop freezes the game on the frame the blow lands, before any update
-   *  runs, so without this the freeze shows the victim untouched and the
-   *  squash, flash and lean only start once time resumes. */
+   *  stop freezes the game on the frame the blow lands, before this
+   *  critter's next present(), so without this the freeze shows the victim
+   *  untouched and the squash, flash and lean only start once time
+   *  resumes. */
   showImpactFrame(): void {
     this.tickFeedback(0);
   }
@@ -1133,29 +1175,28 @@ export class Critter {
   }
 
   /**
-   * Edge-detection memory for ability cast events, so `tickSkeletal` can
-   * fire a `playSkeletal('ability_N')` exactly once on the rising edge of
-   * each ability's `active` flag.
+   * Edge-detection memory for ability cast events, so
+   * `tickAbilityClipEdges` can fire a `playSkeletal('ability_N')` exactly
+   * once on the rising edge of each ability's `active` flag.
    */
   private lastAbilityActive: boolean[] = [false, false, false];
 
-  /**
-   * Advance the skeletal layer (if any) and auto-drive idle / run loops
-   * from current velocity. Called every frame before procedural.
-   *
-   * Auto-logic is conservative:
+  /*
+   * The skeletal layer: `tickAbilityClipEdges` (per step, observeStep)
+   * fires ability_1 / ability_2 / ability_3 on the rising edge of each
+   * ability's `active` flag; `tickSkeletal` (per frame, present(), before
+   * procedural) auto-drives idle / run from the current velocity and
+   * advances the mixer. Auto-logic is conservative:
    *   - Does nothing if the critter has no skeletal animator.
    *   - Skips idle/run switching while a HEAVY state is active (victory,
    *     defeat, ability, headbutt_lunge, fall, hit) — those clips own
    *     the pose.
    *   - Skips idle/run while headbutt anticip/lunge flags are set, so
    *     the pose stays crisp.
-   *   - Fires ability_1 / ability_2 / ability_3 on the rising edge of
-   *     each ability's `active` flag.
    */
   /**
    * Advance per-match counters by edge-detecting state transitions.
-   * Called once per Critter.update() in BOTH offline and online paths —
+   * Called once per step (observeStep) in BOTH offline and online paths —
    * the flags it watches (`isHeadbutting`, `falling`, `abilityStates[i].
    * active`) are set by the local sim in offline and by the online
    * sync loop before `update()` runs. So one detection path feeds both.
@@ -1184,8 +1225,8 @@ export class Critter {
     }
   }
 
-  private tickSkeletal(dt: number): void {
-    this.trackGroundSpeed(dt);
+  /** Per step (observeStep): the ability clips' edges. */
+  private tickAbilityClipEdges(): void {
     if (!this.skeletal) return;
 
     // Ability cast edges — play the corresponding clip exactly once
@@ -1220,6 +1261,11 @@ export class Critter {
       }
       this.lastAbilityActive[i] = active;
     }
+  }
+
+  /** Per frame (present): idle/run, the locomotion pose and the mixer. */
+  private tickSkeletal(dt: number): void {
+    if (!this.skeletal) return;
 
     // Movement-driven idle/run, only if nothing "heavier" is playing and
     // we're not in a headbutt pose window.
@@ -1419,14 +1465,22 @@ export class Critter {
     cancelYankVisual(this);
   }
 
-  /** Ground velocity from the position delta of this frame. Jumps faster
+  /** Ground velocity from the position delta of this step. Jumps faster
    *  than any run (respawn, blink, a late network patch) are not running
    *  and are skipped. Smoothed online only: there the position arrives in
    *  server patches; offline it is exact, and smoothing it only made the
    *  legs lag the body — the foot slid ~8 cm at every stop (FEELING §7.11).
    *  Visual only. */
+  /** Sim time of the latest ground-speed sample (one per step offline, one
+   *  per frame online): the accents differentiate the forward speed over
+   *  it (critter-animation tickAccents) — over the time shown instead, a
+   *  step every 2 or 3 frames at 144 Hz made the lean zig-zag. Visual
+   *  only. */
+  groundSampleTime = 0;
+
   private trackGroundSpeed(dt: number): void {
     if (dt <= 0) return;
+    this.groundSampleTime += dt;
     if (Number.isFinite(this.groundX)) {
       const vx = (this.x - this.groundX) / dt;
       const vz = (this.z - this.groundZ) / dt;

@@ -219,9 +219,25 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     - la suavidad de ese movimiento (CV de lo que se mueve por
       fotograma);
     - cuántos pasos de simulación hace cada fotograma: a 60 Hz tiene que
-      ser 1 siempre.
+      ser 1 siempre;
+    - `presents`, `animCV` y `animRate`: cuántas veces se presenta el
+      jugador por fotograma (1 desde el segundo corte) y cómo avanza su
+      animación por fotograma (variación ~0, ritmo 1);
+    - `leaks`: fotogramas en que algo de la simulación cambió después
+      de su último paso. Tiene que ser 0: presentar no escribe estado de
+      simulación.
+  - `--hitstop`: el jugador cabecea a un muñeco aturdido. Mide la
+    congelación a cada frecuencia (fotogramas, ms) y la imagen que
+    sostiene, que tiene que ser la misma a todas.
+  - `--snowball`: Kowalski lanza la K y se lee la posición dibujada de la
+    bola en cada fotograma.
   - `--jitter` mete ruido en las marcas de tiempo y las redondea a 0,1 ms,
     como un navegador de verdad.
+- **Dónde engancharse por paso** (desde el 2026-09-25): `Game.simulate`
+  corre una vez por paso de simulación en el juego y en los dos modos del
+  laboratorio, porque `Game.update` también lo llama. Un gancho en
+  `Game.update` ya no ve los pasos del juego ni los del modo de paso fijo.
+  `Game.present` y `Critter.present` corren una vez por fotograma.
   - Con el paso fijo (`src/fixed-step.ts`), el deslizamiento y la
     velocidad tienen que salir iguales a cualquier frecuencia.
   - El retraso es de 1 fotograma hasta 144 Hz. Por encima puede llegar a

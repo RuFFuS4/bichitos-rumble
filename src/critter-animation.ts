@@ -35,6 +35,7 @@ import type { Critter } from './critter';
 import { FEEL, isKnockbackLeaning } from './gamefeel';
 import { PERSONALITY_OVERRIDES } from './animation-personality-overrides';
 import { RUN_GAIT } from './critter-locomotion';
+import { lerpFactor } from './fixed-step';
 
 export interface AnimationPersonality {
   /** Idle breathing rate (Hz). Heavier critters breathe slower. */
@@ -209,8 +210,13 @@ const HEADBUTT_LUNGE_FORWARD  = 0.14;  // small forward Y drop + Z offset on lun
 
 /** Per critter, visual state only: the smoothed forward acceleration, and
  *  the smoothed lean the accents ride on (so they keep their snap instead
- *  of being eased by the slow run-lean lerp). */
-const accentState = new WeakMap<Critter, { prevForward: number; accel: number; pitch: number; start: number; stop: number }>();
+ *  of being eased by the slow run-lean lerp). `raw` is the acceleration
+ *  over the last two ground-speed samples (`sampleTime`: the newer one's
+ *  sim time). */
+const accentState = new WeakMap<Critter, {
+  prevForward: number; accel: number; pitch: number; start: number; stop: number;
+  sampleTime: number; raw: number;
+}>();
 
 /**
  * Start / stop accents, 0..1 each: how hard the MODEL is speeding up or
@@ -225,12 +231,24 @@ function tickAccents(critter: Critter, dt: number, quiet: boolean): { start: num
   const forward = critter.forwardGroundSpeed();
   let s = accentState.get(critter);
   if (!s) {
-    s = { prevForward: forward, accel: 0, pitch: critter.glbMesh?.rotation.x ?? 0, start: 0, stop: 0 };
+    s = {
+      prevForward: forward, accel: 0, pitch: critter.glbMesh?.rotation.x ?? 0, start: 0, stop: 0,
+      sampleTime: critter.groundSampleTime, raw: 0,
+    };
     accentState.set(critter, s);
   }
-  const raw = dt > 0 ? (forward - s.prevForward) / dt : 0;
-  s.prevForward = forward;
-  s.accel += (raw - s.accel) * Math.min(1, dt / loco.accentSmoothing);
+  // The ground speed only changes when a sim step runs (observeStep): at
+  // 144 Hz a per-frame derivative is a train of spikes and zeros, and the
+  // lean zig-zagged at the step beat. Take it once per new sample, over
+  // the sim time between samples, and hold it in between. One step per
+  // frame (60 Hz, online) gives the old per-frame value.
+  const sampleDt = critter.groundSampleTime - s.sampleTime;
+  if (sampleDt > 0) {
+    s.raw = (forward - s.prevForward) / sampleDt;
+    s.prevForward = forward;
+    s.sampleTime = critter.groundSampleTime;
+  }
+  s.accel += (s.raw - s.accel) * lerpFactor(1 / loco.accentSmoothing, dt);
   const silent = quiet || isKnockbackLeaning(critter);
   const a = s.accel / Math.max(0.1, runTopSpeed(critter));
   const start = silent ? 0 : Math.min(1, Math.max(0, a / loco.accentStartFull));
@@ -241,7 +259,8 @@ function tickAccents(critter: Critter, dt: number, quiet: boolean): { start: num
   return { start: s.start, stop: s.stop, state: s };
 }
 
-// Lerp speeds (per second). Higher = snappier transitions.
+// Lerp speeds (per second). Higher = snappier transitions. Tuned at 1/60 s
+// steps; applied through lerpFactor so they feel the same at any frame rate.
 const LEAN_LERP_RUN = 10;
 const LEAN_LERP_HEADBUTT = 30;
 // Sway follows a wave that can run at 4-6 Hz on the small-stride rigs; at
@@ -364,10 +383,7 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
     const runPitchTarget = runIntensity * p.leanRadians;
     const pitchTarget = headbuttActive ? headbuttPitchTarget : runPitchTarget;
 
-    const pitchLerp = Math.min(
-      1,
-      dt * (headbuttActive ? LEAN_LERP_HEADBUTT : LEAN_LERP_RUN),
-    );
+    const pitchLerp = lerpFactor(headbuttActive ? LEAN_LERP_HEADBUTT : LEAN_LERP_RUN, dt);
     accent.state.pitch += (pitchTarget - accent.state.pitch) * pitchLerp;
     critter.glbMesh.rotation.x = accent.state.pitch +
       accent.start * loco.accentStartLean - accent.stop * loco.accentStopLean;
@@ -390,7 +406,7 @@ export function tickProceduralAnimation(critter: Critter, dt: number): void {
       p.runSwayRadians *
       runIntensity *
       (1 - Math.min(1, antBlend + lungeBlend));
-    const swayLerp = Math.min(1, dt * SWAY_LERP);
+    const swayLerp = lerpFactor(SWAY_LERP, dt);
     critter.glbMesh.rotation.z +=
       (swayTarget - critter.glbMesh.rotation.z) * swayLerp;
     // The roll pivots on the model's origin, between the feet, so it

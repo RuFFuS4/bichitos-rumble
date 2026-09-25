@@ -86,9 +86,12 @@ await page.evaluate(({ CRITTER, feel, CONTACT }) => {
   let buf = []; let t = 0; let lastCast = -1e9; let wasActive = false; let wasFalling = false; let me = null;
   P.reset = () => { buf = []; t = 0; lastCast = -1e9; wasActive = false; wasFalling = false; me = null; };
   const radial = (b, x, z) => { const r = Math.hypot(b.x, b.z) || 1; return (x * b.x + z * b.z) / r; };
-  const update = g.update;
-  g.update = function (dt) {
-    update.call(g, dt);
+  // One call per sim step in both lab modes (Game.update calls it too).
+  // Hooking update() missed every step once the lab's fixed mode went to
+  // simulate() (2026-09-25): it reported 0 falls, silently.
+  const simulate = g.simulate;
+  g.simulate = function (dt) {
+    simulate.call(g, dt);
     if (g.phase !== 'playing') return;
     t += dt; P.steps++;
     if (!me || !g.critters.includes(me)) me = g.critters.find((c) => c.config.name === CRITTER);
@@ -143,9 +146,13 @@ for (let m = 0; m < Number(opt.matches); m++) {
     api.startMatch(CRITTER, bots, { seed });
   }, { CRITTER, bots, seed });
   const t0 = Date.now();
+  const stepsBefore = await page.evaluate(() => window.__fallProbe.steps);
   while (!(await page.evaluate(() => window.__game.phase === 'ended'))) {
     if (Date.now() - t0 > 120_000) { console.error(`  partida ${seed}: sin terminar en 2 min, se corta`); break; }
     await new Promise((r) => setTimeout(r, 400));
+  }
+  if ((await page.evaluate(() => window.__fallProbe.steps)) === stepsBefore) {
+    throw new Error(`partida ${seed}: la sonda no contó ningún paso (¿ya no se llama a Game.simulate por paso?)`);
   }
   process.stdout.write(`\r${m + 1}/${opt.matches}`);
 }

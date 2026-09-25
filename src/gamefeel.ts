@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Critter } from './critter';
+import { lerpFactor } from './fixed-step';
 
 // ---------------------------------------------------------------------------
 // Tuning — ALL game feel values centralized here
@@ -149,7 +150,6 @@ export const FEEL = {
     anticipation: {
       duration: 0.12,         // wind-up time (readable but quick)
       headRetract: -0.30,     // head pulls back (visible coil)
-      bodySquash: 0.70,       // body compresses during wind-up
     },
     lunge: {
       duration: 0.15,         // snap forward (shorter = sharper)
@@ -219,6 +219,12 @@ export const FEEL = {
   // --- Blink landing (Sand Trap, Shadow Step). Mirror: SIM.blink ---
   blink: {
     landingProbeStep: 0.5,    // a target off live floor steps back toward the origin in these steps; none on floor = stay put
+  },
+
+  // --- Snowball (Kowalski K) look — presentation only, no SIM mirror ---
+  snowball: {
+    tumbleX: 8,               // rad per second of flight, so it reads as a thrown snowball
+    tumbleZ: 6,
   },
 
   // --- Cone Pulse (Cheeto L) waves. Mirror: SIM.conePulse, read by
@@ -414,6 +420,21 @@ export function applyHitStop(dt: number): number {
     return 0;
   }
   return dt;
+}
+
+/** A hit stop is pending or running. Presentation gate only (offline
+ *  'playing'; online nothing drains the timer): the step that lands the
+ *  blow isn't frozen yet, and the last frozen step already leaves the
+ *  timer ≤ 0 — Game pairs it with "the newest step froze". */
+export function isHitStopActive(): boolean {
+  return hitStopTimer > 0;
+}
+
+/** A new match starts unfrozen: a hit that landed as the previous one
+ *  ended, or an online hit stop (never drained), used to freeze its first
+ *  steps. */
+export function resetHitStop(): void {
+  hitStopTimer = 0;
 }
 
 /**
@@ -679,7 +700,7 @@ function lerp(a: number, b: number, t: number): number {
 
 function lerpMeshScale(critter: Critter, tx: number, ty: number, tz: number, dt: number, speed: number): void {
   const s = critter.mesh.scale;
-  const f = Math.min(dt * speed, 1);
+  const f = lerpFactor(speed, dt); // same feel per frame at any rate as per 1/60 step
   s.x += (tx - s.x) * f;
   s.y += (ty - s.y) * f;
   s.z += (tz - s.z) * f;

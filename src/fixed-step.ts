@@ -61,6 +61,19 @@ const RESYNC_PER_FRAME = 0.05 * SIM_STEP;
 /** Tolerance so 1/60-sized frames don't lose a step to float rounding. */
 const STEP_EPSILON = 1e-6;
 
+/**
+ * Share of the way to its target that a `min(1, rate·dt)` lerp tuned at
+ * one 1/60 step covers in `dt`, at any frame rate: the old value at
+ * dt = SIM_STEP (to float rounding), n steps' worth over n·SIM_STEP, 0 at
+ * dt = 0. For
+ * presentation smoothing that now runs per frame instead of per step, so
+ * its feel doesn't change with the refresh rate.
+ */
+export function lerpFactor(ratePerSec: number, dt: number): number {
+  const perStep = Math.min(1, ratePerSec * SIM_STEP);
+  return 1 - Math.pow(1 - perStep, dt / SIM_STEP);
+}
+
 export class FixedStepClock {
   /** Real time minus sim time, s: ≤ 0 after each frame (the sim is ahead). */
   private lag = 0;
@@ -92,6 +105,39 @@ export class FixedStepClock {
 
   reset(): void {
     this.lag = 0;
+  }
+}
+
+/**
+ * Game time as presentation shows it. The sim reports the game time each
+ * step covered (0 while the match is paused or a hit stop freezes it);
+ * each frame asks how far the picture moves on: the game time at the drawn
+ * instant (alpha inside the newest step) minus the last one shown. A
+ * 0-step frame at 144 Hz moves it by its share of a step, a 4-step frame
+ * (slow motion, the lab's fixed mode) by four steps, a freeze by nothing.
+ * Never negative. Not the frame's real dt: presentation (clips tuned to
+ * ability windows, the decoy's life) runs on game time.
+ */
+export class PresentClock {
+  private stepStart = 0; // game time when the newest step began
+  private stepEnd = 0;   // … and when it ended
+  private shown = 0;     // game time of the last frame asked for
+
+  /** Once per sim step (or per update online): the game time it covered. */
+  onStep(gameDt: number): void {
+    this.stepStart = this.stepEnd;
+    this.stepEnd += gameDt;
+  }
+
+  /** Once per frame, with FixedStepClock's alpha (1 when not
+   *  interpolating). Returns the game time to present. Consumed even if
+   *  the caller then presents less (a freeze drops ≤ 1 step of animation,
+   *  never adds). */
+  onFrame(alpha: number): number {
+    const t = this.stepStart + (this.stepEnd - this.stepStart) * alpha;
+    const dt = Math.max(0, t - this.shown);
+    this.shown += dt;
+    return dt;
   }
 }
 

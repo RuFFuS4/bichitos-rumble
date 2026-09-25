@@ -1,5 +1,27 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-25] El golden dio un «cambio de balance» en una partida idéntica
+- **Where**: `scripts/run-match-batch.mjs` (espera del fin de partida) y
+  `src/tools/dev-api.ts` `tickRecording`.
+- **Symptom**: con un cambio solo visual del paso fijo, el golden falló
+  dos veces seguidas en la seed 501: «evento #252: golden
+  match_ended|arena|player_eliminated vs actual (fin)». La grabación era
+  idéntica hasta el final, con los mismos eventos y las mismas
+  posiciones; solo le faltaba el último evento y la última instantánea.
+  Otra pasada del mismo código salió 3/3.
+- **Cause**: carrera.
+  - `dev-api` solo mira si la partida acabó cuando toca instantánea, cada
+    200 ms de simulación. La fase pasa a `ended` hasta 12 pasos antes de
+    que se registre `match_ended`.
+  - El ejecutor sondea cada 500 ms de reloj de pared. Si veía `ended` en
+    ese hueco, paraba la grabación a mano sin el evento.
+- **Fix**: con la fase en `ended`, el ejecutor espera (hasta 5 s) a que la
+  grabación tenga su motivo de fin.
+- **Lección**: ante un «cambio de balance» en un cambio que no debería
+  tocar la simulación, compara también las posiciones de las grabaciones
+  antes de buscar la fuga. Si la simulación es idéntica hasta el final,
+  el fallo está en la herramienta.
+
 ### [2026-09-25] Ventanas de tiempo medidas con el reloj de pared: culpé al Ice Slide sin motivo
 - **Where**: análisis de las grabaciones de `run-match-batch.mjs
   --dump-recordings` (script de un día, no del repo). Conclusión

@@ -1,5 +1,49 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [PERSONAJES] Paso fijo, segundo corte: la presentación va por fotograma
+
+- **Qué:** simular por paso y presentar por fotograma, en `Critter`,
+  `Game` y `frame-ticks`. A 144 y 240 Hz se mueven en cada fotograma, y
+  no 60 veces por segundo:
+  - animación, balanceo y brillo;
+  - efectos de golpe, polvo y bola de nieve;
+  - anillos de zona, iconos y sombras.
+- **Por qué:** con el primer corte la posición ya se interpolaba, pero lo
+  demás iba a trompicones: la animación avanzaba 0 o 1 pasos por
+  fotograma (variación 1,18 a 144 Hz y 1,73 a 240 Hz).
+- **Cómo se hizo:**
+  - mapa de cuatro lectores, diseño, dos críticas adversariales y
+    commits verificados uno a uno;
+  - una revisión adversarial final (3 lentes y un escéptico por
+    hallazgo), que encontró tres fallos, arreglados: el golpe en
+    fotogramas de varios pasos, la inclinación a 144 Hz y un comentario;
+  - Rafa dio permiso para `game.ts`; `main.ts` y `frame-ticks.ts` entran
+    en su «adelante con el paso fijo»;
+  - el laboratorio, en su modo de paso fijo, presenta una vez por
+    fotograma.
+- **Medido en el juego real:**
+  - 1 presentación por fotograma a cualquier frecuencia;
+  - animación y bola con variación 0;
+  - 0 fugas de presentación a simulación;
+  - la congelación del golpe es la misma imagen a 30-240 Hz e igual que
+    antes.
+- **La simulación no cambia:** golden 3/3 tras cada commit, y las
+  grabaciones del golden (posiciones y velocidades) idénticas bit a bit,
+  también presentando una vez cada 8 pasos.
+- **De paso:**
+  - el ejecutor de tandas espera al `match_ended`. Si no, a veces daba un
+    falso «cambio de balance» (ERROR_LOG);
+  - un hit stop sobrante ya no congela el arranque de la partida
+    siguiente en la misma página.
+- **Tierra de nadie, dicho aquí:**
+  - `game.ts`: `simulate`, `present`, `presentFrame` y `resetHitStop`;
+  - `main.ts` y `frame-ticks.ts`: el bucle y la división;
+  - `src/tools/main.ts`: el modo de paso fijo del laboratorio.
+- **Pendiente:**
+  - `Arena.update` y los portales, de ARENA e INTERFAZ (aviso en sus
+    buzones);
+  - tres cambios visuales que necesitan el sí de Rafa.
+
 ## 2026-09-25 — [PERSONAJES] Respuestas de Rafa: el Grip trae entero, el All-in apunta a 180°/s y seis arreglos en tierra de nadie
 
 - **Las cinco preguntas de la segunda tanda:**
