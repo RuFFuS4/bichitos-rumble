@@ -683,7 +683,7 @@ export class Game {
    * so the roster lands asynchronously (feels like actual falling from
    * the sky instead of a synchronized rain). Each critter plays its
    * skeletal 'fall' clip the instant its delay expires and gravity
-   * takes over; they snap to 'idle' the moment they touch the floor.
+   * takes over, and blends back to 'idle' the moment it touches the floor.
    */
   private initCountdownDrops(): void {
     this.countdownDrops.clear();
@@ -2110,8 +2110,12 @@ export class Game {
           // to compute duration for the Speedrun Belt badge.
           this.matchStartMs = performance.now();
           // Safety net: any critter still mid-air when countdown ends
-          // snaps to ground (no thud — we'd rather avoid a late SFX).
-          for (const [c] of this.countdownDrops) c.mesh.position.y = 0;
+          // snaps to ground (no thud — we'd rather avoid a late SFX), and
+          // out of the fall clip, which nothing else would leave.
+          for (const [c] of this.countdownDrops) {
+            c.mesh.position.y = 0;
+            c.playSkeletal('idle', { force: true });
+          }
           this.countdownDrops.clear();
         }
         break;
@@ -2314,6 +2318,9 @@ export class Game {
     switch (this.phase) {
       case 'title':
       case 'character_select':
+      // countdown: the drop (updateCountdownDrops) raises the fall and idle
+      // clips; they play here.
+      case 'countdown':
         for (const c of this.critters) c.present(dt);
         break;
       case 'playing': {
@@ -2334,7 +2341,6 @@ export class Game {
       case 'ended':
         for (const c of this.critters) if (c.alive) c.present(dt);
         break;
-      // countdown: nothing presents during the drop, as before.
       // online: updateOnline presented every critter inside simulate().
     }
     this.syncCritterShadows();
