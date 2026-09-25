@@ -134,21 +134,16 @@ interface InternalPlayerData {
   allInDirZ?: number;
   allInActive?: boolean;
   /** 2026-05-01 final block — Sebastian hold-to-fire L state.
-   *  `lHoldCharging` mirrors the client flag and is set on the
-   *  rising edge of `inputUltimate`. While charging the player is
+   *  `lHoldCharging` mirrors the client flag: it starts while
+   *  `inputUltimate` is held with the L ready (level, like the
+   *  offline tickSebastianHoldToFire). While charging the player is
    *  rooted (effectiveSpeed → 0 via the same critter-side gate)
-   *  and the trajectory preview is painted client-side. On the
-   *  falling edge of `inputUltimate` (or when the auto-release
-   *  timer elapses) we set `allInActive = true` so step 2.g
-   *  resolves the dash. `lHoldChargeTime` is the server's safety
-   *  timer; `lHoldPrevInput` provides the rising-edge detection. */
+   *  and the trajectory preview is painted client-side. On release
+   *  (or when the auto-release timer elapses) we set
+   *  `allInActive = true` so step 2.g resolves the dash.
+   *  `lHoldChargeTime` is the server's charge timer. */
   lHoldCharging?: boolean;
   lHoldChargeTime?: number;
-  lHoldPrevInput?: boolean;
-  /** Suelta la carga del All-in sin disparar (docs/REPASO_HABILIDADES.md
-   *  S2-1). Hoy no lo escribe nadie: es la salida para cuando los bots
-   *  online carguen el All-in. */
-  inputUltimateCancel?: boolean;
 }
 
 function newInternal(): InternalPlayerData {
@@ -1025,22 +1020,17 @@ export class BrawlRoom extends Room {
       // Copycat no copia holdToFireL (COPYCAT_KEYS), así que no cambia nada.
       const lDef = getLDef(p);
       const lState = p.abilities[2];
-      if (!lDef || !lState || !lDef.holdToFireL) {
-        data.lHoldPrevInput = !!data.inputUltimate;
-        continue;
-      }
+      if (!lDef || !lState || !lDef.holdToFireL) continue;
+      // La L mantenida, tal cual la dejó el último mensaje de input. Esta L
+      // no pasa nunca por la activación estándar (paso 2 no la recibe): si
+      // entraba por ahí, un All-in salía instantáneo, sin carga ni mínimo.
       const ultDown = !!data.inputUltimate;
-      const ultPrev = !!data.lHoldPrevInput;
-      const risingEdge = ultDown && !ultPrev;
-      data.lHoldPrevInput = ultDown;
       if (data.lHoldCharging) {
-        // Aturdido (o cancelación) → suelta la carga sin disparar
-        // (decisión 3 de Rafa, REPASO_HABILIDADES S2-1).
-        if (p.stunTimer > 0 || data.inputUltimateCancel) {
+        // Aturdido → suelta la carga sin disparar (decisión 3 de Rafa,
+        // REPASO_HABILIDADES S2-1).
+        if (p.stunTimer > 0) {
           data.lHoldCharging = false;
           data.lHoldChargeTime = 0;
-          data.inputUltimate = false;
-          data.inputUltimateCancel = false;
           this.broadcast('lChargeEnd', { sessionId: p.sessionId });
           continue;
         }
@@ -1071,13 +1061,12 @@ export class BrawlRoom extends Room {
           lState.cooldownLeft = lDef.cooldown;
           this.broadcast('lChargeEnd', { sessionId: p.sessionId });
         }
-        // Suppress activation while charging — tickPlayerAbilities
-        // would otherwise activate the L on input=true.
-        data.inputUltimate = false;
-      } else if (risingEdge && lState.cooldownLeft <= 0 && !lState.active && p.stunTimer <= 0) {
-        // Start charging. BLOQUE FINAL micropass — dash direction is
-        // FORWARD (facing actual), no lateral auto-pick. Cliente
-        // preview line + server resolution both read the same dir.
+      } else if (ultDown && lState.cooldownLeft <= 0 && !lState.active && p.stunTimer <= 0) {
+        // Start charging — while held, not on the press: holding the L as
+        // the cooldown or a stun runs out starts it then, as offline.
+        // BLOQUE FINAL micropass — dash direction is FORWARD (facing
+        // actual), no lateral auto-pick. Cliente preview line + server
+        // resolution both read the same dir.
         data.lHoldCharging = true;
         data.lHoldChargeTime = 0;
         const range = lDef.allInDashRange ?? 9.0;
@@ -1086,10 +1075,6 @@ export class BrawlRoom extends Room {
         const dir: [number, number] = [dirX, dirZ];
         data.allInDirX = dirX;
         data.allInDirZ = dirZ;
-        // Suppress activation: standard flow would set lState.active
-        // and start the windup; we want the L to stay inactive
-        // while the user holds the input.
-        data.inputUltimate = false;
         // Broadcast charge-start so remote viewers can paint the
         // same trajectory preview their local Sebastian sees.
         this.broadcast('lChargeStart', {
@@ -1114,7 +1099,8 @@ export class BrawlRoom extends Room {
       const out = tickPlayerAbilities(p, players, dt, {
         ability1: data.inputAbility1,
         ability2: data.inputAbility2,
-        ultimate: data.inputUltimate,
+        // La L de carga (All-in) la lleva el bucle de arriba.
+        ultimate: data.inputUltimate && !getLDef(p)?.holdToFireL,
       }, (x, z) => this.arenaSim.isOnArena(x, z)); // aterrizajes seguros (punto 8)
       for (const ev of out.events) {
         this.broadcast('abilityFired', { ...ev, originX, originZ, originRotY });
