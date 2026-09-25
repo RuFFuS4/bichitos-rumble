@@ -41,6 +41,11 @@ export interface AbilityFiredEvent {
   x: number;
   z: number;
   rotationY: number;
+  /** Posición y orientación ANTES del efecto (desde NET_PROTOCOL 3): el
+   *  señuelo de Mirror Trick se pinta ahí, no donde aterriza Kurama. */
+  originX?: number;
+  originZ?: number;
+  originRotY?: number;
 }
 
 /**
@@ -165,6 +170,30 @@ export interface LChargeStartEvent {
 }
 export function onLChargeStart(room: Room, cb: (ev: LChargeStartEvent) => void): void {
   room.onMessage('lChargeStart', cb);
+}
+
+/** Fin de la carga del All-in (desde NET_PROTOCOL 3): disparo al soltar, o
+ *  carga soltada sin disparar por un aturdido. Apaga la línea de puntería. */
+export interface LChargeEndEvent {
+  sessionId: string;
+}
+export function onLChargeEnd(room: Room, cb: (ev: LChargeEndEvent) => void): void {
+  room.onMessage('lChargeEnd', cb);
+}
+
+/** Golpe de dash (J de Sergei, Cheeto, Sebastian y Shelly; desde
+ *  NET_PROTOCOL 3). El empuje ya lo hizo el servidor; esto es para el
+ *  feedback. `force` 0 = contacto sin golpe propio (sin hit stop). Espejo de
+ *  server/src/sim/physics.ts DashHitEvent. */
+export interface DashHitEvent {
+  rusherSid: string;
+  victimSid: string;
+  nx: number;
+  nz: number;
+  force: number;
+}
+export function onDashHit(room: Room, cb: (ev: DashHitEvent) => void): void {
+  room.onMessage('dashHit', cb);
 }
 
 /** Send one input frame to the server. Safe to call every client tick. */

@@ -43,7 +43,7 @@ import {
 } from './portal';
 // network-events es colyseus-free (imports type-only del SDK) — el SDK
 // real (network.ts) solo entra por import dinámico en connectOnline.
-import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, onShellReflected, type Room, type AbilityFiredEvent, type PlayersChangeBinder } from './network-events';
+import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, onLChargeEnd, onDashHit, onShellReflected, type Room, type AbilityFiredEvent, type PlayersChangeBinder } from './network-events';
 import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
@@ -53,7 +53,7 @@ import { triggerCameraShake, triggerHitStop, applyDashFeedback, applyImpactFeedb
 import { play as playSoundEffect } from './audio';
 import { getCritterVfxPalette } from './abilities';
 import { clearActiveZones, pushNetworkZone, deriveZoneVfxKind } from './abilities-runtime';
-import { spawnShockwaveRing, spawnFrenzyBurst, spawnDecoyAt, spawnAllInTrajectoryPreview, spawnZoneRing } from './abilities-vfx';
+import { spawnShockwaveRing, spawnFrenzyBurst, spawnDecoyAt, spawnAllInTrajectoryPreview, spawnZoneRing, type AllInPreview } from './abilities-vfx';
 import { spawnDustPuff, clearDustPuffs } from './dust-puff';
 import { clearProjectiles } from './projectiles';
 import { clearAllCritterStatus, disposeCritterStatus } from './hud/status-icons';
@@ -178,6 +178,9 @@ export class Game {
   /** Where online critters are drawn between server patches (visual only,
    *  src/net-smoothing.ts; `__game.netSmoother.config` / `.stats()`). */
   readonly netSmoother = new NetSmoother(() => ({ ...FEEL.movement, fallSpeed: FEEL.lives.fallSpeed }));
+  /** All-in aim lines of online chargers (lChargeStart → aim per frame →
+   *  lChargeEnd). */
+  private onlineAllInPreviews = new Map<string, AllInPreview>();
   private lastServerPhase: string = '';                 // for transition detection
   /** When true, confirming the character select connects to server instead
    *  of starting a local match. Set by enterOnlineCharacterSelect(). */
@@ -931,6 +934,8 @@ export class Game {
     this.room = room;
     this.phase = 'online';
     this.lastServerPhase = '';
+    this.onlineAllInPreviews.forEach((p) => p.end());
+    this.onlineAllInPreviews.clear();
     this.portalRedirecting = false;
     document.body.classList.add('match-active');
     document.body.classList.add('online-mode'); // CSS hides unavailable touch buttons
@@ -1101,13 +1106,30 @@ export class Game {
     // rooted with no indicator of which way he was about to dash.
     onLChargeStart(room, (ev) => {
       if (this.room !== room) return;
-      spawnAllInTrajectoryPreview(
+      this.onlineAllInPreviews.get(ev.sessionId)?.end();
+      this.onlineAllInPreviews.set(ev.sessionId, spawnAllInTrajectoryPreview(
         this.scene,
         ev.x, ev.z,
         ev.dirX, ev.dirZ,
         ev.range,
         ev.maxMs / 1000,
-      );
+      ));
+    });
+    // NET_PROTOCOL 3: released (fired) or dropped by a stun → line off.
+    onLChargeEnd(room, (ev) => {
+      if (this.room !== room) return;
+      this.onlineAllInPreviews.get(ev.sessionId)?.end();
+      this.onlineAllInPreviews.delete(ev.sessionId);
+    });
+    // NET_PROTOCOL 3: a J dash hit — the server already pushed; same
+    // feedback as the offline rushContact (physics.ts).
+    onDashHit(room, (ev) => {
+      if (this.room !== room) return;
+      if (ev.force > 0) triggerHitStop(FEEL.hitStop.dashHit);
+      const victim = this.onlineCritters.get(ev.victimSid);
+      if (victim) applyImpactFeedback(victim, ev.nx, ev.nz);
+      playSound('headbuttHit');
+      triggerCameraShake(FEEL.shake.chargeRush);
     });
 
     // 2026-04-30 final-polish — Sihans Sinkhole real-hole sync.
@@ -1327,6 +1349,12 @@ export class Game {
       c.x = pos.x;
       c.z = pos.z;
       if (typeof p.rotationY === 'number') c.mesh.rotation.y = p.rotationY;
+      // All-in aim line follows the charger's aim (the server turns it).
+      const preview = this.onlineAllInPreviews.get(sid);
+      if (preview) {
+        if (p.falling || p.alive === false) { preview.end(); this.onlineAllInPreviews.delete(sid); }
+        else preview.aim(c.x, c.z, Math.sin(c.mesh.rotation.y), Math.cos(c.mesh.rotation.y));
+      }
       c.vx = p.vx ?? 0;
       c.vz = p.vz ?? 0;
       // Alive edge detection — online matches mark `alive=false` from
@@ -1669,7 +1697,9 @@ export class Game {
       // duration. Server already moves Kurama to the escape spot
       // via state sync, so we don't reposition here.
       if (c.config.name === 'Kurama') {
-        spawnDecoyAt(this.scene, c, 2.8, ev.x, ev.z, ev.rotationY);
+        // NET_PROTOCOL 3: the decoy stays where Kurama WAS (origin), not
+        // where she lands (S2-4).
+        spawnDecoyAt(this.scene, c, 2.8, ev.originX ?? ev.x, ev.originZ ?? ev.z, ev.originRotY ?? ev.rotationY);
         c.invisibilityTimer = Math.max(c.invisibilityTimer, 2.8);
       }
     } else if (ev.type === 'frenzy') {

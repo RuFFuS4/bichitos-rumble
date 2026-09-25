@@ -28,9 +28,16 @@ import {
 } from './net-protocol-guard.js';
 import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
-import { resolveCollisions, checkFalloff, updateFalling, effectiveSpeed, isOnSlipperyZone, type ActiveZoneSnapshot } from './sim/physics.js';
-import { createAbilityStates, tickPlayerAbilities, getLDef } from './sim/abilities.js';
+import {
+  resolveCollisions, checkFalloff, updateFalling, effectiveSpeed, getSlipperyZone, startFalling,
+  type ActiveZoneSnapshot, type DashHitEvent,
+} from './sim/physics.js';
+import {
+  createAbilityStates, tickPlayerAbilities, getLDef, knockbackScale, frictionScale,
+  ageContactRehit, takeContactHit,
+} from './sim/abilities.js';
 import { ArenaSim } from './sim/arena.js';
+import { FRAG } from './sim/arena-fragments.js';
 import { computeBotInput } from './sim/bot.js';
 import {
   verifyPlayer, getPlayerNickname, recordMatchResult, recordMatch,
@@ -138,6 +145,10 @@ interface InternalPlayerData {
   lHoldCharging?: boolean;
   lHoldChargeTime?: number;
   lHoldPrevInput?: boolean;
+  /** Suelta la carga del All-in sin disparar (docs/REPASO_HABILIDADES.md
+   *  S2-1). Hoy no lo escribe nadie: es la salida para cuando los bots
+   *  online carguen el All-in. */
+  inputUltimateCancel?: boolean;
 }
 
 function newInternal(): InternalPlayerData {
@@ -966,7 +977,8 @@ export class BrawlRoom extends Room {
           p.isHeadbutting = false;
           p.headbuttCooldown = SIM.headbutt.cooldown;
         }
-      } else if (data.inputHeadbutt && p.headbuttCooldown <= 0 && p.immunityTimer <= 0) {
+      } else if (data.inputHeadbutt && p.headbuttCooldown <= 0 && p.immunityTimer <= 0 && p.stunTimer <= 0) {
+        // El aturdido no cabecea (decisión 3 de Rafa, REPASO_HABILIDADES S2-1).
         p.headbuttAnticipating = true;
         data.anticipationTimer = SIM.headbutt.anticipation;
       }
@@ -988,9 +1000,10 @@ export class BrawlRoom extends Room {
       data.moveX = mx;
       data.moveZ = mz;
 
-      // 2026-04-30 final-L — slippery acceleration penalty.
-      const slipperyHere = isOnSlipperyZone(p, this.activeZones);
-      const accelMul = slipperyHere ? 0.35 : 1.0;
+      // Hielo: el factor de aceleración viene de la zona (punto 10 del
+      // repaso; antes era un 0.35 fijo aquí).
+      const ice = getSlipperyZone(p, this.activeZones);
+      const accelMul = ice?.accelMult ?? 1;
       let speed = effectiveSpeed(p, this.activeZones);
       // 2026-05-01 final block — Sebastian holding the L is rooted.
       if (data.lHoldCharging) speed = 0;
@@ -1019,24 +1032,49 @@ export class BrawlRoom extends Room {
       const ultDown = !!data.inputUltimate;
       const ultPrev = !!data.lHoldPrevInput;
       const risingEdge = ultDown && !ultPrev;
-      const fallingEdge = !ultDown && ultPrev;
       data.lHoldPrevInput = ultDown;
       if (data.lHoldCharging) {
+        // Aturdido (o cancelación) → suelta la carga sin disparar
+        // (decisión 3 de Rafa, REPASO_HABILIDADES S2-1).
+        if (p.stunTimer > 0 || data.inputUltimateCancel) {
+          data.lHoldCharging = false;
+          data.lHoldChargeTime = 0;
+          data.inputUltimate = false;
+          data.inputUltimateCancel = false;
+          this.broadcast('lChargeEnd', { sessionId: p.sessionId });
+          continue;
+        }
+        // Apuntado mientras carga (decisión 5): el mando gira la mira por el
+        // lado corto, como mucho SIM.allIn.aimTurnDegPerSec.
+        if (data.hasInput) {
+          const target = Math.atan2(data.moveX, data.moveZ);
+          let diff = target - p.rotationY;
+          diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+          const maxTurn = (SIM.allIn.aimTurnDegPerSec * Math.PI / 180) * dt;
+          p.rotationY += Math.max(-maxTurn, Math.min(maxTurn, diff));
+        }
         data.lHoldChargeTime = (data.lHoldChargeTime ?? 0) + dt;
+        const minSec = (lDef.holdToFireMinMs ?? 0) / 1000;
         const maxSec = (lDef.holdToFireMaxMs ?? 3000) / 1000;
-        if (fallingEdge || (data.lHoldChargeTime ?? 0) >= maxSec) {
+        // `!ultDown` y no el flanco de bajada: soltar antes del mínimo
+        // dispara al cumplirlo.
+        if ((!ultDown || data.lHoldChargeTime >= maxSec) && data.lHoldChargeTime >= minSec) {
           // Release → trigger resolution. Step 2.g picks it up.
           data.lHoldCharging = false;
           data.lHoldChargeTime = 0;
           data.allInActive = true;
+          // La dirección es la de la mira AHORA, no la del arranque.
+          data.allInDirX = Math.sin(p.rotationY);
+          data.allInDirZ = Math.cos(p.rotationY);
           // Cooldown applied here so tickPlayerAbilities doesn't
           // try to re-activate next tick.
           lState.cooldownLeft = lDef.cooldown;
+          this.broadcast('lChargeEnd', { sessionId: p.sessionId });
         }
         // Suppress activation while charging — tickPlayerAbilities
         // would otherwise activate the L on input=true.
         data.inputUltimate = false;
-      } else if (risingEdge && lState.cooldownLeft <= 0 && !lState.active) {
+      } else if (risingEdge && lState.cooldownLeft <= 0 && !lState.active && p.stunTimer <= 0) {
         // Start charging. BLOQUE FINAL micropass — dash direction is
         // FORWARD (facing actual), no lateral auto-pick. Cliente
         // preview line + server resolution both read the same dir.
@@ -1061,14 +1099,6 @@ export class BrawlRoom extends Room {
           range,
           maxMs: lDef.holdToFireMaxMs ?? 3000,
         });
-      } else if (data.lHoldCharging && !ultDown) {
-        // Defensive: suppress in case the rising-edge clause
-        // didn't run but we somehow ended up in charging without
-        // input — release immediately.
-        data.lHoldCharging = false;
-        data.allInActive = true;
-        lState.cooldownLeft = lDef.cooldown;
-        data.inputUltimate = false;
       }
     }
 
@@ -1078,13 +1108,16 @@ export class BrawlRoom extends Room {
       if (!p.alive || p.falling) continue;
       const data = this.internal.get(p.sessionId);
       if (!data) continue;
+      // Posición y orientación ANTES del efecto: el señuelo de Mirror Trick
+      // se pinta donde estaba Kurama, no donde aterriza (S2-4).
+      const originX = p.x, originZ = p.z, originRotY = p.rotationY;
       const out = tickPlayerAbilities(p, players, dt, {
         ability1: data.inputAbility1,
         ability2: data.inputAbility2,
         ultimate: data.inputUltimate,
-      });
+      }, (x, z) => this.arenaSim.isOnArena(x, z)); // aterrizajes seguros (punto 8)
       for (const ev of out.events) {
-        this.broadcast('abilityFired', ev);
+        this.broadcast('abilityFired', { ...ev, originX, originZ, originRotY });
       }
       for (const z of out.zoneSpawns) {
         // Authoritative state: track on the room so effectiveSpeed
@@ -1182,8 +1215,11 @@ export class BrawlRoom extends Room {
       }
       if (hitVictim) {
         const speedMag = Math.sqrt(pr.vx * pr.vx + pr.vz * pr.vz) || 1;
-        hitVictim.vx += (pr.vx / speedMag) * pr.impulse;
-        hitVictim.vz += (pr.vz / speedMag) * pr.impulse;
+        // knockbackScale: el frenesí de Sergei (×0,4) también resiste la
+        // bola (decisión 4, S2-2).
+        const impulse = pr.impulse * knockbackScale(hitVictim);
+        hitVictim.vx += (pr.vx / speedMag) * impulse;
+        hitVictim.vz += (pr.vz / speedMag) * impulse;
         hitVictim.slowTimer = Math.max(hitVictim.slowTimer, pr.slowDuration);
         this.broadcast('projectileHit', {
           id: pr.id,
@@ -1230,41 +1266,27 @@ export class BrawlRoom extends Room {
       // (slowTimer / immunityTimer already decremented elsewhere.)
       if (p.confusedTimer > 0) p.confusedTimer = Math.max(0, p.confusedTimer - dt);
       if (p.stunTimer > 0) p.stunTimer = Math.max(0, p.stunTimer - dt);
+      // Contactos de la L: cada víctima, una vez por ventana (punto 6).
+      ageContactRehit(p, dt);
 
-      // 2026-05-01 microfix — Cone Pulse rising-edge detection runs
-      // BEFORE the active gate so the per-pulse counter resets even
-      // after the L falls off. Without this, the second activation
-      // of conePulseL inherits stale pulseLastActive=true and the
-      // ramp counter never resets.
-      if (lDef.conePulseL) {
+      // --- Cone Pulse (Cheeto) --- Un solo bloque ANTES de la puerta de
+      // activa (punto 7 del repaso): el flanco de subida reinicia la rampa,
+      // se sigue pulsando el tick en que la L acaba, y `pulseCount` pone
+      // tope (la Kurama que lo copia daba 11 en vez de 6).
+      const pulseData = this.internal.get(p.sessionId);
+      if (lDef.conePulseL && pulseData) {
+        const data = pulseData;
         const isActive = lState.active && lState.windUpLeft <= 0;
-        const data = this.internal.get(p.sessionId);
-        if (data) {
-          if (isActive && !data.pulseLastActive) {
-            data.pulseAccum = 0;
-            data.pulseCount = 0;
-          }
-          data.pulseLastActive = isActive;
-        }
-      }
-
-      if (!lState.active || lState.windUpLeft > 0) continue;
-
-      // --- Cone Pulse (Cheeto) ---
-      // 2026-05-01 microfix — Per-pulse force RAMP: pulse N uses
-      // baseForce × (1 + (N - 1) × 0.5). Pre-fix the first pulse
-      // shoved the target out of the 5.5 u radius and every later
-      // pulse missed; the ramp catches up.
-      if (lDef.conePulseL) {
-        const data = this.internal.get(p.sessionId);
-        if (data) {
-          if (data.pulseAccum === undefined) data.pulseAccum = 0;
-          if (data.pulseCount === undefined) data.pulseCount = 0;
-          data.pulseAccum += dt;
+        if (isActive && !data.pulseLastActive) { data.pulseAccum = 0; data.pulseCount = 0; }
+        const channeling = isActive || !!data.pulseLastActive;
+        data.pulseLastActive = isActive;
+        if (channeling) {
           const interval = lDef.pulseInterval ?? 0.30;
-          while (data.pulseAccum >= interval) {
+          const maxPulses = lDef.pulseCount ?? Infinity;
+          data.pulseAccum = (data.pulseAccum ?? 0) + dt;
+          while (data.pulseAccum >= interval && (data.pulseCount ?? 0) < maxPulses) {
             data.pulseAccum -= interval;
-            data.pulseCount++;
+            data.pulseCount = (data.pulseCount ?? 0) + 1;
             // 2026-05-01 final block — rolling wave model. Each
             // pulse is a forward-moving band, force pushes targets
             // along facing (not radial). Doubling ramp capped at 8.
@@ -1275,8 +1297,8 @@ export class BrawlRoom extends Room {
             const facingZ = Math.cos(p.rotationY);
             const baseForce = lDef.pulseForce ?? 28;
             const effectiveForce = baseForce * ramp;
-            const waveStep = 1.4;
-            const waveThickness = 2.0;
+            // Espejo de FEEL (S2-3): antes 1.4 y 2.0 escritos aquí.
+            const { waveStep, waveThickness } = SIM.conePulse;
             const waveCenter = data.pulseCount * waveStep;
             const waveMin = Math.max(0.3, waveCenter - waveThickness * 0.5);
             const waveMax = waveCenter + waveThickness * 0.5;
@@ -1291,8 +1313,9 @@ export class BrawlRoom extends Room {
               const nz = dz / d;
               if (nx * facingX + nz * facingZ < cosCone) continue;
               const fall = 1 - Math.abs(d - waveCenter) / (waveThickness * 0.5);
-              other.vx += facingX * effectiveForce * fall;
-              other.vz += facingZ * effectiveForce * fall;
+              const k = knockbackScale(other); // frenesí de Sergei (S2-2)
+              other.vx += facingX * effectiveForce * fall * k;
+              other.vz += facingZ * effectiveForce * fall * k;
             }
             this.broadcast('lPulse', {
               sessionId: p.sessionId,
@@ -1307,8 +1330,12 @@ export class BrawlRoom extends Room {
         }
       }
 
+      if (!lState.active || lState.windUpLeft > 0) continue;
+
       // --- Stampede ramming (Trunk) — same shape as Saw Shell but
       //     with a different impulse value. 2026-05-01 microfix.
+      // Punto 6 del repaso: una vez por víctima y ventana (takeContactHit)
+      // y la velocidad se FIJA en vez de sumarse; × knockbackScale (S2-2).
       if (lDef.rammingL) {
         const reach = 0.55 + 0.55 + 0.10;
         const impulse = lDef.ramContactImpulse ?? 50;
@@ -1319,9 +1346,11 @@ export class BrawlRoom extends Room {
           const dz = other.z - p.z;
           const d2 = dx * dx + dz * dz;
           if (d2 > reach * reach || d2 < 0.0001) continue;
+          if (!takeContactHit(p, other)) continue;
           const d = Math.sqrt(d2);
-          other.vx += (dx / d) * impulse;
-          other.vz += (dz / d) * impulse;
+          const k = impulse * knockbackScale(other);
+          other.vx = (dx / d) * k;
+          other.vz = (dz / d) * k;
         }
       }
 
@@ -1337,9 +1366,13 @@ export class BrawlRoom extends Room {
           const dz = other.z - p.z;
           const d2 = dx * dx + dz * dz;
           if (d2 > reach * reach || d2 < 0.0001) continue;
+          // Punto 6: una vez por víctima y ventana; velocidad FIJADA (sumarla
+          // cada tick daba 600-1260 u/s offline). × knockbackScale (S2-2).
+          if (!takeContactHit(p, other)) continue;
           const d = Math.sqrt(d2);
-          other.vx += (dx / d) * impulse;
-          other.vz += (dz / d) * impulse;
+          const k = impulse * knockbackScale(other);
+          other.vx = (dx / d) * k;
+          other.vz = (dz / d) * k;
         }
       }
 
@@ -1371,6 +1404,7 @@ export class BrawlRoom extends Room {
           const dz = other.z - p.z;
           const d2 = dx * dx + dz * dz;
           if (d2 > reach * reach || d2 < 0.0001) continue;
+          if (!takeContactHit(p, other)) continue; // punto 6
           other.confusedTimer = Math.max(other.confusedTimer, dur);
         }
       }
@@ -1436,9 +1470,11 @@ export class BrawlRoom extends Room {
         for (const other of players) {
           if (other === p || !other.alive || other.falling) continue;
           if (other.immunityTimer > 0) continue;
+          // Solo por delante (punto 4): ya no elimina a quien está detrás.
+          if ((other.x - p.x) * dx + (other.z - p.z) * dz < 0) continue;
           const odx = other.x - sx;
           const odz = other.z - sz;
-          const reach = 0.55 + 0.55 + 0.55;
+          const reach = 0.55 + 0.55 + SIM.allIn.hitMargin;
           if (odx * odx + odz * odz <= reach * reach) {
             hitVictim = other;
             hitT = t;
@@ -1465,24 +1501,22 @@ export class BrawlRoom extends Room {
         hitVictim.vz = dz * force;
         hitVictim.x += dx * (range * 0.8);
         hitVictim.z += dz * (range * 0.8);
+        // Cae como cualquier caída (punto 3): startFalling cancela también
+        // sus habilidades y banderas, igual que checkFalloff.
         if (!hitVictim.falling && hitVictim.alive) {
-          hitVictim.falling = true;
-          hitVictim.lives = Math.max(0, hitVictim.lives - 1);
-          const vData = this.internal.get(hitVictim.sessionId);
-          if (vData) vData.respawnTimer = SIM.lives.respawnDelay;
+          startFalling(hitVictim, this.internal.get(hitVictim.sessionId));
         }
       } else {
-        // MISS — Sebastian commits all the way past the rim.
-        // Teleport to the dash endpoint × 1.5 (guarantees we're
-        // outside arena maxRadius even if he started inside) +
-        // outward velocity so the server's `isOnArena` check next
-        // tick triggers `falling` (no manual void check needed;
-        // existing collapse logic handles it).
-        p.x += dx * range * 1.5;
-        p.z += dz * range * 1.5;
-        const sf = lDef.allInMissSelfForce ?? 130;
-        p.vx = dx * sf;
-        p.vz = dz * sf;
+        // MISS — Sebastian sigue en línea recta hasta salirse del suelo
+        // vivo y cae (punto 5). Antes: salto a 1,5× el alcance con un
+        // empujón, que no garantizaba la caída.
+        const step = SIM.allIn.missProbeStep;
+        const maxT = Math.hypot(p.x, p.z) + FRAG.maxRadius + step;
+        let t = step;
+        while (t < maxT && this.arenaSim.isOnArena(p.x + dx * t, p.z + dz * t)) t += step;
+        p.x += dx * t;
+        p.z += dz * t;
+        startFalling(p, data);
       }
       this.broadcast('lAllInResolve', {
         sessionId: p.sessionId,
@@ -1504,12 +1538,13 @@ export class BrawlRoom extends Room {
       p.x += p.vx * dt;
       p.z += p.vz * dt;
 
-      // 2026-04-30 final-L — slippery zones (Kowalski Frozen Floor)
-      // increase the friction half-life ~5×, so velocity decays MUCH
-      // slower → critters keep sliding even without input.
-      const slippery = isOnSlipperyZone(p, this.activeZones);
+      // Hielo (Frozen Floor): la vida media de la fricción la multiplica la
+      // ZONA (punto 10; antes un ×5 fijo aquí), y el Ice Slide la del propio
+      // bicho (frictionScale, S2-3). Mismo orden que Critter.update.
+      const ice = getSlipperyZone(p, this.activeZones);
       let halfLife = data.hasInput ? SIM.movement.frictionHalfLife : SIM.movement.idleFrictionHalfLife;
-      if (slippery) halfLife *= 5;
+      if (ice) halfLife *= ice.frictionMult;
+      halfLife *= frictionScale(p);
       const friction = Math.pow(0.5, dt / halfLife);
       p.vx *= friction;
       p.vz *= friction;
@@ -1532,8 +1567,9 @@ export class BrawlRoom extends Room {
       }
 
       // Facing follows the player's OWN movement: a shove never turns it
-      // round (mirror of Critter.update, FEELING §7.10).
-      if ((Math.abs(p.vx) > 0.1 || Math.abs(p.vz) > 0.1) &&
+      // round (mirror of Critter.update, FEELING §7.10). Mientras carga el
+      // All-in, la orientación es la mira y la gira el apuntado (S2-1).
+      if (!data.lHoldCharging && (Math.abs(p.vx) > 0.1 || Math.abs(p.vz) > 0.1) &&
           data.hasInput && p.vx * data.moveX + p.vz * data.moveZ > 0) {
         p.rotationY = Math.atan2(p.vx, p.vz);
       }
@@ -1547,9 +1583,15 @@ export class BrawlRoom extends Room {
     // feedback (shake/sonido) que offline dispara su física local — el
     // rebote era mudo online.
     const reflects: import('./sim/physics.js').ShellReflectEvent[] = [];
-    resolveCollisions(players, this.internal, reflects);
+    // Golpes de dash (J de Sergei, Cheeto, Sebastian y Shelly): el empuje lo
+    // hace el sim; aquí solo se avisa a los clientes para el feedback (S2-5).
+    const dashHits: DashHitEvent[] = [];
+    resolveCollisions(players, this.internal, reflects, dashHits);
     for (const r of reflects) {
       this.broadcast('shellReflected', r);
+    }
+    for (const h of dashHits) {
+      this.broadcast('dashHit', h);
     }
 
     // 5. Falloff detection — uses the authoritative fragment layout
@@ -1591,6 +1633,11 @@ export class BrawlRoom extends Room {
       p.fallY = 0;
       p.falling = false;
       p.immunityTimer = SIM.lives.immunityDuration;
+      // Reaparición limpia (punto 2): no se arrastra un aturdido, una
+      // confusión ni un frenado de la vida anterior.
+      p.stunTimer = 0;
+      p.confusedTimer = 0;
+      p.slowTimer = 0;
       p.isHeadbutting = false;
       p.headbuttAnticipating = false;
       p.headbuttCooldown = 0;

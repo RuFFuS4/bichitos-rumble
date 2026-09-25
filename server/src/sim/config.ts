@@ -53,15 +53,13 @@ export const SIM = {
   },
 
   bots: {
-    // Deploy gate for the online bots' L (Rafa, 2026-09-24: «10 sí»). OFF
-    // until BrawlRoom runs every L the way this sim does: today its saw and
-    // ram passes add their impulse on every contact tick (no rehit window)
-    // and its own pushes skip knockbackScale. With bots casting in every
-    // match that broke online games (measured: 27 % shorter, L falls ×2.6).
-    // DISTRIBUCIÓN turns it on in the BrawlRoom slice that lands those
-    // fixes (docs/REPASO_HABILIDADES.md). Client-only: offline bots always
-    // cast their L.
-    ultimateOnline: false as boolean,
+    // Deploy gate for the online bots' L (Rafa, 2026-09-24: «10 sí»). ON
+    // since the BrawlRoom slice that runs every L the way this sim does
+    // (rehit window on the saw/ram/touch contacts, set velocity,
+    // knockbackScale on the room's own pushes — DISTRIBUCIÓN, 2026-09-25).
+    // Rafa, pregunta 6: «encender para todos», aunque Kermit quede fuerte;
+    // su balance va aparte. Client-only: offline bots always cast their L.
+    ultimateOnline: true as boolean,
     // Fraction of the player's acceleration a bot runs with. Online bots
     // used to push at the full 1.0 while offline ones ran at 0.55; both
     // are 0.7 since 2026-09-21. Mirror of FEEL.bots.moveAccelFactor.

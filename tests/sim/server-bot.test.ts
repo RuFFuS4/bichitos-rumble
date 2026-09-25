@@ -321,21 +321,31 @@ describe('server bot — computeBotInput', () => {
 });
 
 describe('server bot — the L gate (SIM.bots.ultimateOnline)', () => {
-  it('stays shut until BrawlRoom runs the L like the sim: no bot presses its L', () => {
+  it('is open since the BrawlRoom slice (Rafa, 2026-09-25: «encender para todos»)', () => {
+    expect(SIM.bots.ultimateOnline).toBe(true);
+  });
+
+  it('closed, no bot presses its L', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
-    expect(SIM.bots.ultimateOnline).toBe(false);
-    const sergei = makePlayer({ sessionId: 'bot', x: 0, z: 0, abilities: readyKit('Sergei') });
-    const enemy = makePlayer({ sessionId: 'e', x: 3, z: 0 });
-    expect(computeBotInput(sergei, [sergei, enemy]).ultimate).toBe(false);
+    const gate = SIM.bots as { ultimateOnline: boolean };
+    gate.ultimateOnline = false;
+    try {
+      const sergei = makePlayer({ sessionId: 'bot', x: 0, z: 0, abilities: readyKit('Sergei') });
+      const enemy = makePlayer({ sessionId: 'e', x: 3, z: 0 });
+      expect(computeBotInput(sergei, [sergei, enemy]).ultimate).toBe(false);
+    } finally {
+      gate.ultimateOnline = true;
+    }
   });
 });
 
 describe('server bot — the L (online bots cast it since 2026-09-24, mirror of src/bot.ts)', () => {
-  // The rules below, with the deploy gate open (it opens in the BrawlRoom
-  // slice; see SIM.bots.ultimateOnline).
+  // The rules below, with the deploy gate open (the default since the
+  // BrawlRoom slice; see SIM.bots.ultimateOnline).
   const gate = SIM.bots as { ultimateOnline: boolean };
-  beforeAll(() => { gate.ultimateOnline = true; });
-  afterAll(() => { gate.ultimateOnline = false; });
+  let prev = true;
+  beforeAll(() => { prev = gate.ultimateOnline; gate.ultimateOnline = true; });
+  afterAll(() => { gate.ultimateOnline = prev; });
 
   it('a buff L (Sergei Frenzy) fires with the nearest enemy within buffRange, any direction, and only when ready', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
