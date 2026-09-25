@@ -19,7 +19,7 @@
 import * as THREE from 'three';
 import { createCamera, handleResize, syncSize } from '../camera';
 import { initSceneAtmosphere } from '../scene-atmosphere';
-import { tickSharedGameplay } from '../frame-ticks';
+import { tickSharedGameplay, tickSharedSimulation, tickSharedPresentation } from '../frame-ticks';
 import { setArenaForAbilities } from '../abilities-runtime';
 import { Game } from '../game';
 import { updateCameraShake, FEEL } from '../gamefeel';
@@ -132,24 +132,29 @@ function loop(now: number) {
   const fixed = devApi.getFixedStep();
   if (fixed && game.debugSpeedScale !== 0) {
     // Fixed-step: what goes INSIDE each iteration is everything that
-    // defines the match outcome or must track sim time — game.update,
-    // tickSharedGameplay (zones/projectiles are gameplay, they'd lag
+    // defines the match outcome or must track sim time — game.simulate,
+    // tickSharedSimulation (zones/projectiles are gameplay, they'd lag
     // behind the sim otherwise) and devApi.tick (event edge polling
     // can't skip transient states, and recording snapshots sample per
     // SIM second, so an 8× run still gets ~5 snapshots/sim-sec).
-    // What stays ONCE per frame: camera shake, render, preview — pure
-    // visuals, fed wall-clock dt so they pace normally on screen.
+    // What stays ONCE per frame: the presentation (critters, dust, balls,
+    // icons — as the live game presents once per frame at any number of
+    // steps: the golden holding proves presentation never feeds the sim),
+    // camera shake, render, preview.
     // Perf caveat: devApi.tick now runs before render, so drawCalls/
     // triangles lag one frame and fps reads as sim-rate. Irrelevant
     // for batch runs; the clock-driven branch keeps exact old timing.
+    const viewport = {
+      width: renderer.domElement.clientWidth,
+      height: renderer.domElement.clientHeight,
+    };
     for (let i = 0; i < fixed.stepsPerFrame; i++) {
-      game.update(fixed.dt);
-      tickSharedGameplay(fixed.dt, game, scene, camera, {
-        width: renderer.domElement.clientWidth,
-        height: renderer.domElement.clientHeight,
-      });
+      game.simulate(fixed.dt);
+      tickSharedSimulation(fixed.dt, game, scene);
       devApi.tick(fixed.dt);
     }
+    game.present(1);
+    tickSharedPresentation(fixed.dt * fixed.stepsPerFrame, 1, game, camera, viewport);
     updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, raw);
     // Under fixed-step the render is pure observation cost — on
     // SwiftShader (headless batch runs) a per-frame render throttles
