@@ -223,24 +223,31 @@ está abajo, por dueño.
 
 ## Pendiente en tierra de nadie (con permiso de Rafa)
 
+**Hechas por PERSONAJES el 2026-09-25**, con permiso de Rafa:
 - `src/frame-ticks.ts`:
-  - mientras un bicho cae no se pintan sus iconos de estado;
-  - el 👻 de Mirror Trick solo para la Kurama local (hoy la delata);
-  - `isInsideZoneOfKind(…, c.config.name)` en los iconos de veneno,
-    arena y hielo.
-- `src/main.ts:414`: `isInsideZoneOfKind(localPos.x, localPos.z,
-  'poison', localPos.critterName)`. La nube de Kermit no le ciega a él.
-- `src/game.ts`:
-  - ~2099: mover `playerWasFalling` antes de `updatePlayer`, para que la
-    caída por fallo del All-in cuente en las estadísticas;
-  - opcional: pasar `scene` a `updateBot`;
-  - opcional: `setArenaForAbilities` en el constructor de `Game`.
-- `src/tools/dev-api.ts`: registrar el flanco de `lHoldCharging` como
-  `ability_cast`/`ability_end`. Hoy el All-in no sale en las grabaciones
-  ni en los usos/min.
-- `src/tools/sidebar.ts:1424` («Reset defs»): leer el kit
-  (`CRITTER_ABILITIES`) y no `state.def`, que durante un Copycat es la
-  copia.
+  - ningún icono sobre el bicho invisible de otro (Mirror Trick, la
+    madriguera): el 👻 solo lo ve la Kurama local, y los demás iconos
+    (frenesí, veneno…) también la delataban;
+  - zonas por dueño (`isInsideZoneOfKind(…, nombre)`): una Kurama que
+    copia Frozen Floor no se ve congelada en su hielo y Kowalski sí.
+    Online también, desde que DISTRIBUCIÓN toma el tipo de la zona de sus
+    banderas (3b1dbd6);
+  - «sin iconos mientras cae» ya lo hacía `status-icons.ts` desde
+    6817ce5: no hacía falta.
+- `src/main.ts`: la nube de Kermit no le ciega a él.
+- `src/game.ts`: `playerWasFalling` se toma antes de la entrada. Así
+  cuentan en las estadísticas las caídas del All-in: el fallo propio y el
+  de un bot que echa al jugador.
+- `src/tools/dev-api.ts`: el All-in sale en las grabaciones.
+  - Su `ability_cast` es la suelta que dispara, y va antes de las caídas
+    que provoca.
+  - Una carga soltada sin disparar deja un `ability_end` «(dropped)», sin
+    `ability_cast`.
+
+Quedan, opcionales y sin pedir: `scene` en `updateBot`,
+`setArenaForAbilities` en el constructor de `Game` y el «Reset defs» del
+laboratorio (`src/tools/sidebar.ts:1424`, que debería leer el kit y no
+`state.def`, que durante un Copycat es la copia).
 
 ## Pendiente para INTERFAZ y ARENA
 
@@ -290,10 +297,13 @@ contra la foto fija de `dev`, y revisión adversarial del diff.
   punto central (`knockbackScale`) a todos los empujes. También lo tiene
   la Kurama que lo copia.
   - Cabezazo de Trunk sobre Sergei en frenesí: 1,54 → 0,62 u.
-  - El golpe del All-in y el tirón del Sinkhole quedan fuera a propósito.
+  - El golpe del All-in y el tirón del Sinkhole quedan fuera a propósito,
+    y desde el 2026-09-25 también el Grip, que lo trae entero (pregunta
+    4).
 - **All-in (5).** Carga mínima de 0,35 s: un toque dispara al cumplirse.
-  Mientras carga, el mando gira el apuntado a 360°/s, y la línea sigue la
-  puntería y se apaga al acabar. Los bots respetan el mínimo.
+  Mientras carga, el mando gira el apuntado (360°/s; 180°/s desde el
+  2026-09-25, pregunta 5), y la línea sigue la puntería y se apaga al
+  acabar. Los bots respetan el mínimo.
 - **Mirror Trick (6).** Se aleja del enemigo vivo más cercano a menos de
   10 u, girándose hacia él para que el salto hacia atrás se lea. Sin
   nadie cerca, salta hacia atrás como antes. Probado en los tres casos:
@@ -389,20 +399,202 @@ lo mismo.
   - una acción del calentamiento ya no cae dentro de la toma. Antes
     aturdía al muñeco cercano en todas las tomas de Kurama.
 
-## Preguntas abiertas para Rafa
+## Paso fijo de simulación (decisión 1), hecho el 2026-09-25
 
-1. **Steel Shell**: hoy frena el movimiento de Shelly, pero no anula un
-   empujón recibido. ¿Debe anularlo también?
-2. **Mirror Trick también cae sobre el vacío** durante el truco, no solo
-   Shelly: el truco es un engaño, no un suelo. ¿De acuerdo?
-3. **El Slam de Trunk también deja sin actuar** 1,5 s a todos los que
-   pilla. En la tanda Trunk no sale más fuerte. ¿Se queda así, o solo
-   bloquea el Grip?
-4. **El Grip trae a Sergei en frenesí solo al 40 %** del camino. ¿Así, o
-   el agarre lo trae entero?
-5. **El All-in apuntando casi no falla**: un rival que huye de lado gira
-   25-60°/s y el apuntado sigue a 360°/s. ¿Se baja, por ejemplo, a
-   180°/s?
+El juego offline simula en pasos de 1/60 s, como el laboratorio, el
+golden y la tanda. Así, un empujón llega igual de lejos se juegue a la
+frecuencia que se juegue.
+
+- **Permiso**: Rafa aprobó `main.ts` y, el 25, unas 6 líneas de
+  `game.ts`: `isOnlinePhase()` y `syncCritterShadows` pública.
+- **Cómo funciona** (`src/fixed-step.ts`, puro, con sus tests):
+  - Cada fotograma ejecuta los pasos que llevan la simulación hasta el
+    reloj real o un poco más allá.
+  - Los bichos se dibujan en el instante real, entre sus dos últimas
+    poses de simulación. La pose interpolada solo se pone para pintar.
+  - Las sombras y los iconos de estado siguen a la pose dibujada.
+  - Se simula por delante del reloj, no por detrás como en el libro:
+    dibujar el paso pasado añadiría 16,7 ms de retraso a 60 Hz.
+  - Cuando la pantalla va a 60 o a 30 Hz (±0,25 ms por fotograma), el
+    reloj se engancha a su ritmo y se sienta 1 ms dentro del paso.
+    - Sentado justo en el límite, el ruido de las marcas de tiempo del
+      navegador (redondeadas a 0,1 ms) hacía fotogramas de 2, 0 y 1
+      pasos. Animaciones, giros, bolas y polvo, que no se interpolan,
+      iban a trompicones. Lo vio la revisión adversarial.
+    - Con ±0,2 ms de ruido, 60 Hz da ahora 1 paso en cada fotograma, y
+      30 Hz, 2.
+  - El código que teletransporta a un bicho lo marca
+    (`Critter.markTeleported`): blink, señuelo, tirón del Grip, All-in,
+    reaparición y reinicio. Se dibuja en el sitio nuevo, sin
+    deslizarse, y el tirón del Grip no se corrige dos veces.
+- **Online no cambia**: sigue por fotograma y manda el servidor.
+- **Medido en el juego real** (`scripts/fixed-step-probe.mjs`, reloj de
+  fotogramas virtual):
+
+  | | 30 Hz | 60 Hz | 144 Hz | 240 Hz |
+  |---|---|---|---|---|
+  | Deslizamiento tras un empujón, antes | +15 % | 2,877 u | +74 % | −15 % |
+  | Deslizamiento, ahora | igual | 2,877 u | igual | igual |
+  | Velocidad al andar, antes → ahora (u/s) | 3,80 → 3,54 | 3,54 → 3,54 | 3,40 → 3,54 | 3,05 → 3,54 |
+
+  - A 60 Hz el juego es idéntico al de antes: mismo recorrido, y el
+    bicho se mueve en el fotograma siguiente a la tecla (se dibuja 1 ms
+    por detrás del último paso).
+  - A 240 Hz la entrada se lee cada paso, así que puede tardar hasta
+    16,7 ms en notarse. Es el precio de simular a 60 Hz.
+  - El movimiento dibujado es uniforme a cualquier frecuencia.
+### Segundo corte: la presentación va por fotograma (2026-09-25)
+
+Rafa: «tienes permiso para `game.ts`, adelante con el paso fijo».
+
+- **Qué había.** Con el primer corte la posición ya se interpolaba, pero
+  el resto de lo que se ve corría por paso de simulación: a 144 Hz, 0 o
+  1 veces por fotograma. Eso incluía la animación, el balanceo, el
+  brillo, los efectos de golpe, el polvo, la bola de nieve, los iconos y
+  las sombras.
+- **Cómo se diseñó:**
+  - un mapa de cuatro lectores, que clasificaron cada línea como
+    simulación o presentación;
+  - un diseño con plan de commits (`.tmp/paso-fijo-2/diseno.md` del
+    worktree);
+  - dos críticas adversariales, que salvaron la imagen congelada del
+    golpe (el atacante se habría congelado en la pose de antes del
+    golpe) y un `fall-probe` que habría dado «0 caídas» en silencio.
+- **Qué hace:**
+  - `Critter`, `Game` y `frame-ticks` se parten en simular (por paso) y
+    presentar (por fotograma).
+  - La presentación avanza con el tiempo de juego mostrado
+    (`PresentClock`): 0 en pausa y congelación, K pasos en cámara lenta.
+  - Lo que tiene que ver cada paso (estadísticas, velocidad de suelo,
+    flancos de los clips) se queda por paso.
+  - Las interpolaciones de presentación no dependen del ritmo
+    (`lerpFactor`).
+  - Bola de nieve y anillos de zona interpolados.
+  - Online, el laboratorio en modo reloj, la vista previa y animlab
+    siguen igual.
+- **Medido** (`scripts/fixed-step-probe.mjs`, el juego real con reloj
+  virtual; «antes» es el primer corte):
+
+  | | 60 Hz | 144 Hz | 240 Hz |
+  |---|---|---|---|
+  | Presentaciones por fotograma, antes → ahora | 1 → 1 | 0 o 1 → 1 | 0 o 1 → 1 |
+  | Variación del avance de la animación por fotograma | 0 → 0 | 1,18 → 0 | 1,73 → 0 |
+  | Variación del movimiento de la bola de nieve | 0 → 0 | 1,19 → 0 | — → 0 |
+
+  - Con ±0,2 ms de ruido en el reloj, la animación varía 0,009 a 60 Hz
+    y 0,02 a 144 Hz: el propio ruido.
+  - Ninguna fuga: en ningún fotograma cambia nada de lo que es de la
+    simulación después de su último paso.
+  - La congelación del golpe es la misma imagen a 30, 60, 144 y 240 Hz
+    y la misma que antes: víctima aplastada y con destello, atacante ya
+    embistiendo. Dura ~100 ms y está quieta.
+- **La simulación no cambia**, probado de dos formas:
+  - golden 3/3 tras cada commit;
+  - las grabaciones del golden, con eventos, posiciones y velocidades,
+    idénticas bit a bit a la línea base. También con el laboratorio
+    presentando una vez cada 8 pasos, que es la prueba de que presentar
+    no alimenta la simulación.
+- **Revisión adversarial final** (3 lentes y un escéptico por
+  hallazgo). Tres confirmados, los tres arreglados:
+  - Si el golpe caía en un paso que no era el último de su fotograma
+    (30 Hz, un tirón), el atacante se congelaba en la pose de antes.
+    Ahora la sonda lo prueba en 4 posiciones del golpe.
+  - La inclinación de arranque y frenada zigzagueaba a 144 Hz. Ahora
+    toma la aceleración por muestra de simulación, y cambia de sentido
+    las mismas 3-4 veces a 60, 144 y 240 Hz.
+  - Un comentario prometía de más.
+- **De paso**, arreglada una carrera del ejecutor de tandas: si miraba
+  justo al acabar la partida, cerraba la grabación sin el `match_ended`,
+  y el golden daba un falso «cambio de balance» (ERROR_LOG).
+- **Queda fuera, para otros carriles o para Rafa:**
+  - `Arena.update` y los portales siguen por paso. Son de ARENA e
+    INTERFAZ: aviso en sus buzones.
+  - Tres cambios visuales que necesitan tu sí:
+    - que se vea el clip de caída offline (hoy el bicho que cae se queda
+      quieto);
+    - que se muevan los clips durante la cuenta atrás;
+    - que la sierra de Shelly gire también online.
+  - La línea del All-in se reorienta por paso (saltos de 3° a 144 Hz).
+  - Un toque de tecla de menos de 16,7 ms puede caer entre dos pasos.
+    Ya pasaba a 60 Hz, y un toque humano dura 40-100 ms.
+
+### El enganche en Safari e iOS (2026-09-25)
+
+Lo encontró la revisión previa al despliegue de DISTRIBUCIÓN. WebKit
+trunca las marcas de `requestAnimationFrame` a 1 ms, y a 60 Hz los
+fotogramas miden 16 o 17 ms. El enganche a la cadencia juzgaba cada
+fotograma solo (±0,25 ms de 16,67) y en Safari no se enganchaba nunca.
+
+- **Antes**, medido con `fixed-step-probe --floor=1`, que arranca el
+  reloj alineado con la pantalla:
+  - a 60 Hz, 0, 1 y 2 pasos por fotograma (20/20/20);
+  - a 30 Hz, 1, 2 y 3 pasos por fotograma (10/10/10);
+  - dependía de la fase: con la 0 no fallaba, con la 0,4 y la 0,7 sí.
+  - En partida, además, la fase no se reajustaba nunca: se dibujaba hasta
+    un paso tarde, y había rachas de 0 y 2 pasos cuando derivaba cerca del
+    borde de un paso.
+  - El segundo corte ya lo tapaba casi entero, porque la animación iba
+    a 0,03 de variación.
+- **Ahora** se juzga la media de los 16 últimos fotogramas; las marcas
+  truncadas se compensan entre sí.
+  - En todas las fases, 1 paso por fotograma a 60 Hz y 2 a 30 Hz, con
+    variación 0.
+  - Chrome, 144, 240 y la congelación del golpe salen como antes.
+- **Dos retoques**, tras medir 6 variantes contra fotogramas irregulares,
+  marcas de WebKit con tirones y pantallas de 57 a 63 Hz:
+  - el reajuste de fase espera a que el enganche aguante una ventana
+    entera. Con fotogramas que bailan ±10 % el enganche iba y venía, y
+    cada reajuste regalaba tiempo: el juego corría ~1 % rápido;
+  - el umbral de la media baja a ±0,15 ms: 59,94 Hz se engancha y 59 Hz
+    no. Justo en los bordes (~59,5 y ~60,5 Hz) el enganche va y viene, y
+    el tiempo de juego puede desviarse hasta ~1 %.
+- **Revisión adversarial** del arreglo, con scripts propios y 11
+  variantes del reloj contra los tests:
+  - nada grave;
+  - un primer fotograma que agotaba los pasos (compilando shaders) dejaba
+    el reloj en el borde de un paso ~33 fotogramas. Arreglado: cae en el
+    margen de fase;
+  - los tests arrancaban el reloj alineado. Ahora empiezan con un
+    fotograma aleatorio;
+  - frases de comentarios corregidas. El enganche aguanta hasta ±0,7 ms
+    de ruido en las marcas de WebKit.
+  - Descartado: un enganche con permanencia mínima. Solo quitaba una
+    décima de punto en los bordes, a cambio de más lógica.
+- **Tests:** cuatro nuevos, con 12 casos:
+  - marcas truncadas a 1 ms a 60 y 30 Hz en 10 fases;
+  - Safari con tirones;
+  - pantallas de 57 a 63 Hz que no se enganchan;
+  - un primer fotograma largo.
+
+  Con el reloj viejo fallan 7 de 46.
+
+## Preguntas a Rafa — respondidas el 2026-09-25
+
+1. **Steel Shell**: si a Shelly la lanzan y saca el escudo en pleno
+   vuelo, ¿se queda clavada o sigue volando? Rafa: **sigue volando**. El
+   escudo frena en seco lo que ella hace por sí misma, no un golpe ya
+   recibido; premia sacarlo antes del golpe. Sin cambios.
+2. **Mirror Trick cae sobre el vacío** durante el truco. Rafa: **sí, debe
+   caer**. Sin cambios.
+3. **El Slam de Trunk deja sin actuar** 1,5 s a los que pilla. Rafa:
+   **sin actuar, tampoco habilidades**. Sin cambios.
+4. **El Grip a un Sergei en frenesí.** Rafa: **entero**. Hecho: el tirón
+   ya no pasa por `knockbackScale`, en el cliente y en `server/src/sim`
+   (test en `server-knockback-scale`). El frenesí solo resiste los
+   golpes.
+5. **Velocidad de apuntado del All-in.** Rafa: «como consideres mejor y
+   más coherente». **180°/s** (antes 360), en `FEEL` y `SIM`.
+   - A un rival que corre la puntería lo sigue igual: de lado, a 5 u,
+     gira 25-60°/s visto desde Sebastian.
+   - Lo que cambia es el giro por sorpresa. A 360°/s, Sebastian cargando
+     de espaldas se giraba 180° en 0,5 s, antes de que la víctima leyera
+     la línea: reaccionar lleva ~0,25 s y salir del pasillo ~0,5 s. A
+     180°/s tarda 1 s, y 90° en 0,5 s. La línea avisa, que es para lo
+     que está, y apuntar sigue siendo ágil.
+   - Los bots no apuntan mientras cargan: disparan con el rival ya en la
+     línea. Una tanda de 24 partidas da los mismos 62 All-in a 360, 180 y
+     120°/s. Solo cambia el juego humano, también online (`BrawlRoom` lee
+     el espejo).
 6. ~~**Kermit online**: con la L, su bot pasa de ganar el 16 % al 39 %
    en la sala simulada.~~ **Respondida** (Rafa, 2026-09-25, vía
    DISTRIBUCIÓN): la L de los bots online se enciende para todos. El

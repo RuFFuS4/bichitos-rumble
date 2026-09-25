@@ -236,6 +236,7 @@ export class DevApi {
   private lastFalling = new WeakMap<Critter, boolean>();
   private lastAlive = new WeakMap<Critter, boolean>();
   private lastAbilityActive = new WeakMap<Critter, boolean[]>();
+  private lastLHoldCharging = new WeakMap<Critter, boolean>();
   private lastCollapseLevel = -1;
   private lastWarningBatch = -2;
 
@@ -560,6 +561,7 @@ export class DevApi {
     this.lastFalling = new WeakMap();
     this.lastAlive = new WeakMap();
     this.lastAbilityActive = new WeakMap();
+    this.lastLHoldCharging = new WeakMap();
     this.lastCollapseLevel = -1;
     this.lastWarningBatch = -2;
   }
@@ -674,6 +676,27 @@ export class DevApi {
   }
 
   private pollGameplayEvents(): void {
+    // All-in (hold-to-fire L), in a pass of its own before any fall: it
+    // never sets its slot active, so the loop below can't see it (it was
+    // missing from recordings and uses/min), and the falls it causes land
+    // in the same step, the caster's on a miss, the victim's on a hit.
+    // Its cast is the release that fires it (the cooldown starts right
+    // then); a charge dropped without firing (stun, fall, a bot whose lane
+    // emptied) is logged as such.
+    for (const c of this.game.critters) {
+      const charging = c.lHoldCharging;
+      if (!charging && (this.lastLHoldCharging.get(c) ?? false)) {
+        const l = c.abilityStates[2];
+        const name = l?.def.name ?? 'L';
+        if (l && l.cooldownLeft > 0) {
+          this.pushEvent('ability_cast', c.config.name, name);
+          this.pushEvent('ability_end', c.config.name, name);
+        } else {
+          this.pushEvent('ability_end', c.config.name, `${name} (dropped)`);
+        }
+      }
+      this.lastLHoldCharging.set(c, charging);
+    }
     for (const c of this.game.critters) {
       // Headbutt edge
       const hb = c.isHeadbutting;

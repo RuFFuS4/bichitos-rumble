@@ -1,9 +1,179 @@
 # Build Log — Bichitos Rumble
 
-## 2026-09-25 — [DISTRIBUCIÓN] v1.9 preparada: BrawlRoom ejecuta las habilidades como el sim (protocolo 3)
+## 2026-09-25 — [PERSONAJES] El paso fijo se engancha también en Safari e iOS
 
+- **Qué:** `FixedStepClock` decide si la pantalla va a la cadencia de la
+  simulación (60 o 30 Hz) por la media de sus 16 últimos fotogramas, y ya
+  no fotograma a fotograma.
+- **Por qué:** lo encontró la revisión previa al despliegue de
+  DISTRIBUCIÓN. WebKit trunca las marcas de rAF a 1 ms, así que los
+  fotogramas miden 16 o 17 ms y ninguno quedaba a ±0,25 ms de 16,67. En
+  Safari no se enganchaba nunca. Con `fixed-step-probe --floor=1`, a 60 Hz
+  había fotogramas de 0, 1 y 2 pasos, y a 30 Hz de 1, 2 y 3.
+- **Retoques** (medidas 6 variantes con fotogramas irregulares, tirones y
+  pantallas de 57 a 63 Hz):
+  - el reajuste de fase espera a que el enganche aguante una ventana
+    entera, porque si no el juego corría ~1 % rápido con fotogramas que
+    bailan;
+  - umbral de ±0,15 ms, para que 59 Hz no se enganche.
+- **Revisión adversarial:** nada grave. Un primer fotograma que agotaba
+  los pasos dejaba el reloj en el borde de un paso; ahora cae en el margen
+  de fase. Los tests arrancan con un fotograma aleatorio.
+- **Medido:** con marcas de WebKit, 1 paso por fotograma a 60 Hz y 2 a
+  30 Hz en todas las fases, con variación 0. Chrome, 144, 240 Hz y la
+  congelación del golpe salen como antes. 304 tests (con el reloj viejo
+  fallan 7 de `fixed-step`), golden 3/3, smoke 4/4.
+- **Herramienta:** `fixed-step-probe --floor=MS --phase=MS`, para simular
+  las marcas de WebKit.
+
+## 2026-09-25 — [PERSONAJES] Paso fijo, segundo corte: la presentación va por fotograma
+
+- **Qué:** simular por paso y presentar por fotograma, en `Critter`,
+  `Game` y `frame-ticks`. A 144 y 240 Hz se mueven en cada fotograma, y
+  no 60 veces por segundo:
+  - animación, balanceo y brillo;
+  - efectos de golpe, polvo y bola de nieve;
+  - anillos de zona, iconos y sombras.
+- **Por qué:** con el primer corte la posición ya se interpolaba, pero lo
+  demás iba a trompicones: la animación avanzaba 0 o 1 pasos por
+  fotograma (variación 1,18 a 144 Hz y 1,73 a 240 Hz).
+- **Cómo se hizo:**
+  - mapa de cuatro lectores, diseño, dos críticas adversariales y
+    commits verificados uno a uno;
+  - una revisión adversarial final (3 lentes y un escéptico por
+    hallazgo), que encontró tres fallos, arreglados: el golpe en
+    fotogramas de varios pasos, la inclinación a 144 Hz y un comentario;
+  - Rafa dio permiso para `game.ts`; `main.ts` y `frame-ticks.ts` entran
+    en su «adelante con el paso fijo»;
+  - el laboratorio, en su modo de paso fijo, presenta una vez por
+    fotograma.
+- **Medido en el juego real:**
+  - 1 presentación por fotograma a cualquier frecuencia;
+  - animación y bola con variación 0;
+  - 0 fugas de presentación a simulación;
+  - la congelación del golpe es la misma imagen a 30-240 Hz e igual que
+    antes.
+- **La simulación no cambia:** golden 3/3 tras cada commit, y las
+  grabaciones del golden (posiciones y velocidades) idénticas bit a bit,
+  también presentando una vez cada 8 pasos.
+- **De paso:**
+  - el ejecutor de tandas espera al `match_ended`. Si no, a veces daba un
+    falso «cambio de balance» (ERROR_LOG);
+  - un hit stop sobrante ya no congela el arranque de la partida
+    siguiente en la misma página.
+- **Tierra de nadie, dicho aquí:**
+  - `game.ts`: `simulate`, `present`, `presentFrame` y `resetHitStop`;
+  - `main.ts` y `frame-ticks.ts`: el bucle y la división;
+  - `src/tools/main.ts`: el modo de paso fijo del laboratorio.
+- **Pendiente:**
+  - `Arena.update` y los portales, de ARENA e INTERFAZ (aviso en sus
+    buzones);
+  - tres cambios visuales que necesitan el sí de Rafa.
+
+## 2026-09-25 — [PERSONAJES] Respuestas de Rafa: el Grip trae entero, el All-in apunta a 180°/s y seis arreglos en tierra de nadie
+
+- **Las cinco preguntas de la segunda tanda:**
+  - 1-3 se quedan como están:
+    - Shelly sigue volando si saca el escudo en pleno vuelo;
+    - Mirror Trick cae al vacío;
+    - el Slam no deja actuar.
+  - **4, el Grip trae entero a un Sergei en frenesí:** el tirón ya no
+    pasa por `knockbackScale`, en el cliente y en `server/src/sim`.
+  - **5, apuntado del All-in de 360 a 180°/s** (Rafa lo dejó a mi
+    criterio). A 360, un Sebastian de espaldas se giraba en 0,5 s, antes
+    de que la línea avisara. Los bots no apuntan mientras cargan, así
+    que solo cambia el juego humano: una tanda de 24 partidas da los
+    mismos 62 All-in a 360, 180 y 120.
+- **Seis arreglos en tierra de nadie** (permiso de Rafa):
+  - ningún icono sobre el bicho invisible de otro, y el 👻 solo lo ve
+    la Kurama local;
+  - los iconos de zona van por dueño;
+  - la nube de Kermit no le ciega a él;
+  - las caídas del All-in cuentan en las estadísticas;
+  - el All-in sale en las grabaciones, antes de las caídas que provoca.
+  - «Sin iconos al caer» ya existía (6817ce5).
+- **Revisión adversarial** (2 lentes): la lógica aguantó. Salieron:
+  - el orden de los eventos del All-in;
+  - los demás iconos que delataban a Kurama;
+  - docs viejos;
+  - que online el cambio necesita redesplegar el servidor (aviso a
+    DISTRIBUCIÓN).
+- **Golden regenerado** (253/188/242 eventos), 3/3 detrás:
+  - la 501 cambia desde el Grip sobre el Sergei en frenesí;
+  - la 503 gana los eventos del All-in.
+- **Tierra de nadie, dicho aquí:** `frame-ticks.ts`, `main.ts` (una
+  condición y un comentario huérfano), `game.ts` (dónde se toma
+  `playerWasFalling`) y `dev-api.ts` (una pasada de detección más).
+
+## 2026-09-25 — [PERSONAJES] El juego simula a paso fijo: un empujón llega igual de lejos a cualquier frecuencia
+
+- **Decisión 1 del repaso de habilidades** (Rafa: «sí»). Aprobó
+  `main.ts` y, el 25, unas 6 líneas de `game.ts`.
+- **Qué hace** (`src/fixed-step.ts`):
+  - el juego offline simula en pasos de 1/60 s, como el laboratorio, el
+    golden y la tanda;
+  - los bichos se dibujan interpolados en el instante real, con sombras e
+    iconos detrás;
+  - online no cambia.
+- **Medido en el juego real** (`scripts/fixed-step-probe.mjs`, reloj de
+  fotogramas virtual):
+  - antes, el mismo empujón deslizaba +15 % a 30 Hz, +74 % a 144 Hz y
+    −15 % a 240 Hz, y andar iba de 3,05 a 3,80 u/s según la frecuencia;
+  - ahora, 2,877 u y 3,54 u/s a cualquier frecuencia, y a 60 Hz es
+    idéntico a antes.
+- **La revisión adversarial encontró tres fallos, arreglados:**
+  - a 60 Hz, el ruido de las marcas de tiempo daba fotogramas de 2, 0 y
+    1 pasos: el reloj ahora se engancha al ritmo de la pantalla, 1 ms
+    dentro del paso;
+  - el tirón del Grip se corregía dos veces;
+  - los teletransportes cortos se deslizaban
+    (`Critter.markTeleported`).
+
+  Con ±0,2 ms de ruido, 60 Hz da 1 paso en cada fotograma.
+- **Verificado**: 278 tests (20 del reloj y la interpolación), golden
+  3/3 sin regenerar, smoke 4/4, `check`.
+- **Tierra de nadie, dicho aquí**:
+  - `main.ts`: el bucle;
+  - `game.ts`: `isOnlinePhase()` nueva y `syncCritterShadows` pasa a
+    pública.
+- **Queda un segundo corte** (con permiso aparte): separar simular de
+  presentar, para que animaciones, polvo y bolas de nieve se pinten a
+  144 Hz. Hoy van a 60 Hz a cualquier frecuencia.
+
+## 2026-09-25 — [DISTRIBUCIÓN] v1.9 en producción: BrawlRoom ejecuta las habilidades como el sim (protocolo 3)
+
+- **Despliegue** (visto bueno de Rafa a las capturas):
+  - merge `--no-ff` de `a09ec8a` (el SHA verificado de `dev`) → `main`
+    `a37791b`, tag `v1.9-habilidades-online`;
+  - push a las 02:09:36 UTC; `check` y `test:sim` en verde sobre el
+    merge, que es idéntico en contenido a `a09ec8a`.
+  - **Ventana, medida con un bucle de `curl`**: Vercel sirvió la build
+    nueva a los **32 s** (`index-CN8Xgfp3.js`) y Railway el proceso
+    nuevo a los **59 s** (en v1.8, ~38 s y ~2 min).
+  - Partidas vivas: desde aquí no se ven (el matchmaker no lista salas
+    por GET y `/health` no las cuenta). Se desplegó a las 04:09 hora de
+    España.
+  - **Comprobado después**, sin crear datos:
+    - `/health` → `protocol: 3`, `protocolGuard: "on"`;
+    - `/api/leaderboard` 200;
+    - `POST /matchmake/joinOrCreate/brawl {}` → 523
+      `client_outdated 1<3` a través del edge;
+    - `/` con `max-age=0`; `index-*.js` y los GLB con `?v=`,
+      `immutable`;
+    - release de Sentry `a37791b`;
+    - www en un navegador mudo, normal y con `?ref=itch`: 0 errores y 0
+      respuestas 4xx, sin entrar al online.
+  - **Rollback**, si hiciera falta, siempre de los dos lados: Vercel
+    `dpl_AozQKczWU5Zn3pCZBBT6eH1VYeDq` (784779f, v1.8) y Railway, el
+    despliegue de 784779f.
+  - **Queda de Rafa, a mano**:
+    - una pestaña v1.8 que siga abierta tiene que recibir «recarga»;
+    - 2 pestañas en una sala privada, con un Sebastian que cargue el
+      All-in;
+    - Sentry sin issues nuevos en 30-60 min;
+    - el A/B del suavizado contra Railway, que venía de v1.8.
 - **Qué**: rama `claude/feature/distribucion-brawlroom-v19` sobre `dev`
-  `39318ae`. Sin desplegar: falta el visto bueno de Rafa.
+  `39318ae`.
   - Del repaso de PERSONAJES (`docs/REPASO_HABILIDADES.md`): los 11
     puntos menos el 9 (Sinkhole, espera el getter de ARENA) y S2-1..S2-5.
   - La L de los bots online (`SIM.bots.ultimateOnline = true`; Rafa,
@@ -64,8 +234,7 @@
   3. **El comodín `onMessage('*')` del SDK solo recibe los tipos sin
      handler.** Para contar todos los mensajes hay que envolver
      `room.dispatchMessage`.
-- **Falta**: capturas y visto bueno de Rafa, despliegue con el runbook, y
-  el Sinkhole online cuando ARENA exponga el layout.
+- **Falta**: el Sinkhole online, cuando ARENA exponga el layout.
 
 ## 2026-09-25 — [Interfaz] El HUD enseña cuándo no puedes actuar
 

@@ -207,6 +207,44 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     recibe (stun, slow, confused…).
   - La L de Sebastian, que es de mantener, se mantiene `--hold` pasos.
   - Sirve para revisar habilidades con pruebas.
+- **¿Simula igual a cualquier frecuencia?** (2026-09-25): con el dev
+  server vivo, `node scripts/fixed-step-probe.mjs [--hz=30,60,144,240]
+  [--push=25] [--jitter=0.2] [--floor=1 --phase=0.4] [--json]`.
+  - Mueve el juego real (`index.html`, el bucle de `main.ts`) con un reloj
+    de `requestAnimationFrame` virtual, a cada frecuencia.
+  - Mide:
+    - cuánto desliza un bicho empujado;
+    - la velocidad al andar;
+    - los fotogramas de retraso entre la tecla y el movimiento dibujado;
+    - la suavidad de ese movimiento (CV de lo que se mueve por
+      fotograma);
+    - cuántos pasos de simulación hace cada fotograma: a 60 Hz tiene que
+      ser 1 siempre;
+    - `presents`, `animCV` y `animRate`: cuántas veces se presenta el
+      jugador por fotograma (1 desde el segundo corte) y cómo avanza su
+      animación por fotograma (variación ~0, ritmo 1);
+    - `leaks`: fotogramas en que algo de la simulación cambió después
+      de su último paso. Tiene que ser 0: presentar no escribe estado de
+      simulación.
+  - `--hitstop`: el jugador cabecea a un muñeco aturdido. Mide la
+    congelación a cada frecuencia (fotogramas, ms) y la imagen que
+    sostiene, que tiene que ser la misma a todas.
+  - `--snowball`: Kowalski lanza la K y se lee la posición dibujada de la
+    bola en cada fotograma.
+  - `--jitter` mete ruido en las marcas de tiempo y las redondea a 0,1 ms,
+    como Chrome.
+  - `--floor=1` las trunca a 1 ms, como Safari e iOS, y `--phase` fija en
+    qué punto del milisegundo empieza el reloj. Prueba varias fases: el
+    enganche viejo fallaba en unas sí y en otras no.
+- **Dónde engancharse por paso** (desde el 2026-09-25): `Game.simulate`
+  corre una vez por paso de simulación en el juego y en los dos modos del
+  laboratorio, porque `Game.update` también lo llama. Un gancho en
+  `Game.update` ya no ve los pasos del juego ni los del modo de paso fijo.
+  `Game.present` y `Critter.present` corren una vez por fotograma.
+  - Con el paso fijo (`src/fixed-step.ts`), el deslizamiento y la
+    velocidad tienen que salir iguales a cualquier frecuencia.
+  - El retraso es de 1 fotograma hasta 144 Hz. Por encima puede llegar a
+    un paso (1/60 s).
 - **Por qué cae un bicho** (2026-09-25): con el dev server vivo,
   `node scripts/fall-probe.mjs --critter=Kowalski [--matches=40]
   [--seed=4000] [--feel=sec.key=val]`.
@@ -713,6 +751,18 @@ Emitidos automáticamente vía polling edge-detection en `DevApi.tick`:
 | `collapse_batch`  | `arena.collapseLevel` cambia a un valor > 0        | `arena`   |
 | `match_started`   | Explícito desde `startMatch`                       | `lab`     |
 | `match_ended`     | Explícito desde `endMatch`                         | `lab`     |
+
+**El All-in (L de mantener)** nunca activa su ranura, así que sale por otra
+vía (2026-09-25): cuando `lHoldCharging` pasa de true → false.
+- Con el enfriamiento ya en marcha, ha disparado: `ability_cast` y
+  `ability_end` seguidos, antes de las caídas que provoca en ese paso.
+- Si no, la carga se soltó sin disparar (aturdido, caída, un bot sin
+  pasillo): solo un `ability_end` con «(dropped)» detrás del nombre, **sin
+  `ability_cast`**.
+
+**Ojo con los tiempos**: `t` es `performance.now()`, reloj de pared. A
+`--speed 8` una ventana corta entre eventos abarca varios segundos de
+partida (ERROR_LOG 2026-09-25): para eso, `scripts/fall-probe.mjs`.
 
 **Añadir un nuevo tipo**:
 

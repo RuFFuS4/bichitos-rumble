@@ -140,14 +140,26 @@ antes de commitear el JSON.
            como el sim.
          - **No** se toca Toxic Touch: que se inviertan todos los
            controles es la intención.
-   - [ ] **Paso fijo de simulación** (decisión 1, permiso para `main.ts`).
-         El diseño, opción (a), está en `.tmp/fase2/paso-fijo-diseno.md`
-         del worktree. Van dos commits:
-         1. `src/fixed-step.ts` y el bucle de `main.ts`;
-         2. separar simular de presentar en `Critter` y en `frame-ticks`.
+   - [x] **Paso fijo de simulación** (decisión 1), primer corte hecho el
+         2026-09-25:
+         - `src/fixed-step.ts` y el bucle de `main.ts`;
+         - en `game.ts`, `isOnlinePhase()` y `syncCritterShadows` pública,
+           con permiso de Rafa;
+         - `SIM.movement.integrationSubsteps` con su espejo en `FEEL`,
+           para DISTRIBUCIÓN.
 
-         Además, `SIM.movement.integrationSubsteps` con su espejo en `FEEL`
-         para el suavizado de DISTRIBUCIÓN.
+         El empujón llega igual de lejos a cualquier frecuencia, sin
+         retraso añadido a 60 Hz. Cifras en `REPASO_HABILIDADES.md`
+         §«Paso fijo»; herramienta: `scripts/fixed-step-probe.mjs`.
+   - [x] Paso fijo, segundo corte (Rafa, 2026-09-25: permiso para
+         `game.ts`, «adelante»), hecho el mismo día. Simular va por paso
+         y presentar por fotograma: animación, efectos, polvo, bolas e
+         iconos se mueven en cada fotograma a 144 y 240 Hz. Cifras en
+         `REPASO_HABILIDADES.md` §«Segundo corte»; mapa y diseño en
+         `.tmp/paso-fijo-2/` del worktree.
+   - [ ] Preguntar a Rafa por tres cambios visuales seguros: clip de
+         caída offline, clips en la cuenta atrás y sierra de Shelly
+         online.
    - [ ] **Pase de balance de los golpes de dash** (`REPASO_HABILIDADES.md`
          §«Medido»). Kowalski (eliminado 49 → 65 %) y Sergei (70 → 78 %)
          pierden: les tiran más los dashes que ahora golpean, no su
@@ -157,8 +169,11 @@ antes de commitear el JSON.
    - [ ] Lo que falta en `BrawlRoom` (DISTRIBUCIÓN, S2-1 a S2-5), en tierra
          de nadie, INTERFAZ y ARENA: listado en el documento, con aviso en
          cada buzón.
-   - [ ] Preguntar a Rafa si deja tocar 6 cosas pequeñas de tierra de
-         nadie (`frame-ticks`, `main.ts:414`, `game.ts`, `dev-api.ts`).
+   - [x] Las 6 cosas pequeñas de tierra de nadie (permiso de Rafa,
+         2026-09-25), hechas: ver `REPASO_HABILIDADES.md`.
+   - [x] Las preguntas de la segunda tanda, respondidas el 2026-09-25:
+         1-3 se quedan, el Grip trae entero, y el apuntado del All-in pasa
+         a 180°/s (a criterio de PERSONAJES).
 4. **Feel pass de Kurama** (heredado de H4; receta en `NEXT_STEPS.md`).
 5. **Shaders cartoon**: Rafa eligió el 2026-09-23 contorno sobre el
    sombreado actual, no toon (punto 2). Si vuelve el toon, el precedente
@@ -317,6 +332,44 @@ antes de commitear el JSON.
   estaba en producción. Mantener la L mientras acababa el cooldown, o
   pulsarla aturdido, la metía por la activación estándar sin carga ni
   mínimo.
+  → *Hecho el 2026-09-25:*
+  - *los comentarios dicen ya lo que hace `BrawlRoom`, incluidos los de
+    `getLDef`, `knockbackScale` y `dashGlideFactor` en
+    `server/src/sim/abilities.ts`, y el de la paridad en
+    `feel-sim-parity`;*
+  - *`lHoldPrevInput`, fuera de `server/src/sim/physics.ts`.*
+
+- **De DISTRIBUCIÓN, 2026-09-25 — tu nota de las zonas de Copycat, hecha,
+  y tres cosas más de la misma familia que no toco.** Las copias de
+  Kurama del Frozen Floor y del Sinkhole salen ya online como hielo y
+  arena (`onZoneSpawned`, con permiso de Rafa para `game.ts`; medido en
+  vivo con 4 clientes). Un barrido del cliente online buscando visuales
+  que se deciden por el nombre del lanzador, con verificador adversarial,
+  confirmó tres fallos más, todos de gravedad baja y solo visuales.
+  Casi todo está ya en tu informe (C7, A3 y las líneas 238-239), pero la
+  trampa de Copycat es nueva:
+  1. **La cuña del Cone Pulse online** (`game.ts` ~1729,
+     `handleAbilityFired`, rama `frenzy`): online siempre se pinta
+     `spawnFrenzyBurst`, un disco. Si se cablea `spawnLEntryVfx` con
+     `c.abilityStates[2].def`, Cheeto queda bien pero la copia de Kurama
+     sigue saliendo como disco. Online `applyCopycat` no corre nunca (solo
+     desde `fireEffect` en offline), así que esa def es siempre la del kit
+     de Kurama. El comentario de `abilities-runtime.ts` ~1096 («la copia
+     llega en `def`») solo es cierto offline. Para la copia, el servidor
+     tendría que mandar la forma de la L en el `abilityFired` (campos
+     opcionales, leídos de `getLDef`); eso es mío cuando lo decidáis.
+  2. **Shake y sonido por pulso del Cone Pulse**
+     (`abilities-runtime.ts` ~641, `tickLOffline`): también corre online y
+     lee la def del kit del cliente. La copia de Kurama online no hace
+     shake ni suena en ningún pulso, y el Cheeto online saca los puffs y
+     anillos dos veces (esto es tu C7). Si aplicas C7 saltándote
+     `tickLOffline` en online, pasa el shake y el sonido a `onLPulse`, o
+     el Cheeto online también se queda mudo.
+  3. **El giro de la sierra** (`critter.ts` ~608): va condicionado a
+     `config.name === 'Shelly'` y está después del `return` de
+     `skipPhysics`. Online no gira nadie, ni Shelly ni la copia (la parte
+     de Shelly online no la vi documentada). Offline la copia tampoco
+     gira, aunque `COPYCAT_KEYS` copia `sawSpinSpeed`.
 
 ## Cómo retomar
 
@@ -327,13 +380,10 @@ los ficheros de otro carril (memoria `feedback_physics_permission`).
 
 Lo siguiente:
 - el pase de balance de los golpes de dash (Kowalski y Sergei pierden);
-- el paso fijo de simulación (punto 3), con su diseño ya escrito;
 - después, el punto 3 original del feeling: que cada Tripo corra a su
   manera.
 
-Siguen abiertas en `REPASO_HABILIDADES.md`:
-- las 6 preguntas de la segunda tanda;
-- el permiso para las 6 cosas pequeñas de tierra de nadie.
+Rafa contestó las preguntas y dio los permisos el mismo 25 (ver arriba).
 
 **2026-09-24** — la mejora gráfica del punto 2 está completa en `dev`,
 salvo las texturas nuevas de los Tripo (aparcadas: Rafa no tiene acceso a

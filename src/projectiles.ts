@@ -29,6 +29,8 @@ import { spawnShockwaveRing } from './abilities-vfx';
  *  smaller one where it melts at the end of its range. */
 const HIT_RING_RADIUS = 1.2;
 const EXPIRE_RING_RADIUS = 0.7;
+/** Height the ball flies at (visual). */
+const SNOWBALL_Y = 0.7;
 
 interface ActiveProjectile {
   id: number | null; // null for offline (no server id), number for online
@@ -39,6 +41,13 @@ interface ActiveProjectile {
   vx: number;
   vz: number;
   ttl: number;
+  /** x / z / ttl before the newest sim step (snapshotProjectiles): the
+   *  mesh is drawn between the two (presentProjectiles). */
+  prevX: number;
+  prevZ: number;
+  prevTtl: number;
+  /** ttl at birth: the flight time, ttl0 − ttl, drives the tumble. */
+  ttl0: number;
   radius: number;
   impulse: number;
   slowDuration: number;
@@ -89,12 +98,13 @@ export function spawnLocalProjectile(
   offlineCounter++;
   const id = -offlineCounter; // negative id space → no clash with server ids
   const mesh = makeSnowballMesh(args.radius);
-  mesh.position.set(args.x, 0.7, args.z);
+  mesh.position.set(args.x, SNOWBALL_Y, args.z);
   scene.add(mesh);
   activeProjectiles.push({
     id, ownerCritterName: args.ownerCritterName, ownerSid: null,
     x: args.x, z: args.z, vx: args.vx, vz: args.vz,
-    ttl: args.ttl, radius: args.radius,
+    ttl: args.ttl, prevX: args.x, prevZ: args.z, prevTtl: args.ttl, ttl0: args.ttl,
+    radius: args.radius,
     impulse: args.impulse, slowDuration: args.slowDuration,
     mesh, serverAuthoritative: false,
   });
@@ -122,12 +132,13 @@ export function pushNetworkProjectile(
   },
 ): void {
   const mesh = makeSnowballMesh(args.radius);
-  mesh.position.set(args.x, 0.7, args.z);
+  mesh.position.set(args.x, SNOWBALL_Y, args.z);
   scene.add(mesh);
   activeProjectiles.push({
     id: args.id, ownerCritterName: args.ownerCritterName, ownerSid: args.ownerSid,
     x: args.x, z: args.z, vx: args.vx, vz: args.vz,
-    ttl: args.ttl, radius: args.radius,
+    ttl: args.ttl, prevX: args.x, prevZ: args.z, prevTtl: args.ttl, ttl0: args.ttl,
+    radius: args.radius,
     impulse: 0, slowDuration: 0,
     mesh, serverAuthoritative: true,
   });
@@ -179,15 +190,37 @@ export function clearProjectiles(): void {
   activeProjectiles.length = 0;
 }
 
+/** Before every sim step (paused and frozen ones too, so a still ball
+ *  draws still): where each ball stands, for presentProjectiles. */
+export function snapshotProjectiles(): void {
+  for (const pr of activeProjectiles) {
+    pr.prevX = pr.x;
+    pr.prevZ = pr.z;
+    pr.prevTtl = pr.ttl;
+  }
+}
+
+/** Once per rendered frame: each ball drawn between its last two sim
+ *  positions (`alpha`, as the critters), tumbling by its flight time — it
+ *  stops with the flight on hit stop and pause. Online and the lab pass 1. */
+export function presentProjectiles(alpha: number): void {
+  for (const pr of activeProjectiles) {
+    pr.mesh.position.set(pr.prevX + (pr.x - pr.prevX) * alpha, SNOWBALL_Y, pr.prevZ + (pr.z - pr.prevZ) * alpha);
+    const flight = pr.ttl0 - (pr.prevTtl + (pr.ttl - pr.prevTtl) * alpha);
+    pr.mesh.rotation.x = flight * FEEL.snowball.tumbleX;
+    pr.mesh.rotation.z = flight * FEEL.snowball.tumbleZ;
+  }
+}
+
 /**
- * Per-frame tick:
+ * Per sim step (tickSharedSimulation):
  *   · integrate position
  *   · advance ttl
  *   · OFFLINE only: sweep against each alive non-owner critter, apply
  *     knockback + critter.slowTimer on hit, despawn with impact VFX
  *   · expire on ttl ≤ 0 with a soft puff
- * Called from main.ts after physics. Skipped on hit-stop frames: a
- * snowball doesn't fly on while the world is frozen.
+ * The mesh is presentProjectiles'. Skipped on hit-stop steps: a snowball
+ * doesn't fly on while the world is frozen.
  */
 const projectilesFrozen = createFrozenFrameGate();
 export function tickProjectiles(
@@ -200,9 +233,6 @@ export function tickProjectiles(
     pr.x += pr.vx * dt;
     pr.z += pr.vz * dt;
     pr.ttl -= dt;
-    pr.mesh.position.set(pr.x, 0.7, pr.z);
-    pr.mesh.rotation.x += dt * 8; // tumble for snowball read
-    pr.mesh.rotation.z += dt * 6;
 
     // Server-authoritative: skip local hit detection, server drives
     // removal via removeProjectile(id) on `projectileHit`.

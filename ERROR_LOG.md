@@ -1,5 +1,61 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-25] El paso fijo nunca se enganchaba en Safari ni en iOS
+- **Where**: `src/fixed-step.ts` `FixedStepClock.advance`. Lo encontró la
+  revisión previa al despliegue de DISTRIBUCIÓN.
+- **Symptom**: con las marcas de rAF de WebKit, el enganche no llegaba
+  nunca.
+  - Con el reloj arrancado alineado con la pantalla (así lo hacen la
+    sonda y los tests), a 60 Hz había fotogramas de 0, 1 y 2 pasos, y a
+    30 Hz de 1, 2 y 3. Pasaba en la mayoría de las fases del reloj.
+  - En partida, la fase no se reajustaba nunca: se dibujaba hasta un paso
+    tarde. Además había rachas de 0 y 2 pasos cada vez que la fase quedaba
+    a menos de ~1 ms del borde de un paso.
+- **Cause**: WebKit trunca las marcas de rAF a 1 ms, así que a 60 Hz los
+  fotogramas miden 16 o 17 ms. El enganche juzgaba cada fotograma por
+  separado con ±0,25 ms, y ninguno quedaba cerca de 16,67.
+- **Fix**: se juzga la media de los 16 últimos fotogramas. Las marcas
+  truncadas se compensan entre sí, así que esa media se desvía menos de
+  1/16 ms. Al medir 6 variantes con fotogramas irregulares salieron dos
+  retoques:
+  - la fase solo se reajusta cuando el enganche lleva una ventana entera
+    sin soltarse (si no, el juego corría ~1 % rápido);
+  - el umbral pasa a ±0,15 ms, para que una pantalla de 59 Hz no se
+    enganche.
+
+  Una revisión adversarial del arreglo encontró otro detalle: un primer
+  fotograma que agotaba los pasos (compilando shaders) dejaba el reloj en
+  el borde de un paso durante ~33 fotogramas. Ahora cae en el margen de
+  fase.
+- **Lección**: los tests y la sonda solo modelaban la precisión de Chrome
+  (0,1 ms), el navegador en que se probaba. Un reloj que depende de las
+  marcas de tiempo se prueba con la precisión de cada motor: Chrome
+  0,1 ms, WebKit 1 ms truncado y Firefox 1 ms. Para eso están
+  `webkitFrames` en `tests/sim/fixed-step.test.ts` y `--floor` en la
+  sonda.
+
+### [2026-09-25] El golden dio un «cambio de balance» en una partida idéntica
+- **Where**: `scripts/run-match-batch.mjs` (espera del fin de partida) y
+  `src/tools/dev-api.ts` `tickRecording`.
+- **Symptom**: con un cambio solo visual del paso fijo, el golden falló
+  dos veces seguidas en la seed 501: «evento #252: golden
+  match_ended|arena|player_eliminated vs actual (fin)». La grabación era
+  idéntica hasta el final, con los mismos eventos y las mismas
+  posiciones; solo le faltaba el último evento y la última instantánea.
+  Otra pasada del mismo código salió 3/3.
+- **Cause**: carrera.
+  - `dev-api` solo mira si la partida acabó cuando toca instantánea, cada
+    200 ms de simulación. La fase pasa a `ended` hasta 12 pasos antes de
+    que se registre `match_ended`.
+  - El ejecutor sondea cada 500 ms de reloj de pared. Si veía `ended` en
+    ese hueco, paraba la grabación a mano sin el evento.
+- **Fix**: con la fase en `ended`, el ejecutor espera (hasta 5 s) a que la
+  grabación tenga su motivo de fin.
+- **Lección**: ante un «cambio de balance» en un cambio que no debería
+  tocar la simulación, compara también las posiciones de las grabaciones
+  antes de buscar la fuga. Si la simulación es idéntica hasta el final,
+  el fallo está en la herramienta.
+
 ### [2026-09-25] Ventanas de tiempo medidas con el reloj de pared: culpé al Ice Slide sin motivo
 - **Where**: análisis de las grabaciones de `run-match-batch.mjs
   --dump-recordings` (script de un día, no del repo). Conclusión

@@ -29,7 +29,9 @@ import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
 import { initOnlineBeltToast } from './online-belt-toast';
 import { isInsideZoneOfKind, setArenaForAbilities } from './abilities-runtime';
 import { initSceneAtmosphere } from './scene-atmosphere';
-import { tickSharedGameplay } from './frame-ticks';
+import { tickSharedGameplay, tickSharedSimulation, tickSharedPresentation } from './frame-ticks';
+import { FixedStepClock, PoseInterpolator, SIM_STEP, MAX_FRAME_DT } from './fixed-step';
+import type { Critter } from './critter';
 import { initStatusLegend } from './hud/status-legend';
 import { getPreviewPackId } from './arena-decor-layouts';
 
@@ -366,112 +368,140 @@ if (!hasServerUrl) {
   console.info('[Main] online mode disabled (no VITE_SERVER_URL)');
 }
 
-/**
- * Build the status-set for a critter from its instantaneous state.
- * Pure: takes a Critter, returns a fresh Set<CritterStatus>. The
- * HUD layer diffs the result against its previous render so the DOM
- * only mutates when a glyph actually changes.
- *
- * Mapping rules (2026-04-29 final-K):
- *   · stunTimer > 0           → 'stunned' + 'vulnerable'
- *   · slowTimer > 0           → 'frozen' (Snowball is the only
- *                                 setter — frost cyan tint already
- *                                 paired with the icon)
- *   · selfTintTimer > 0 with Shelly's metallic tint → 'steel-shell'
- *   · invisibilityTimer > 0 + Kurama → 'decoy-ghost'
- *   · ability frenzy slot active and out of windup → 'frenzy'
- *   · standing in a 'poison' zone (and not Kermit himself)
- *                             → 'poisoned'
- *   · standing in a 'sand' zone (and not Sihans herself)
- *                             → 'slowed'
- */
+// Status icons: the mapping lives in computeCritterStatuses
+// (src/frame-ticks.ts), run once per frame.
+
 // Game loop
+//
+// Offline, the sim runs in fixed steps of 1/60 s (src/fixed-step.ts; Rafa,
+// decision 1 of the ability review, 2026-09-24): a push carries the same
+// at 30, 60 or 144 Hz, and the live game matches the lab, the golden and
+// the batch runner. Each frame runs the steps that take the sim up to (or
+// just past) the real clock and draws the critters at the real instant,
+// between their last two sim poses — at 60 Hz that is one step per frame,
+// drawn 1 ms short of its end: no added lag to speak of. Presentation
+// (animation, feedback, dust, icons, shadows) runs once per frame, so at
+// 144 Hz it moves every frame, not 60 times a second. Online keeps the
+// per-frame path: the server is authoritative and net-smoothing owns the
+// local motion.
+const clock = new FixedStepClock();
+const pose = new PoseInterpolator<Critter>();
 let lastTime = performance.now();
 function loop(now: number) {
-  const dt = Math.min((now - lastTime) / 1000, 0.05); // cap dt
+  const frameDt = Math.min(Math.max((now - lastTime) / 1000, 0), MAX_FRAME_DT);
+  // Per-frame presentation (camera, preview, online) keeps its old cap.
+  const dt = Math.min(frameDt, 0.05);
   lastTime = now;
 
   // Ensure canvas matches viewport (guards against late-layout edge cases)
   if (renderer.domElement.width === 0) {
     syncSize(camera, renderer);
   }
-
-  game.update(dt);
-  // Dust puff pool tick — no-op when empty. Lives outside game.update so
-  // puffs keep animating even through edge phase transitions.
-  // EXCEPT when the offline pause menu is up: if we keep advancing
-  // puff lifetimes, an in-flight ring would keep expanding behind the
-  // menu and look like gameplay never actually froze.
-  // Gameplay subsystem ticks (dust / zones / L / projectiles / status
-  // icons) — shared with the match lab, see src/frame-ticks.ts.
-  tickSharedGameplay(dt, game, scene, camera, {
+  const viewport = {
     width: renderer.domElement.clientWidth,
     height: renderer.domElement.clientHeight,
-  });
-  if (!game.isPaused()) {
-    const localPos = game.getLocalPlayerPos();
-    const insidePoison = !!localPos && localPos.alive
-      && isInsideZoneOfKind(localPos.x, localPos.z, 'poison');
-    setPoisonOverlayIntensity(insidePoison ? 1 : 0);
-    const allCritters = game.getActiveCritters();
-    if (insidePoison) {
-      for (const c of allCritters) {
-        if (!c.alive) { c.fadeAlpha = null; continue; }
-        // Skip self — never fade the local viewer.
-        if (localPos && c.x === localPos.x && c.z === localPos.z && c.config.name === localPos.critterName) {
-          c.fadeAlpha = null;
-          continue;
+  };
+
+  // The sim. Its ticks outside game.simulate (zones / L / projectiles) run
+  // with it — shared with the match lab, see src/frame-ticks.ts.
+  let alpha = -1; // ≥ 0: offline; draw the critters interpolated by it
+  if (game.isOnlinePhase()) {
+    clock.reset();
+    pose.clear();
+    game.update(dt);
+    tickSharedGameplay(dt, game, scene, camera, viewport);
+  } else {
+    const tick = clock.advance(frameDt);
+    for (let i = 0; i < tick.steps; i++) {
+      pose.capture(game.getActiveCritters());
+      game.simulate(SIM_STEP);
+      tickSharedSimulation(SIM_STEP, game, scene);
+      if (game.isOnlinePhase()) break; // joined a room mid-frame
+    }
+    if (!game.isOnlinePhase()) alpha = tick.alpha;
+  }
+
+  // The drawing. Offline it all happens inside the window where the
+  // critters stand at their interpolated pose, so everything that follows
+  // them (poison fade, their animation, blob shadows, the end camera, dust,
+  // status icons) sees what is drawn; the sim pose comes back after the
+  // render, whatever throws. Presentation runs once per frame here, with
+  // the game time shown (Game.present), at any refresh rate.
+  try {
+    if (alpha >= 0) pose.apply(game.getActiveCritters(), alpha);
+    if (!game.isPaused()) {
+      const localPos = game.getLocalPlayerPos();
+      // Someone else's cloud: Kermit sees fine inside his own.
+      const insidePoison = !!localPos && localPos.alive
+        && isInsideZoneOfKind(localPos.x, localPos.z, 'poison', localPos.critterName);
+      setPoisonOverlayIntensity(insidePoison ? 1 : 0);
+      const allCritters = game.getActiveCritters();
+      if (insidePoison) {
+        for (const c of allCritters) {
+          if (!c.alive) { c.fadeAlpha = null; continue; }
+          // Skip self — never fade the local viewer.
+          if (localPos && c.x === localPos.x && c.z === localPos.z && c.config.name === localPos.critterName) {
+            c.fadeAlpha = null;
+            continue;
+          }
+          c.fadeAlpha = isInsideZoneOfKind(c.x, c.z, 'poison') ? null : 0.10;
         }
-        c.fadeAlpha = isInsideZoneOfKind(c.x, c.z, 'poison') ? null : 0.10;
+      } else {
+        for (const c of allCritters) c.fadeAlpha = null;
       }
     } else {
-      for (const c of allCritters) c.fadeAlpha = null;
+      // Paused: drop the overlay so the pause menu reads cleanly.
+      setPoisonOverlayIntensity(0);
     }
-  } else {
-    // Paused: drop the overlay so the pause menu reads cleanly.
-    setPoisonOverlayIntensity(0);
-  }
-  // Camera ownership per phase:
-  //   · paused          → freeze (no shake, no lerp).
-  //   · ended           → game.getEndScreenCameraPose() returns a
-  //                       win/lose/draw-specific pose (close-up,
-  //                       wide-on-survivor, or wide-on-arena). Shake
-  //                       silenced — celebratory framing wants a
-  //                       steady camera, not a wobble.
-  //   · everything else → base position + camera shake stack (the
-  //                       normal gameplay pipeline).
-  //
-  // Restart reset: when the phase leaves 'ended' (e.g. user hits R
-  // to restart), we have to actively reset the camera's `lookAt`
-  // back to the gameplay base. Three.js stores rotation internally;
-  // a previous `camera.lookAt(endPose.lookAt)` persists across phase
-  // changes if not explicitly overwritten. Without this, post-restart
-  // matches play with the camera staring at wherever the end-screen
-  // was focused (the player's last position, or arena origin for
-  // wide poses) — looks like the camera is broken. The
-  // `wasEndPhase` edge detector calls `lookAt(BASE_CAM_LOOKAT)` ONCE
-  // on the transition out, not every frame.
-  const endPose = game.getEndScreenCameraPose();
-  if (game.isPaused()) {
-    // No-op — camera frozen at whatever it was last frame.
-  } else if (endPose) {
-    camera.position.lerp(endPose.position, Math.min(dt * 2.5, 1));
-    camera.lookAt(endPose.lookAt);
-    wasEndPhase = true;
-  } else {
-    if (wasEndPhase) {
-      // Explicit full pose reset on the transition out of 'ended':
-      // position, lookAt and the up-vector all snap back to the
-      // canonical gameplay framing in one call. updateCameraShake
-      // below writes absolute position values relative to the
-      // cached base, so the snap is locked in even if a residual
-      // shake was still decaying when the match ended.
-      applyGameplayCameraPose(camera);
-      wasEndPhase = false;
+    // After the fade (updateVisuals reads it) and before the camera (the
+    // end pose frames the drawn survivor).
+    if (alpha >= 0) game.present(alpha);
+    // Camera ownership per phase:
+    //   · paused          → freeze (no shake, no lerp).
+    //   · ended           → game.getEndScreenCameraPose() returns a
+    //                       win/lose/draw-specific pose (close-up,
+    //                       wide-on-survivor, or wide-on-arena). Shake
+    //                       silenced — celebratory framing wants a
+    //                       steady camera, not a wobble.
+    //   · everything else → base position + camera shake stack (the
+    //                       normal gameplay pipeline).
+    //
+    // Restart reset: when the phase leaves 'ended' (e.g. user hits R
+    // to restart), we have to actively reset the camera's `lookAt`
+    // back to the gameplay base. Three.js stores rotation internally;
+    // a previous `camera.lookAt(endPose.lookAt)` persists across phase
+    // changes if not explicitly overwritten. Without this, post-restart
+    // matches play with the camera staring at wherever the end-screen
+    // was focused (the player's last position, or arena origin for
+    // wide poses) — looks like the camera is broken. The
+    // `wasEndPhase` edge detector calls `lookAt(BASE_CAM_LOOKAT)` ONCE
+    // on the transition out, not every frame.
+    const endPose = game.getEndScreenCameraPose();
+    if (game.isPaused()) {
+      // No-op — camera frozen at whatever it was last frame.
+    } else if (endPose) {
+      camera.position.lerp(endPose.position, Math.min(dt * 2.5, 1));
+      camera.lookAt(endPose.lookAt);
+      wasEndPhase = true;
+    } else {
+      if (wasEndPhase) {
+        // Explicit full pose reset on the transition out of 'ended':
+        // position, lookAt and the up-vector all snap back to the
+        // canonical gameplay framing in one call. updateCameraShake
+        // below writes absolute position values relative to the
+        // cached base, so the snap is locked in even if a residual
+        // shake was still decaying when the match ended.
+        applyGameplayCameraPose(camera);
+        wasEndPhase = false;
+      }
+      updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
     }
-    updateCameraShake(camera, baseCamX, baseCamY, baseCamZ, dt);
+    // Dust and status icons, placed with this frame's camera.
+    if (alpha >= 0) tickSharedPresentation(dt, alpha, game, camera, viewport);
+    renderer.render(scene, camera);
+  } finally {
+    pose.restore();
   }
-  renderer.render(scene, camera);
   // Preview renders only when visible; cheap no-op otherwise
   tickPreview(dt);
   requestAnimationFrame(loop);

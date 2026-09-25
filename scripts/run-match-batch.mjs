@@ -348,6 +348,20 @@ async function runOneMatch(page, { player, bots, seed, packId, speed, timeoutMs,
     }
   })();
 
+  // The phase turns 'ended' a few sim steps before the recording logs its
+  // match_ended (dev-api checks the end on its 200 ms snapshot grid). Seen
+  // in that gap, the recording used to be stopped by hand below without
+  // the event, and the golden flagged a "balance change" that wasn't one
+  // (2026-09-25). Give the sim the steps it needs.
+  if (ended) {
+    const t1 = Date.now();
+    while (Date.now() - t1 < 5_000) {
+      const logged = await evaluateWithDeadline(page, () => window.__devApi.getRecording()?.outcome.reason != null);
+      if (logged) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+
   const payload = await evaluateWithDeadline(page, ({ ended }) => {
     const api = window.__devApi;
     const g = window.__game;

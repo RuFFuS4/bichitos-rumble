@@ -6,17 +6,53 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Pendiente (por orden)
 
-0. **v1.9 — preparada, falta el visto bueno de Rafa y desplegar.**
+0. **v1.9 — ✅ EN PRODUCCIÓN desde el 2026-09-25 a las 02:10 UTC**
+   (main `a37791b` = `dev` `a09ec8a`, tag `v1.9-habilidades-online`).
    `BrawlRoom` ejecuta las habilidades como el sim (repaso de PERSONAJES
    menos el Sinkhole), la L de los bots online, el paso fijo con 2
    sub-pasos y `NET_PROTOCOL` 3.
-   - Verificación completa en BUILD_LOG (2026-09-25, DISTRIBUCIÓN, v1.9).
-   - Capturas en `.tmp/v19-live/shots/` del worktree de distribución.
-   - **Al desplegar** (runbook de abajo, el SHA exacto verificado):
-     - comprobar `/health` → `protocol: 3`;
-     - un cliente v1.8 que siga abierto verá «recarga»: es lo esperado;
-     - las cifras de balance online cambian (sub-pasos + L de los bots):
-       Kermit fuerte, decisión de Rafa.
+   - Verificación, ventana (Vercel 32 s, Railway 59 s) y comprobaciones
+     de después en BUILD_LOG (2026-09-25, DISTRIBUCIÓN, v1.9).
+   - Rollback: Vercel `dpl_AozQKczWU5Zn3pCZBBT6eH1VYeDq` (784779f) y
+     Railway, el despliegue de 784779f. Siempre los dos lados.
+   - **Queda de Rafa, a mano:**
+     - una pestaña v1.8 abierta tiene que recibir «recarga»;
+     - 2 pestañas en sala privada, con un Sebastian que cargue el
+       All-in;
+     - Sentry sin issues nuevos;
+     - el A/B del suavizado del punto 1.
+   - Las cifras de balance online cambian (sub-pasos + L de los bots):
+     Kermit queda fuerte, decisión de Rafa.
+   - **Ya en `dev` para el próximo despliegue** (avisos de PERSONAJES,
+     2026-09-25). **Van cliente Y servidor**: si solo sale Vercel, online
+     se queda como hoy. `NET_PROTOCOL` sigue en 3, así que no hay
+     «recarga».
+     - `5f8c9d9` (cliente): el juego offline simula a paso fijo de 1/60,
+       como los 2 sub-pasos del servidor. La ruta online de `main.ts` no
+       cambia (`game.update(dt)` por frame, con el reloj del paso fijo
+       reiniciado), así que el suavizado tampoco. Comprobado: 278 tests
+       y el tsc del servidor en verde.
+     - `f22d8ca` (servidor, `server/src/sim`), respuestas de Rafa:
+       - el Grip trae entero a un Sergei en frenesí (`fireGroundPound`
+         ya no escala el tirón con `knockbackScale`);
+       - el All-in apunta a 180°/s (`SIM.allIn.aimTurnDegPerSec`, que lee
+         el bucle de carga de `BrawlRoom`).
+     - Verificación al desplegar:
+       - una partida offline a 60 Hz y otra a 144 Hz;
+       - una sala online de 4 clientes (`.tmp/ability-live.mjs` del
+         worktree), donde Trunk agarra a un Sergei en frenesí y lo deja a
+         1,6 u de la trompa;
+       - un Sebastian que carga tarda ~1 s en girarse 180°.
+   - Cliente, también en `dev` (con permiso de Rafa para `game.ts`,
+     2026-09-25): el Frozen Floor o el Sinkhole que copia Kurama salen
+     ya online como hielo y arena (`onZoneSpawned` toma el tipo de las
+     banderas del evento), con su icono de congelado o ralentizado
+     dentro.
+     - Medido en vivo con 4 clientes: antes `generic`, después `ice` y
+       `sand`; las zonas propias, igual que antes.
+     - Queda una diferencia de color, ya sabida: online el anillo sale
+       con la paleta del lanzador y offline con los colores de cada
+       zona. Así, la copia de Kurama se ve magenta.
 
 1. **v1.8 (H4.5) — ✅ EN PRODUCCIÓN desde el 2026-09-24 a las 22:00 UTC**
    (main `784779f` = `bf7b3ee`, tag `v1.8-terreno-v2`). Comprobaciones de
@@ -316,6 +352,28 @@ corren riesgo: no hay migraciones.
 ## Buzón
 
 *(Notas que te dejan otros carriles.)*
+
+- **De PERSONAJES, 2026-09-25 (tarde) — dos cambios de Rafa que viven en
+  `server/src/sim`: el próximo despliegue necesita servidor, no solo
+  cliente.**
+  - **El Grip trae entero a un Sergei en frenesí** (Rafa: «entero»).
+    `fireGroundPound` ya no escala el tirón con `knockbackScale`.
+  - **El apuntado del All-in pasa de 360 a 180°/s**
+    (`SIM.allIn.aimTurnDegPerSec`, que lee tu bucle de carga).
+  - `NET_PROTOCOL` sigue en 3 y el cliente puede salir antes o después,
+    porque ni el tirón ni la línea se predicen en el cliente. Pero si
+    solo se redespliega Vercel, online se queda con el 0,4 y los 360°/s.
+    Tu punto 0 dice «solo cliente»: ya no es así.
+  - Para verificar: en una sala privada, un Trunk agarra a un Sergei en
+    frenesí y lo deja a 1,6 u de la trompa; un Sebastian cargando tarda
+    ~1 s en girarse 180°.
+  - Una cosa tuya, sin prisa: `onZoneSpawned` en `game.ts` deriva el tipo
+    de zona del nombre del lanzador (`deriveZoneVfxKind`), así que online
+    el Frozen Floor o el Sinkhole que copia Kurama llegan como `generic`.
+    Nadie ve el icono de congelado o atrapado dentro, aunque en la sala
+    sí resbala y tira. El evento trae `slippery`/`sinkhole`: con eso
+    saldría `ice`/`sand`. Offline ya va bien. *(Hecho el 2026-09-25 con
+    permiso de Rafa; ver el punto 0.)*
 
 - **De PERSONAJES, 2026-09-25 — segunda tanda del repaso (decisiones de
   Rafa): cinco puntos más en `BrawlRoom.ts`. Ninguno bloquea.** Detalle

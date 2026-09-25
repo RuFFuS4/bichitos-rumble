@@ -249,9 +249,9 @@ export function findGripTarget(
  * Stun `target` for at least `seconds` (a stun never shortens a longer
  * one). A stunned critter doesn't act (Critter.stunTimer), so an All-in
  * charge it was holding drops unreleased — no dash, no cooldown — as on a
- * fall. Server: the grip and slam write the same max; the charge lives in
- * BrawlRoom's hold-to-fire loop, where dropping it on the stun (and sending
- * `lChargeEnd` so the line goes) is pending (DISTRIBUCIÓN, buzón fase 2).
+ * fall. Server: the grip and slam write the same max; BrawlRoom's
+ * hold-to-fire loop drops the charge on the stun and sends `lChargeEnd`
+ * so the line goes (since v1.9).
  */
 function stun(target: Critter, seconds: number): void {
   target.stunTimer = Math.max(target.stunTimer, seconds);
@@ -332,6 +332,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
         critter.z = nz;
         critter.mesh.position.x = nx;
         critter.mesh.position.z = nz;
+        critter.markTeleported();
         critter.vx = 0;
         critter.vz = 0;
         // 4 — a little dust at arrival: whoever watches closely can
@@ -374,11 +375,11 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
     playSound('groundPound');
     if (target) {
       const pull = def.gripPullDistance ?? 1.6;
-      // The yank is a push the target takes: it comes knockbackScale of
-      // the way to the pull point (a Frenzy Sergei, 0.4), never past it.
-      const k = Math.min(1, target.knockbackScale);
-      const tx = target.x + (critter.x + facingX * pull - target.x) * k;
-      const tz = target.z + (critter.z + facingZ * pull - target.z) * k;
+      // The grip brings the target all the way, knockbackScale or not: a
+      // Frenzy Sergei resists pushes, not the trunk (Rafa, 2026-09-25:
+      // «entero»).
+      const tx = critter.x + facingX * pull;
+      const tz = critter.z + facingZ * pull;
       // The lean follows the real yank: a target already inside the pull
       // distance, or off to a side, isn't moved straight at Trunk.
       let yankX = tx - target.x;
@@ -396,6 +397,7 @@ function fireGroundPound(def: AbilityDef, critter: Critter, allCritters: Critter
       target.z = tz;
       target.mesh.position.x = tx;
       target.mesh.position.z = tz;
+      target.markTeleported(); // the slide is applyYankVisual's, not the renderer's
       target.vx = 0;
       target.vz = 0;
       stun(target, def.gripStunDuration ?? 2.0);
@@ -547,18 +549,41 @@ interface ActiveZone {
    *  toward the centre is applied in `tickAbilityZones`. */
   sinkhole?: boolean;
   pullForce?: number;
+  /** ttl before the newest sim step (snapshotZoneClocks): the ring's
+   *  clock is drawn between the two (setZoneDrawAlpha). Offline only. */
+  prevTtl?: number;
 }
 
 const activeZones: ActiveZone[] = [];
+/** Where the drawn instant falls inside the newest sim step (the pose's
+ *  alpha), for the rings' clocks. 1 online and in the lab. */
+let zoneDrawAlpha = 1;
+
+/** Before every sim step (paused and frozen ones too): each zone's clock
+ *  as it stands. */
+export function snapshotZoneClocks(): void {
+  for (const zone of activeZones) zone.prevTtl = zone.ttl;
+}
+
+/** Once per rendered frame: the alpha the zone rings draw their clock at. */
+export function setZoneDrawAlpha(alpha: number): void {
+  zoneDrawAlpha = alpha;
+}
 
 /** Push an offline zone and return the clock its ring runs on
- *  (spawnZoneRing `age`): seconds of game time since it spawned, which
- *  stop with the zone on hit stop and pause, and read as its whole
- *  lifetime once it has left the list (expired or cleared). */
+ *  (spawnZoneRing `age`): seconds of game time since it spawned, drawn
+ *  between the last two sim steps like the critters, which stop with the
+ *  zone on hit stop and pause, and read as its whole lifetime once it has
+ *  left the list (expired or cleared). */
 function pushOfflineZone(zone: ActiveZone): () => number {
+  zone.prevTtl = zone.ttl;
   activeZones.push(zone);
   const lifetime = zone.ttl;
-  return () => (activeZones.includes(zone) ? lifetime - zone.ttl : lifetime);
+  return () => {
+    if (!activeZones.includes(zone)) return lifetime;
+    const prev = zone.prevTtl ?? zone.ttl;
+    return lifetime - (prev + (zone.ttl - prev) * zoneDrawAlpha);
+  };
 }
 
 /** Map a critter name to the zone visual kind they spawn. Centralised
@@ -1002,6 +1027,7 @@ function fireBlink(def: AbilityDef, critter: Critter, allCritters: Critter[], sc
   critter.z = targetZ;
   critter.mesh.position.x = targetX;
   critter.mesh.position.z = targetZ;
+  critter.markTeleported();
   critter.vx = 0;
   critter.vz = 0;
   spawnShockwaveRing(scene, targetX, targetZ, 1.4, palette);
@@ -1431,6 +1457,7 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     critter.z += dirZ * arrivalT;
     critter.mesh.position.x = critter.x;
     critter.mesh.position.z = critter.z;
+    critter.markTeleported();
     critter.vx = 0;
     critter.vz = 0;
     // BLOQUE FINAL micropass v2 — Rafa: "si choca con alguien debe
@@ -1449,6 +1476,7 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     hit.z += dirZ * (range * 0.8);
     hit.mesh.position.x = hit.x;
     hit.mesh.position.z = hit.z;
+    hit.markTeleported();
     if (!hit.falling && hit.alive) hit.startFalling();
     applyImpactFeedback(hit, dirX, dirZ);
     triggerHitStop(FEEL.hitStop.headbutt);
@@ -1467,6 +1495,7 @@ function fireAllInResolution(def: AbilityDef, critter: Critter, allCritters: Cri
     const [fx, fz] = firstPointOffArena(critter.x, critter.z, dirX, dirZ);
     critter.x = fx;
     critter.z = fz;
+    critter.markTeleported();
     critter.startFalling();
     spawnShockwaveRing(scene, critter.x, critter.z, 1.4, palette);
     triggerCameraShake(FEEL.shake.headbutt * 0.9);
@@ -1633,9 +1662,8 @@ export function startSebastianAllInCharge(critter: Critter, scene: THREE.Scene):
  * stands aside and the move input turns the facing instead, toward the
  * pushed direction at FEEL.allIn.aimTurnDegPerSec, the short way round.
  * No input keeps the aim. The line follows the facing and the caster (a
- * shove moves him). Server: pending in BrawlRoom's integrate step, with
- * SIM.allIn.aimTurnDegPerSec (DISTRIBUCIÓN, buzón fase 2); online the
- * charge still keeps the facing it started with.
+ * shove moves him). Server: BrawlRoom's hold-to-fire loop turns the
+ * facing the same way, with SIM.allIn.aimTurnDegPerSec (since v1.9).
  */
 export function advanceAllInCharge(critter: Critter, dt: number): void {
   critter.lHoldChargeTime += dt;

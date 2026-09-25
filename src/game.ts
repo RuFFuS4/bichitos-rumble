@@ -23,7 +23,8 @@ import {
   setEndMatchStats, clearEndMatchStats,
   type EndResult, type WaitingScreenData,
 } from './hud';
-import { applyHitStop, FEEL } from './gamefeel';
+import { applyHitStop, isHitStopActive, resetHitStop, FEEL } from './gamefeel';
+import { PresentClock } from './fixed-step';
 import { NetSmoother } from './net-smoothing';
 import { showPreview, swapPreviewCritter, hidePreview } from './preview';
 import { play as playSound, playMusic, preloadMusic } from './audio';
@@ -208,6 +209,14 @@ export class Game {
    *  short-circuits (no input, no bot AI, no physics) and the DOM pause
    *  menu overlay is shown. Toggled by ESC and the pause buttons. */
   private paused: boolean = false;
+  /** Game time as presentation shows it (src/fixed-step.ts). */
+  private readonly presentClock = new PresentClock();
+  /** The newest 'playing' step froze (hit stop, or the lab at speed 0). */
+  private lastStepFrozen = false;
+  /** A live (unfrozen) 'playing' step ran since the critters last
+   *  presented: a frame that runs the blow's step and then a frozen one
+   *  (30 Hz, a hitch) must still put the blow on screen. */
+  private livePending = false;
   /** Set after the nickname modal resolves (or from localStorage cache)
    *  when the player enters online mode. Sent with match-result writes so
    *  the server can credit stats to the right player row. Null offline. */
@@ -433,6 +442,12 @@ export class Game {
     return false;
   }
 
+  /** True while following a server room: the main loop keeps its
+   *  per-frame path there instead of fixed sim steps (src/fixed-step.ts). */
+  public isOnlinePhase(): boolean {
+    return this.phase === 'online';
+  }
+
   // -------------------------------------------------------------------------
   // Phase transitions
   // -------------------------------------------------------------------------
@@ -567,6 +582,10 @@ export class Game {
     // siembra el PRNG de la partida (bots, respawns, drops iniciales).
     const matchSeed = (Math.random() * 0xFFFFFFFF) | 0;
     seedMatchRng(matchSeed);
+    // A new match starts unfrozen (gamefeel.resetHitStop).
+    resetHitStop();
+    this.lastStepFrozen = false;
+    this.livePending = false;
     this.arena.buildFromSeed(matchSeed, offlinePack);
     const roster = buildMatchRoster(
       playerConfig,
@@ -1056,7 +1075,12 @@ export class Game {
       // local-side overlays (Kermit Poison Cloud screen-space mask)
       // can light up while the player stands inside a zone of the
       // matching kind. Same lookup table as the offline path.
-      const vfxKind = caster ? deriveZoneVfxKind(caster.config.name) : 'generic';
+      // The L flags win over the caster: a Frozen Floor or Sinkhole
+      // that Kurama copied (Copycat) is ice / sand like the offline
+      // one, not Kurama's 'generic' (no frozen/slowed icon inside).
+      const vfxKind = ev.slippery ? 'ice'
+        : ev.sinkhole ? 'sand'
+          : caster ? deriveZoneVfxKind(caster.config.name) : 'generic';
       pushNetworkZone({
         x: ev.x, z: ev.z, radius: ev.radius,
         slowMultiplier: ev.slowMultiplier,
@@ -1994,11 +2018,20 @@ export class Game {
   // Main update
   // -------------------------------------------------------------------------
 
-  update(dt: number): void {
+  /**
+   * One fixed step of the game (offline: src/main.ts calls it per 1/60 s
+   * step; the lab and online go through update()). Critters simulate here;
+   * they present once per frame in presentFrame(). Online, updateOnline
+   * still updates its critters per frame, as always.
+   */
+  simulate(dt: number): void {
+    // The phase at the start of the step; 'playing' reports its own time
+    // below (paused and hit-stop steps cover none).
+    if (this.phase !== 'playing') this.presentClock.onStep(dt);
     switch (this.phase) {
       case 'title':
         // Let critters idle (bob animation, no input)
-        for (const c of this.critters) c.update(dt);
+        for (const c of this.critters) c.simulate(dt);
         // Arrow left/right toggles mode highlight. If online isn't
         // available, left/right are ignored (only one mode exists).
         {
@@ -2021,7 +2054,7 @@ export class Game {
         break;
 
       case 'character_select': {
-        for (const c of this.critters) c.update(dt);
+        for (const c of this.critters) c.simulate(dt);
         const rLen = this.displayRoster.length;
         if (consumeMenuAction('left') && rLen > 0) {
           this.selectedIdx = (this.selectedIdx - 1 + rLen) % rLen;
@@ -2089,12 +2122,16 @@ export class Game {
         // the pause menu is up. Leave visuals (drag rotation etc.) alone.
         // The DOM overlay is managed by setPaused().
         if (this.paused) {
+          this.presentClock.onStep(0);
           // Still update the HUD once so cooldown bars don't snap on resume.
           updateAbilityHUD(this.player.abilityStates, this.player.stunTimer > 0);
           setCopycatTarget(this.player.config.name === 'Kurama' && this.player.lastHitTargetCritter ? this.player.lastHitTargetCritter : null);
           break;
         }
         const effectiveDt = applyHitStop(dt);
+        this.presentClock.onStep(effectiveDt);
+        this.lastStepFrozen = effectiveDt === 0;
+        if (effectiveDt > 0) this.livePending = true;
         if (effectiveDt === 0) {
           updateAbilityHUD(this.player.abilityStates, this.player.stunTimer > 0);
           setCopycatTarget(this.player.config.name === 'Kurama' && this.player.lastHitTargetCritter ? this.player.lastHitTargetCritter : null);
@@ -2102,6 +2139,10 @@ export class Game {
         }
 
         this.matchTimer -= effectiveDt;
+        // Stats (step 5): taken before the input, since an All-in starts a
+        // fall in steps 1-3, not in checkFalloff: the player's own miss, or
+        // a bot's All-in that yeets the player.
+        const playerWasFalling = this.player.falling;
 
         // 1. Player input — suppressed under autopilot so the bot brain
         // below is the ONLY writer on the player slot.
@@ -2135,18 +2176,17 @@ export class Game {
           }
         }
 
-        // 4. Update critters
+        // 4. Simulate critters (they present once per frame: presentFrame)
         for (const c of this.critters) {
-          if (c.alive && !c.falling) c.update(effectiveDt);
+          if (c.alive && !c.falling) c.simulate(effectiveDt);
         }
 
         // 5. Physics
         resolveCollisions(this.critters);
-        const playerWasFalling = this.player.falling;
         checkFalloff(this.critters, this.arena);
         // Stats: record player falls only (bots falling would inflate counts).
-        // Rising edge of `falling` — checkFalloff is the only path that
-        // sets it to true, so it's safe to diff before/after this call.
+        // Rising edge of `falling` over the whole step: checkFalloff, or an
+        // All-in (see above).
         if (!playerWasFalling && this.player.falling) {
           recordFall(this.player.config.name);
         }
@@ -2214,7 +2254,7 @@ export class Game {
         // Finish any pending fall animations so eliminated critters disappear
         updateFalling(this.critters, dt);
         for (const c of this.critters) {
-          if (c.alive) c.update(dt);
+          if (c.alive) c.simulate(dt);
         }
 
         if (consumeMenuAction('restart')) {
@@ -2244,6 +2284,58 @@ export class Game {
         }
         break;
     }
+  }
+
+  /**
+   * Once per rendered frame, after the frame's sim steps and inside the
+   * pose.apply/restore window (src/main.ts). `alpha`: FixedStepClock's (1
+   * when the critters aren't interpolated: the lab).
+   */
+  present(alpha: number): void {
+    this.presentFrame(this.presentClock.onFrame(alpha));
+  }
+
+  /** One step and one frame at once: online, the lab's clock mode and
+   *  requestStep. The simulation is the old update()'s, bit for bit; the
+   *  presentation now runs after the step's physics (a step that lands a
+   *  hit presents with 0 s; the presented set is taken after falls and
+   *  respawns), as in the live game. */
+  update(dt: number): void {
+    this.simulate(dt);
+    this.presentFrame(this.presentClock.onFrame(1));
+  }
+
+  /**
+   * The critters' presentation for this frame (`dt`: game time shown since
+   * the last one), then the blob shadows. Never changes phase, consumes
+   * input, calls applyHitStop or matchRng, or writes sim state.
+   */
+  private presentFrame(dt: number): void {
+    switch (this.phase) {
+      case 'title':
+      case 'character_select':
+        for (const c of this.critters) c.present(dt);
+        break;
+      case 'playing': {
+        // Paused, or frozen with nothing new to show: nothing moves, so the
+        // freeze holds the frame of the blow (with showImpactFrame for the
+        // victim) at any refresh rate. The step that lands the blow isn't
+        // frozen yet, and may be followed by frozen ones in the same frame
+        // (30 Hz, a hitch): it presents with 0 s, so its changes (the
+        // attacker's lunge, the slammer's landing squash) reach the screen
+        // and no effect ages before the freeze.
+        if (this.paused || (this.lastStepFrozen && !this.livePending)) break;
+        const presentDt = this.lastStepFrozen || isHitStopActive() ? 0 : dt;
+        for (const c of this.critters) if (c.alive && !c.falling) c.present(presentDt);
+        this.livePending = false;
+        break;
+      }
+      case 'ended':
+        for (const c of this.critters) if (c.alive) c.present(dt);
+        break;
+      // countdown: nothing presents during the drop, as before.
+      // online: updateOnline presented every critter inside simulate().
+    }
     this.syncCritterShadows();
   }
 
@@ -2252,7 +2344,9 @@ export class Game {
    * fase (menú, offline u online): cada uno tiene su slot mientras exista
    * y lo devuelve al desaparecer. La sombra sigue la posición del critter
    * y se desvanece al despegar del suelo (salto, caída), que es lo que
-   * hace legible la altura en un juego cenital.
+   * hace legible la altura en un juego cenital. Una vez por fotograma,
+   * desde presentFrame: offline, dentro de la ventana de la pose
+   * interpolada (src/fixed-step.ts).
    */
   private syncCritterShadows(): void {
     const active = this.getActiveCritters();
@@ -2363,6 +2457,12 @@ export class Game {
     const seed = options.seed ?? ((Math.random() * 0xFFFFFFFF) | 0);
     // Un seed = una partida entera (mismo contrato que enterCountdown).
     seedMatchRng(seed);
+    // A new match starts unfrozen, like enterCountdown: a hit stop left
+    // over from the previous match on this page (batch runner) used to
+    // freeze its first steps.
+    resetHitStop();
+    this.lastStepFrozen = false;
+    this.livePending = false;
     this.arena.reset();
     // Review 2026-08-24: sin estas limpiezas, una Poison Cloud (ttl 10s)
     // o un Snowball en vuelo de la partida anterior CONTAMINAN la

@@ -7,18 +7,16 @@ sincronización cliente↔servidor.
 
 ## Estado del deploy (comprobado el 2026-09-25)
 
-> **El online está VIVO en producción** con `v1.8-terreno-v2` (main
-> `784779f`, desplegado el 2026-09-24 a las 22:00 UTC; antes,
-> `v1.7-h4-social`). Comprobado tras desplegar:
+> **El online está VIVO en producción** con `v1.9-habilidades-online`
+> (main `a37791b`, desplegado el 2026-09-25 a las 02:10 UTC; antes,
+> `v1.8-terreno-v2` y `v1.7-h4-social`). Comprobado tras desplegar:
 > - `https://bichitos-rumble-production.up.railway.app/health` responde
->   `protocol: 2` y `protocolGuard: "on"`;
+>   `protocol: 3` y `protocolGuard: "on"`;
 > - `/api/leaderboard` devuelve los 5 cinturones (el volumen de la DB
 >   está montado);
 > - el bundle de `www.bichitosrumble.com` apunta a ese `wss://`.
 >
-> Detalle en BUILD_LOG (2026-09-25). **v1.9** (protocolo 3, el repaso de
-> habilidades en `BrawlRoom`) está en verificación en la rama
-> `claude/feature/distribucion-brawlroom-v19`.
+> Detalle en BUILD_LOG (2026-09-25, v1.9).
 >
 > - **Cómo se despliega**: Railway construye `server/Dockerfile`
 >   (multi-stage `node:22-alpine`) y Vercel `npm run build`, **los dos

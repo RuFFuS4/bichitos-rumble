@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Critter } from './critter';
+import { lerpFactor } from './fixed-step';
 
 // ---------------------------------------------------------------------------
 // Tuning — ALL game feel values centralized here
@@ -149,7 +150,6 @@ export const FEEL = {
     anticipation: {
       duration: 0.12,         // wind-up time (readable but quick)
       headRetract: -0.30,     // head pulls back (visible coil)
-      bodySquash: 0.70,       // body compresses during wind-up
     },
     lunge: {
       duration: 0.15,         // snap forward (shorter = sharper)
@@ -206,7 +206,14 @@ export const FEEL = {
   allIn: {
     hitMargin: 0.55,          // lane half-width = caster radius + target radius + this; only targets ahead count
     missProbeStep: 0.5,       // a miss walks the dash line in these steps to the first point off the arena and falls there
-    aimTurnDegPerSec: 360,    // while charging (rooted) the stick turns the facing, and the line with it, this fast: 90° in 0.25 s, a full flip in 0.5 s. Online reader pending in BrawlRoom (DISTRIBUCIÓN)
+    // While charging (rooted) the stick turns the facing, and the line with
+    // it, this fast: 90° in 0.5 s, a full flip in 1 s. 360 → 180 on
+    // 2026-09-25 (Rafa left it to PERSONAJES): at 360 a Sebastian charging
+    // with his back turned flipped onto someone in 0.5 s, before they could
+    // read the line (reaction ~0.25 s + ~0.5 s to leave the lane). Bots
+    // don't aim while charging, so it only changes human play. Online:
+    // BrawlRoom's hold-to-fire loop reads the mirror.
+    aimTurnDegPerSec: 180,
   },
 
   // --- Blink landing (Sand Trap, Shadow Step). Mirror: SIM.blink ---
@@ -214,8 +221,14 @@ export const FEEL = {
     landingProbeStep: 0.5,    // a target off live floor steps back toward the origin in these steps; none on floor = stay put
   },
 
-  // --- Cone Pulse (Cheeto L) waves. Mirror: SIM.conePulse, which the room
-  // doesn't read yet: BrawlRoom writes its own 1.4 / 2.0 (DISTRIBUCIÓN) ---
+  // --- Snowball (Kowalski K) look — presentation only, no SIM mirror ---
+  snowball: {
+    tumbleX: 8,               // rad per second of flight, so it reads as a thrown snowball
+    tumbleZ: 6,
+  },
+
+  // --- Cone Pulse (Cheeto L) waves. Mirror: SIM.conePulse, read by
+  // BrawlRoom's Cone Pulse pass ---
   // Pulse N is a band waveThickness wide centred N × waveStep ahead, so the
   // last one (pulseCount 6) reaches 6 × 1.4 + 1.0 = 9.4 u: the depth of the
   // cone its entry wedge paints (abilities-runtime spawnLEntryVfx).
@@ -407,6 +420,21 @@ export function applyHitStop(dt: number): number {
     return 0;
   }
   return dt;
+}
+
+/** A hit stop is pending or running. Presentation gate only (offline
+ *  'playing'; online nothing drains the timer): the step that lands the
+ *  blow isn't frozen yet, and the last frozen step already leaves the
+ *  timer ≤ 0 — Game pairs it with "the newest step froze". */
+export function isHitStopActive(): boolean {
+  return hitStopTimer > 0;
+}
+
+/** A new match starts unfrozen: a hit that landed as the previous one
+ *  ended, or an online hit stop (never drained), used to freeze its first
+ *  steps. */
+export function resetHitStop(): void {
+  hitStopTimer = 0;
 }
 
 /**
@@ -672,7 +700,7 @@ function lerp(a: number, b: number, t: number): number {
 
 function lerpMeshScale(critter: Critter, tx: number, ty: number, tz: number, dt: number, speed: number): void {
   const s = critter.mesh.scale;
-  const f = Math.min(dt * speed, 1);
+  const f = lerpFactor(speed, dt); // same feel per frame at any rate as per 1/60 step
   s.x += (tx - s.x) * f;
   s.y += (ty - s.y) * f;
   s.z += (tz - s.z) * f;
