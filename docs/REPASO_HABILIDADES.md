@@ -518,6 +518,56 @@ Rafa: «tienes permiso para `game.ts`, adelante con el paso fijo».
   - Un toque de tecla de menos de 16,7 ms puede caer entre dos pasos.
     Ya pasaba a 60 Hz, y un toque humano dura 40-100 ms.
 
+### El enganche en Safari e iOS (2026-09-25)
+
+Lo encontró la revisión previa al despliegue de DISTRIBUCIÓN. WebKit
+trunca las marcas de `requestAnimationFrame` a 1 ms, y a 60 Hz los
+fotogramas miden 16 o 17 ms. El enganche a la cadencia juzgaba cada
+fotograma solo (±0,25 ms de 16,67) y en Safari no se enganchaba nunca.
+
+- **Antes**, medido con `fixed-step-probe --floor=1`, que arranca el
+  reloj alineado con la pantalla:
+  - a 60 Hz, 0, 1 y 2 pasos por fotograma (20/20/20);
+  - a 30 Hz, 1, 2 y 3 pasos por fotograma (10/10/10);
+  - dependía de la fase: con la 0 no fallaba, con la 0,4 y la 0,7 sí.
+  - En partida, además, la fase no se reajustaba nunca: se dibujaba hasta
+    un paso tarde, y había rachas de 0 y 2 pasos cuando derivaba cerca del
+    borde de un paso.
+  - El segundo corte ya lo tapaba casi entero, porque la animación iba
+    a 0,03 de variación.
+- **Ahora** se juzga la media de los 16 últimos fotogramas; las marcas
+  truncadas se compensan entre sí.
+  - En todas las fases, 1 paso por fotograma a 60 Hz y 2 a 30 Hz, con
+    variación 0.
+  - Chrome, 144, 240 y la congelación del golpe salen como antes.
+- **Dos retoques**, tras medir 6 variantes contra fotogramas irregulares,
+  marcas de WebKit con tirones y pantallas de 57 a 63 Hz:
+  - el reajuste de fase espera a que el enganche aguante una ventana
+    entera. Con fotogramas que bailan ±10 % el enganche iba y venía, y
+    cada reajuste regalaba tiempo: el juego corría ~1 % rápido;
+  - el umbral de la media baja a ±0,15 ms: 59,94 Hz se engancha y 59 Hz
+    no. Justo en los bordes (~59,5 y ~60,5 Hz) el enganche va y viene, y
+    el tiempo de juego puede desviarse hasta ~1 %.
+- **Revisión adversarial** del arreglo, con scripts propios y 11
+  variantes del reloj contra los tests:
+  - nada grave;
+  - un primer fotograma que agotaba los pasos (compilando shaders) dejaba
+    el reloj en el borde de un paso ~33 fotogramas. Arreglado: cae en el
+    margen de fase;
+  - los tests arrancaban el reloj alineado. Ahora empiezan con un
+    fotograma aleatorio;
+  - frases de comentarios corregidas. El enganche aguanta hasta ±0,7 ms
+    de ruido en las marcas de WebKit.
+  - Descartado: un enganche con permanencia mínima. Solo quitaba una
+    décima de punto en los bordes, a cambio de más lógica.
+- **Tests:** cuatro nuevos, con 12 casos:
+  - marcas truncadas a 1 ms a 60 y 30 Hz en 10 fases;
+  - Safari con tirones;
+  - pantallas de 57 a 63 Hz que no se enganchan;
+  - un primer fotograma largo.
+
+  Con el reloj viejo fallan 7 de 46.
+
 ## Preguntas a Rafa — respondidas el 2026-09-25
 
 1. **Steel Shell**: si a Shelly la lanzan y saca el escudo en pleno

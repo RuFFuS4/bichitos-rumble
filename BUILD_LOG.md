@@ -1,5 +1,31 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [PERSONAJES] El paso fijo se engancha también en Safari e iOS
+
+- **Qué:** `FixedStepClock` decide si la pantalla va a la cadencia de la
+  simulación (60 o 30 Hz) por la media de sus 16 últimos fotogramas, y ya
+  no fotograma a fotograma.
+- **Por qué:** lo encontró la revisión previa al despliegue de
+  DISTRIBUCIÓN. WebKit trunca las marcas de rAF a 1 ms, así que los
+  fotogramas miden 16 o 17 ms y ninguno quedaba a ±0,25 ms de 16,67. En
+  Safari no se enganchaba nunca. Con `fixed-step-probe --floor=1`, a 60 Hz
+  había fotogramas de 0, 1 y 2 pasos, y a 30 Hz de 1, 2 y 3.
+- **Retoques** (medidas 6 variantes con fotogramas irregulares, tirones y
+  pantallas de 57 a 63 Hz):
+  - el reajuste de fase espera a que el enganche aguante una ventana
+    entera, porque si no el juego corría ~1 % rápido con fotogramas que
+    bailan;
+  - umbral de ±0,15 ms, para que 59 Hz no se enganche.
+- **Revisión adversarial:** nada grave. Un primer fotograma que agotaba
+  los pasos dejaba el reloj en el borde de un paso; ahora cae en el margen
+  de fase. Los tests arrancan con un fotograma aleatorio.
+- **Medido:** con marcas de WebKit, 1 paso por fotograma a 60 Hz y 2 a
+  30 Hz en todas las fases, con variación 0. Chrome, 144, 240 Hz y la
+  congelación del golpe salen como antes. 304 tests (con el reloj viejo
+  fallan 7 de `fixed-step`), golden 3/3, smoke 4/4.
+- **Herramienta:** `fixed-step-probe --floor=MS --phase=MS`, para simular
+  las marcas de WebKit.
+
 ## 2026-09-25 — [PERSONAJES] Paso fijo, segundo corte: la presentación va por fotograma
 
 - **Qué:** simular por paso y presentar por fotograma, en `Critter`,

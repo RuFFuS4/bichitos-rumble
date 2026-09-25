@@ -34,6 +34,21 @@ function realFrames(hz: number, seconds: number, jitterMs: number, seed = 1): nu
   return out;
 }
 
+/** Frame durations as Safari and iOS report them: timestamps floored to
+ *  1 ms, starting `phaseMs` into the millisecond, with ± `jitterMs`. */
+function webkitFrames(hz: number, seconds: number, phaseMs: number, jitterMs = 0, seed = 1): number[] {
+  const rnd = mulberry32(seed);
+  const stamp = (i: number) => Math.floor(phaseMs + i * 1000 / hz + (rnd() * 2 - 1) * jitterMs);
+  const out: number[] = [];
+  let prev = stamp(0);
+  for (let i = 1; i <= hz * seconds; i++) {
+    const s = stamp(i);
+    out.push((s - prev) / 1000);
+    prev = s;
+  }
+  return out;
+}
+
 describe('FixedStepClock', () => {
   it.each([30, 60, 75, 120, 144, 165, 240])('%i Hz with ±10 %% jitter: game time tracks real time (10 s ≈ 600 steps)', (hz) => {
     const clock = new FixedStepClock();
@@ -68,13 +83,75 @@ describe('FixedStepClock', () => {
     expect(Math.min(...ticks.map((t) => t.alpha))).toBeGreaterThan(0.85);
   });
 
+  // DISTRIBUCIÓN's review (2026-09-25): WebKit floors rAF timestamps to
+  // 1 ms, so 60 Hz frames read 16 and 17 ms and no single frame was near
+  // 16.67: the clock never locked. Each case starts with a random first
+  // frame, so the clock doesn't start aligned with the display.
+  const PHASES = Array.from({ length: 10 }, (_, k) => k / 10);
+  it.each([
+    [60, 0, 1], [60, 0.3, 1], [60, 0.6, 1], [30, 0, 2], [30, 0.3, 2], [30, 0.6, 2],
+  ])('%i Hz, timestamps floored to 1 ms (±%s ms): every phase locks within 16 frames', (hz, jitter, perFrame) => {
+    for (const phase of PHASES) {
+      const clock = new FixedStepClock();
+      clock.advance(mulberry32(3 + phase * 10)() * 0.04);
+      const frames = webkitFrames(hz, 20, phase, jitter, 7 + phase * 10);
+      const ticks = frames.map((dt) => clock.advance(dt));
+      const late = ticks.slice(16);
+      expect(new Set(late.map((t) => t.steps)), `phase ${phase} ms`).toEqual(new Set([perFrame]));
+      // Once any warm-up offset has eased back, drawn ~1 ms behind the
+      // newest step.
+      expect(Math.min(...ticks.slice(60).map((t) => t.alpha)), `phase ${phase} ms`).toBeGreaterThan(0.85);
+      const steps = ticks.reduce((n, t) => n + t.steps, 0);
+      const real = frames.reduce((s, dt) => s + dt, 0);
+      expect(Math.abs(steps - real / SIM_STEP)).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('Safari with hitches (a dropped frame every ~3 s, an odd 25 ms one every ~7 s): each frame runs its whole steps', () => {
+    for (const phase of PHASES) {
+      const rnd = mulberry32(11 + phase * 10);
+      const clock = new FixedStepClock();
+      clock.advance(rnd() * 0.04);
+      let ideal = phase;
+      let prev = Math.floor(ideal);
+      let off = 0;
+      let frames = 0;
+      for (let i = 0; i < 60 * 60; i++) {
+        const u = rnd();
+        const ms = u < 1 / 180 ? 2000 / 60 : u < 1 / 180 + 1 / 420 ? 25 : 1000 / 60;
+        ideal += ms;
+        const stamp = Math.floor(ideal + (rnd() * 2 - 1) * 0.3);
+        const dt = (stamp - prev) / 1000;
+        prev = stamp;
+        const tick = clock.advance(dt);
+        if (i < 16 || ms === 25) continue; // warm-up; the odd frame itself runs what it can
+        frames++;
+        if (tick.steps !== Math.round(dt / SIM_STEP)) off++;
+      }
+      // A step lost or gained only right at an odd frame's edge.
+      expect(off / frames, `phase ${phase} ms`).toBeLessThan(0.001);
+    }
+  });
+
+  // What the average is for: a display near 60 Hz but not at it passes the
+  // per-frame tolerance and must still run on real time, not on 60 Hz.
+  it.each([57, 59, 61, 63])('%i Hz, timestamps floored to 1 ms: not locked, game time tracks real time', (hz) => {
+    const clock = new FixedStepClock();
+    const frames = webkitFrames(hz, 20, 0.4);
+    const steps = frames.reduce((n, dt) => n + clock.advance(dt).steps, 0);
+    const real = frames.reduce((s, dt) => s + dt, 0);
+    expect(Math.abs(steps - real / SIM_STEP)).toBeLessThanOrEqual(2);
+  });
+
   it('after a hitch at 60 Hz it eases back to ~1 ms behind the newest step', () => {
     const clock = new FixedStepClock();
-    for (let i = 0; i < 10; i++) clock.advance(1 / 60);
+    for (let i = 0; i < 30; i++) clock.advance(1 / 60);
     const hitch = clock.advance(0.025); // a 25 ms frame: the display lands mid-step
     expect(hitch.alpha).toBeLessThan(0.7);
     let last = hitch;
-    for (let i = 0; i < 25; i++) {
+    // The lock holds a whole window before easing the phase (~16 frames),
+    // then ~10 frames to ease it.
+    for (let i = 0; i < 40; i++) {
       last = clock.advance(1 / 60);
       expect(last.steps).toBe(1);
     }
@@ -99,9 +176,22 @@ describe('FixedStepClock', () => {
     expect(clock.advance(1 / 60).steps).toBe(1);
   });
 
+  // Review of the Safari fix: dropping the backlog used to land the clock
+  // ON the step's edge, and until a lock could ease it (~33 frames) the
+  // timestamps' noise flipped frames between 0 and 2 steps.
+  it('a first frame that runs out of steps (shaders compiling) leaves the next ones whole', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const clock = new FixedStepClock();
+      clock.advance(0.07 + 0.3 * mulberry32(seed)());
+      const ticks = realFrames(60, 1, 0.2, seed).map((dt) => clock.advance(dt));
+      expect(new Set(ticks.map((t) => t.steps)), `seed ${seed}`).toEqual(new Set([1]));
+    }
+  });
+
   it('a negative frame (clock hiccup) runs nothing', () => {
     const clock = new FixedStepClock();
-    expect(clock.advance(-0.5)).toEqual({ steps: 0, alpha: 1 });
+    const before = clock.advance(1 / 60);
+    expect(clock.advance(-0.5)).toEqual({ steps: 0, alpha: before.alpha });
   });
 });
 

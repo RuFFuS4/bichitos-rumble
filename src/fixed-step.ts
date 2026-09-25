@@ -43,19 +43,39 @@ export const MAX_FRAME_DT = 0.1;
  *  sliding through the arena, even if nobody flagged it as a teleport
  *  (PoseTarget.teleportSerial). */
 export const SNAP_DISTANCE = 3.0;
-/** A frame within this of a whole number of steps (60 Hz, 30 Hz…) counts
- *  as exactly that many, s: the display is locked to the sim's cadence.
- *  ±0.25 ms is ±1.5 % at 60 Hz; 120 and 144 Hz never lock. */
-export const CADENCE_SNAP = 0.00025;
-/** While locked, the display sits this far behind the end of the newest
- *  step, s. A 60 Hz display left ON the step boundary flips between 2,
- *  0 and 1 steps per frame with the rAF timestamps' jitter and 0.1 ms
- *  rounding, and everything that isn't interpolated (animations, facing,
- *  projectiles, dust) stutters (review, 2026-09-25). 1 ms inside the step
- *  absorbs that jitter and costs 1 ms of display lag. */
+/** The display is locked to the sim's cadence (60 Hz, 30 Hz…) when its
+ *  last CADENCE_WINDOW frames sit, on average, within this of a whole
+ *  number of steps, s; each locked frame then counts as exactly that many.
+ *  ±0.15 ms is ±0.9 % at 60 Hz: 59.94 Hz locks, 59 Hz doesn't; 120 and
+ *  144 Hz never do. Right at the band's edges (~59.5, ~60.5 Hz) the lock
+ *  comes and goes and game time can stray up to ~1 %. */
+export const CADENCE_SNAP = 0.00015;
+/** Frames in that average. The average and not each frame: Safari and iOS
+ *  floor rAF timestamps to 1 ms, so a 60 Hz display reports 16 and 17 ms
+ *  frames, never near 16.67 on their own. Judged frame by frame it never
+ *  locked: the phase never eased back (drawn up to a step late), and
+ *  wherever it wandered within ~1 ms of a step's edge, frames ran 0 or 2
+ *  steps (DISTRIBUCIÓN's review, 2026-09-25). Floored stamps telescope, so
+ *  the average of 16 is off by < 1/16 ms, plus 2/16 of the stamps' own
+ *  jitter: it holds up to ±0.7 ms of it. The window must be full to lock. */
+const CADENCE_WINDOW = 16;
+/** How far one frame may stray from a whole number of steps and still
+ *  count as that many, s: a 1 ms timestamp tick plus jitter. Rates of
+ *  ~54-68 Hz pass it; the average is what turns them down. */
+const FRAME_TOLERANCE = 0.002;
+/** The display sits this far behind the end of the newest step, s (and
+ *  the clock starts there). A 60 Hz display left ON the step boundary
+ *  flips between 2, 0 and 1 steps per frame with the rAF timestamps'
+ *  jitter and rounding, and whatever isn't drawn between two steps
+ *  stutters (review, 2026-09-25). 1 ms inside the step absorbs that
+ *  jitter and costs 1 ms of display lag. */
 const PHASE_MARGIN = 0.001;
 /** While locked, how fast the phase eases back to PHASE_MARGIN after a
- *  hitch, s per frame: ~10 frames, the sim 5 % off meanwhile. */
+ *  hitch, s per frame: ~10 frames, the sim 5 % off meanwhile. Only once
+ *  the lock has held more than a CADENCE_WINDOW: the resync credits the sim
+ *  time it moves, and on frames that wander ±10 % around 60 Hz the lock
+ *  comes and goes, so crediting after each unlocked frame ran the game
+ *  ~1 % fast. */
 const RESYNC_PER_FRAME = 0.05 * SIM_STEP;
 
 /** Tolerance so 1/60-sized frames don't lose a step to float rounding. */
@@ -76,7 +96,14 @@ export function lerpFactor(ratePerSec: number, dt: number): number {
 
 export class FixedStepClock {
   /** Real time minus sim time, s: ≤ 0 after each frame (the sim is ahead). */
-  private lag = 0;
+  private lag = -PHASE_MARGIN;
+  /** How far the last frames within FRAME_TOLERANCE strayed from their
+   *  whole steps, s (a ring, oldest overwritten). */
+  private readonly residuals = new Float64Array(CADENCE_WINDOW);
+  private residualCount = 0;
+  private nextResidual = 0;
+  /** Consecutive locked frames. */
+  private lockedRun = 0;
 
   /**
    * Adds one frame of real time. Returns how many sim steps to run now so
@@ -87,16 +114,19 @@ export class FixedStepClock {
   advance(frameDt: number): { steps: number; alpha: number } {
     let dt = Math.min(Math.max(frameDt, 0), MAX_FRAME_DT);
     const whole = Math.round(dt / SIM_STEP);
-    const locked = whole >= 1 && Math.abs(dt - whole * SIM_STEP) <= CADENCE_SNAP;
+    const locked = whole >= 1 && this.onCadence(dt - whole * SIM_STEP);
+    this.lockedRun = locked ? this.lockedRun + 1 : 0;
     if (locked) dt = whole * SIM_STEP;
     this.lag += dt;
     let steps = Math.max(0, Math.ceil(this.lag / SIM_STEP - STEP_EPSILON));
     if (steps > MAX_STEPS_PER_FRAME) {
+      // Dropped backlog: land at the phase margin, not on the step's edge
+      // (a first frame that compiles shaders, before any lock can ease it).
       steps = MAX_STEPS_PER_FRAME;
-      this.lag = SIM_STEP * steps;
+      this.lag = SIM_STEP * steps - PHASE_MARGIN;
     }
     this.lag -= steps * SIM_STEP;
-    if (locked) {
+    if (this.lockedRun > CADENCE_WINDOW) {
       const toPhase = -PHASE_MARGIN - this.lag;
       this.lag += Math.max(-RESYNC_PER_FRAME, Math.min(RESYNC_PER_FRAME, toPhase));
     }
@@ -104,7 +134,24 @@ export class FixedStepClock {
   }
 
   reset(): void {
-    this.lag = 0;
+    this.lag = -PHASE_MARGIN;
+    this.residualCount = 0;
+    this.nextResidual = 0;
+    this.lockedRun = 0;
+  }
+
+  /** Whether a frame `residual` s off its whole steps is on the display's
+   *  cadence: near enough itself, and the last CADENCE_WINDOW such frames
+   *  on average. */
+  private onCadence(residual: number): boolean {
+    if (Math.abs(residual) > FRAME_TOLERANCE) return false;
+    this.residuals[this.nextResidual] = residual;
+    this.nextResidual = (this.nextResidual + 1) % CADENCE_WINDOW;
+    this.residualCount = Math.min(this.residualCount + 1, CADENCE_WINDOW);
+    if (this.residualCount < CADENCE_WINDOW) return false;
+    let sum = 0;
+    for (const r of this.residuals) sum += r;
+    return Math.abs(sum / CADENCE_WINDOW) <= CADENCE_SNAP;
   }
 }
 

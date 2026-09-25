@@ -39,12 +39,16 @@
 // position is read every frame (CV of its per-frame move: ~0 is smooth).
 //
 // --jitter=MS adds ± MS of noise to every frame timestamp and rounds it to
-// 0.1 ms, like a real browser; without it the clock is exact.
+// 0.1 ms, like Chrome; without it the clock is exact. --floor=MS floors
+// every timestamp to MS instead, like Safari and iOS (1), and --phase=MS
+// starts the clock MS into that grid: which phase is what decided whether
+// the old cadence lock failed there.
 //
 // Usage (dev server running; muted browser like every test instance):
 //   node scripts/fixed-step-probe.mjs --url=http://localhost:5181
 //   node scripts/fixed-step-probe.mjs --hz=30,60,144,240 --push=25 --hitstop --json
 //   node scripts/fixed-step-probe.mjs --hz=60 --jitter=0.2
+//   node scripts/fixed-step-probe.mjs --hz=30,60 --floor=1 --phase=0.4
 // ---------------------------------------------------------------------------
 
 import { parseArgs } from 'node:util';
@@ -56,6 +60,8 @@ const { values: opt } = parseArgs({
     hz: { type: 'string', default: '30,60,144,240' },
     push: { type: 'string', default: '25' },
     jitter: { type: 'string', default: '0' },
+    floor: { type: 'string', default: '0' },
+    phase: { type: 'string', default: '0' },
     json: { type: 'boolean', default: false },
     hitstop: { type: 'boolean', default: false },
     snowball: { type: 'boolean', default: false },
@@ -64,6 +70,8 @@ const { values: opt } = parseArgs({
 const RATES = opt.hz.split(',').map(Number);
 const PUSH = Number(opt.push);
 const JITTER = Number(opt.jitter);
+const FLOOR = Number(opt.floor);
+const PHASE = Number(opt.phase);
 
 const browser = await launchMutedBrowser({ channel: 'chromium', args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] });
 
@@ -72,9 +80,14 @@ async function openGame() {
   page.on('pageerror', (e) => console.error('[pageerror]', e.message));
   // The virtual clock: rAF callbacks only run when the probe ticks, and
   // performance.now() reads the same clock (main.ts seeds lastTime with it).
-  await page.addInitScript((jitter) => {
-    let ideal = 0;
-    let now = 0;
+  await page.addInitScript(({ jitter, floor, phase }) => {
+    let ideal = phase;
+    const stamp = () => {
+      const t = jitter > 0 ? ideal + (Math.random() * 2 - 1) * jitter : ideal;
+      if (floor > 0) return Math.floor(t / floor) * floor;
+      return jitter > 0 ? Math.round(t * 10) / 10 : t;
+    };
+    let now = stamp();
     let queue = [];
     window.requestAnimationFrame = (cb) => { queue.push(cb); return queue.length; };
     window.cancelAnimationFrame = () => {};
@@ -82,11 +95,11 @@ async function openGame() {
     window.__vclock = {
       tick(ms) {
         ideal += ms;
-        now = jitter > 0 ? Math.round((ideal + (Math.random() * 2 - 1) * jitter) * 10) / 10 : ideal;
+        now = stamp();
         const cbs = queue; queue = []; for (const cb of cbs) cb(now);
       },
     };
-  }, JITTER);
+  }, { jitter: JITTER, floor: FLOOR, phase: PHASE });
   await page.goto(new URL('/', opt.url).href, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => Boolean(window.__game) && Boolean(window.__vclock), null, { polling: 100, timeout: 60000 });
   return page;

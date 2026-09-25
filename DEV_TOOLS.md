@@ -209,7 +209,7 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   - Sirve para revisar habilidades con pruebas.
 - **¿Simula igual a cualquier frecuencia?** (2026-09-25): con el dev
   server vivo, `node scripts/fixed-step-probe.mjs [--hz=30,60,144,240]
-  [--push=25] [--jitter=0.2] [--json]`.
+  [--push=25] [--jitter=0.2] [--floor=1 --phase=0.4] [--json]`.
   - Mueve el juego real (`index.html`, el bucle de `main.ts`) con un reloj
     de `requestAnimationFrame` virtual, a cada frecuencia.
   - Mide:
@@ -232,7 +232,10 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   - `--snowball`: Kowalski lanza la K y se lee la posición dibujada de la
     bola en cada fotograma.
   - `--jitter` mete ruido en las marcas de tiempo y las redondea a 0,1 ms,
-    como un navegador de verdad.
+    como Chrome.
+  - `--floor=1` las trunca a 1 ms, como Safari e iOS, y `--phase` fija en
+    qué punto del milisegundo empieza el reloj. Prueba varias fases: el
+    enganche viejo fallaba en unas sí y en otras no.
 - **Dónde engancharse por paso** (desde el 2026-09-25): `Game.simulate`
   corre una vez por paso de simulación en el juego y en los dos modos del
   laboratorio, porque `Game.update` también lo llama. Un gancho en
