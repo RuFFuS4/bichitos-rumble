@@ -701,18 +701,21 @@ export class Critter {
   }
 
   /**
-   * Once per rendered frame: saw spin, headbutt head pose, skeleton,
-   * procedural pose, glow, feedback, decoy. `dt`: game time shown since the
-   * last call (0 holds everything still). Runs inside the pose.apply /
-   * restore window, so position reads get the drawn pose; it must never
-   * write mesh.position (restore would undo it) nor anything the sim reads.
+   * Once per rendered frame: saw spin, headbutt head pose (offline),
+   * skeleton, procedural pose, glow, feedback, decoy. `dt`: game time shown
+   * since the last call (0 holds everything still). Runs inside the
+   * pose.apply / restore window, so position reads get the drawn pose; it
+   * must never write mesh.position (restore would undo it) nor anything the
+   * sim reads.
    */
   present(dt: number): void {
-    // Online keeps today's look: the server doesn't sync these (follow-up).
-    if (!this.skipPhysics) {
-      this.tickSawSpin(dt);
-      this.applyHeadbuttPose();
-    }
+    // Online too: the saw reads the L's active / windUpLeft, which
+    // Game.updateOnline copies from the server before this runs.
+    this.tickSawSpin(dt);
+    // Offline only: the head comes back through applyHeadbuttRecovery,
+    // which simulate()'s headbutt state machine raises and online never
+    // runs, so the head would stay thrust out.
+    if (!this.skipPhysics) this.applyHeadbuttPose();
 
     // Skeletal animation layer (no-op if this critter has no clips). Runs
     // BEFORE procedural so procedural can read the skeletal state and
@@ -745,6 +748,12 @@ export class Critter {
    * set in attachGlbMesh (Tripo critters ship with rotation: -π/2) —
    * Sergei, Shelly, Kermit, Kowalski and Cheeto were all rendering at the
    * wrong angle as a result.
+   *
+   * Online the flags are the server's and `def` is the client's kit, so the
+   * spin follows the server's saw window (since 2026-09-25). A Copycat
+   * Kurama carrying the saw doesn't spin: offline the name gate stops her,
+   * and online the client never builds the copy (applyCopycat runs offline
+   * only), so dropping the gate alone would spin her offline only.
    */
   private tickSawSpin(dt: number): void {
     if (this.config.name !== 'Shelly' || !this.glbMesh) return;
