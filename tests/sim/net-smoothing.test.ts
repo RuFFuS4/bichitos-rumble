@@ -144,9 +144,9 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
   // navegador). Un remoto, que lo deduce, se pasa ≤ 0,018 u.
   // Con 2 sub-pasos por tick (v1.9) el servidor frena en un 16 % menos de
   // recorrido (0,153 u en vez de 0,182 al soltar a 3 u/s) y más de golpe:
-  // el local se pasa 0,0065-0,0088 u y, entre frame y frame de la frenada,
-  // un paso llega a ser un 19 % mayor que el anterior (1,11 antes); el remoto,
-  // que se entera un parche tarde, se pasa 0,019-0,039 u (1,7 px). Umbrales
+  // el local se pasa 0,0061-0,0081 u y, entre frame y frame de la frenada,
+  // un paso llega a ser un 28 % mayor que el anterior (1,11 antes); el remoto,
+  // que se entera un parche tarde, se pasa 0,018-0,033 u (1,4 px). Umbrales
   // recalibrados sobre eso; el diente de sierra de arriba (×3) sigue fuera.
   for (const local of [true, false]) {
     for (const latencyMs of [10, 40, 80]) {
@@ -166,7 +166,7 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
           const steps = frames.filter((f) => f.t > tRelease - 0.05).map((f, i, a) => (i ? f.x - a[i - 1].x : 0)).slice(1);
           const peak = steps.findIndex((d, i) => i > 0 && d < steps[i - 1] * 0.9);   // empieza a frenar
           for (let i = Math.max(1, peak + 1); i < steps.length && steps[i - 1] > 1e-3; i++) {
-            expect(steps[i]).toBeLessThan(steps[i - 1] * 1.25 + 1e-4);
+            expect(steps[i]).toBeLessThan(steps[i - 1] * 1.35 + 1e-4);
           }
         }
         expect(Math.abs(frames[frames.length - 1].x - rest)).toBeLessThan(0.005);
@@ -378,11 +378,9 @@ describe('net-smoothing — frenadas, golpes y saltos', () => {
       sm.beginFrame(tMs, last.mt, true);
       p = sm.place(key, last, true, 1 / 60);
     }
-    // Lo que el servidor avanzaría en maxExtrapolation, más lo que un sub-paso
-    // a la velocidad de arranque del tick (v/f) saca a la media del tick.
-    const f = Math.pow(0.5, DT / SIM.movement.frictionHalfLife);
-    const bound = last.vx * (cruiseLead() * NET_SMOOTHING.maxExtrapolation + (1 / f - cruiseLead()) * DT / SUB);
-    expect(p.x - last.x).toBeLessThanOrEqual(bound + 1e-6);
+    // Lo que el servidor avanza en maxExtrapolation (dentro de un tick, en
+    // línea recta), y no menos que a la v publicada.
+    expect(p.x - last.x).toBeLessThanOrEqual(last.vx * cruiseLead() * NET_SMOOTHING.maxExtrapolation + 1e-6);
     expect(p.x - last.x).toBeGreaterThan(last.vx * NET_SMOOTHING.maxExtrapolation);
   });
 

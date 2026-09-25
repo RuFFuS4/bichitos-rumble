@@ -404,7 +404,10 @@ export class NetSmoother {
   /** Posición de servidor predicha a `age` s del último estado: el paso de
    *  integración de BrawlRoom tick a tick — sumar el empuje del mando (uno
    *  por tick) y, en cada uno de sus `integrationSubsteps` sub-pasos, mover
-   *  → fricción → zona muerta → tope. */
+   *  → fricción → zona muerta → tope. Los sub-pasos dan dónde ACABA cada
+   *  tick; dentro del tick se interpola en línea recta. El servidor solo
+   *  existe en los ticks: pintar la forma de los sub-pasos metía un diente
+   *  de sierra de velocidad del 13 % a 30 Hz (medido con el banco). */
   private predict(tr: Track | undefined, brake: boolean, x: number, z: number, vx: number, vz: number, age: number, mv: NetMovement): [number, number] {
     const dt = 1 / this.config.serverTickHz;
     const n = Math.max(1, Math.round(mv.integrationSubsteps ?? 1));
@@ -422,24 +425,28 @@ export class NetSmoother {
     // Zona muerta del servidor: solo en inercia, que incluye un empuje que
     // ni a velocidad terminal supera el umbral (BrawlRoom, pushTerminal).
     const coasting = brake || (Math.hypot(dx, dz) / dt) * mv.frictionHalfLife / Math.LN2 < mv.velocityDeadZone;
-    // Hacia atrás (frame anterior al estado): lineal con la v del tick siguiente.
-    if (age <= 0) return [x + (vx + dx) * age, z + (vz + dz) * age];
-    for (let ticks = age / dt; ticks > 0; ticks -= 1) {
-      let left = Math.min(1, ticks) * dt;   // tiempo de este tick que toca predecir
+    const tick = (): void => {
       let wx = vx + dx, wz = vz + dz;
-      for (let s = 0; s < n && left > 1e-12; s++) {
-        const step = Math.min(h, left);
-        x += wx * step; z += wz * step;
-        left -= step;
-        if (step < h) break;                // sub-paso a medias: basta la posición
+      for (let s = 0; s < n; s++) {
+        x += wx * h; z += wz * h;
         wx *= fSub; wz *= fSub;
         const sp = Math.hypot(wx, wz);
         if (coasting && sp < mv.velocityDeadZone) { wx = 0; wz = 0; }
         else if (sp > mv.maxSpeed) { wx *= mv.maxSpeed / sp; wz *= mv.maxSpeed / sp; }
       }
       vx = wx; vz = wz;
-    }
-    return [x, z];
+    };
+    // Tick a medias (y, con age ≤ 0, el frame anterior al estado): la
+    // fracción del recorrido de ese tick entero.
+    const partial = (frac: number): [number, number] => {
+      const x0 = x, z0 = z;
+      tick();
+      return [x0 + (x - x0) * frac, z0 + (z - z0) * frac];
+    };
+    if (age <= 0) return partial(age / dt);
+    let ticks = age / dt;
+    for (; ticks >= 1; ticks -= 1) tick();
+    return ticks > 1e-9 ? partial(ticks) : [x, z];
   }
 
   /** Lo que trae este frame para el bicho y, si es un estado nuevo, su
