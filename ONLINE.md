@@ -5,19 +5,21 @@ sincronización cliente↔servidor.
 
 ---
 
-## Estado del deploy (comprobado el 2026-09-25)
+## Estado del deploy (comprobado el 2026-09-26)
 
-> **El online está VIVO en producción** con `v1.10-paso-fijo` (main
-> `bb819bb`, desplegado el 2026-09-25 a las 13:47 UTC; antes,
-> `v1.9-habilidades-online`, `v1.8-terreno-v2` y `v1.7-h4-social`).
-> Comprobado tras desplegar:
+> **El online está VIVO en producción** con `v1.11-caida-sierra` (main
+> `c8143ea`, desplegado el 2026-09-26 a las 21:32 UTC; antes,
+> `v1.10-paso-fijo`, `v1.9-habilidades-online`, `v1.8-terreno-v2` y
+> `v1.7-h4-social`). v1.11 es solo de cliente: el servidor sigue siendo
+> el proceso de v1.10 (ver «Cómo se despliega»). Comprobado tras
+> desplegar:
 > - `https://bichitos-rumble-production.up.railway.app/health` responde
 >   `protocol: 3` y `protocolGuard: "on"`;
 > - `/api/leaderboard` devuelve los 5 cinturones (el volumen de la DB
 >   está montado);
 > - el bundle de `www.bichitosrumble.com` apunta a ese `wss://`.
 >
-> Detalle en BUILD_LOG (2026-09-25, v1.9 y v1.10).
+> Detalle en BUILD_LOG (2026-09-25, v1.9 y v1.10; 2026-09-26, v1.11).
 >
 > - **Cómo se despliega**: Railway construye `server/Dockerfile`
 >   (multi-stage `node:22-alpine`) y Vercel `npm run build`, **los dos
@@ -25,6 +27,11 @@ sincronización cliente↔servidor.
 >   el mismo instante — ver "Versiones cliente↔servidor" en
 >   Limitaciones. El runbook del despliegue vive en
 >   [`docs/carriles/distribucion.md`](docs/carriles/distribucion.md).
+> - **Railway tiene rutas vigiladas**: solo redespliega si el push toca
+>   `server/`. En un despliegue solo de cliente (v1.11) contesta en los
+>   estados del commit de GitHub «No deployment needed - watched paths
+>   not modified» y el proceso sigue vivo, sin cortar partidas. Se ve
+>   con `gh api repos/RuFFuS4/bichitos-rumble/commits/<sha>/statuses`.
 > - **Admin de la DB** (`server/scripts/admin-players.mjs`, vía
 >   `npm run admin:*` desde `server/` en local, o
 >   `node scripts/admin-players.mjs <cmd>` dentro del contenedor, donde

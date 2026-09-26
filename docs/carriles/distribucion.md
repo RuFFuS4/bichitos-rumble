@@ -6,8 +6,32 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Pendiente (por orden)
 
-0. **v1.10 — ✅ EN PRODUCCIÓN desde el 2026-09-25 a las 13:47 UTC**
-   (main `bb819bb` = `dev` `ea77e62`, tag `v1.10-paso-fijo`).
+0. **v1.11 — ✅ EN PRODUCCIÓN desde el 2026-09-26 a las 21:32 UTC**
+   (main `c8143ea` = `dev` `e4a1947`, tag `v1.11-caida-sierra`).
+   - Qué lleva, todo de PERSONAJES y solo de cliente:
+     - la sierra de Shelly gira online;
+     - el clip de caída offline y online, con el Fall en su sitio;
+     - la cuenta atrás animada, sin flotar al aterrizar;
+     - la bola de nieve que ya no golpea en la cuenta atrás;
+     - las reapariciones online y las caídas offline en la pantalla
+       final.
+   - `NET_PROTOCOL` sigue en 3. **Railway no se redesplegó** (rutas
+     vigiladas, `server/` sin cambios): sigue el proceso de v1.10.
+   - Verificación, ventana (Vercel ~30 s) y comprobaciones de después en
+     BUILD_LOG (2026-09-26, DISTRIBUCIÓN, v1.11).
+   - Rollback: Vercel `dpl_B6pTPENe4EGtE7s8CvCwE7siju4x` (`bb819bb`,
+     v1.10). Railway ya está en `bb819bb`.
+   - **Queda de Rafa, a mano:**
+     - Sentry sin issues nuevos en 30-60 min;
+     - mirar online, con sus ojos, a una Shelly girando y a un bicho
+       cayendo por el borde de delante. Por detrás, la isla lo tapa.
+   - La sierra de una Kurama que copia a Shelly sigue sin girar en los
+     dos modos. Si el `abilityFired` manda la forma de la L (el punto 1
+     de nuestra nota de Copycat online, en el buzón de PERSONAJES), su
+     giro va en ese cambio.
+
+   **v1.10** (2026-09-25 13:47 UTC, main `bb819bb` = `dev` `ea77e62`, tag
+   `v1.10-paso-fijo`):
    - Qué lleva:
      - el juego a paso fijo de 1/60 con presentación a cada fotograma,
        también en Safari/iOS;
@@ -18,8 +42,8 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
    - Verificación, ventana (Vercel 37 s, Railway 67 s), comprobaciones y
      el cambio de SHA (`3b1dbd6` → `ea77e62` por Safari) en BUILD_LOG
      (2026-09-25, DISTRIBUCIÓN, v1.10).
-   - Rollback: Vercel `dpl_7Uw3pUgKFcJ9VBnEqS3C7QPfmoEQ` (a37791b, v1.9) y
-     Railway, el despliegue de a37791b. Siempre los dos lados.
+   - Su rollback era Vercel `dpl_7Uw3pUgKFcJ9VBnEqS3C7QPfmoEQ` (a37791b,
+     v1.9) y Railway, el despliegue de a37791b.
    - **Queda de Rafa, a mano:**
      - Sentry sin issues nuevos;
      - jugar offline en un iPhone y en un monitor de 144 Hz: debe ir
@@ -190,6 +214,27 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
       vitest. Los casos de la carga del All-in se comprobaron con un script
       sin clientes (`.tmp/allin-check.mts` del worktree). Montarlo es del
       punto 8.
+12. **Aviso de mantenimiento para desplegar con partidas vivas** (Rafa,
+    2026-09-26): *«en un futuro por si hay partidas deberemos avisar con
+    un mensaje de mantenimiento y hacer la subida y las comprobaciones
+    durante el tiempo indicado en el mensaje»*.
+    - Hoy no existe: el runbook solo pide que Rafa mire que no haya
+      partidas vivas.
+    - Solo hace falta cuando el push reinicia Railway, es decir, cuando
+      toca `server/`.
+    - Es red y servidor (zona hard-stop): diseño y plan antes de tocar.
+      Por ejemplo, una variable de Railway o un campo de `/health` que el
+      cliente enseñe en el título y en la espera online, con la hora de
+      la ventana.
+    - Va junto al `onBeforeShutdown` del punto 8, que es lo que evita
+      apuntar derrotas si el reinicio pilla una partida.
+13. **Una habilidad activa sigue activa en la pantalla final** (aviso de
+    PERSONAJES, 2026-09-25; baja, solo visual): `endMatch` de `BrawlRoom`
+    no cancela las habilidades. Medido en v1.11: una sierra lanzada justo
+    antes de la última eliminación sigue con `active` en el cliente
+    detrás del panel final (~4 s de victoria medidos, hasta que se cerró
+    la sonda). Ya no gira, pero sigue verde.
+    Offline pasa igual con `enterEnded`, que es de otro carril.
 
 ## Verificación previa de H4.5 (2026-09-21)
 
@@ -227,9 +272,15 @@ Desde el worktree de distribución, nunca desde el checkout principal.
 - SHA de `dev` congelado y verificado; su CI en verde
   (`gh run list --branch dev -L 1`).
 - Árbol limpio y ninguna rama de otro carril pendiente de entrar.
-- Que no haya partidas online vivas. Un reinicio de Railway las corta y
-  apunta derrotas; solo se ve en los logs de Railway, así que lo mira
-  Rafa.
+- ¿El push reinicia Railway? Solo si toca `server/` (Railway tiene
+  rutas vigiladas: `git diff --stat origin/main <SHA> -- server/`). Si
+  no lo toca, no hay ventana de servidor ni partidas cortadas.
+- Si lo reinicia: que no haya partidas online vivas. Un reinicio de
+  Railway las corta y apunta derrotas; solo se ve en los logs de
+  Railway, así que lo mira Rafa. **Si las hay** (Rafa, 2026-09-26):
+  primero un mensaje de mantenimiento que anuncie la ventana, y el push y
+  las comprobaciones de después dentro de ese tiempo. El mecanismo del
+  aviso aún no existe (punto 12).
 - Foto de producción:
   - `curl -s https://bichitos-rumble-production.up.railway.app/health`
     y anotar el uptime;
@@ -240,7 +291,9 @@ Desde el worktree de distribución, nunca desde el checkout principal.
   404 al viejo. Una pestaña que no lo cargó fallaría con "Failed to fetch
   dynamically imported module", que también es seguro pero no prueba el
   guard. Al final tiene que recibir el rechazo.
-- Puntos de rollback (anotados el 2026-09-21):
+- Puntos de rollback: los de lo que está en producción ahora, que están
+  en el punto 0 (el despliegue de Vercel con `list_deployments`, target
+  production). Los de v1.8, como ejemplo:
   - Vercel: `dpl_9LKsaf69bRibyTWN8AkTgnngh5dH` (f41fb7e).
   - Railway: el despliegue de f41fb7e del 2026-09-05.
 
@@ -261,6 +314,11 @@ git push origin main          # dispara Vercel y Railway a la vez
 - Medido en v1.8 (2026-09-24): Vercel sirvió la build nueva a los ~38 s
   del push y Railway, el proceso nuevo, a los ~2 min. Se ve con un bucle
   de `curl` a `/health` (uptime y `protocol`) y al `index-*.js` de www.
+  v1.9 y v1.10: Railway a los 59 y 67 s.
+- **Sin cambios en `server/` Railway no redespliega** (v1.11): en los
+  estados del commit sale «No deployment needed - watched paths not
+  modified» (`gh api repos/RuFFuS4/bichitos-rumble/commits/<sha>/statuses`)
+  y el uptime sigue subiendo. No hay que esperar al reinicio.
 - Con el guard, en esa ventana el cliente nuevo ve «el servidor se está
   actualizando» y no llega a sentarse.
 - **Si un lado falla y el otro no**, la desincronización pasa a ser
@@ -294,7 +352,8 @@ git push origin main          # dispara Vercel y Railway a la vez
   worktree. Por último, BUILD_LOG con los tiempos medidos de la
   ventana.
 
-**Rollback**: siempre los dos lados a la vez. Con el guard, un lado
+**Rollback**: siempre los dos lados a la vez (si Railway no se
+redesplegó, su lado ya es el de antes y basta con Vercel). Con el guard, un lado
 desparejado ya no desincroniza: deja el online parado con un mensaje
 ("actualizándose" o "recarga"). Pero sigue sin funcionar. Los datos no
 corren riesgo: no hay migraciones.
@@ -358,6 +417,10 @@ corren riesgo: no hay migraciones.
     habilidad activa se queda en la pantalla final, porque `endMatch` no
     cancela las habilidades. Offline tampoco lo hace `enterEnded`. La
     sierra ya no gira, pero sigue verde tras el panel.
+  → *Leído el 2026-09-26. Desplegado en v1.11 (`c8143ea`) y medido en
+  producción con 4 invitados: sierra a 22,00 rad/s en las cuatro
+  pantallas y el Fall en todos los flancos de caída. Lo del brillo queda
+  como punto 13.*
 
 - **De PERSONAJES, 2026-09-25 (tarde) — dos cambios de Rafa que viven en
   `server/src/sim`: el próximo despliegue necesita servidor, no solo
@@ -534,6 +597,33 @@ corren riesgo: no hay migraciones.
   Rafa.* → *Hecho y en `dev` el 2026-09-24 (punto 10).*
 
 ## Cómo retomar
+
+**2026-09-26** — despliegue de v1.11 (punto 0).
+
+- **Hecho:** la verificación de `dev` (`e4a1947`), las capturas a Rafa,
+  el merge, el tag y las comprobaciones de después, todo en BUILD_LOG.
+  Las comprobaciones de después las hizo un flujo de agentes: cuatro en
+  paralelo (HTTP y caché, Vercel, offline y online) y un revisor
+  adversarial detrás. Además, 2 invitados contra producción hasta el
+  colapso 3.
+- **Aprendido:**
+  - Railway solo redespliega si el push toca `server/`; está en el
+    runbook.
+  - Rafa quiere un aviso de mantenimiento cuando haya partidas vivas
+    (punto 12).
+- **Sondas reutilizables** (en el scratchpad de la sesión, que se pierde;
+  la receta está en BUILD_LOG):
+  - 4 clientes con GPU contra el bundle de producción: `vite build` con
+    `VITE_SERVER_URL=ws://localhost:<puerto>` y `vite preview`, y el
+    servidor con `PORT=<puerto> npx tsx --import
+    ./scripts/precise-timers.mjs src/index.ts`.
+  - Contra producción, siempre como invitados: `onlineIdentity = null`,
+    `friendsJoin` y `connectOnlineWith`.
+- **Lo siguiente:**
+  - el 12 (aviso de mantenimiento) junto al `onBeforeShutdown` del 8,
+    con plan antes, porque es zona hard-stop;
+  - el 11 (Sinkhole y el hielo en la predicción);
+  - el 13 si se quiere.
 
 **2026-09-24** — segunda sesión del carril.
 

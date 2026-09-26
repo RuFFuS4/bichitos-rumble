@@ -33,10 +33,13 @@ encargos en [`docs/SESIONES.md`](docs/SESIONES.md). A partir de ahí, cada
 punto de esta lista lo recoge el carril que lo tiene en su checklist
 ([`docs/carriles/`](docs/carriles/)).
 
-**En producción: `v1.8-terreno-v2`** (2026-09-24, main `784779f` =
-`dev` `bf7b3ee`): H4.5 entero, con guard de versión y suavizado online.
-Detalle y comprobaciones en BUILD_LOG (2026-09-25, DISTRIBUCIÓN). Lo
-que entre en `dev` después sale en el siguiente despliegue
+**En producción: `v1.11-caida-sierra`** (2026-09-26, main `c8143ea` =
+`dev` `e4a1947`): el clip de caída offline y online, la cuenta atrás
+animada, la sierra de Shelly online y las estadísticas finales al día.
+Antes, `v1.10-paso-fijo`, `v1.9-habilidades-online` y `v1.8-terreno-v2`
+(H4.5 entero, con guard de versión y suavizado online). Detalle y
+comprobaciones de cada uno en BUILD_LOG (DISTRIBUCIÓN). Lo que entre en
+`dev` después sale en el siguiente despliegue
 (`git log --oneline main..dev`).
 
 **Lo primero de la próxima sesión, por orden:**

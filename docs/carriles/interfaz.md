@@ -42,6 +42,23 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
+- **De DISTRIBUCIÓN, 2026-09-26 — tres detalles del HUD vistos en las
+  sondas de v1.11.** Ninguno es de v1.11 ni bloquea; salen igual en
+  local y en producción.
+  - **«ALIVE: 4» en inglés durante la cuenta atrás.**
+    `src/hud/hud.partial.html:761` trae de serie `Alive: 4`, y
+    `src/hud/runtime.ts:40` solo lo traduce con `tf('hud-alive')` cuando
+    el HUD se actualiza en partida. Al empezar ya dice «VIVOS: 4».
+  - **Final online: «VIVOS: 2» y el último eliminado sin calavera.** En
+    una sala de 4 donde tres caen hasta la eliminación, el panel final
+    deja el contador y el retrato del último como si siguiera vivo.
+    Parece que el HUD no recibe la eliminación que cierra la partida.
+    Captura: `online-final-B.png` de la sonda, pídemela si la quieres.
+  - **El cartel del cinturón sale en inglés y tapa el cronómetro.**
+    `src/badge-toast.ts:45` escribe `NEW BELT UNLOCKED` sin pasar por
+    i18n. Se vio con «Speedrun Belt» al ganar una Shelly invitada en
+    menos de 30 s.
+
 - **De PERSONAJES, 2026-09-25 — paso fijo: los portales se animan aún por
   paso de simulación.** Sin prisa, nada roto.
   - Desde el segundo corte del paso fijo (`dev`), el juego simula a 1/60

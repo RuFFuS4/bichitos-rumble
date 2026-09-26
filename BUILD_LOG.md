@@ -1,5 +1,101 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-26 — [DISTRIBUCIÓN] v1.11-caida-sierra en producción: el clip de caída, la cuenta atrás animada y la sierra de Shelly online
+
+- **Despliegue** (Rafa: visto bueno a las capturas, «no hay partidas
+  vivas»):
+  - merge `--no-ff` de `e4a1947` (el SHA verificado de `dev`) en `main`
+    `c8143ea`, y tag `v1.11-caida-sierra`;
+  - push a las 21:31:42 UTC; `check` y 304 tests sobre el merge, que es
+    idéntico en contenido a `e4a1947`;
+  - solo cliente y docs: `server/` no cambia y `NET_PROTOCOL` sigue en 3,
+    así que las pestañas de v1.10 siguen jugando y nadie ve «recarga».
+- **Ventana:**
+  - **Vercel** sirvió la build nueva (`index-n2gAXDPZ.js`) a los
+    **~30 s** del push. El build tardó 19 s, con
+    `[payload-budget] dist total: 27.5 MB` y `OK`.
+  - **Railway no se redesplegó.** Tiene rutas vigiladas: en los estados
+    del commit contestó «No deployment needed - watched paths not
+    modified». El proceso de v1.10 (arrancado el 2026-09-25 a las 13:46
+    UTC) siguió vivo sin cortes. Como el servidor es idéntico byte a
+    byte, no hubo ventana de servidor ni partidas cortadas.
+- **Rollback:** Vercel `dpl_B6pTPENe4EGtE7s8CvCwE7siju4x` (`bb819bb`,
+  v1.10). Railway ya está en el despliegue de `bb819bb`: no hay nada que
+  revertir en ese lado.
+- **Comprobado después:**
+  - Cuatro comprobadores en paralelo y, detrás, un revisor adversarial:
+    0 cosas que bloqueen y cifras cruzadas que cuadran.
+  - Servidor: `/health` con protocolo 3 y guard `on`; leaderboard 200;
+    `POST {}` → 523 `client_outdated 1<3`, con `rejectedJoins` de 1 a 2 y
+    sin sala.
+  - Caché: `/` con `max-age=0`; `/assets/*` y `shelly.glb?v=d7429e49`
+    con `immutable`; los GLB de arena con un día.
+  - Vercel: release de Sentry `c8143ea` (chunk
+    `observability-sentry-BkfvOjec.js`). El despliegue
+    `dpl_7PcjLTEN3pyBaKJQJNbZ6r5dKLPK` está READY con los 5 alias.
+  - Smoke de Playwright **contra www**: 4/4, con `?ref=itch` y
+    `?portal=0` sin portal y el móvil grande con joystick.
+  - Offline contra www, los 5 biomas: 0 errores y 0 respuestas 4xx. Los
+    20 bichos de la cuenta atrás hacen Idle → Fall → Idle y aterrizan en
+    Idle. Las caídas dan `fall` en el flanco, y la pantalla final da
+    3 caídas y 2 reapariciones.
+  - **Online contra Railway**, 4 invitados en sala privada (Shelly,
+    Sergei, Kurama y Sihans; sin nick, así que 0 filas en la base de
+    datos de producción):
+    - la sierra gira a **22,00 rad/s** en las cuatro pantallas y vuelve
+      a su sitio en el fotograma siguiente a la victoria;
+    - en cada pantalla, 9/9 flancos de caída en `fall`, 6/6
+      reapariciones en `idle` y 3/3 eliminaciones en `defeat`, sin
+      reaparición;
+    - pantalla final con 3 caídas y 2 reapariciones; 0 errores.
+  - **Online contra Railway, 2 invitados en sala privada hasta el
+    final**, con relleno de bots y coral_beach:
+    - la misma semilla y la misma huella de arena en los dos;
+    - los mismos fragmentos en los colapsos 1, 2 y 3 (15 caídos,
+      idénticos al acabar);
+    - 0 errores, solo los avisos benignos de siempre (preload y
+      AudioContext).
+- **Verificado antes, sobre `e4a1947`:**
+  - `check`, 304 tests, tsc del servidor, golden 3/3 (253, 188 y 242
+    eventos) y smoke 4/4.
+  - El bundle de producción contra un servidor local con 4 clientes, dos
+    salas: sierra a 22,04-22,07 rad/s y los mismos flancos de caída.
+  - 2 clientes hasta el colapso 2 con los mismos fragmentos.
+  - Los 5 biomas offline.
+  - Capturas aprobadas por Rafa.
+  - Docker, no: el demonio no estaba arrancado. `server/` es idéntico al
+    que ya corría en Railway.
+- **Qué salió** (PERSONAJES):
+  - la sierra de Shelly gira online;
+  - el clip de caída offline y online, con el Fall en su sitio;
+  - la cuenta atrás animada, sin flotar al aterrizar;
+  - la bola de nieve que ya no golpea en la cuenta atrás;
+  - las reapariciones online y las caídas offline en la pantalla final.
+- **Lecciones:**
+  - **Railway solo redespliega si el push toca `server/`.** El runbook
+    daba por hecho que cada push a `main` lo reiniciaba. Ahora el paso 0
+    lo mira con `git diff --stat origin/main <SHA> -- server/`, y el paso
+    2 dice cómo verlo en los estados del commit.
+  - **Aviso de mantenimiento** (Rafa): *«en un futuro por si hay partidas
+    deberemos avisar con un mensaje de mantenimiento y hacer la subida y
+    las comprobaciones durante el tiempo indicado en el mensaje»*. Va en
+    el runbook y como punto 12 del carril. El mecanismo no existe todavía.
+  - **Sondas online sin tocar la base de datos de producción:**
+    `connectOnlineWith` con `onlineIdentity = null` y `friendsJoin` entra
+    como invitado en una sala privada, sin modal de nick.
+  - **4 clientes con GPU no caben contra el dev server** de Vite (se cae
+    una pestaña con `ERR_INSUFFICIENT_RESOURCES` al cargar los módulos
+    sin empaquetar). Lo que sí aguanta es el bundle de producción con
+    `VITE_SERVER_URL` y `vite preview`. Aun así, en producción un
+    intento perdió el contexto WebGL y se repitió.
+  - Las pestañas de v1.10 que sigan abiertas piden chunks con hash viejo,
+    que Vercel ya da como 404. El guard ofrece recargar si falla el chunk
+    de red, pero es otro argumento para el aviso de mantenimiento.
+- **Visto de paso** (buzón de INTERFAZ, no son de v1.11):
+  - en la cuenta atrás el HUD dice «ALIVE: 4» en inglés;
+  - en el final online, «VIVOS: 2» sin la calavera del último eliminado;
+  - el cartel del cinturón sale en inglés y tapa el cronómetro.
+
 ## 2026-09-25 — [PERSONAJES] Las caídas del final offline ya se cuentan
 
 - **Qué:** la estadística «Caídas» de la pantalla final offline daba
