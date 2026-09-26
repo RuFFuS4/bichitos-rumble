@@ -509,7 +509,8 @@ Rafa: «tienes permiso para `game.ts`, adelante con el paso fijo».
 - **Queda fuera, para otros carriles o para Rafa:**
   - `Arena.update` y los portales siguen por paso. Son de ARENA e
     INTERFAZ: aviso en sus buzones.
-  - Tres cambios visuales que necesitan tu sí:
+  - ~~Tres cambios visuales que necesitan tu sí~~: Rafa dijo «Sí, Sí y
+    Sí». Hechos, en «Los tres cambios visuales» más abajo.
     - que se vea el clip de caída offline (hoy el bicho que cae se queda
       quieto);
     - que se muevan los clips durante la cuenta atrás;
@@ -567,6 +568,59 @@ fotograma solo (±0,25 ms de 16,67) y en Safari no se enganchaba nunca.
   - un primer fotograma largo.
 
   Con el reloj viejo fallan 7 de 46.
+
+### Los tres cambios visuales (2026-09-25)
+
+Rafa: «Sí, Sí y Sí». Tres diseñadores con un crítico cada uno, y después
+tres sondas con capturas y dos revisiones adversariales, cada hallazgo con
+su escéptico.
+
+- **El clip de caída, offline.** Offline, `Game.presentFrame` no presentaba
+  al que caía. Se quedaba congelado 0,8 s y el golpe (destello,
+  aplastamiento, inclinación) se reanudaba al reaparecer. Ahora se ve el
+  Fall de los 9, y el golpe termina durante la caída.
+  - Ni el brillo del cabezazo ni el parpadeo de inmunidad salen mientras
+    cae.
+  - Al reaparecer, el Idle entra sin fundido y se borran los acentos y la
+    inclinación.
+- **El clip de caída, también online.** Al diseñarlo salió que online
+  tampoco se veía nunca: nadie pedía el Fall. `Critter.presentFallEdge` da
+  el aspecto de los dos flancos, y lo llaman `startFalling` y `respawnAt`
+  offline y `Game.updateOnline` en el flanco sincronizado.
+- **El Fall, en su sitio.** Los Fall de Mixamo de Sergei, Sihans y Kurama
+  bajan la cadera unos 2 m. Tal cual, el bicho saltaba 1,4 u (Sergei) o
+  2,5 u (Sihans) al empezar a caer, y volvía a saltar cada vez que el bucle
+  se repetía.
+  - `IN_PLACE_STATES` quita la traslación de la raíz del esqueleto, y la
+    raíz queda en su posición de reposo.
+  - Tampoco hay rebote procedural durante la caída.
+  - anim-lab y dev-api ven la misma copia que el juego.
+- **La cuenta atrás.** Los bichos colgaban congelados en un fotograma.
+  Ahora hacen Idle en lo alto y Fall en la bajada, y las piernas bajan a
+  buscar el suelo: el paso a Idle (`FEEL.match.dropLandBlend`, 0,1 s)
+  termina justo al tocarlo.
+  - Con el fundido después del contacto, las piernas recogidas de los
+    Tripo flotaban hasta 0,29 u sobre el polvo. Acortarlo solo acortaba la
+    flotación. Ahora, en el fotograma del aterrizaje, los 9 están a menos
+    de 0,007 u del suelo.
+  - Si el modelo del jugador llega tarde, el Fall espera a que pueda
+    tomarlo.
+  - La red de seguridad del «¡YA!» también saca del Fall.
+- **La sierra de Shelly, online.** Gira a 22,000 rad/s, local y remota, en
+  la ventana exacta de la sierra del servidor. La copia de Kurama no gira
+  en ningún modo (ver el buzón de PERSONAJES). Bajo el clip de victoria ya
+  no gira: antes giraba sin fin tras la pantalla final.
+- **La simulación no cambia.** Golden 3/3 y grabaciones idénticas bit a bit
+  después de cada cambio. La sonda de fugas no ve ni una en caídas,
+  reapariciones, cuentas atrás ni en el laboratorio, a 30, 60 y 144 Hz.
+  Online, sin errores de consola ni de servidor.
+- **Queda:**
+  - mientras cae, la inclinación de la raíz se queda la que tenía (hasta
+    0,2 rad si corría). Es plausible, por la inercia, y se borra al
+    reaparecer;
+  - el brillo verde de una sierra activa sigue en la pantalla final, en
+    los dos modos: ni `enterEnded` ni el `endMatch` del servidor cancelan
+    las habilidades.
 
 ## Preguntas a Rafa — respondidas el 2026-09-25
 

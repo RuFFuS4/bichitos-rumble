@@ -1,5 +1,239 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-25 — [PERSONAJES] Las caídas del final offline ya se cuentan
+
+- **Qué:** la estadística «Caídas» de la pantalla final offline daba
+  siempre 0. Es uno de los dos fallos viejos que dejó apuntados la entrada
+  del clip de caída.
+- **Por qué:**
+  - `Critter.tickMatchStats` cuenta la caída por el flanco de `falling`, y
+    solo corre en `observeStep`, al final de `Critter.simulate`.
+  - Offline, `Game.simulate` solo simula a los bichos con `!c.falling`. La
+    caída empieza más tarde en ese mismo paso: `checkFalloff`, o un All-in
+    en `updateAbilities`.
+  - Mientras cae, el bicho no se vuelve a simular hasta que `respawnAt`
+    baja la bandera, así que ningún paso veía el flanco.
+  - Solo lo veía la fase `ended`, que sí simula a los que caen. Por eso una
+    caída en curso al acabar sumaba 1, pero después de pintar la pantalla.
+  - Online funciona: `updateOnline` llama a `c.update` en cada bicho y en
+    cada fotograma.
+- **Arreglo, solo en `src/critter.ts`:**
+  - `startFalling` cuenta la caída. Es la única entrada offline: la usan
+    la física y el All-in, y online nunca se llama.
+  - `startFalling` marca además el flanco como visto
+    (`lastStatsFalling = true`). Así la fase `ended` no la cuenta otra vez.
+  - El camino del flanco sigue igual para online.
+  - No se tocó `present` (la presentación no lleva contabilidad por paso)
+    ni `src/game.ts`.
+- **Medido** (sonda headless muda en `/`, partida offline con Sergei).
+  Primero se tira al jugador fuera del disco y se espera a que reaparezca.
+  Luego se le tira otra vez y la partida se acaba mientras cae:
+
+  | Momento | Antes | Después |
+  |---|---|---|
+  | Tras la 1.ª caída | 0 | **1** |
+  | Tras reaparecer | 0 | 1 |
+  | Al acabar la partida, cayendo | 1 (lo sumó `ended`) | 2 |
+  | Pantalla final, «Caídas» | 0 | **2** |
+
+  En los cuatro momentos, «Después» coincide con los flancos de `falling`
+  contados paso a paso.
+- **La simulación no cambia:** golden 3/3 (253, 188 y 242 eventos
+  idénticos), `npm run check` y 304 tests en verde.
+- **Visto de paso:** online, «Reapariciones» daba siempre 0.
+  `matchStats.respawns` solo subía en `respawnAt`, y online la reaparición
+  la manda el servidor sin llamarlo. Ya está arreglado (entrada de abajo,
+  1f15315). Entró en `dev` antes que este cambio, y su limpieza de
+  `lastStatsFalling` en `respawnAt` es lo que evita que, con los dos
+  juntos, las reapariciones offline se cuenten doble.
+
+## 2026-09-25 — [PERSONAJES] Las reapariciones online ya se cuentan
+
+- **Qué:** online, la estadística «Reapariciones» de la pantalla final
+  daba siempre 0. Salió al arreglar las caídas offline (`753ba32`, rama
+  `claude/fix/personajes-caidas-offline`).
+- **Por qué:**
+  - `matchStats.respawns` solo subía en `Critter.respawnAt`.
+  - Online nunca se llama a `respawnAt`: la reaparición la hace el
+    servidor. `Game.updateOnline` solo copia `falling` y llama a
+    `presentFallEdge`.
+  - Las caídas online sí se contaban: el flanco de subida de `falling`
+    se ve en `tickMatchStats`, que corre en cada fotograma a través de
+    `c.update`.
+- **Arreglo, solo en `src/critter.ts`:**
+  - `tickMatchStats` cuenta la reaparición con el flanco de **bajada** de
+    `falling`, si el bicho sigue vivo (`alive`).
+  - La eliminación no cuenta: el servidor baja `falling` y `alive` en el
+    mismo tick (`updateFalling` de `server/src/sim/physics.ts`, y el
+    abandono por portal), y el cliente copia `alive` antes que
+    `falling`.
+  - Offline la sigue contando `respawnAt`, que ahora limpia
+    `lastStatsFalling`. Así el paso siguiente no vuelve a ver el flanco.
+    Sin esa línea no pasa nada en `dev`, pero con `753ba32` encima
+    (`startFalling` sube `lastStatsFalling`) se contaría doble.
+  - No se tocó `present` ni `src/game.ts`.
+- **Medido.** Las sondas son headless y mudas, con el jugador Sergei.
+  La sonda online va contra un servidor local (`npm run dev` en
+  `server/`, con `precise-timers`). En ella el jugador se tira al vacío
+  tres veces: dos reapariciones y la eliminación. La verdad del servidor
+  sale de las vidas y de los flancos de cada parche de estado.
+
+  | Caso | Antes | Después | Verdad |
+  |---|---|---|---|
+  | Online, pantalla final, «Reapariciones» | 0 | **2** | 2 (vidas 0, eliminado) |
+  | Online, tras cada caída (cliente) | 0 · 0 · 0 | 1 · 2 · 2 | 1 · 2 · 2 |
+  | Offline, cae 1 y se acaba el tiempo | 1 | 1 | 1 `respawnAt` |
+  | Offline, cae hasta la eliminación | 2 | 2 | 2 `respawnAt` |
+  | Offline + `753ba32`, las dos partidas | — | 1 y 2 | 1 y 2 |
+  | Control: offline + `753ba32` sin limpiar en `respawnAt` | — | 2 y 4 ✗ | 1 y 2 |
+
+  Con `753ba32` encima, las caídas offline también cuadran: 1 y 3.
+- **Verificado:**
+  - golden 3/3 con eventos idénticos (253 · 188 · 242);
+  - `npm run check`;
+  - 304 tests de `test:sim`.
+- **Para quien integre `753ba32`:** `src/critter.ts` se combina sin
+  conflicto con este arreglo (comprobado con `git merge-tree`).
+  `BUILD_LOG.md` choca, como ya chocaba con `dev`.
+
+## 2026-09-25 — [PERSONAJES] Una bola de nieve de la partida anterior ya no golpea en la cuenta atrás
+
+- **El fallo** (viejo, apuntado como pendiente en la entrada de abajo):
+  - `Game.enterCountdown` resetea la arena y llama a `clearActiveZones()`,
+    pero no a `clearProjectiles()`, que sí llaman `enterTitle` y
+    `debugStartOfflineMatch`.
+  - `tickProjectiles` corre en cada paso del sim, cuenta atrás incluida,
+    y su barrido es 2D: no mira la altura.
+  - Resultado: una bola de Kowalski que sigue en vuelo al reiniciar
+    golpea a un bicho de la partida nueva mientras cae del cielo, antes
+    del «¡YA!».
+- **Medido antes del arreglo**, con una sonda headless muda con GPU (la
+  bola sale de (0,−6) hacia el centro):
+  - **Pausa → Reiniciar**: la pausa congela la bola junto a (0,−6), y en
+    el primer paso golpea al **jugador nuevo**, que sale justo ahí.
+  - **Se acaba el tiempo → R**: la bola sigue en vuelo en la cuenta atrás
+    y golpea al bot que sale en (0,6).
+  - En los dos casos la víctima arranca el «¡YA!» con 5 s de
+    congelación y 22 u/s de empujón guardados en la velocidad.
+- **Arreglo:** `clearProjectiles()` al entrar en la cuenta atrás, junto a
+  `clearActiveZones()`, con su comentario.
+- **Verificado:**
+  - la misma sonda, dos pasadas por camino: 0 bolas desde la entrada en
+    la cuenta atrás hasta el «¡YA!», y ningún bicho congelado ni empujado;
+  - golden 3/3 (usa `debugStartOfflineMatch`, que ya limpiaba) y tsc.
+- **Online no cambia:** a `enterCountdown` solo se llega offline
+  (selección de bots, reinicio offline y entrada por portal).
+- **Tierra de nadie, dicho aquí:** `src/game.ts`, una línea y su
+  comentario, con el permiso explícito de Rafa en el encargo de esta
+  sesión.
+
+## 2026-09-25 — [PERSONAJES] Clip de caída (offline y online), cuenta atrás animada y la sierra de Shelly online
+
+- **Qué:** los tres cambios visuales que aprobó Rafa («Sí, Sí y Sí»), más
+  lo que salió al hacerlos.
+  - **El que cae al vacío se anima.** Offline no se presentaba: quedaba
+    congelado 0,8 s y el golpe se reanudaba al reaparecer. Online nadie
+    pedía el Fall. Ahora `Critter.presentFallEdge` sirve a las dos vías.
+  - **El Fall, en su sitio** (`IN_PLACE_STATES` en `critter-skeletal.ts`).
+    Los Fall de Mixamo de Sergei, Sihans y Kurama bajan la cadera unos
+    2 m, y el bicho habría saltado hasta 2,5 u en el borde.
+  - **La cuenta atrás se anima:** Idle en lo alto, Fall en la bajada, y el
+    paso a Idle termina justo al tocar el suelo (`FEEL.match.dropLandBlend`,
+    0,1 s). Antes las piernas recogidas flotaban hasta 0,28 u sobre el
+    polvo; ahora quedan a menos de 0,007 u.
+  - **La sierra de Shelly gira online** (22,000 rad/s medidos), y ya no
+    gira bajo la victoria.
+- **Cómo se hizo:** tres diseños con su crítico y tres sondas con
+  capturas (caída de los 9, cuenta atrás de los 9, online contra un
+  servidor local). Después, dos revisiones adversariales con un escéptico
+  por hallazgo, seis arreglos y una reverificación. Esta vio que acortar el
+  fundido del aterrizaje no bajaba la flotación, y el fundido pasó a
+  terminar al tocar el suelo.
+- **La simulación no cambia:** golden 3/3 y grabaciones idénticas bit a bit
+  tras cada commit. Ninguna fuga de presentación a simulación a 30, 60 y
+  144 Hz. 304 tests, smoke 4/4.
+- **Tierra de nadie, dicho aquí:** `src/game.ts`, con el permiso de Rafa
+  para estos cambios visuales:
+  - `presentFrame` ('playing' y 'countdown');
+  - el flanco de caída en `updateOnline`;
+  - el pestillo y el fundido del aterrizaje de la cuenta atrás;
+  - la red del «¡YA!».
+- **Pendiente:**
+  - el brillo de una habilidad activa sigue en la pantalla final, en los
+    dos modos (ni `enterEnded` ni `endMatch` cancelan);
+  - dos fallos viejos, con tarea aparte: la estadística de caídas del
+    final offline siempre da 0, y `enterCountdown` no limpia los
+    proyectiles.
+
+## 2026-09-25 — [DISTRIBUCIÓN] v1.10-paso-fijo en producción: paso fijo en el juego, Grip entero, All-in a 180°/s
+
+- **Despliegue** (Rafa: «prepáralo y despliégalo»):
+  - merge `--no-ff` de `ea77e62` (el SHA verificado de `dev`) → `main`
+    `bb819bb`, tag `v1.10-paso-fijo`. Push a las 13:45:50 UTC;
+  - `check` y 304 tests sobre el merge, idéntico en contenido a
+    `ea77e62`;
+  - `NET_PROTOCOL` sigue en 3: las pestañas v1.9 abiertas siguen jugando
+    y no hay «recarga».
+  - **Ventana**: Vercel a los **37 s** (`index-sR0DHhDE.js`) y Railway a
+    los **67 s**. Sin cambio de protocolo, Railway se detecta porque el
+    uptime vuelve a empezar.
+  - **Comprobado después**:
+    - `/health` con protocolo 3 y guard `on`;
+    - leaderboard 200;
+    - `POST {}` → 523 `client_outdated 1<3`;
+    - cabeceras de caché;
+    - release de Sentry `bb819bb`;
+    - www normal y con `?ref=itch` sin errores ni 4xx.
+  - **Rollback**, siempre los dos lados: Vercel
+    `dpl_7Uw3pUgKFcJ9VBnEqS3C7QPfmoEQ` (a37791b, v1.9) y Railway, el
+    despliegue de a37791b.
+- **Qué salió**:
+  - PERSONAJES, el juego a paso fijo de 1/60:
+    - la simulación en pasos de 1/60 y la presentación a cada
+      fotograma;
+    - el reloj enganchado también en Safari/iOS;
+  - el Grip trae entero a un Sergei en frenesí;
+  - el All-in apunta a 180°/s;
+  - seis arreglos de tierra de nadie;
+  - las zonas que copia Kurama, online como hielo y arena.
+- **Cambio de SHA en la preparación**: se congeló `3b1dbd6` y se verificó
+  entero. La revisión adversarial confirmó que en Safari/iOS (marcas de
+  rAF redondeadas a 1 ms) el reloj del paso fijo no se enganchaba nunca.
+  En un iPhone offline, lo no interpolado iba a tirones.
+  - El segundo corte de PERSONAJES (`12cec85`: presentación a cada
+    fotograma) ya quitaba el tirón visible. Su arreglo del enganche
+    (`ea77e62`) deja 1 paso por frame a 60 Hz y 2 a 30 Hz en todas las
+    fases.
+  - Se desplegó `ea77e62`, verificado de nuevo, en vez de `3b1dbd6`.
+- **Verificado** (sobre `3b1dbd6`, y lo que cambió después de nuevo
+  sobre `12cec85` y `ea77e62`):
+  - check, 304 tests, golden 3/3, smoke 4/4, tsc de los dos lados;
+  - Docker con guard (el servidor no cambia desde `3b1dbd6`);
+  - `BrawlRoom` sin clientes:
+    - un Sergei en frenesí queda a 1,60 u de la trompa, como uno
+      normal;
+    - Sebastian cargando gira 90° en 0,5 s y 180° en 1 s;
+  - sonda del paso fijo a 30/60/144/240 Hz: mismo empujón (2,877 u),
+    una presentación por frame, 0 fugas del sim a la presentación, el
+    hit stop dura lo mismo a cualquier tasa. Con marcas de 1 ms en 3
+    fases: 1×60 y 2×30;
+  - 12 salas online de 4 clientes en tres tandas: 0 errores, ninguna
+    habilidad lista sin ejecutarse, sin líneas del All-in colgadas;
+  - revisiones adversariales de los dos tramos (5 y 3 revisores con
+    verificador). Del primero, el hallazgo de Safari. Del segundo, 0
+    hallazgos.
+- **Lección: el banco del suavizado y los parones del navegador sin
+  pantalla.**
+  - Cada grabación tiene uno o dos parones del hilo principal de
+    220-330 ms. El navegador deja de leer mensajes y el banco lo ve como
+    un hueco de red de 270-460 ms, mientras sigue pintando a 60/144 Hz.
+  - Si coincide con la frenada de un rival, el banco da pasadas de 5-24
+    px que en el juego no se ven así.
+  - Salen igual en las grabaciones de v1.9 (el mismo módulo, que dio
+    ≤ 1,9 px sin coincidencias). No es una regresión: es el banco.
+  - Para juzgar la pasada de los rivales hay que descartar las frenadas
+    que caen en un parón (el peor frame está en la grabación).
+
 ## 2026-09-25 — [PERSONAJES] El paso fijo se engancha también en Safari e iOS
 
 - **Qué:** `FixedStepClock` decide si la pantalla va a la cadencia de la

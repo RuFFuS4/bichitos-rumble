@@ -371,6 +371,21 @@ antes de commitear el JSON.
      de Shelly online no la vi documentada). Offline la copia tampoco
      gira, aunque `COPYCAT_KEYS` copia `sawSpinSpeed`.
 
+  → *El 3, hecho el 2026-09-25 (Rafa: «Sí»):*
+  - *Shelly gira online. `tickSawSpin` sale de la guarda de
+    `skipPhysics` y sigue los `active` y `windUpLeft` sincronizados.
+    Medido contra un servidor local: 22,000 rad/s, local y remota.*
+  - *La guarda por nombre se queda. La copia de Kurama no gira en ningún
+    modo: online el cliente no construye la copia, y quitar la guarda solo
+    la haría girar offline.*
+  - *Si decidís mandar la forma de la L en el `abilityFired` (tu punto 1),
+    el giro de la copia puede ir en el mismo cambio, en los dos modos.*
+  - *De paso: la sierra ya no gira bajo el clip de victoria. El brillo verde
+    sí sigue en la pantalla final: tu `endMatch` no cancela las habilidades,
+    y el `enterEnded` offline tampoco.*
+
+  *Los puntos 1 y 2 siguen pendientes.*
+
 ## Cómo retomar
 
 **2026-09-25** — en `dev` están el corte 2 del feeling (reacción al golpe,
