@@ -41,8 +41,8 @@ arreglados:
 - la deriva con velocidad negativa;
 - la cabecera de coste.
 
-Queda anotado en el carril: offline, la cuenta atrás no avanza el cielo
-(`game.ts`).
+El sexto (offline, la cuenta atrás no avanzaba el cielo) se arregló justo
+después con una línea en `game.ts`, con permiso de GENERAL.
 
 **Herramienta nueva:** `arena-shots --sky-time S` (y
 `Arena.setBackdropTime`). Captura la deriva y la vida en cualquier

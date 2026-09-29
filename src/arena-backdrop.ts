@@ -746,8 +746,8 @@ export class ArenaBackdrop {
    * F2: deriva y vida, con el reloj de la PARTIDA: lo llama
    * `Arena.tickVisuals`, así que la pausa lo congela, a t=0 (al construir)
    * todo está en su sitio de colocación y las capturas se reproducen.
-   * Offline, la cuenta atrás no llama a `tickVisuals` (`game.ts`): el cielo
-   * arranca con la partida. Online corre desde que llega la semilla.
+   * Corre desde la cuenta atrás (offline, `game.ts` → `tickVisuals`; online,
+   * desde que llega la semilla).
    */
   tick(dt: number): void {
     if (this.driftMeshes.length === 0 && !this.lifeMesh) return;

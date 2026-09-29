@@ -39,7 +39,9 @@
 //               F1 del fondo es que, tapando el disco, se sepa el bioma.
 //   --sky-time  pone el reloj del fondo (deriva de las nubes y vida, F2) en
 //               S segundos sobre el instante congelado: separa el efecto de
-//               la deriva del del colapso. Sufijo `_skyS`.
+//               la deriva del del colapso. Sufijo `_skyS`. Sin él, el reloj
+//               del fondo va al instante pedido (--at-seconds), para que la
+//               vida no dependa de cuánto tardó la captura en congelar.
 // ---------------------------------------------------------------------------
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -166,7 +168,10 @@ for (const pack of PACKS) {
     });
   }
   if (SCATTER !== null) await page.evaluate((d) => window.__devApi.setScatterDensity(d), SCATTER);
-  if (SKY_TIME !== null) await page.evaluate((t) => window.__game.arena.setBackdropTime(t), SKY_TIME);
+  // El reloj del fondo se fija siempre: desde que el cielo corre en la
+  // cuenta atrás, lo que pase entre llegar a ella y congelar movería la
+  // vida de una captura a otra. Sin --sky-time, el instante pedido.
+  await page.evaluate((t) => window.__game.arena.setBackdropTime(t), SKY_TIME ?? AT);
   for (const pose of POSES) {
     await page.evaluate((p) => window.__devApi.setCameraPose(p), pose);
     await sleep(700);

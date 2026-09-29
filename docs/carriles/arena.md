@@ -38,10 +38,6 @@ el orden de trabajo.
    - Lo que queda: F3 luz por bioma (absorbe la antigua «fase 3, rig de
      luz») · F4 caída, CLI `arena-sky.mjs`, `look-patch`, test de
      determinismo y borrado del mar y de las fotos.
-   - Nota para quien tenga `src/game.ts`: offline, la cuenta atrás no
-     llama a `arena.tickVisuals`, así que el cielo (deriva y vida) arranca
-     con la partida. Es cosmético: una línea en la rama `'countdown'` de
-     `presentFrame` lo arregla.
 2. **Dioramas slice 2**: afinar recetas sobre capturas (grietas de hielo,
    escala de acentos), fleco del borde que se regenera al caer un sector,
    viento animado barato, recomponer los 73 props autorados,

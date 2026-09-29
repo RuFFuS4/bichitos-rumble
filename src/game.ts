@@ -2404,6 +2404,9 @@ export class Game {
       // clips; they play here.
       case 'countdown':
         for (const c of this.critters) c.present(dt);
+        // The sky (cloud drift and life, docs/DIORAMAS.md F2) moves from the
+        // countdown on, as online. Nothing is falling yet at this point.
+        if (this.phase === 'countdown') this.arena.tickVisuals(dt);
         break;
       case 'playing': {
         // The portals' visuals run on wall-clock time (portal.ts), at the
