@@ -178,6 +178,11 @@ Cómo se trabaja desde un worktree:
 - **Capturas con GPU y mudas**: `launchMutedBrowser({ channel: 'chromium',
   args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] })`.
   Por defecto el headless renderiza por software (~18 s por fotograma).
+  **Pero con varios carriles capturando a la vez, la GPU falla**: salen
+  capturas en blanco y texturas sin cargar (medido por ARENA el
+  2026-09-29, con los cuatro trabajando). En modo paralelo, por software:
+  más lento, pero fiable. La GPU solo cuando tu carril sea el único que
+  captura.
 - `resources/` y `.tmp/` **no existen** en el worktree: las referencias de
   arte se leen por ruta absoluta de la carpeta principal.
 - **Integrar**: `git checkout dev` solo funciona si nadie más lo tiene
