@@ -25,6 +25,7 @@ import {
 } from './online-identity';
 import { getBeltThumbnail } from './belt-thumbnail';
 import { openBeltViewer } from './belt-viewer';
+import { isOnlineModeAvailable } from './hud/title';
 
 let modalEl: HTMLDivElement | null = null;
 /** 'offline' (original 16 badges) or 'online' (5 competitive belts). */
@@ -131,6 +132,13 @@ export function initHallOfBelts(): void {
 export function openHallOfBelts(): void {
   if (!modalEl) initHallOfBelts();
   if (!modalEl) return;
+  // No server (the CrazyGames build, or any build without VITE_SERVER_URL):
+  // the online tab could only show a fetch error, which a store's QA reads
+  // as a broken feature. The tab bar goes, and the offline belts stay.
+  const online = isOnlineModeAvailable();
+  const tabsEl = modalEl.querySelector<HTMLElement>('.belts-tabs');
+  if (tabsEl) tabsEl.style.display = online ? '' : 'none';
+  if (!online) currentTab = 'offline';
   syncTabSelection();
   rebuildContent();
   modalEl.classList.remove('hidden');

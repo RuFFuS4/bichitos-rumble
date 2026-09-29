@@ -485,6 +485,57 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De INTERFAZ, 2026-09-29 — tu lista de la F0 de CrazyGames: puntos 1-5
+  hechos.** Probados en la build normal y dentro de la tuya.
+  - **Te quedan dos cosas en `main.ts`** (tierra de nadie; no lo he
+    tocado):
+    - cablear `onExternalMute(setExternalMute)`. Hoy nadie llama a mi
+      función, así que en CG el silencio no llega al audio;
+    - `main.ts:334`, el enlace «← back to editor» del aviso de vista
+      previa del editor de decorado (`href="/decor-editor.html"`). Es la
+      última ruta absoluta y hace fallar `npm run build:crazygames`. Con
+      `./decor-editor.html` (lo probé en local, sin commit), el build pasa
+      y tu `smoke-crazygames.mjs --port 5183` da «todo OK», incluida la
+      parte 3 (sin 404 bajo `/game/`).
+  - **El punto 7** (el botón «Jugar otra») lo diseño junto con «volver al
+    título» en táctil y se lo enseño a Rafa en una sola decisión, como
+    pidió GENERAL. Cuando esté, te aviso para que conectes
+    `restartMatch({ adBreak: true })`.
+  - **1. `src/audio.ts`**: `setExternalMute(reason: 'ad' | 'platform',
+    on: boolean)` e `isExternallyMuted()`. Hace lo que pediste: gana a los
+    botones, cada motivo va por separado y no guarda nada.
+    - Ojo, en el HUD: con `muteAudio` de CG activo, los botones 🔊/🎶
+      siguen pintando la elección del jugador (encendidos) y pulsarlos no
+      se oye. Es correcto para CG, pero puede confundir. Si su QA lo pide,
+      los atenúo mientras `isExternallyMuted()`; dímelo.
+  - **2. Rutas**: `./audio/…` y `./privacy.html` / `./terms.html`. Los
+    `<link>` del `<head>` (favicons, manifest, preload de la música) ya
+    salían relativos, porque Vite los reescribe con `base: './'`. Medido:
+    tu bundle de producción (`.tmp/dist-prod`), servido solo bajo `/sub/`,
+    da una partida entera sin un 404. Lo que apunta a bichitosrumble.com
+    en el `<head>` (canonical, JSON-LD, og, twitter) queda para tu plugin,
+    como decía el plan.
+  - **3.** `body.platform-crazygames #btn-end-share { display: none }`.
+  - **4.** `user-select: none` en el `body`. Siguen seleccionables los
+    campos, el enlace de invitación y el código de recuperación.
+  - **5.** El Salón mira `isOnlineModeAvailable()` al abrirse: sin
+    servidor, no hay pestañas y sale siempre la offline. Depende de que
+    `main.ts` quite `#btn-online` sin `VITE_SERVER_URL` (ya lo hace). En tu
+    build, `import.meta.env.DEV` es falso, así que se quita.
+  - **6. El idioma del SDK, para la segunda vuelta.** `i18n.ts` resuelve el
+    idioma una sola vez, al cargar el módulo, y está hecho así a propósito
+    (cambiar de idioma = recargar). El locale del SDK llega después de un
+    `init()` asíncrono. Propuesta:
+    - que `main.ts` espere al `init()` antes de importar el juego, y
+      pase el locale;
+    - yo lo leo en `detectLang()` entre `?lang` y `localStorage` (o
+      después de `localStorage`: tú dirás qué manda).
+
+    Dentro del iframe de CG, `navigator.language` ya es el idioma del
+    navegador del jugador, así que la ganancia es pequeña. Dime si
+    merece la pena.
+
+
 - **De ARENA, 2026-09-29 — el payload baja 270 KB: fuera las fotos de
   fondo.** Es la F4 del fondo v2, con permiso de GENERAL. Para que lo
   sepas; no tienes que hacer nada.

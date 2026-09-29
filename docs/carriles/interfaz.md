@@ -22,7 +22,10 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
      arreglada el mismo día (ver §Hecho).
 2. **En táctil no se vuelve al título desde la pantalla final ni se
    pausa offline** (visto el 2026-09-29, no es un callejón: «Toca para
-   jugar otra vez» siempre funciona). El menú de pausa solo abre con
+   jugar otra vez» siempre funciona). **Va junto con el punto 7 de
+   CrazyGames** (un botón explícito «Jugar otra», porque el anuncio no
+   puede salir con un toque cualquiera): se diseñan juntos y los decide
+   Rafa en una sola vez. El menú de pausa solo abre con
    Escape. El mecanismo ya existe: un botón `data-menu-action="back"` en
    la pantalla final (su manejador de «jugar otra vez», en
    `hud/end.ts`, tiene que saltarse `[data-menu-action]` como ya se salta
@@ -50,6 +53,12 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
+- De DISTRIBUCIÓN, 2026-09-29 — tu parte de la F0 de CrazyGames →
+  **puntos 1-5 hechos el 29** (ver §Hecho). El 6 (idioma del SDK) queda
+  para la segunda vuelta, con la propuesta en su buzón. **El 7 (el botón
+  «Jugar otra») está pendiente**: va junto con el punto 2 de §Pendiente
+  («volver al título» en táctil), en una sola decisión de Rafa, como pidió
+  GENERAL. Lo que pedía, para el registro:
 - **De DISTRIBUCIÓN, 2026-09-29 — tu parte de la F0 de CrazyGames (H5),
   aprobada por Rafa.** El plan completo está en
   [`docs/H5_CRAZYGAMES.md`](../H5_CRAZYGAMES.md). Es una build aparte
@@ -166,6 +175,26 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
   hecho (ver §Hecho, miniaturas).
 
 ## Hecho
+
+- **2026-09-29 — F0 de CrazyGames, la parte de INTERFAZ** (encargo de
+  GENERAL, plan en [`docs/H5_CRAZYGAMES.md`](../H5_CRAZYGAMES.md)).
+  - **Silencio externo** (`src/audio.ts`): `setExternalMute('ad' |
+    'platform', on)` y `isExternallyMuted()`. Cada bus suena solo si ni el
+    jugador ni ningún motivo externo lo calla, y `play()` y el aviso de
+    colapso lo respetan. No guarda nada: `bichitos.sfxMuted` /
+    `bichitos.musicMuted` siguen igual y significan lo mismo. Test:
+    `tests/sim/audio-external-mute.test.ts` (AudioContext falso).
+  - **Rutas relativas**: la música (`./audio/…`) y los enlaces de
+    privacidad y términos. Los `<link>` del `<head>` ya salían relativos,
+    porque Vite los reescribe con `base: './'`. Medido con el bundle de
+    producción servido bajo `/sub/`: una partida entera sin un solo 404.
+  - **Compartir**, oculto con `body.platform-crazygames`.
+  - **`user-select: none`** en el `body`. Siguen seleccionables los
+    campos, el enlace de invitación y el código de recuperación.
+  - **El Salón sin servidor** (`isOnlineModeAvailable()` falso): sin barra
+    de pestañas y siempre en la offline.
+  - La web no cambia: smoke 4/4 en dev y 4/4 contra el bundle de
+    producción.
 
 - **2026-09-29 — En el móvil, las pantallas online tienen salida.** En
   táctil no hay T, y «Desconectado» era un callejón sin salida (solo

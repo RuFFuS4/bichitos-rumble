@@ -120,7 +120,10 @@ Object.assign(codeBoxEl.style, {
   border: '1px dashed rgba(255, 220, 92, 0.6)',
   borderRadius: '10px',
   padding: '10px 18px',
+  // Copyable although body is user-select: none (index.html); the prefixed
+  // one is what older iOS Safari reads.
   userSelect: 'all',
+  webkitUserSelect: 'all',
 } satisfies Partial<CSSStyleDeclaration>);
 const codeHintEl = document.createElement('div');
 Object.assign(codeHintEl.style, {

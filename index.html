@@ -94,6 +94,12 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a18; }
+    /* No text selection on a long press or a stray drag (CrazyGames asks
+       for it on mobile). What must stay copyable opts back in: typed
+       fields, the invite link and the recovery code (inline `all`). */
+    body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    input, textarea { -webkit-user-select: text; user-select: text; }
+    #waiting-screen .waiting-share-link { -webkit-user-select: all; user-select: all; }
     canvas { display: block; }
     /* The in-match HUD (CSS + markup) lives in src/hud/hud.partial.html —
        a single source injected into the <body> below via the @partial:hud
@@ -1024,6 +1030,9 @@
       pointer-events: auto;
     }
     .end-share-btn:hover { background: rgba(255, 220, 92, 0.32); }
+    /* CrazyGames build (src/platform sets the class): no sharing a link to
+       another site — the contract bars promoting our own (art. 10.2(b)). */
+    body.platform-crazygames #btn-end-share { display: none; }
 
     #end-stats.end-stats {
       display: flex;
@@ -2557,9 +2566,10 @@
       by <span class="handle">@RGomezR14</span>
     </a>
     <div class="legal-links">
-      <a href="/privacy.html" target="_blank" rel="noopener noreferrer" data-i18n="legal-privacy">Privacy</a>
+      <!-- Relative: CrazyGames serves the game under a sub-path. -->
+      <a href="./privacy.html" target="_blank" rel="noopener noreferrer" data-i18n="legal-privacy">Privacy</a>
       &middot;
-      <a href="/terms.html" target="_blank" rel="noopener noreferrer" data-i18n="legal-terms">Terms</a>
+      <a href="./terms.html" target="_blank" rel="noopener noreferrer" data-i18n="legal-terms">Terms</a>
     </div>
   </div>
 

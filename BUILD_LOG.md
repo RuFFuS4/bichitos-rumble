@@ -1,5 +1,43 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Interfaz] F0 de CrazyGames: silencio externo, rutas relativas y lo que no debe verse allí
+
+- **Qué** (la parte de INTERFAZ del plan H5, `docs/H5_CRAZYGAMES.md`,
+  aprobado por Rafa; la build de CG y sus ganchos son de DISTRIBUCIÓN):
+  - `src/audio.ts`: `setExternalMute('ad' | 'platform', on)`, para el
+    anuncio y para el `muteAudio` de CG, que manda sobre el botón. Gana a
+    los botones sin tocarlos y no guarda nada, así que las claves de
+    silencio de las pruebas mudas siguen igual. Suspender el contexto no
+    habría servido: `ensureContext()` lo reanuda.
+  - La música y los enlaces de privacidad y términos, con rutas
+    relativas. CG sirve el juego bajo una subruta, y allí la música se
+    habría quedado muda sin dar ningún error.
+  - `body.platform-crazygames` oculta Compartir. Motivo: el contrato
+    prohíbe promocionar webs propias (art. 10.2(b)).
+  - `user-select: none` en el `body`, como pide CG en móvil. Siguen
+    seleccionables los campos, el enlace de invitación y el código de
+    recuperación.
+  - El Salón de los Cinturones sin servidor: la pestaña online solo podía
+    enseñar un error de conexión, que el QA de una tienda lee como una
+    función rota. Ahora no hay barra de pestañas.
+- **Verificado:**
+  - `check`, los tests de sim (el nuevo del silencio externo, 4/4, con un
+    AudioContext falso), smoke 4/4 en dev y 4/4 contra el bundle de
+    producción;
+  - un guion de navegador, 13/13: la web sigue pidiendo `/audio/intro.mp3`
+    y enlazando `/privacy.html`, Compartir se ve sin la clase y no con
+    ella, y el Salón sale con y sin servidor;
+  - el bundle de producción servido solo bajo `/sub/`: una partida entera
+    con 62 peticiones, entre ellas modelos, imágenes y las dos pistas de
+    música, y ninguna da 404;
+  - dentro de la build de CG de DISTRIBUCIÓN, `smoke-crazygames.mjs` da
+    «todo OK», también la parte 3 (sin 404 bajo `/game/`). Para eso hizo
+    falta hacer relativo en local, sin commit, el enlace
+    `/decor-editor.html` de `main.ts:334`, que es tierra de nadie; queda
+    para DISTRIBUCIÓN, junto con cablear `onExternalMute`.
+- **Pendiente:** el punto 7, el botón «Jugar otra» de la pantalla final.
+  Se diseña con «volver al título» en táctil y lo decide Rafa.
+
 ## 2026-09-29 — [DISTRIBUCIÓN] H5: la build de CrazyGames, detrás de un flag y probada en localhost (F0)
 
 - **Qué** (plan `docs/H5_CRAZYGAMES.md`, aprobado por Rafa: F0 ya, sin
@@ -305,7 +343,6 @@ pesaba: la compensación usaba la luma sRGB y three ilumina en lineal
 **Antes, en `dev`** (`b91c3e1`): el cielo ya se mueve desde la cuenta
 atrás offline, con una línea en `game.ts` (permiso de GENERAL, ya
 soltado).
-
 
 ## 2026-09-29 — [Arena] Fondo v2, F2: el cielo se mueve y la victoria tiene horizonte
 
