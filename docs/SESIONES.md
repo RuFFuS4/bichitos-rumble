@@ -136,7 +136,58 @@ todos los carriles.
 
 ---
 
-## Tierra de nadie (permiso explícito, nunca dos carriles el mismo día)
+### 🧭 La sesión GENERAL
+
+Desde el 2026-09-29 hay una quinta sesión, la **general del proyecto**. No
+es un carril: no escribe código. Lo suyo es la foto de conjunto, las
+decisiones de hito con Rafa y el reparto de encargos.
+
+- **Suyo**: `ROADMAP.md`, `NEXT_STEPS.md` (estado global, cómo retomar,
+  lo que espera a Rafa) y los encargos que deja al principio del §Buzón
+  de cada carril.
+- **Vive en la carpeta principal.** Cuando los carriles trabajan en
+  paralelo, la deja en **HEAD desacoplado**: si la carpeta principal tiene
+  `dev` sacado, ningún worktree puede integrar.
+- Si necesita tocar un fichero de carril, deja la nota en su buzón como
+  cualquier otro.
+
+## Modo paralelo — las cuatro a la vez
+
+Aprobado por Rafa el 2026-09-29. Cada carril trabaja en **su propio
+worktree** y la carpeta principal queda para la sesión general. Probado
+por PERSONAJES desde el 2026-09-21:
+
+| Carril | Worktree | Dev server | Servidor local |
+|---|---|---|---|
+| 🏝️ ARENA | `.claude/worktrees/arena` | 5182 | 2582 |
+| 🦔 PERSONAJES | `.claude/worktrees/personajes` | 5181 | 2581 |
+| 🖥️ INTERFAZ | `.claude/worktrees/interfaz` | 5183 | 2583 |
+| 📦 DISTRIBUCIÓN | `.claude/worktrees/distribucion` | 5184 | 2584 |
+
+Cómo se trabaja desde un worktree:
+
+- **Crearlo** desde la carpeta principal y con ruta absoluta:
+  `git worktree add <ruta-principal>/.claude/worktrees/<carril> -b claude/<tipo>/<carril>-<slug> origin/dev`.
+  Con ruta relativa, lanzado desde otro worktree, queda anidado dentro.
+- `npm install` tarda ~5 s (sale de la caché).
+- **El dev server se arranca a mano**:
+  `npx vite --port <puerto> --strictPort`. El panel de preview del app
+  lee `.claude/launch.json` de la carpeta principal, no del worktree.
+- **Golden** contra ese servidor:
+  `npm run golden -- --url=http://localhost:<puerto>`.
+- **Capturas con GPU y mudas**: `launchMutedBrowser({ channel: 'chromium',
+  args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] })`.
+  Por defecto el headless renderiza por software (~18 s por fotograma).
+- `resources/` y `.tmp/` **no existen** en el worktree: las referencias de
+  arte se leen por ruta absoluta de la carpeta principal.
+- **Integrar**: `git checkout dev` solo funciona si nadie más lo tiene
+  sacado. Squash, push y **`git checkout --detach` enseguida**, para no
+  bloquear `dev` a los demás. El segundo que integra resuelve los
+  conflictos (los docs son zona segura).
+- **`git add` con rutas explícitas, nunca `-A`**: hay worktrees vivos y
+  arte local.
+
+## Tierra de nadie (permiso explícito, nunca dos carriles a la vez)
 
 Estos ficheros los quieren todos. Quien los toque: **diff mínimo, dicho en
 el commit, y nunca a medias entre sesiones.**

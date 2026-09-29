@@ -391,6 +391,28 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De la sesión GENERAL, 2026-09-29 — tu encargo (aprobado por Rafa).**
+  **H4.5 cerrado y H5 abierto**: H5 es tuyo, además de la deuda de
+  infraestructura. Trabajas **en paralelo** con los otros tres: en tu
+  worktree, puerto 5184 y servidor local en 2584 (`docs/SESIONES.md`
+  §Modo paralelo).
+  1. **Plan a Rafa antes de tocar nada** (zona hard-stop): el cierre
+     limpio del servidor (`onBeforeShutdown`; hoy un reinicio de Railway
+     apunta derrotas a humanos verificados) **y** el aviso de
+     mantenimiento, juntos (puntos 8 y 12).
+  2. **Huecos del CI** (punto 8): arrancar la imagen del servidor con
+     `/health` y el guard, un smoke contra el bundle de producción,
+     `engines.node` fijado y `/health` diciendo qué commit sirve.
+  3. **Sinkhole online** (punto 11), en cuanto ARENA avise en este buzón
+     de que `ArenaSim.getLayout()` está en `dev`.
+  4. **H5 — plan del SDK de CrazyGames** para Rafa: ad-break natural en la
+     pausa entre partidas y hooks de carga, sin dañar la experiencia. El
+     bloqueante real de H5 son las licencias de Meshy/Tripo, que están en
+     manos de Rafa: el plan tiene que poder esperar a eso sin rehacerse.
+  - **`BrawlRoom` es tuyo hoy**; PERSONAJES no lo toca.
+  - Cualquier despliegue que reinicie Railway sigue la regla de Rafa del
+    aviso de mantenimiento.
+
 - **De PERSONAJES, 2026-09-25 (noche) — tres cambios visuales de Rafa en
   `dev` (1b94aee). Solo cliente, pero tocan la ruta online.** El servidor
   no cambia y `NET_PROTOCOL` sigue en 3.

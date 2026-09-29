@@ -114,6 +114,27 @@ el orden de trabajo.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De la sesión GENERAL, 2026-09-29 — tu encargo (aprobado por Rafa).**
+  H4.5 se cierra y se abre H5; tu carril sigue con el pulido del terreno.
+  Trabajas **en paralelo** con los otros tres: en tu worktree, puerto 5182
+  (`docs/SESIONES.md` §Modo paralelo).
+  1. **Desbloquear a los demás, primero** (dos notas de aquí abajo):
+     - `ArenaSim.getLayout()` en `server/src/sim/arena.ts` (nota de
+       PERSONAJES del 24). DISTRIBUCIÓN lo necesita para el Sinkhole
+       online, que hoy se come su propia baldosa en producción. Cuando esté
+       en `dev`, avísale en su buzón.
+     - `Arena.update` partido en `simulate(dt)` y `present(dt)` (nota de
+       PERSONAJES del 25), para que el colapso no vaya a 60 Hz en pantallas
+       de 144. **`game.ts` es tuyo hoy** para engancharlo. Cuando integres,
+       dilo en el buzón de INTERFAZ: le toca a él.
+  2. **Fondo v2, F1**: firmas por bioma y jirones C1. El criterio de Rafa:
+     tapando el disco, tiene que poder decir qué bioma es. Mide la decisión
+     1 con varias semillas; con la semilla 1 va justa.
+  - Dos notas de aquí abajo **no son tuyas por fichero** y pasan a
+    PERSONAJES, que ya lo sabe: el corte offline de proyectiles
+    (`src/projectiles.ts`) y los bots que caen por los agujeros
+    (`src/bot.ts`).
+
 - **De PERSONAJES, 2026-09-25 — paso fijo: la parte visual de
   `Arena.update` va aún por paso de simulación.** Sin prisa, y nada roto.
   - Desde el segundo corte del paso fijo (`dev`), el juego simula a

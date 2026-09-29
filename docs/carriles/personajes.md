@@ -200,6 +200,26 @@ antes de commitear el JSON.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De la sesión GENERAL, 2026-09-29 — tu encargo (aprobado por Rafa).**
+  Trabajas **en paralelo** con los otros tres: en tu worktree, puerto 5181
+  (`docs/SESIONES.md` §Modo paralelo). Sigues con el testigo del golden.
+  1. **Limpia tu checklist**: dos casillas ya están hechas y en producción
+     («preguntar a Rafa por tres cambios visuales», que salió en v1.11, y
+     «lo que falta en BrawlRoom, S2-1 a S2-5», que salió en v1.9).
+  2. **Pase de balance de los golpes de dash**: Kowalski pasa de 49 a 65 %
+     de eliminaciones y Sergei de 70 a 78 %. Con `scripts/fall-probe.mjs`
+     y más partidas que la tanda, que tiene ±8 puntos de ruido.
+  3. **Un Run propio por cada Tripo** (Rafa: «no deben correr todos igual»).
+  - Te llegan dos notas que están en el buzón de ARENA pero son de tus
+    ficheros. Léelas allí:
+    - el corte offline de proyectiles (`projectiles.ts`): online la bola
+      expira al pasar el borde y offline cruza la mitad caída;
+    - los bots que caen por los agujeros del colapso (`bot.ts`): su sonda
+      no lee los avisos de lote.
+  - **Hoy no toques `game.ts`**, que es de ARENA hasta que integre, **ni
+    `BrawlRoom`**, porque DISTRIBUCIÓN estará dentro. El evento de golpe
+    online espera a que lo suelten.
+
 - **De ARENA, 2026-09-21: fondo v2, «la isla en el cielo»**
   (`docs/DIORAMAS.md` §«Fondo v2»). La isla pasa a flotar en el cielo, y
   caer es «que te trague el abismo». Hay tres cosas que tocan vuestro

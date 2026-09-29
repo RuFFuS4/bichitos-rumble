@@ -239,7 +239,20 @@ con Playwright y review de networking (2026-09-05); detalle en
 shared sim package quedó NO-GO (server `rootDir` estricto) y se sustituye
 por espejos + scraper de paridad (H4.5, terreno v2 fase 0).
 
-## H4.5 — Arreglar antes de crecer (2026-09-05 → ~3 semanas)
+## H4.5 — Arreglar antes de crecer ✅ CERRADO 2026-09-29 (`v1.8-terreno-v2` → `v1.11-caida-sierra`)
+
+> **Cierre (2026-09-29, decisión de Rafa).** Su gate se cumplió con
+> `v1.8-terreno-v2` (2026-09-24): hoja de contactos aprobada por Rafa el
+> 2026-09-21, `check` con paridad de arena, `test:sim` en CI, golden de
+> layout y merge a `main` con tag. Detrás salieron `v1.9` (habilidades
+> online como el sim), `v1.10-paso-fijo` y `v1.11-caida-sierra`: cuatro
+> versiones en ocho días, ya con el trabajo repartido en cuatro carriles
+> (`docs/SESIONES.md`). La dist bajó de 69,7 a 27,4 MB.
+>
+> Lo que queda de la lista de abajo **no se pierde ni bloquea**: el fondo
+> v2 (F1-F4), el slice 2 y la cohesión de los dioramas, y las fases 1b, 2,
+> 4 y 5 del terreno siguen como pulido continuo en el carril ARENA
+> (`docs/carriles/arena.md`); el feeling y el balance, en PERSONAJES.
 
 **Meta** (fijada por Rafa el 2026-09-05): *"antes de ampliar y avanzar hay
 que arreglar cosas"*. Lo primero, la generación de terrenos, *"muy muy
@@ -312,12 +325,19 @@ aprobada por Rafa · `npm run check` con paridad de arena · `test:sim` en
 CI · golden de layout · `DEV_TOOLS.md §Superficie programática` al día ·
 merge a `main` con tag.
 
-## H5 — Monetización mínima (tras H2+H4; ~2+ semanas)
+## H5 — Monetización mínima — EN CURSO desde 2026-09-29
 
 **Meta**: primeros euros sin dañar la experiencia. Requiere el dossier de
 licencias de H0 cerrado.
 
-- [ ] **Donaciones itch.io** activas (viene de H2).
+> **Abierto el 2026-09-29** (decisión de Rafa) en paralelo con el pulido:
+> lo lleva el carril DISTRIBUCIÓN mientras los otros tres siguen con lo
+> suyo. **El camino crítico no es código**: son las licencias comerciales
+> de los assets de Meshy/Tripo, que están en manos de Rafa. El plan del
+> SDK tiene que poder esperar a eso sin rehacerse.
+
+- [x] **Donaciones itch.io** activas (desde H2, 2026-08-19: "$0 or
+      donate", 2 $ sugeridos).
 - [ ] **Portal con rev-share**: CrazyGames primero (sin exclusividad,
       50-80% del ad revenue). Integrar su SDK: ad-break natural en la pausa
       entre partidas de 60-90 s + hooks de loading. El gate de payload lo
@@ -377,8 +397,8 @@ beta cerrada.
 | H3 Bichitos Studio | ✅ 2026-08-19 | `v1.5-bichitos-studio` |
 | Interludio afilado | ✅ 2026-08-20 | `v1.6-afilado` |
 | H4 Retención + social | ✅ 2026-09-05 | `v1.7-h4-social` |
-| H4.5 Arreglar antes de crecer | septiembre | `v1.8-terreno-v2` |
-| H5 Monetización | octubre | `v2.0-first-euro` |
+| H4.5 Arreglar antes de crecer | ✅ 2026-09-29 | `v1.8-terreno-v2` (→ `v1.11-caida-sierra`) |
+| H5 Monetización | en curso desde 2026-09-29 | `v2.0-first-euro` |
 | H6 Party · progresión · 8P · Steam | noviembre → | `v2.x` |
 
 Los hitos H2/H3 pueden solaparse (uno es assets/infra, otro tooling). El

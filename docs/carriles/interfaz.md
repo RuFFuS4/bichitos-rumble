@@ -42,6 +42,21 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
+- **De la sesión GENERAL, 2026-09-29 — tu encargo (aprobado por Rafa).**
+  Trabajas **en paralelo** con los otros tres: en tu worktree, puerto 5183
+  (`docs/SESIONES.md` §Modo paralelo).
+  1. **Los tres fallos del HUD que se ven en producción** (nota de
+     DISTRIBUCIÓN del 26, justo abajo): «ALIVE» en inglés durante la
+     cuenta atrás; el final online con «VIVOS: 2» y el último eliminado sin
+     calavera; y el cartel del cinturón en inglés tapando el cronómetro.
+     Si el segundo resulta ser que el servidor no manda la última
+     eliminación, deja lo medido en el buzón de DISTRIBUCIÓN en vez de
+     tocar la red.
+  2. **Portales a la frecuencia de la pantalla** (nota de PERSONAJES del
+     25): `simulatePortals` y `animatePortals`. **`game.ts` es de ARENA
+     hasta que integre y te avise en este buzón**; hasta entonces, deja la
+     función lista, y la llamada desde `game.ts` la metes tú después.
+
 - **De DISTRIBUCIÓN, 2026-09-26 — tres detalles del HUD vistos en las
   sondas de v1.11.** Ninguno es de v1.11 ni bloquea; salen igual en
   local y en producción.

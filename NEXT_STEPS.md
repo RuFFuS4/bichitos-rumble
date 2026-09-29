@@ -12,7 +12,9 @@ itch.io publicado con donaciones) · **H3 Bichitos Studio: ✅
 `v1.5-bichitos-studio`** · **Afilado: ✅ `v1.6-afilado`** · **H4 Retención
 + social: ✅ `v1.7-h4-social`** (2026-09-05, Vercel + Railway verificados,
 sala privada real en prod; detalle en [`ROADMAP.md`](ROADMAP.md) y
-[`BUILD_LOG.md`](BUILD_LOG.md)).
+[`BUILD_LOG.md`](BUILD_LOG.md)) · **H4.5 Arreglar antes de crecer: ✅
+`v1.8-terreno-v2`** (cerrado el 2026-09-29; detrás salieron `v1.9`,
+`v1.10-paso-fijo` y `v1.11-caida-sierra`) · **H5 Monetización: EN CURSO**.
 
 > **Desde el 2026-09-16 el trabajo va repartido en cuatro carriles**, cada
 > uno con su sesión y su checklist en [`docs/carriles/`](docs/carriles/):
@@ -25,60 +27,72 @@ sala privada real en prod; detalle en [`ROADMAP.md`](ROADMAP.md) y
 
 ---
 
-## Cómo retomar — cierre del 2026-09-16
+## Cómo retomar — reparto del 2026-09-29
 
-**Antes que nada**: abrir **las cuatro sesiones por carril** y cerrar la
-sesión larga que lo tocaba todo — decidido el 2026-09-16, protocolo y
-encargos en [`docs/SESIONES.md`](docs/SESIONES.md). A partir de ahí, cada
-punto de esta lista lo recoge el carril que lo tiene en su checklist
-([`docs/carriles/`](docs/carriles/)).
+**En producción: `v1.11-caida-sierra`** (2026-09-26). En código,
+producción y `dev` son lo mismo: no hay nada esperando despliegue
+(`git log --oneline main..dev` solo da documentación). Detalle y
+comprobaciones de cada versión en BUILD_LOG (DISTRIBUCIÓN).
 
-**En producción: `v1.11-caida-sierra`** (2026-09-26, main `c8143ea` =
-`dev` `e4a1947`): el clip de caída offline y online, la cuenta atrás
-animada, la sierra de Shelly online y las estadísticas finales al día.
-Antes, `v1.10-paso-fijo`, `v1.9-habilidades-online` y `v1.8-terreno-v2`
-(H4.5 entero, con guard de versión y suavizado online). Detalle y
-comprobaciones de cada uno en BUILD_LOG (DISTRIBUCIÓN). Lo que entre en
-`dev` después sale en el siguiente despliegue
-(`git log --oneline main..dev`).
+**Decisiones de Rafa del 2026-09-29**, sobre la recopilación de la sesión
+general: **cerrar H4.5 y abrir H5**, con el reparto de abajo tal cual, y
+**las cuatro sesiones a la vez**, cada una en su worktree
+([`docs/SESIONES.md`](docs/SESIONES.md) §Modo paralelo). El encargo
+completo de cada carril está al principio de su §Buzón.
 
-**Lo primero de la próxima sesión, por orden:**
-1. ✅ *Hecho el 2026-09-21 por el carril ARENA: decididas las tres (ver
-   «Esperando respuesta» justo abajo).* **Rafa mira capturas y decide.** La ÚNICA hoja de contactos que
-   enseña el estado de hoy es **`.tmp/shots-cierre/`** (los 5 biomas,
-   t=0, tomada al cerrar sobre el `dev` de hoy). Las otras son
-   históricas y **engañan si se miran como estado actual**:
-   `shots-despues/` son las capturas rotas del segundo ~52 (ver
-   ERROR_LOG), `shots-fondo/` es anterior a los dioramas y
-   `shots-dioramas/`/`shots-discmap/` son anteriores a la escala de suelo
-   por bioma. De `shots-cierre/` salen las tres decisiones que hoy
-   bloquean el afinado: techos del scatter (M2), isla como cono, y si el
-   fondo ya vale. Sin ellas, afinar recetas es afinar contra el techo
-   equivocado. Para rehacerla: dev server vivo +
-   `node scripts/arena-shots.mjs --out .tmp/shots-<lo-que-sea>`.
-2. ~~Relanzar el diagnóstico del feeling~~ — hecho el 2026-09-21 con su
-   primer arreglo; espera la decisión de tamaños de Rafa
-   ([`docs/FEELING.md`](docs/FEELING.md) §6).
-3. **Decidir el despliegue**: merge `dev` → `main` con tag cuando las
-   capturas convenzan. Railway autodeploya el servidor desde `main`, así
-   que cliente y servidor salen a la vez.
+| Carril | Primero | Después |
+|---|---|---|
+| 🏝️ ARENA | Desbloquear a los demás: `ArenaSim.getLayout()` (el Sinkhole online se come su baldosa) y `Arena.update` partido en simular/presentar | F1 del fondo v2: firmas por bioma y jirones |
+| 🦔 PERSONAJES | Balance de los golpes de dash (Kowalski 49 → 65 % eliminado, Sergei 70 → 78 %) | Un Run propio por Tripo; proyectiles offline y bots que caen por los agujeros (notas reasignadas desde ARENA) |
+| 🖥️ INTERFAZ | Los tres fallos del HUD que se ven en producción | Portales a la frecuencia de la pantalla |
+| 📦 DISTRIBUCIÓN | **Plan** a Rafa de `onBeforeShutdown` + aviso de mantenimiento (hard-stop) | Huecos del CI; Sinkhole online tras el getter de ARENA; plan del SDK de CrazyGames (H5) |
 
-**Esperando respuesta de Rafa** (bloquean trabajo, no son opinión):
-- ~~Techos del scatter, isla como cono, ¿vale el fondo?~~ **Decididas el
-  2026-09-21** (BUILD_LOG [Arena]): manda el código, la isla ya es un
-  cono en punta y el fondo se rehace como «isla en el cielo»
-  (`docs/carriles/arena.md`). La decisión 2 del fondo v2 también está
-  tomada: jungle con pozo claro, el resto oscuro.
+**Cruces vigilados** (hoy):
+- **`game.ts` es de ARENA** hasta que integre y lo diga; luego pasa a
+  INTERFAZ para enganchar los portales.
+- **`BrawlRoom` es de DISTRIBUCIÓN**: el evento de golpe online de
+  PERSONAJES espera.
+- El Sinkhole online de DISTRIBUCIÓN va **detrás** del getter de ARENA.
 
-**Estado de la máquina** (comprobado el 2026-09-16): no queda vivo ningún
-navegador de automatización —los ~70 Chrome huérfanos del cierre anterior
-se fueron solos; los que hay ahora son el navegador de Rafa— ni el dev
-server, así que el puerto 5173 está libre. Toda instancia de prueba nace
-muda (`scripts/lib/headless-browser.mjs`).
+**Lo que solo puede hacer Rafa** (acumulado de v1.8 a v1.11):
+- [ ] Sentry sin issues nuevos tras v1.8, v1.10 y v1.11.
+- [ ] El A/B del suavizado online (`?netsmooth=legacy` frente a normal,
+      con `__game.netSmoother.stats()`), pendiente desde v1.8.
+- [ ] Jugar offline en un iPhone y en un monitor de 144 Hz: igual de
+      fluido y empujando lo mismo.
+- [ ] Mirar online, a ojo, una Shelly girando y un bicho cayendo por el
+      borde de delante.
+- [ ] Borrar los nicks de prueba desde la shell de Railway
+      (`cd /app && npm run admin:delete-test`, primero sin `--confirm`).
+- [ ] **Licencias comerciales de Meshy/Tripo: el bloqueante de H5.**
+- [ ] Acceso a Tripo, si se quieren las texturas nuevas de esos bichos.
+
+**Estado de la máquina**: toda instancia de prueba nace muda
+(`scripts/lib/headless-browser.mjs`), también las de los worktrees.
 
 ---
 
-## H4.5 — Arreglar antes de crecer (EN CURSO desde 2026-09-05)
+## H5 — Monetización mínima (EN CURSO desde 2026-09-29)
+
+Plan y gate en [`ROADMAP.md`](ROADMAP.md) §H5. Lo lleva **DISTRIBUCIÓN**
+en paralelo con el pulido de los otros tres carriles.
+
+- [ ] **Licencias comerciales de los assets de IA** (Meshy/Tripo) —
+      **Rafa**. Es el camino crítico: sin ellas no hay monetización.
+- [x] Donaciones en itch.io (desde H2).
+- [ ] **Plan del SDK de CrazyGames** (DISTRIBUCIÓN): ad-break natural en
+      la pausa entre partidas, hooks de carga, sin dañar la experiencia.
+      A Rafa antes de integrar nada.
+- [ ] Evaluar Poki con los datos del primer portal.
+- [ ] Decisión con métricas en la mano (retención D7, partidas/día) antes
+      de pensar en cosméticos.
+
+**Gate de salida**: primer ingreso registrado (donación o ad revenue) y
+decisión documentada del siguiente paso con métricas.
+
+---
+
+## H4.5 — Arreglar antes de crecer (✅ cerrado 2026-09-29, histórico — lo pendiente sigue en los carriles)
 
 Contexto: Rafa quiere un juego más grande y monetizable (referencias
 smashkarts.io y krunker.io), hasta 8 por partida y Steam — eso es **H6**

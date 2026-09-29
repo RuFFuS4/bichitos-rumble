@@ -1,5 +1,50 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [GENERAL] H4.5 se cierra, H5 se abre y los cuatro carriles arrancan a la vez
+
+Rafa abrió la **sesión general del proyecto** para hacer recopilación de
+dónde estamos y repartir trabajo. La foto, medida sobre el repo:
+
+- **Cuatro versiones en ocho días** desde que arrancaron los carriles (el
+  2026-09-21): `v1.8-terreno-v2` (24, H4.5 entero), `v1.9` (25, las
+  habilidades online como el sim), `v1.10-paso-fijo` (25) y
+  `v1.11-caida-sierra` (26). 104 commits desde el 16, más de la mitad de
+  PERSONAJES. La dist bajó de 69,7 a 27,4 MB.
+- **En código, producción es igual a `dev`**; solo falta un commit de
+  documentación.
+- Lo que se había quedado atrás eran los documentos generales: el
+  ROADMAP marcaba H4.5 abierto y NEXT_STEPS seguía diciendo «abrir las
+  cuatro sesiones».
+- **ARENA llevaba parada desde el 22** con dos notas en el buzón que
+  bloqueaban a otros: el getter de `ArenaSim` que necesita el Sinkhole
+  online (que hoy se come su propia baldosa en producción) y el split
+  simular/presentar de `Arena.update`.
+
+**Decisiones de Rafa**, las tres por la recomendación:
+1. **H4.5 se cierra.** Su gate se cumplió con v1.8. Lo que queda de
+   terreno y dioramas (fondo v2 F1-F4, slice 2, cohesión, fases 1b/2/4/5)
+   no bloquea nada y sigue como pulido en ARENA.
+2. **H5 se abre en DISTRIBUCIÓN** mientras los otros tres pulen: con
+   carriles no hay que elegir entre pulir y monetizar. Su camino crítico
+   no es código: son las licencias de Meshy/Tripo, en manos de Rafa.
+3. **Las cuatro sesiones a la vez**, cada una en su worktree, con
+   puertos fijos por carril. La carpeta principal queda para la sesión
+   general, en HEAD desacoplado para no bloquear `dev`.
+
+El reparto está en `NEXT_STEPS.md` §Cómo retomar y el encargo completo de
+cada carril, al principio de su §Buzón. Tres cruces se dejan
+**asignados de antemano**, en vez de confiar en que nadie coincida:
+`game.ts` es de ARENA hasta que integre (luego pasa a INTERFAZ, para los
+portales), `BrawlRoom` es de DISTRIBUCIÓN (el evento de golpe online de
+PERSONAJES espera) y el Sinkhole online va detrás del getter de ARENA. Dos
+notas que habían caído en el buzón de ARENA pasan a PERSONAJES, que es
+dueño de esos ficheros: los proyectiles offline y los bots que caen por
+los agujeros.
+
+`docs/SESIONES.md` gana la sesión GENERAL (qué es suyo y qué no) y el
+§Modo paralelo, con la receta de worktree que PERSONAJES había probado y
+que hasta hoy solo vivía en la memoria de una sesión.
+
 ## 2026-09-26 — [DISTRIBUCIÓN] v1.11-caida-sierra en producción: el clip de caída, la cuenta atrás animada y la sierra de Shelly online
 
 - **Despliegue** (Rafa: visto bueno a las capturas, «no hay partidas
