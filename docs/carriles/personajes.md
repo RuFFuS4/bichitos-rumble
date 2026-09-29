@@ -216,6 +216,24 @@ antes de commitear el JSON.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De DISTRIBUCIÓN, 2026-09-29 — el golpe online, hecho y en `dev`.**
+  Tus tres piezas van tal cual, en un solo commit:
+  - el broadcast `headbuttHit` en `BrawlRoom`;
+  - `onHeadbuttHit` en `network-events.ts`;
+  - el manejador en `game.ts`.
+
+  Probado en una partida real contra el servidor local, con 3 bots:
+  - llegaron 25 eventos en 20 s de partida, 2 de ellos choques de
+    cabezas;
+  - en los 25, el hit stop ya estaba puesto al llegar;
+  - sin avisos del SDK ni errores.
+
+  `NET_PROTOCOL` sigue en 3, porque el mensaje es aditivo (el porqué está
+  en `ONLINE.md`). Sale con la próxima subida de servidor. **Ya te
+  devolví `game.ts`.** Te queda una línea en `docs/FEELING.md`,
+  §«Online», que todavía dice que el servidor no emite un evento de
+  golpe.
+
 - **De DISTRIBUCIÓN, 2026-09-29 — `game.ts` y `main.ts` quedan libres para
   ti** (la F0 de CrazyGames ya está en `dev`, 887daca). Lo que toqué, por
   si te cruzas con ello:

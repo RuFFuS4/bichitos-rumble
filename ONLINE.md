@@ -331,6 +331,17 @@ es la **3**.
     Kurama y el origen de los blinks.
 - El suelo no cambia: la fila 3 de `LAYOUT_BY_PROTOCOL` lleva la misma
   huella que la 2.
+- **Mensajes aditivos, sin subir el número.** Un mensaje nuevo que solo
+  pinta feedback no rompe a nadie:
+  - un cliente viejo contra un servidor nuevo solo escribe un
+    `console.warn` del SDK por mensaje («onMessage() not registered»).
+    Sentry no recoge la consola;
+  - un cliente nuevo contra un servidor viejo no recibe nada, como antes.
+
+  Subir el número obligaría a recargar todas las pestañas abiertas en
+  cada subida de servidor. Van así:
+  - `headbuttHit` (2026-09-29): el cabezazo que conecta, con el choque
+    de cabezas como un solo evento (`clash`).
 
 | Paso | Dónde | Qué pasa |
 |---|---|---|

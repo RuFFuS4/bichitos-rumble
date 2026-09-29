@@ -31,7 +31,7 @@ import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
 import {
   resolveCollisions, checkFalloff, updateFalling, effectiveSpeed, getSlipperyZone, startFalling,
-  type ActiveZoneSnapshot, type DashHitEvent,
+  type ActiveZoneSnapshot, type DashHitEvent, type HeadbuttHitEvent,
 } from './sim/physics.js';
 import {
   createAbilityStates, tickPlayerAbilities, getLDef, knockbackScale, frictionScale,
@@ -1685,12 +1685,19 @@ export class BrawlRoom extends Room {
     // Golpes de dash (J de Sergei, Cheeto, Sebastian y Shelly): el empuje lo
     // hace el sim; aquí solo se avisa a los clientes para el feedback (S2-5).
     const dashHits: DashHitEvent[] = [];
-    resolveCollisions(players, this.internal, reflects, dashHits);
+    // Cabezazos que conectan, con el choque de cabezas como UN evento
+    // (clash): lo mismo, el feedback que offline pone la física local.
+    // Aditivo, sin subir NET_PROTOCOL (ONLINE.md).
+    const headbuttHits: HeadbuttHitEvent[] = [];
+    resolveCollisions(players, this.internal, reflects, dashHits, headbuttHits);
     for (const r of reflects) {
       this.broadcast('shellReflected', r);
     }
     for (const hit of dashHits) {
       this.broadcast('dashHit', hit);
+    }
+    for (const hit of headbuttHits) {
+      this.broadcast('headbuttHit', hit);
     }
 
     // 5. Falloff detection — uses the authoritative fragment layout

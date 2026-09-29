@@ -1,5 +1,30 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [DISTRIBUCIÓN] El golpe online: la mitad de red
+
+- Es la otra mitad de la entrada de PERSONAJES (73df833). Online, un
+  cabezazo que conecta ya tiene su hit stop, su sacudida, su destello y
+  su sonido, igual que offline. Son tres piezas:
+  - `BrawlRoom` emite `headbuttHit` junto a `dashHit`, una vez por tick
+    de colisión. El choque de cabezas va como un solo evento con
+    `clash`;
+  - `network-events.ts` añade `onHeadbuttHit`;
+  - `game.ts` llama a `headbuttHitFeedback` o a
+    `headbuttClashFeedback`.
+- `NET_PROTOCOL` sigue en 3. El mensaje es aditivo:
+  - una pestaña vieja contra el servidor nuevo solo deja un
+    `console.warn` del SDK, y Sentry no recoge la consola;
+  - subir el número obligaría a recargar todas las pestañas abiertas en
+    cada subida.
+
+  Anotado en `ONLINE.md`.
+- Probado en una partida real contra el servidor local (1 invitado y 3
+  bots): 25 eventos en 20 s, 2 de ellos choques. En los 25, el manejador
+  del juego ya había puesto el hit stop, y no hubo avisos del SDK ni
+  errores. `test:sim` 379/379 y tsc en los dos lados.
+- **Sin desplegar.** Toca `server/` y sale con la próxima subida de
+  servidor. `game.ts` vuelve a PERSONAJES.
+
 ## 2026-09-29 — [PERSONAJES] El golpe online, mi mitad: el servidor ya sabe decir «cabezazo» y el cliente sabe cómo se ve
 
 Online, un cabezazo no se nota: el servidor empuja, pero nadie hace hit

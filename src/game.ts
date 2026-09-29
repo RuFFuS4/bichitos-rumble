@@ -7,7 +7,7 @@ import { updatePlayer } from './player';
 import { consumeMenuAction, clearMenuActions } from './input';
 import { updateBot } from './bot';
 import { updateAbilities } from './abilities-runtime';
-import { resolveCollisions, checkFalloff, updateFalling } from './physics';
+import { resolveCollisions, checkFalloff, updateFalling, headbuttHitFeedback, headbuttClashFeedback } from './physics';
 import {
   updateHUD, showOverlay, hideOverlay,
   initAbilityHUD, updateAbilityHUD, setCopycatTarget,
@@ -44,7 +44,7 @@ import {
 } from './portal';
 // network-events es colyseus-free (imports type-only del SDK) — el SDK
 // real (network.ts) solo entra por import dinámico en connectOnline.
-import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, onLChargeEnd, onDashHit, onShellReflected, type Room, type AbilityFiredEvent, type PlayersChangeBinder } from './network-events';
+import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSpawned, onProjectileSpawned, onProjectileHit, onProjectileExpired, onArenaFragmentsKilled, onLPulse, onLChargeStart, onLChargeEnd, onDashHit, onHeadbuttHit, onShellReflected, type Room, type AbilityFiredEvent, type PlayersChangeBinder } from './network-events';
 import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
@@ -1218,6 +1218,16 @@ export class Game {
       if (victim) applyImpactFeedback(victim, ev.nx, ev.nz);
       playSound('headbuttHit');
       triggerCameraShake(FEEL.shake.chargeRush);
+    });
+    // A headbutt that lands (a clash is one event): the server already
+    // pushed; the same feedback as the offline physics.
+    onHeadbuttHit(room, (ev) => {
+      if (this.room !== room) return;
+      const attacker = this.onlineCritters.get(ev.attackerSid);
+      const victim = this.onlineCritters.get(ev.victimSid);
+      if (!attacker || !victim) return;
+      if (ev.clash) headbuttClashFeedback(attacker, victim, ev.nx, ev.nz);
+      else headbuttHitFeedback(attacker, victim, ev.nx, ev.nz);
     });
 
     // 2026-04-30 final-polish — Sihans Sinkhole real-hole sync.

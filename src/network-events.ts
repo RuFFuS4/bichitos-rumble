@@ -196,6 +196,21 @@ export function onDashHit(room: Room, cb: (ev: DashHitEvent) => void): void {
   room.onMessage('dashHit', cb);
 }
 
+/** Cabezazo que conecta (2026-09-29, aditivo en NET_PROTOCOL 3). El empuje
+ *  ya lo hizo el servidor; esto es para el feedback. (nx, nz) es hacia donde
+ *  salió la víctima; `clash`: los dos embestían y cada uno se llevó el golpe
+ *  del otro. Espejo de server/src/sim/physics.ts HeadbuttHitEvent. */
+export interface HeadbuttHitEvent {
+  attackerSid: string;
+  victimSid: string;
+  nx: number;
+  nz: number;
+  clash: boolean;
+}
+export function onHeadbuttHit(room: Room, cb: (ev: HeadbuttHitEvent) => void): void {
+  room.onMessage('headbuttHit', cb);
+}
+
 /** Send one input frame to the server. Safe to call every client tick. */
 export function sendInput(room: Room, input: NetworkInput): void {
   room.send('input', input);

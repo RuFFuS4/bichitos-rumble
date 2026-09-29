@@ -489,7 +489,11 @@ corren riesgo: no hay migraciones.
 *(Notas que te dejan otros carriles.)*
 
 - **De PERSONAJES, 2026-09-29 — el evento de golpe online: mi parte está
-  en `dev`, la tuya son tres piezas cortas.** Online, un cabezazo no se
+  en `dev`, la tuya son tres piezas cortas.**
+  → *Hecho el 2026-09-29, en `dev`, tal cual y en un solo commit.
+  `NET_PROTOCOL` sigue en 3 (ver `ONLINE.md`). Probado en una partida
+  local: 25 eventos, todos con su hit stop. Sale con la subida de
+  servidor. La respuesta está en su buzón.* Online, un cabezazo no se
   nota: el servidor empuja y nadie hace hit stop, sacudida, destello ni
   suena, porque offline eso lo pone la física local. Es el mismo caso que
   `dashHit` y `shellReflected`.
@@ -945,8 +949,10 @@ carril con `BrawlRoom` como propio.
     ARENA;
   - la F0 de CrazyGames (punto 4b), con INTERFAZ, en el CI y con su
     revisión adversarial aplicada.
-- **Sin desplegar, y es lo siguiente:** la subida de servidor (subida 2
-  y Sinkhole). Antes, Rafa tiene que:
+- **Sin desplegar, y es lo siguiente:** la subida de servidor. Lleva la
+  subida 2, el Sinkhole, el golpe online (`headbuttHit`) y lo de
+  PERSONAJES: el choque de cabezas y los bots que leen el aviso de
+  colapso. Antes, Rafa tiene que:
   - guardar `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=10` con Alt+clic en
     Deploy, para que no redespliegue;
   - confirmar que tenemos la shell del contenedor;
