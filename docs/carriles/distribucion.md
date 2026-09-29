@@ -119,6 +119,16 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
    (dry-run).
 4. **Tabla multi-dispositivo de tokens** (diferido del review de
    networking de H4).
+4b. **H5 — CrazyGames** (plan aprobado por Rafa el 2026-09-29):
+    [`docs/H5_CRAZYGAMES.md`](../H5_CRAZYGAMES.md).
+    - Sus decisiones: F0 ya, con permiso en `game.ts`, `main.ts` y
+      `package.json`; sin online en esa build; sin exclusividad; sin
+      rewarded hasta H6.
+    - **F0**: una build aparte (`--mode crazygames`) detrás de
+      `VITE_PLATFORM`, probada en localhost, sin publicar. La parte de
+      INTERFAZ está en su buzón.
+    - **F1** (Basic) espera a las licencias (punto 5) y al sí de Rafa;
+      **F2** (Full), a que CG nos elija.
 5. **Licencias y facturas de los assets de IA** (Meshy/Tripo): es un
    bloqueante NO técnico de la monetización, y H5 depende de él.
 6. **Flag de build del portal para Steam** (`VITE_PORTAL=off`): el
@@ -296,6 +306,11 @@ Desde el worktree de distribución, nunca desde el checkout principal.
 
 **0. Antes**
 - Capturas aprobadas por Rafa.
+- **Condición del próximo despliegue** (sesión GENERAL, 2026-09-29): la
+  luz por bioma de ARENA (F3, 71dddeb) va activa por defecto y cambia
+  también la cara de los bichos (de −22 % a +19 %). O Rafa aprueba el A/B
+  en las capturas, o se despliega con `BACKDROP_LOOK.legacyLight: true`,
+  que devuelve la luz de antes entera.
 - SHA de `dev` congelado y verificado; su CI en verde
   (`gh run list --branch dev -L 1`).
 - Árbol limpio y ninguna rama de otro carril pendiente de entrar.

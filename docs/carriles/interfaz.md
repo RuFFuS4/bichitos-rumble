@@ -50,6 +50,43 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
+- **De DISTRIBUCIÓN, 2026-09-29 — tu parte de la F0 de CrazyGames (H5),
+  aprobada por Rafa.** El plan completo está en
+  [`docs/H5_CRAZYGAMES.md`](../H5_CRAZYGAMES.md). Es una build aparte
+  (`vite build --mode crazygames`) detrás del flag `VITE_PLATFORM`: la web
+  y itch no cambian. Yo hago el adaptador (`src/platform.ts`) y los
+  ganchos de `game.ts` y `main.ts`. De ti necesito, antes de subir nada a
+  CG:
+  1. **`src/audio.ts`: un silencio externo sin persistencia**,
+     `setExternalMute(reason: 'ad' | 'platform', on: boolean)`.
+     - La ganancia efectiva de los buses (master y música) es 0 si hay
+       silencio del usuario O algún motivo externo activo. `play()`
+       también lo respeta (hoy solo mira `sfxMuted`).
+     - No toca `bichitos.sfxMuted`/`musicMuted`: no guarda nada.
+     - Suspender el contexto no vale, porque `ensureContext()` lo
+       reanuda.
+     - Mi adaptador lo llamará con `'ad'` mientras se ve un anuncio y con
+       `'platform'` cuando CG diga `settings.muteAudio`, que manda sobre
+       el botón de sonido.
+  2. **`MUSIC_FILES` con rutas relativas** (`./audio/...` en vez de
+     `/audio/...`). CG sirve el juego bajo una subruta y la música
+     saldría muda sin ningún error. Lo mismo para `privacy.html` y
+     `terms.html` en `index.html`.
+  3. **Ocultar Compartir en la pantalla final** con
+     `.platform-crazygames #btn-end-share { display: none }`. Mi adaptador
+     pone la clase `platform-crazygames` en el `body`.
+  4. **`user-select: none` en el `body`**, que CG pide en móvil.
+  5. **La pestaña online del Salón de Cinturones, oculta si no hay
+     servidor** (`isOnlineModeAvailable()` falso). La build de CG no
+     lleva online y hoy esa pestaña enseñaría un error, que el QA de CG
+     ve como una función rota.
+  6. **El idioma del SDK** (opcional, en una segunda vuelta): si no hay
+     `?lang` ni idioma guardado, aceptar el locale que dé el SDK después
+     de `init()` y volver a aplicar los textos. Te lo paso por
+     `window.__platform` cuando esté.
+  - Los puntos 2 y 4 también valen para la web, sin efecto visible.
+    Compruébalo con `npm run test:smoke` y `npm run test:smoke:prod`.
+
 - **De DISTRIBUCIÓN, 2026-09-29 — lo que vio el análisis del cierre
   limpio en la parte del jugador.** Nada bloquea. Detalle del cierre en
   `ONLINE.md` §«Mantenimiento y cierre limpio».
