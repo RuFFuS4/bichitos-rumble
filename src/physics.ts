@@ -87,11 +87,10 @@ function rushContact(rusher: Critter, victim: Critter, dirX: number, dirZ: numbe
  * giant one vanished and the strongest critter won even more (eliminated
  * −10.9 points); with it nobody moves beyond noise
  * (docs/REPASO_HABILIDADES.md §«Choque de cabezas y All-in del bot»).
- * One hit stop and one sound; the shake of the stronger boost; both flash
- * and lean away. It used to go to whoever came first in `critters`
- * (offline, always the player). (nx, nz) points from a to b; each velocity
- * pair is written x then z (attrib-probe reads this function by name).
- * Server mirror: headbuttClash in server/src/sim/physics.ts.
+ * It used to go to whoever came first in `critters` (offline, always the
+ * player). (nx, nz) points from a to b; each velocity pair is written x
+ * then z (attrib-probe reads this function by name). Server mirror:
+ * headbuttClash in server/src/sim/physics.ts.
  */
 function headbuttClash(a: Critter, b: Critter, nx: number, nz: number, aTakes: number, bTakes: number, aVuln: number, bVuln: number): void {
   const toA = headbuttForceOf(b) * aTakes + headbuttForceOf(a) * FEEL.headbutt.recoilFactor * aVuln;
@@ -100,15 +99,37 @@ function headbuttClash(a: Critter, b: Critter, nx: number, nz: number, aTakes: n
   a.vz -= nz * toA;
   b.vx += nx * toB;
   b.vz += nz * toB;
+  headbuttClashFeedback(a, b, nx, nz);
+  a.matchStats.hitsReceived++;
+  b.matchStats.hitsReceived++;
+  if (a.config.name === 'Kurama') a.lastHitTargetCritter = b.config.name;
+  if (b.config.name === 'Kurama') b.lastHitTargetCritter = a.config.name;
+}
+
+/**
+ * What a headbutt that connects looks and sounds like: hit stop, a shake
+ * scaled by the attacker's headbuttBoost, the victim's flash and lean along
+ * (nx, nz) (away from the attacker) and the thud. Presentation only, so
+ * offline and online look the same: offline the local physics plays it,
+ * online the room's `headbuttHit` event (server/src/sim/physics.ts
+ * HeadbuttHitEvent), where the server already did the push.
+ */
+export function headbuttHitFeedback(attacker: Critter, victim: Critter, nx: number, nz: number): void {
+  triggerHitStop(FEEL.hitStop.headbutt);
+  triggerCameraShake(FEEL.shake.headbutt * (attacker.config.headbuttBoost ?? 1.0));
+  applyImpactFeedback(victim, nx, nz);
+  playSound('headbuttHit');
+}
+
+/** A headbutt clash's feedback (see headbuttHitFeedback): one hit stop and
+ *  one thud, the shake of the stronger boost, and both flash and lean away
+ *  from each other. (nx, nz) points from a to b. */
+export function headbuttClashFeedback(a: Critter, b: Critter, nx: number, nz: number): void {
   triggerHitStop(FEEL.hitStop.headbutt);
   triggerCameraShake(FEEL.shake.headbutt * Math.max(a.config.headbuttBoost ?? 1.0, b.config.headbuttBoost ?? 1.0));
   applyImpactFeedback(a, -nx, -nz);
   applyImpactFeedback(b, nx, nz);
   playSound('headbuttHit');
-  a.matchStats.hitsReceived++;
-  b.matchStats.hitsReceived++;
-  if (a.config.name === 'Kurama') a.lastHitTargetCritter = b.config.name;
-  if (b.config.name === 'Kurama') b.lastHitTargetCritter = a.config.name;
 }
 
 /** The attacker takes `force` back along (dirX, dirZ), with a hit's feedback. */
@@ -202,18 +223,12 @@ export function resolveCollisions(critters: Critter[]): void {
         // Knockback force — reads from centralized FEEL config.
         // v0.11: per-critter `headbuttBoost` multiplies BOTH the
         // raw force (more knockback on the target) and the camera
-        // shake amplitude (more punch on the screen). Default 1.0 →
-        // unchanged for the critters Rafa marked as OK; >1 for
-        // Sergei / Kowalski / Cheeto / Sebastian.
+        // shake amplitude (more punch on the screen; headbuttHitFeedback).
+        // Default 1.0 → unchanged for the critters Rafa marked as OK; >1
+        // for Sergei / Kowalski / Cheeto / Sebastian.
         let force: number = FEEL.collision.normalPushForce;
-        let boost = 1.0;
-        if (a.isHeadbutting) {
-          boost = a.config.headbuttBoost ?? 1.0;
-          force = headbuttForceOf(a);
-        } else if (b.isHeadbutting) {
-          boost = b.config.headbuttBoost ?? 1.0;
-          force = headbuttForceOf(b);
-        }
+        if (a.isHeadbutting) force = headbuttForceOf(a);
+        else if (b.isHeadbutting) force = headbuttForceOf(b);
 
         const massRatioA = b.effectiveMass / (a.effectiveMass + b.effectiveMass);
         const massRatioB = a.effectiveMass / (a.effectiveMass + b.effectiveMass);
@@ -235,10 +250,7 @@ export function resolveCollisions(critters: Critter[]): void {
           b.vz += nz * force * massRatioB * bVuln;
           a.vx -= nx * force * FEEL.headbutt.recoilFactor * aVuln;
           a.vz -= nz * force * FEEL.headbutt.recoilFactor * aVuln;
-          triggerHitStop(FEEL.hitStop.headbutt);
-          triggerCameraShake(FEEL.shake.headbutt * boost);
-          applyImpactFeedback(b, nx, nz);
-          playSound('headbuttHit');
+          headbuttHitFeedback(a, b, nx, nz);
           // Badge aggregation: count the hit on the receiver. Used by
           // Untouchable / Pain Tolerance evaluation via recordWin().
           b.matchStats.hitsReceived++;
@@ -249,10 +261,7 @@ export function resolveCollisions(critters: Critter[]): void {
           a.vz -= nz * force * massRatioA * aVuln;
           b.vx += nx * force * FEEL.headbutt.recoilFactor * bVuln;
           b.vz += nz * force * FEEL.headbutt.recoilFactor * bVuln;
-          triggerHitStop(FEEL.hitStop.headbutt);
-          triggerCameraShake(FEEL.shake.headbutt * boost);
-          applyImpactFeedback(a, -nx, -nz);
-          playSound('headbuttHit');
+          headbuttHitFeedback(b, a, -nx, -nz);
           a.matchStats.hitsReceived++;
           if (b.config.name === 'Kurama') b.lastHitTargetCritter = a.config.name;
         } else {

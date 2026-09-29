@@ -40,7 +40,12 @@ antes de commitear el JSON.
    - [x] Un empujón ya no gira al bicho (`§7.10`, física, con permiso de
          Rafa; golden regenerado).
    - [ ] El online no tiene evento de golpe: el golpeado no recibe
-         feedback de impacto (`game.ts` + servidor).
+         feedback de impacto (`game.ts` + servidor). **Lo mío está hecho**
+         (2026-09-29): `HeadbuttHitEvent` en el sim del servidor y
+         `headbuttHitFeedback` / `headbuttClashFeedback` en `physics.ts`.
+         Falta lo de DISTRIBUCIÓN (broadcast en `BrawlRoom`, envoltorio en
+         `network-events.ts` y el manejador en `game.ts`); el contrato
+         está en su buzón.
    - [ ] Arranque de los rigs de Meshy: elegir la fase del Run que mejor
          case con el Idle (`§7.11`).
    - [ ] Vocabulario que sigue faltando después del corte 2: stretch al
@@ -521,11 +526,16 @@ Hechos y en `dev`:
 DISTRIBUCIÓN tiene en su buzón dos cambios del servidor que esperan
 despliegue.
 
+- el evento de golpe online, mi mitad: el evento en el sim del servidor y
+  el feedback exportado de `physics.ts`. La otra mitad (`BrawlRoom`,
+  `network-events.ts` y las líneas de `game.ts`) está en el buzón de
+  DISTRIBUCIÓN, con el código. `game.ts` queda soltado sin tocarlo.
+
 Lo siguiente:
-- el evento de golpe online en `game.ts`, ya libre (DISTRIBUCIÓN lo soltó
-  en 887daca). El lado del servidor es de DISTRIBUCIÓN: el contrato va a
-  su buzón;
-- el pase de Shelly, preguntando antes a Rafa.
+- el pase de Shelly, preguntando antes a Rafa;
+- lo que queda del feeling (§Pendiente 1): el arranque de los Meshy y el
+  vocabulario que falta (stretch al salir despedido, anticipación, inercia
+  de orejas y cola).
 
 Las 900 partidas del plan (`attrib-probe --specs`) sirven de base para el
 próximo pase. El plan y los shards están en el scratchpad de la sesión: si

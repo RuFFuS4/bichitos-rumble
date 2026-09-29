@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { PlayerSchema } from '../../server/src/state/PlayerSchema.js';
-import { resolveCollisions, type ShellReflectEvent } from '../../server/src/sim/physics.js';
+import { resolveCollisions, type HeadbuttHitEvent, type ShellReflectEvent } from '../../server/src/sim/physics.js';
 
 interface AbilityLike {
   abilityType: string;
@@ -193,6 +193,46 @@ describe('server physics — resolveCollisions', () => {
     expect(q.k.vx).toBeCloseTo(p.k.vx, 10); // +124.32 both ways (before: +100.8 vs +23.52)
     expect(q.t.x).toBeCloseTo(p.t.x, 10);
     expect(q.k.x).toBeCloseTo(p.k.x, 10);
+  });
+
+  // The room broadcasts these so the client replays the hit's feedback
+  // (src/physics.ts headbuttHitFeedback / headbuttClashFeedback).
+  const hitsOf = (players: PlayerSchema[]) => {
+    const hits: HeadbuttHitEvent[] = [];
+    resolveCollisions(players, undefined, undefined, undefined, hits);
+    return hits;
+  };
+
+  it('headbutt hit event: one per connect, attacker → victim, pushed away from the attacker', () => {
+    const atk = makePlayer({ sessionId: 'atk', critterName: 'Sergei', x: 0, z: 0, isHeadbutting: true });
+    const def = makePlayer({ sessionId: 'def', critterName: 'Kermit', x: 1.0, z: 0 });
+    expect(hitsOf([atk, def])).toEqual([{ attackerSid: 'atk', victimSid: 'def', nx: 1, nz: 0, clash: false }]);
+    // The headbutter second in the list: same event, same direction.
+    const atk2 = makePlayer({ sessionId: 'atk', critterName: 'Sergei', x: 0, z: 0, isHeadbutting: true });
+    const def2 = makePlayer({ sessionId: 'def', critterName: 'Kermit', x: 1.0, z: 0 });
+    const [ev] = hitsOf([def2, atk2]);
+    expect(ev).toMatchObject({ attackerSid: 'atk', victimSid: 'def', clash: false });
+    expect(ev.nx).toBeCloseTo(1, 12);
+    expect(ev.nz).toBeCloseTo(0, 12);
+  });
+
+  it('headbutt hit event: a clash is ONE event, flagged, from the first in the list', () => {
+    const a = makePlayer({ sessionId: 'a', critterName: 'Trunk', x: 0, z: 0, isHeadbutting: true });
+    const b = makePlayer({ sessionId: 'b', critterName: 'Kowalski', x: 0, z: 1.0, isHeadbutting: true });
+    expect(hitsOf([a, b])).toEqual([{ attackerSid: 'a', victimSid: 'b', nx: 0, nz: 1, clash: true }]);
+  });
+
+  it('headbutt hit event: none for a plain nudge, nor for a Steel Shell reflect', () => {
+    const p = makePlayer({ sessionId: 'p', critterName: 'Sergei', x: 0, z: 0 });
+    const q = makePlayer({ sessionId: 'q', critterName: 'Kermit', x: 1.0, z: 0 });
+    expect(hitsOf([p, q])).toEqual([]);
+    const seb = makePlayer({ sessionId: 'seb', critterName: 'Sebastian', x: 0, z: 0, isHeadbutting: true });
+    const shelly = makeAnchoredShelly(1.0, 0);
+    const reflects: ShellReflectEvent[] = [];
+    const hits: HeadbuttHitEvent[] = [];
+    resolveCollisions([seb, shelly], undefined, reflects, undefined, hits);
+    expect(hits).toEqual([]);
+    expect(reflects).toHaveLength(1);
   });
 
   it('headbutt clash: each side keeps its own vulnerability (stun ×4 on the stunned one only)', () => {

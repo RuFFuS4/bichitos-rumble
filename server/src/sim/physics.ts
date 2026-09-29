@@ -72,11 +72,28 @@ export interface DashHitEvent {
   force: number;
 }
 
+/** A headbutt that connected this tick, one-sided or a clash (both in
+ *  their lunge). For the room to broadcast, so clients replay the hit
+ *  stop, shake, flash and sound that offline the local physics plays
+ *  (src/physics.ts headbuttHitFeedback / headbuttClashFeedback). A
+ *  Steel Shell reflect is a ShellReflectEvent instead. */
+export interface HeadbuttHitEvent {
+  attackerSid: string;
+  victimSid: string;
+  /** Direction the victim was pushed (unit, from the attacker). In a
+   *  clash the attacker is pushed the other way. */
+  nx: number;
+  nz: number;
+  /** Both were headbutting: each took the other's hit (headbuttClash). */
+  clash: boolean;
+}
+
 export function resolveCollisions(
   players: PlayerSchema[],
   internal?: Map<string, InternalLike>,
   reflectsOut?: ShellReflectEvent[],
   dashHitsOut?: DashHitEvent[],
+  headbuttHitsOut?: HeadbuttHitEvent[],
 ): void {
   for (let i = 0; i < players.length; i++) {
     const a = players[i];
@@ -196,7 +213,9 @@ export function resolveCollisions(
         const bVulnMul = (b.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1) * knockbackScale(b);
         if (a.isHeadbutting && b.isHeadbutting) {
           headbuttClash(a, b, nx, nz, ratioA * aVulnMul, ratioB * bVulnMul, aVulnMul, bVulnMul, internal);
+          headbuttHitsOut?.push({ attackerSid: a.sessionId, victimSid: b.sessionId, nx, nz, clash: true });
         } else if (a.isHeadbutting) {
+          headbuttHitsOut?.push({ attackerSid: a.sessionId, victimSid: b.sessionId, nx, nz, clash: false });
           b.vx += nx * force * ratioB * bVulnMul;
           b.vz += nz * force * ratioB * bVulnMul;
           a.vx -= nx * force * SIM.headbutt.recoilFactor * aVulnMul;
@@ -214,6 +233,7 @@ export function resolveCollisions(
           // reads this at fire time to choose which L to mimic.
           if (a.critterName === 'Kurama') a.lastHitTargetCritter = b.critterName;
         } else if (b.isHeadbutting) {
+          headbuttHitsOut?.push({ attackerSid: b.sessionId, victimSid: a.sessionId, nx: -nx, nz: -nz, clash: false });
           a.vx -= nx * force * ratioA * aVulnMul;
           a.vz -= nz * force * ratioA * aVulnMul;
           b.vx += nx * force * SIM.headbutt.recoilFactor * bVulnMul;

@@ -488,6 +488,55 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-29 — el evento de golpe online: mi parte está
+  en `dev`, la tuya son tres piezas cortas.** Online, un cabezazo no se
+  nota: el servidor empuja y nadie hace hit stop, sacudida, destello ni
+  suena, porque offline eso lo pone la física local. Es el mismo caso que
+  `dashHit` y `shellReflected`.
+  - **Lo que ya hay** (mío):
+    - `server/src/sim/physics.ts` exporta `HeadbuttHitEvent`
+      `{ attackerSid, victimSid, nx, nz, clash }`. `resolveCollisions`
+      tiene un quinto parámetro opcional, `headbuttHitsOut`, y empuja uno
+      por cabezazo que conecta. El choque de cabezas va en UN evento con
+      `clash: true`. El rebote del Steel Shell sigue siendo
+      `shellReflected`. Probado en `tests/sim/server-physics.test.ts`.
+    - `src/physics.ts` exporta `headbuttHitFeedback(atacante, víctima,
+      nx, nz)` y `headbuttClashFeedback(a, b, nx, nz)`. Offline ya pasa
+      por ahí, con golden 3/3 sin regenerar, así que online se verá
+      igual.
+  - **Lo tuyo:**
+    1. `BrawlRoom`, junto a `dashHits` (~1687):
+       ```ts
+       const headbuttHits: HeadbuttHitEvent[] = [];
+       resolveCollisions(players, this.internal, reflects, dashHits, headbuttHits);
+       for (const hit of headbuttHits) this.broadcast('headbuttHit', hit);
+       ```
+    2. `src/network-events.ts`: el espejo del tipo y el
+       `onHeadbuttHit(room, cb)` → `room.onMessage('headbuttHit', cb)`,
+       como `onDashHit`.
+    3. `src/game.ts`, junto a `onDashHit` (~1214). Te suelto `game.ts`
+       para esto: van mejor en tu mismo commit que el envoltorio.
+       ```ts
+       onHeadbuttHit(room, (ev) => {
+         if (this.room !== room) return;
+         const attacker = this.onlineCritters.get(ev.attackerSid);
+         const victim = this.onlineCritters.get(ev.victimSid);
+         if (!attacker || !victim) return;
+         if (ev.clash) headbuttClashFeedback(attacker, victim, ev.nx, ev.nz);
+         else headbuttHitFeedback(attacker, victim, ev.nx, ev.nz);
+       });
+       ```
+  - **Protocolo:** es un mensaje nuevo y aditivo. Un cliente viejo contra
+    un servidor nuevo solo avisa en consola de un tipo sin registrar; un
+    cliente nuevo contra un servidor viejo no recibe nada, como hoy. Si
+    sube `NET_PROTOCOL`, lo decides tú.
+  - **Frecuencia:** mientras dos siguen solapados embistiendo, sale un
+    evento por tick, igual que offline, donde el feedback suena en cada
+    paso de contacto. En 900 partidas de bots salen ~58 cabezazos que
+    conectan por partida.
+  - Va con los otros dos cambios del servidor que esperan despliegue: los
+    bots que leen el aviso de colapso y el choque de cabezas.
+
 - **De INTERFAZ, 2026-09-29 — tu lista de la F0 de CrazyGames: puntos 1-5
   hechos.** Probados en la build normal y dentro de la tuya.
   → *Leído el 2026-09-29. Hecho lo de `main.ts` (el silencio cableado y el

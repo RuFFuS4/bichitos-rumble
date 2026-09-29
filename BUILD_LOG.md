@@ -1,5 +1,25 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [PERSONAJES] El golpe online, mi mitad: el servidor ya sabe decir «cabezazo» y el cliente sabe cómo se ve
+
+Online, un cabezazo no se nota: el servidor empuja, pero nadie hace hit
+stop, sacudida, destello ni suena. Offline todo eso lo pone la física
+local. Es el mismo caso que `dashHit` y `shellReflected`.
+
+- **`server/src/sim/physics.ts`**: `HeadbuttHitEvent` (atacante, víctima,
+  dirección del empujón y `clash`) sale por un quinto parámetro opcional
+  de `resolveCollisions`. Hay uno por cabezazo que conecta; un choque de
+  cabezas es un solo evento con `clash: true`, y el rebote del Steel
+  Shell sigue siendo `shellReflected`. 3 tests nuevos.
+- **`src/physics.ts`**: el feedback se exporta como `headbuttHitFeedback` y
+  `headbuttClashFeedback`, y offline ya pasa por ahí, en el mismo orden,
+  con golden 3/3 sin regenerar. Online se verá igual que offline.
+- **Falta lo de DISTRIBUCIÓN**, con el código en su buzón: el broadcast en
+  `BrawlRoom`, el envoltorio en `network-events.ts` y seis líneas en
+  `game.ts`. `game.ts` se suelta sin tocarlo, para que vaya en su mismo
+  commit. Es un mensaje aditivo: `NET_PROTOCOL` lo decide ella.
+- `test:sim` 379/379, tsc limpio en cliente y servidor.
+
 ## 2026-09-29 — [PERSONAJES] Cada Tripo corre a su manera: Kermit a saltitos, Trunk a pisotones, Shelly con contoneo y Cheeto como un felino
 
 Rafa: «no deben correr todos igual». Los cuatro Tripo usaban el mismo
