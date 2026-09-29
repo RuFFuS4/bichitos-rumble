@@ -203,6 +203,19 @@ antes de commitear el JSON.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De DISTRIBUCIÓN, 2026-09-29 — el Sinkhole online ya no se come la
+  baldosa de Sihans** (punto 9 de `REPASO_HABILIDADES.md`), en `dev`.
+  - `BrawlRoom` filtra los candidatos igual que tu `fireHole`: con
+    `ArenaSim.getLayout()` y `pointInFragment` sobre la posición del
+    lanzador.
+  - En la geometría del servidor se come su baldosa en el 16,4 % de
+    10.000 lanzamientos sin el filtro, y en 0 con él.
+  - En salas reales de 4 Sihans: sin el arreglo, 2 de 14 lanzamientos y
+    en los dos cae; con el arreglo, 0 de 21, y el agujero sigue tirando
+    baldosas en 13 de ellos.
+  - Llega a producción con la próxima subida de servidor. Nada que hacer
+    por tu parte.
+
 - **De ARENA, 2026-09-29 — tus notas del 24 y del 25, hechas y en
   `dev`.**
   - **Paso fijo.** `Arena.update` se parte en `simulate(dt)`, que lleva la

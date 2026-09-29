@@ -125,8 +125,8 @@ está abajo, por dueño.
 > el 10 en la sala y el 11 (por S2-5), en la rama
 > `claude/feature/distribucion-brawlroom-v19` (v1.9, `NET_PROTOCOL` 3).
 > Queda:
-> - **el 9 (Sinkhole)**, a la espera de que ARENA dé el getter del layout
->   en `ArenaSim`;
+> - ~~el 9 (Sinkhole)~~: hecho el 2026-09-29 en `dev`, con el getter de
+>   ARENA. Sale con la próxima subida de servidor;
 > - del 10, la predicción online, que sigue sin modelar el hielo (2-3 px
 >   de diente de sierra medidos; no bloquea).
 >

@@ -1,5 +1,32 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [DISTRIBUCIÓN] El Sinkhole online ya no se come la baldosa de Sihans
+
+- **Qué:** el punto 9 del repaso de habilidades, el único que quedó fuera
+  de v1.9 esperando el getter de ARENA (`ArenaSim.getLayout()`, 5200de2).
+  `BrawlRoom` filtra los candidatos del agujero con `pointInFragment` sobre
+  la posición del lanzador, como `fireHole` offline. El disco se prueba
+  por centroide, y una baldosa ancha llega hasta un agujero lanzado 4 u
+  por delante. Un enemigo en esa misma baldosa también la conserva.
+- **Medido:**
+  - Geometría del servidor (`ArenaSim` y el centro del agujero de
+    `server/src/sim/abilities.ts`), 10.000 lanzamientos: la baldosa propia
+    cae en el **16,4 %** sin el filtro (offline se midió 15,5-16,7 %) y en
+    **0** con él. El lanzador conserva siempre el suelo. Tiles por
+    lanzamiento: 1,53 → 1,37.
+  - Salas reales con 4 Sihans invitados (bundle de producción contra un
+    servidor local, A/B con el mismo guion):
+    - sin el arreglo, 2 de 14 lanzamientos se comen la baldosa propia y en
+      los dos Sihans cae;
+    - con el arreglo, 0 de 21, y el agujero tira baldosas en 13 (24 en
+      total);
+    - 0 errores en cliente y servidor.
+  - `check`, 304 tests y tsc del servidor en verde. `NET_PROTOCOL` sigue
+    en 3: el cliente solo recibe los índices que caen.
+- **Despliegue:** toca `server/`, así que reinicia Railway. Sale con la
+  próxima subida de servidor y le aplica el aviso de mantenimiento de
+  Rafa. Hasta entonces, online sigue como hoy.
+
 ## 2026-09-29 — [Arena] Dos desbloqueos: el colapso se presenta por fotograma y el servidor enseña su layout
 
 Encargo de la sesión general (aprobado por Rafa). Va primero porque dos

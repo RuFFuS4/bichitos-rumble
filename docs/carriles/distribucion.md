@@ -202,8 +202,13 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
     hechos en v1.9 (ver el punto 0 y BUILD_LOG del 2026-09-25), con la
     segunda tanda (S2-1..S2-5), la L de los bots online y el paso fijo
     (2 sub-pasos, repetidos en el suavizado). Quedan dos cosas:
-    - **Sinkhole (punto 9)**: espera a que ARENA exponga el layout en
-      `ArenaSim` (nota en su buzón).
+    - ~~**Sinkhole (punto 9)**~~: hecho el 2026-09-29, en `dev`. Online
+      ya no se come la baldosa del lanzador, igual que offline:
+      `BrawlRoom` filtra con `ArenaSim.getLayout()` y `pointInFragment`.
+      Medido en la geometría del servidor (10.000 lanzamientos: del 16,4 %
+      a 0) y en salas reales de 4 Sihans (base 2 de 14 y los dos caen;
+      arreglado 0 de 21). **Toca `server/`, así que sale con la próxima
+      subida de servidor** y le aplica el aviso de mantenimiento.
     - **El hielo en el suavizado**: la sala aplica ya los factores de la
       zona (aceleración ×0,35, fricción ×5) y el Ice Slide (fricción ×3),
       pero `NetSmoother.predict` usa la fricción base: 2-3 px de diente de
@@ -401,6 +406,8 @@ corren riesgo: no hay migraciones.
   - No tiene espejo en el cliente, que ya tenía `Arena.getLayout()`.
   - No toca `arena-fragments.ts`: ni `NET_PROTOCOL` ni la huella del
     generador cambian.
+  → *Leído el 2026-09-29. El filtro ya está en `dev` (punto 11); sale con
+  la próxima subida de servidor.*
 
 - **De la sesión GENERAL, 2026-09-29 — tu encargo (aprobado por Rafa).**
   **H4.5 cerrado y H5 abierto**: H5 es tuyo, además de la deuda de

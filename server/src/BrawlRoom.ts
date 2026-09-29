@@ -37,7 +37,7 @@ import {
   ageContactRehit, takeContactHit,
 } from './sim/abilities.js';
 import { ArenaSim } from './sim/arena.js';
-import { FRAG } from './sim/arena-fragments.js';
+import { FRAG, pointInFragment } from './sim/arena-fragments.js';
 import { computeBotInput } from './sim/bot.js';
 import {
   verifyPlayer, getPlayerNickname, recordMatchResult, recordMatch,
@@ -1143,8 +1143,15 @@ export class BrawlRoom extends Room {
         // returns false on next tick → players standing there fall),
         // and broadcast the indices so clients can knock out the
         // matching meshes and play the fall animation.
+        // The caster's own tile is spared, as offline (fireHole in
+        // src/abilities-runtime.ts): the disc test goes by centroid, and a
+        // wide tile can reach under a hole cast 4 u ahead, so Sihans used
+        // to drop through her own hole. An enemy on that tile keeps it too
+        // (item 9 of docs/REPASO_HABILIDADES.md).
         if (z.sinkhole) {
-          const candidates = this.arenaSim.getAliveFragmentsInDisc(z.x, z.z, z.radius);
+          const frags = this.arenaSim.getLayout().fragments;
+          const candidates = this.arenaSim.getAliveFragmentsInDisc(z.x, z.z, z.radius)
+            .filter((i) => !pointInFragment(p.x, p.z, frags[i]));
           const killed = this.arenaSim.killFragmentIndices(candidates);
           if (killed.length > 0) {
             this.broadcast('arenaFragmentsKilled', { indices: killed });
