@@ -30,6 +30,7 @@ export {
   showSpectatorPrompt, hideSpectatorPrompt,
   showGamepadToast,
 } from './hud/runtime';
+export type { OverlayAction } from './hud/runtime';
 
 export {
   showTitleScreen, hideTitleScreen,

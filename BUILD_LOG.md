@@ -1,5 +1,77 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Interfaz] En el móvil, «Desconectado» ya tiene salida, y los avisos de conexión son del juego
+
+- **Qué** (encargo de la sesión GENERAL, que venía del buzón de
+  DISTRIBUCIÓN):
+  - **El problema.** En táctil no hay tecla T, y las cuatro pantallas
+    online cuya salida era T no tenían nada que tocar:
+    - «Desconectado» era un callejón sin salida: solo quedaba recargar;
+    - «Reconectando…» no dejaba irse durante los reintentos (hasta ~45 s);
+    - la sala de espera y el aviso de espectador decían «Toca T para
+      salir».
+  - **Un solo mecanismo.** Un botón con `data-menu-action="back"`
+    (`src/input.ts`) empuja la misma acción que T, Escape o el Back del
+    mando, así que `game.ts` no gana un segundo camino de salida.
+    `showOverlay` acepta un botón (`OverlayAction`). Reconectando y
+    Desconectado lo llevan («⏏ Volver al título», con la T como chip solo
+    en teclado). La espera y el espectador llevan un botón táctil de
+    verdad.
+  - **Nada tapa el aviso.** `roomLink` (`live` / `dropped` / `lost`, en
+    `game.ts`): sin enlace, el estado de la sala está congelado. Con un
+    corte en la cuenta atrás, el dígito se repintaba cada fotograma
+    encima de «Desconectado» (lo dedujo DISTRIBUCIÓN; medido: ya no
+    pasa). Tampoco lo quitan el «Preparando la arena» ni el aviso de
+    espectador. Un cierre 4001 (reinicio o mantenimiento) explica eso en
+    vez de «se ha perdido la conexión». En la pantalla final no sale
+    nada: ya tiene sus salidas, y en el cierre limpio llega `ended` y
+    justo después el 4001. «Jugar otra vez» busca sala nueva y, si hay
+    mantenimiento, lo cuenta.
+  - **La sala de espera, legible.** El HUD de partida se pintaba encima
+    en todos los tamaños: el reloj sobre el título, las vidas sobre las
+    plazas y, en un portátil, la barra de habilidades sobre «T salir de
+    la sala». La regla del 2026-09-05 estaba dentro del bloque de
+    pantallas bajas. Ahora `body.waiting-room` los oculta siempre, junto
+    con el joystick y los botones. En móvil había 436 px de contenido en
+    390, con el título fuera por arriba y el botón por abajo. Ahora se
+    compacta y cabe entero, también la sala privada a 568×320.
+  - **Avisos del juego, no del navegador** (`src/hud/notice.ts`). Todos
+    los `alert()` y el `confirm()` de `connectOnlineWith` pasan a
+    `showNotice`: mantenimiento, versión nueva («↻ Recargar» / «Ahora
+    no»), nick en uso, conexión fallida. Motivos:
+    - los nativos congelan el bucle y no se pueden contestar con el
+      mando;
+    - llevan la dirección del sitio encima;
+    - en un iframe con sandbox sin `allow-modals` no salen, y `confirm()`
+      devuelve `false`.
+
+    Mientras está abierto se queda con las acciones de menú
+    (`setMenuCapture`): Enter/A pulsa el botón enfocado, Esc/T/Back
+    cierra, y el título de detrás no ve esas pulsaciones. El foco empieza
+    en el botón principal y no se escapa. Va por encima de todos los
+    modales, el Salón de cinturones incluido. El texto del servidor entra
+    tal cual, como `textContent`. El de mantenimiento («idioma preferido /
+    el otro») va en dos párrafos.
+- **Revisión adversarial** (3 lentes y un escéptico por hallazgo): 6
+  hallazgos, 1 refutado y 5 leves, todos arreglados y probados uno a uno
+  (20/20):
+  - el aviso quedaba debajo del Salón de cinturones (z 55 frente a 3000);
+  - Enter con «Ahora no» enfocado aceptaba y recargaba;
+  - el `stopPropagation` de los botones impedía cerrar la leyenda ❓;
+  - con la pestaña oculta, una transición atrasada cambiaba
+    «Desconectado» por un «Preparando la arena» sin botón;
+  - un corte en la sala de espera devolvía el HUD de partida detrás del
+    aviso (`hideWaitingScreen({ keepHudHidden })`).
+- **Verificado:** `check`, 314 tests de sim, smoke 4/4. Guion de
+  extremo a extremo con 4 clientes (2 móviles emulados) contra el
+  servidor local: 26/26. Cubre la salida de la espera tocando, un 4001
+  en la cuenta atrás, salir de espectador, el servidor matado a mitad
+  de partida (botón en Reconectando y en Desconectado), el aviso de
+  conexión fallida (el Enter que lo cierra no llega al título), una
+  ventana de mantenimiento real (`maintenance.mjs on`) y el aviso de dos
+  botones. Aparte: el cierre limpio sobre la pantalla final (3/3) y la
+  sala de espera medida en 5 tamaños, pública y privada.
+
 ## 2026-09-29 — [DISTRIBUCIÓN] Un reinicio del servidor ya no apunta derrotas, y el online se cierra por mantenimiento sin reiniciar
 
 - **Qué** (subida 2 del plan, aprobada por Rafa; toca `server/`, así

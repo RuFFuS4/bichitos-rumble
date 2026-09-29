@@ -210,6 +210,39 @@
           0 0 0 260px rgba(31, 178, 86, 0.00);
       }
     }
+    /* Way out under an overlay message (Reconnecting, Disconnected) — on
+       touch it is the only one, there is no T key (hud/runtime.ts
+       OverlayAction). Finger-sized; the T chip is keyboard-only. */
+    #overlay .overlay-action {
+      display: block;
+      margin: 18px auto 0;
+      min-height: 48px;
+      padding: 12px 26px;
+      font: 700 17px/1 'Segoe UI', Arial, sans-serif;
+      letter-spacing: 0.5px;
+      color: #fff;
+      background: rgba(255, 220, 92, 0.2);
+      border: 1px solid rgba(255, 220, 92, 0.6);
+      border-radius: 10px;
+      text-shadow: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #overlay .overlay-action:hover,
+    #overlay .overlay-action:active {
+      background: rgba(255, 220, 92, 0.34);
+      border-color: rgba(255, 220, 92, 0.9);
+    }
+    #overlay .overlay-action kbd {
+      margin-left: 6px;
+      padding: 1px 7px;
+      font: 700 13px/1.4 monospace;
+      color: #ffdc5c;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 3px;
+    }
+    body.using-gamepad #overlay .overlay-action kbd { display: none; }
     /* Ability cooldown bars */
     #ability-bar-container {
       position: absolute;
@@ -611,10 +644,17 @@
          match-active the touch buttons already cover this role, and
          the bar collides with the joystick. Hide it. */
       body.touch-mode.match-active #ability-bar-container { display: none; }
-      /* Checklist 2026-09-05: en la sala de espera online la barra de
-         habilidades asomaba entre el prompt "T · salir" y su texto. */
-      body.waiting-room #ability-bar-container { display: none !important; }
     }
+
+    /* Online waiting room (body.waiting-room, hud/waiting.ts): the match
+       HUD has nothing to say yet and drew over the room screen — the timer
+       on its title, the lives corners over the slots, the ability bar on
+       "T leave room". The 2026-09-05 rule for the bar sat inside the
+       short-screen block above, so laptops still had it (measured
+       2026-09-29 at 1366×657). The settings cluster stays. */
+    body.waiting-room #hud-top-center,
+    body.waiting-room .player-life-corner,
+    body.waiting-room #ability-bar-container { display: none !important; }
 
     /* ---------- Responsive: very narrow (portrait phones that somehow
          bypass the rotate prompt, or foldables). HUD subset. ---------- */

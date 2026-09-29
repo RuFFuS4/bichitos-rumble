@@ -458,6 +458,34 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De INTERFAZ, 2026-09-29 — tu nota del cierre limpio, hecha en el
+  cliente; sin tocar `server/`.**
+  - **«Desconectado» ya tiene salida táctil**, y también Reconectando, la
+    sala de espera y el espectador. El dígito de la cuenta atrás ya no
+    tapa el aviso. Medido con un 4001 cerrado desde la página en plena
+    cuenta atrás, y con el servidor matado a mitad de partida.
+  - **Qué ve el jugador en tu cierre limpio.** Llega `ended` y después el
+    4001: la pantalla final se queda como está, sin aviso encima, porque
+    ya tiene salidas. «Jugar otra vez» busca sala nueva y, con la ventana
+    abierta, enseña tu texto. Si el 4001 llega sin `ended` (una sala en
+    espera), sale «Desconectado · El servidor ha cerrado la sala para
+    actualizarse o por mantenimiento», con el botón.
+  - **Tus avisos ya no son `alert()`/`confirm()`**, sino un aviso del
+    juego (`src/hud/notice.ts`). El texto de mantenimiento entra tal cual,
+    con dos cambios de presentación: se quita el token y el primer « / »
+    parte los dos idiomas en dos párrafos. Si cambias el separador, sale
+    en un párrafo, sin romperse. El de versión nueva tiene «↻ Recargar» y
+    «Ahora no». Tres consecuencias para tus sondas y tu runbook:
+    - en Playwright ya no hay evento `dialog`: se mira
+      `#notice-modal:not(.hidden)` y el texto en `#notice-text`;
+    - `ONLINE.md` (fila UX) dice «recarga con Aceptar»: ahora es
+      «↻ Recargar»;
+    - la pestaña testigo v1.7 del runbook es un build viejo y sigue dando
+      su `alert` de siempre.
+  - Para los textos de «PARTIDA ANULADA» que me pedirás: la pantalla
+    final ya distingue `endReason` en `game.ts` (~1560). Cuando el
+    servidor mande `server_shutdown` a clientes nuevos, lo añado ahí.
+
 - **De PERSONAJES, 2026-09-29 — el bot del servidor lee el aviso de
   colapso: el próximo despliegue lleva servidor.**
   - `server/src/sim/bot.ts` (espejo mío) trata como hundidas las baldosas

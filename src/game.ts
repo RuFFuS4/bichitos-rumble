@@ -21,7 +21,7 @@ import {
   showWaitingScreen, hideWaitingScreen, updateWaitingScreen, setWaitingShareRoom,
   showSpectatorPrompt, hideSpectatorPrompt,
   setEndMatchStats, clearEndMatchStats,
-  type EndResult, type WaitingScreenData,
+  type EndResult, type WaitingScreenData, type OverlayAction,
 } from './hud';
 import { applyHitStop, isHitStopActive, resetHitStop, FEEL } from './gamefeel';
 import { PresentClock } from './fixed-step';
@@ -48,6 +48,7 @@ import { sendInput, getDefaultServerUrl, onAbilityFired, onBeltChanged, onZoneSp
 import { pushNetworkProjectile, removeProjectile } from './projectiles';
 import { showOnlineBeltToast } from './online-belt-toast';
 import { ensureOnlineIdentity } from './hud/nickname-modal';
+import { showNotice } from './hud/notice';
 import { getDeviceToken, forgetIdentity, type OnlineIdentity } from './online-identity';
 import { getMoveVector, isHeld } from './input';
 import { triggerCameraShake, triggerHitStop, applyDashFeedback, applyImpactFeedback } from './gamefeel';
@@ -91,6 +92,17 @@ const ONLINE_MAX_PLAYERS = 4;
  * enterOnline leaves the stale room whenever that retry lands.
  */
 const ABANDON_ROOM_WAIT_MS = 1500;
+
+/** Colyseus CloseCode.SERVER_SHUTDOWN: the server closed the room (a restart
+ *  or a maintenance window, ONLINE.md §«Mantenimiento y cierre limpio»).
+ *  Local copy because the SDK only loads through the dynamic import. */
+const CLOSE_SERVER_SHUTDOWN = 4001;
+
+/** The way out on the Reconnecting / Disconnected overlays: pushes 'back',
+ *  the same exit as T (case 'online' in simulate). */
+function backToTitleAction(): OverlayAction {
+  return { label: t('hud-back-to-title'), menuAction: 'back', hotkey: 'T' };
+}
 
 /**
  * Build the match roster: player config first, then bots drawn from the
@@ -187,6 +199,11 @@ export class Game {
    *  the patch with falling=false — a stale `falling` must not end it. */
   private allInPreviewsUnconfirmed = new Set<string>();
   private lastServerPhase: string = '';                 // for transition detection
+  /** The link to the room as the SDK reports it: 'dropped' while it
+   *  auto-reconnects, 'lost' once it gives up or the server closes it.
+   *  Off 'live' the room state is stale (a countdown frozen on its digit),
+   *  so nothing may paint over the overlay that carries the way out. */
+  private roomLink: 'live' | 'dropped' | 'lost' = 'live';
   /** When true, confirming the character select connects to server instead
    *  of starting a local match. Set by enterOnlineCharacterSelect(). */
   private selectForOnline: boolean = false;
@@ -918,12 +935,13 @@ export class Game {
       // 2026-04-29 final-K — surface specific reasons. Server
       // throws Error('nickname_active_in_room') from onJoin when
       // a second tab tries to join with the same online identity.
-      // Anything else is a real connection failure.
+      // Anything else is a real connection failure. Shown with the game's
+      // own notice over the title, not alert()/confirm() (hud/notice.ts).
       const msg = (err as Error)?.message ?? '';
       if (msg.includes('nickname_active_in_room')) {
-        alert(t('connect-nickname-active'));
+        void showNotice(t('connect-nickname-active'));
       } else if (msg.includes('nickname_taken')) {
-        alert(t('connect-nickname-taken'));
+        void showNotice(t('connect-nickname-taken'));
       } else if (msg.includes('identity_stale')) {
         // Review 2026-09-05 (fix H) — the server refused our
         // playerId+token (rotated by a recovery on another device, or
@@ -934,7 +952,7 @@ export class Game {
         // stays out of scope — this only makes the rotation visible.
         forgetIdentity();
         this.onlineIdentity = null;
-        alert(t('connect-identity-stale'));
+        void showNotice(t('connect-identity-stale'));
       } else if (msg.includes('room_already_started') || msg.includes('is locked')) {
         // Fix J — joinById on a shared link whose room already left
         // 'waiting'. Two surfaces of the same fact: the matchmaker
@@ -942,10 +960,11 @@ export class Game {
         // rooms lock on countdown) before onJoin runs, and onJoin throws
         // 'room_already_started' in the race window before the lock
         // lands. Same copy for both.
-        alert(t('connect-room-started'));
+        void showNotice(t('connect-room-started'));
       } else if (msg.includes('maintenance_window')) {
         // Mantenimiento (server/src/maintenance.ts): el texto ya llega en su idioma y con los minutos.
-        alert(msg.replace(/\s*\(maintenance_window[^)]*\)\s*$/, ''));
+        // Viene «idioma preferido / el otro»: cada uno en su párrafo, el texto tal cual.
+        void showNotice(msg.replace(/\s*\(maintenance_window[^)]*\)\s*$/, '').replace(' / ', '\n\n'));
       } else if (msg.includes('client_outdated')
         || (navigator.onLine !== false && /dynamically imported module|Importing a module script failed/i.test(msg))) {
         // Guard de versión (ONLINE.md): esta pestaña es de una versión
@@ -953,14 +972,17 @@ export class Game {
         // despliegue lo renombra y Vercel da 404 al viejo) — salvo sin red,
         // donde recargar tiraría la partida offline. Vercel sirve `/` sin
         // caché → recargar trae la nueva.
-        if (confirm(t('connect-client-outdated'))) location.reload();
+        void showNotice(t('connect-client-outdated'), {
+          okLabel: t('connect-reload'),
+          cancelLabel: t('connect-not-now'),
+        }).then((reload) => { if (reload) location.reload(); });
       } else if (msg.includes('server_outdated')) {
-        alert(t('connect-server-outdated'));
+        void showNotice(t('connect-server-outdated'));
       } else if (msg.includes('no_state_from_server')) {
-        alert(t('connect-failed'));
+        void showNotice(t('connect-failed'));
       } else {
         const detail = msg ? `\n\n${tf('connect-failed-server-said', { msg })}` : '';
-        alert(t('connect-failed') + detail);
+        void showNotice(t('connect-failed') + detail);
       }
     } finally {
       this.connectInProgress = false;
@@ -977,6 +999,7 @@ export class Game {
     this.room = room;
     this.phase = 'online';
     this.lastServerPhase = '';
+    this.roomLink = 'live';
     this.onlineAllInPreviews.forEach((p) => p.end());
     this.onlineAllInPreviews.clear();
     this.allInPreviewsUnconfirmed.clear();
@@ -1219,10 +1242,19 @@ export class Game {
     // (arrancan los reintentos); onReconnect = de vuelta en la sala con
     // el estado re-sincronizado (spawnOnlineCritter tiene guard de
     // duplicados para el re-emit de onAdd).
+    //
+    // Both overlays carry a button that pushes 'back' — the same exit as T,
+    // and the only one on touch (2026-09-29: on a phone "Disconnected" was
+    // a dead end). The end screen is left alone: it already has its ways
+    // out, and "play again" requeues in a new room anyway (in a clean
+    // server shutdown, 'ended' arrives first and the 4001 close right after).
     room.onDrop((code, reason) => {
       console.warn('[Game] connection dropped, reconnecting…', code, reason ?? '');
       if (this.phase === 'online' && this.room === room) {
-        showOverlay(t('hud-reconnecting'), t('hud-reconnecting-sub'));
+        this.roomLink = 'dropped';
+        if (this.lastServerPhase === 'ended') return;
+        hideWaitingScreen({ keepHudHidden: true });
+        showOverlay(t('hud-reconnecting'), t('hud-reconnecting-sub'), backToTitleAction());
       }
     });
     room.onReconnect(() => {
@@ -1237,14 +1269,26 @@ export class Game {
         return;
       }
       console.log('[Game] reconnected to room', room.roomId);
+      this.roomLink = 'live';
       if (this.phase === 'online') {
         hideOverlay();
+        // Still waiting: bring the room screen back (a phase change while
+        // we were away is handled by updateOnline's transition as usual).
+        if (this.lastServerPhase === 'waiting') showWaitingScreen();
       }
     });
-    room.onLeave(() => {
-      console.log('[Game] disconnected from room');
+    room.onLeave((code) => {
+      console.log('[Game] disconnected from room', code);
       if (this.phase === 'online' && this.room === room && !this.restartInProgress) {
-        showOverlay(t('hud-disconnected'), t('hud-disconnected-sub'));
+        this.roomLink = 'lost';
+        if (this.lastServerPhase === 'ended') return;
+        hideWaitingScreen({ keepHudHidden: true });
+        hideSpectatorPrompt();
+        showOverlay(
+          t('hud-disconnected'),
+          t(code === CLOSE_SERVER_SHUTDOWN ? 'hud-disconnected-sub-shutdown' : 'hud-disconnected-sub'),
+          backToTitleAction(),
+        );
       }
     });
     // Exact patch arrival for the online smoothing clock (src/net-smoothing.ts).
@@ -1502,6 +1546,11 @@ export class Game {
       this.lastServerPhase = serverPhase;
       // Always drop the waiting screen when leaving waiting.
       if (serverPhase !== 'waiting') hideWaitingScreen();
+      // With the link down this transition is stale news (a tab hidden
+      // while the room moved on): it must not paint over the Reconnecting /
+      // Disconnected overlay, which carries the way out. 'ended' still
+      // shows the end screen, which has its own.
+      const linkLive = this.roomLink === 'live';
 
       if (serverPhase === 'playing') {
         // Stamp match start now — server time has already started ticking
@@ -1515,11 +1564,12 @@ export class Game {
         // timeout). Server keeps marching; we only delay the local
         // confirmation. Once `waitForPack` resolves we drop the overlay
         // and the player sees the fully-decorated scene.
-        showOverlay(t('hud-preparing-arena'));
+        if (linkLive) showOverlay(t('hud-preparing-arena'));
         void this.arena.waitForPack(2500).then(() => {
           // Defensive: only hide if we're still in playing phase. A
-          // fast end-of-match could have already swapped phases.
-          if (this.lastServerPhase === 'playing') hideOverlay();
+          // fast end-of-match could have already swapped phases. Nor if
+          // the link dropped meanwhile: that overlay carries the way out.
+          if (this.lastServerPhase === 'playing' && this.roomLink === 'live') hideOverlay();
         });
       } else if (serverPhase === 'countdown') {
         // Online countdown: switch to the in-game loop so by the time the
@@ -1528,8 +1578,10 @@ export class Game {
       } else if (serverPhase === 'waiting') {
         // New 4P waiting room — the old "Waiting for opponent..." text is
         // replaced by the full waiting-screen overlay (countdown + slots).
-        hideOverlay();
-        showWaitingScreen();
+        if (linkLive) {
+          hideOverlay();
+          showWaitingScreen();
+        }
         // Chill title loop while we wait. Also preloads ingame for the
         // moment the countdown kicks in.
         playMusic('intro');
@@ -1630,8 +1682,10 @@ export class Game {
     // Spectator prompt: the local player has lost all lives but the match
     // is still running (other humans / bots are finishing). Offer them a
     // one-key escape to the title so they aren't held hostage to the
-    // timer. Hidden in every other situation.
+    // timer. Hidden in every other situation — the Reconnecting /
+    // Disconnected overlay has its own way out.
     const showSpectator =
+      this.roomLink === 'live' &&
       serverPhase === 'playing' &&
       this.player !== null &&
       !this.player.alive;
@@ -1641,8 +1695,9 @@ export class Game {
       hideSpectatorPrompt();
     }
 
-    // Overlay for countdown
-    if (serverPhase === 'countdown') {
+    // Overlay for countdown. With the link down the state is frozen on its
+    // last digit, which used to paint over "Disconnected" every frame.
+    if (serverPhase === 'countdown' && this.roomLink === 'live') {
       const sec = Math.max(0, Math.ceil(state.countdownLeft));
       showOverlay(sec > 0 ? String(sec) : t('hud-go'));
     }

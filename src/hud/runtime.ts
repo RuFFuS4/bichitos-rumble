@@ -13,6 +13,7 @@ import type { Critter } from '../critter';
 import { getRosterEntry } from '../roster';
 import { getCritterThumbnail } from '../slot-thumbnail';
 import { tagGlyph } from '../input-glyphs';
+import type { MenuAction } from '../input';
 import { t, tf } from '../i18n';
 
 // ---- Top bar -------------------------------------------------------------
@@ -237,14 +238,31 @@ const DIGIT_VARIANT_CLASSES = [
   'overlay-d-3', 'overlay-d-2', 'overlay-d-1', 'overlay-d-go',
 ];
 
-export function showOverlay(main: string, sub?: string): void {
+/** A button under the overlay message that pushes a menu action (input.ts
+ *  wires every `data-menu-action`). It is the way out of the screens whose
+ *  keyboard exit is T — Reconnecting, Disconnected — on touch, where there
+ *  is no T. `hotkey` shows that key as a chip on keyboard only. */
+export interface OverlayAction {
+  label: string;
+  menuAction: MenuAction;
+  hotkey?: string;
+}
+
+export function showOverlay(main: string, sub?: string, action?: OverlayAction): void {
   if (!overlayEl) return;
-  const html = main + (sub ? `<div class="sub">${sub}</div>` : '');
+  const button = action
+    ? `<button type="button" class="overlay-action" data-menu-action="${action.menuAction}">${action.label}`
+      + (action.hotkey ? ` <kbd class="desktop-only">${action.hotkey}</kbd>` : '')
+      + '</button>'
+    : '';
+  const html = main + (sub ? `<div class="sub">${sub}</div>` : '') + button;
   // Only pop when the visible text actually changes (e.g. countdown tick),
   // so setting the same value back-to-back doesn't re-trigger the animation.
+  // Rewriting the same markup would also recreate the button under a finger
+  // mid-tap, and the click would be lost.
   const changed = overlayEl.innerHTML !== html;
   overlayEl.style.display = 'block';
-  overlayEl.innerHTML = html;
+  if (changed) overlayEl.innerHTML = html;
 
   // Detect countdown digit / GO! content (no sub, main is short enough to
   // be a digit or GO!) and toggle the CSS variant classes. Anything longer

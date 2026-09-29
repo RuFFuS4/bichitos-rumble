@@ -114,8 +114,9 @@ const DICT = {
   // [html]
   'waiting-prompt-leave':       { en: '<kbd>T</kbd> leave room',
                                   es: '<kbd>T</kbd> salir de la sala' },
-  'waiting-prompt-leave-touch': { en: 'Tap T to leave',
-                                  es: 'Toca T para salir' },
+  // Botón táctil (data-menu-action="back"): en el móvil no hay T que tocar.
+  'waiting-leave-btn':          { en: '⏏ Leave room',
+                                  es: '⏏ Salir de la sala' },
 
   // ---- Spectator prompt (eliminado en partida online) ---------------------
   'spectator-out':            { en: "You're out ·",
@@ -123,8 +124,9 @@ const DICT = {
   // [html]
   'spectator-leave-desktop':  { en: 'Press <kbd>T</kbd> to leave',
                                 es: 'Pulsa <kbd>T</kbd> para salir' },
-  'spectator-leave-touch':    { en: 'Tap T to leave',
-                                es: 'Toca T para salir' },
+  // Botón táctil, como el de la sala de espera.
+  'spectator-leave-btn':      { en: 'Leave',
+                                es: 'Salir' },
 
   // ---- Nickname modal (identidad online) ----------------------------------
   'nickname-title':         { en: 'PICK YOUR NICKNAME',
@@ -174,7 +176,7 @@ const DICT = {
   // contrato de la clave (misma variable en en: y es:).
   // =========================================================================
 
-  // ---- Connect (alerts de src/game.ts al conectar online) -----------------
+  // ---- Connect (avisos de src/game.ts al conectar online; hud/notice.ts) ---
   'connect-nickname-active':  { en: 'This nickname is already active in another tab on this device.\n\nUse a different nickname or close the other tab and try again.',
                                 es: 'Ese nick ya está activo en otra pestaña de este dispositivo.\n\nUsa otro nick o cierra la otra pestaña y vuelve a intentarlo.' },
   'connect-nickname-taken':   { en: 'This nickname is already in use by another device.\n\nPick a different nickname.',
@@ -192,6 +194,10 @@ const DICT = {
                                 es: 'Hay una versión nueva de Bichitos Rumble.\n\n¿Recargar la página para jugar online?' },
   'connect-server-outdated':  { en: 'The server is updating right now.\n\nTry again in a minute.',
                                 es: 'El servidor se está actualizando ahora mismo.\n\nPrueba otra vez en un minuto.' },
+  // Botones del aviso propio (src/hud/notice.ts) que sustituye a alert()/confirm().
+  'notice-ok':                { en: 'OK',                        es: 'Vale' },
+  'connect-reload':           { en: '↻ Reload',                  es: '↻ Recargar' },
+  'connect-not-now':          { en: 'Not now',                   es: 'Ahora no' },
 
   // ---- HUD in-match (overlay central, top bar, ability bar, toasts) -------
   'hud-connecting':           { en: 'Connecting...',            es: 'Conectando...' },
@@ -201,8 +207,13 @@ const DICT = {
   'hud-reconnecting':         { en: 'Reconnecting…',            es: 'Reconectando…' },
   'hud-reconnecting-sub':     { en: 'Connection lost — a bot covers you meanwhile', es: 'Conexión perdida — un bot te cubre mientras tanto' },
   'hud-disconnected':         { en: 'Disconnected',             es: 'Desconectado' },
-  'hud-disconnected-sub':     { en: 'Press T to return to title',
-                                es: 'Pulsa T para volver al título' },
+  'hud-disconnected-sub':     { en: 'The connection to the server was lost.',
+                                es: 'Se ha perdido la conexión con el servidor.' },
+  // Cierre con código 4001 (SERVER_SHUTDOWN): el servidor se reinicia o entra en mantenimiento.
+  'hud-disconnected-sub-shutdown': { en: 'The server closed the room to update or for maintenance.',
+                                     es: 'El servidor ha cerrado la sala para actualizarse o por mantenimiento.' },
+  // Botón del overlay de Reconectando / Desconectado (la salida en táctil).
+  'hud-back-to-title':        { en: '⏏ Back to title',          es: '⏏ Volver al título' },
   'hud-leaving':              { en: 'Leaving...',               es: 'Saliendo...' },
   // OJO: hud/runtime.ts#digitVariant compara el texto del overlay con este
   // valor para aplicar el estilo verde de "GO!". Si cambias el es:, el

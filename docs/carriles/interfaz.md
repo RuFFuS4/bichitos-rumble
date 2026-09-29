@@ -20,7 +20,15 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
      ficha en castellano y la selección compacta en móvil.
    - La selección en escritorio y en iPad, que también desbordaba, quedó
      arreglada el mismo día (ver §Hecho).
-2. **Audio**: eres el dueño de `src/audio.ts`. Si cambias las claves
+2. **En táctil no se vuelve al título desde la pantalla final ni se
+   pausa offline** (visto el 2026-09-29, no es un callejón: «Toca para
+   jugar otra vez» siempre funciona). El menú de pausa solo abre con
+   Escape. El mecanismo ya existe: un botón `data-menu-action="back"` en
+   la pantalla final (su manejador de «jugar otra vez», en
+   `hud/end.ts`, tiene que saltarse `[data-menu-action]` como ya se salta
+   los `kbd`) y un botón de pausa táctil en el HUD. Falta decidir con
+   Rafa dónde van sin tapar arena.
+3. **Audio**: eres el dueño de `src/audio.ts`. Si cambias las claves
    `bichitos.sfxMuted` / `bichitos.musicMuted`, avisa a todos los
    carriles — las lee `scripts/lib/headless-browser.mjs` y de ellas
    depende que las instancias de prueba nazcan mudas (directiva de Rafa).
@@ -45,17 +53,13 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 - **De DISTRIBUCIÓN, 2026-09-29 — lo que vio el análisis del cierre
   limpio en la parte del jugador.** Nada bloquea. Detalle del cierre en
   `ONLINE.md` §«Mantenimiento y cierre limpio».
-  - **Ya existía, y es tuyo: en móvil, «Desconectado» es un callejón sin
-    salida.** Con T, Escape o Back del mando se vuelve al título, pero el
-    backend táctil solo cablea acciones mantenidas (`src/input-touch.ts`,
-    128-151) y no hay acción `back`. En el móvil solo queda recargar la
-    página, aunque la espera diga «Tap T to leave».
-  - **Corte en la cuenta atrás** (deducido del código, sin medir): si la
-    conexión muere en `countdown`, `updateOnline` vuelve a pintar el
-    dígito cada fotograma y tapa «Desconectado» (`src/game.ts` hacia la
-    1640 frente a la 1241). Con el cierre limpio ya no pasa en un
-    despliegue, porque el servidor manda `ended` antes de desconectar.
-    Queda para un corte brusco (SIGKILL o caída de red).
+  - ~~En móvil, «Desconectado» es un callejón sin salida~~ → **hecho el
+    29** (encargo de GENERAL, ver §Hecho). También en Reconectando, la
+    sala de espera y el espectador.
+  - ~~Corte en la cuenta atrás: el dígito tapa «Desconectado»~~ → hecho
+    el 29 y medido con un cierre 4001 en plena cuenta atrás.
+  - ~~El `alert()` de mantenimiento y el `confirm()` de versión~~ → aviso
+    propio (`src/hud/notice.ts`), con el texto del servidor tal cual.
   - **Aviso previo:** en una versión posterior te pediré los textos de
     la pantalla «PARTIDA ANULADA · no cuenta como derrota», para
     `endReason` `server_shutdown` (hoy sale como empate) y, si Rafa lo
@@ -114,6 +118,35 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Hecho
 
+- **2026-09-29 — En el móvil, las pantallas online tienen salida.** En
+  táctil no hay T, y «Desconectado» era un callejón sin salida (solo
+  quedaba recargar). Reconectando, la sala de espera y el espectador
+  tampoco dejaban irse.
+  - **Mecanismo único.** Cualquier botón con `data-menu-action="back"`
+    empuja la misma acción que T/Escape/Back (`src/input.ts`, clic en
+    fase de captura), así que `game.ts` no tiene un segundo camino de
+    salida. `showOverlay(main, sub, action)` pinta el botón bajo el
+    mensaje. La T sale como chip solo en teclado. Sirve para cualquier
+    pantalla futura.
+  - **`roomLink`** (`game.ts`: `live` / `dropped` / `lost`). Sin enlace,
+    el estado de la sala está congelado, así que ni el dígito de la
+    cuenta atrás, ni el «Preparando la arena», ni el aviso de espectador
+    pintan encima del aviso que lleva la salida. Un cierre 4001 dice que
+    el servidor cerró la sala (reinicio o mantenimiento). En la pantalla
+    final no se pinta nada: ya tiene salidas.
+  - **La sala de espera**, sin el HUD de partida encima
+    (`body.waiting-room`), y compacta en pantallas bajas. Medida en
+    844×390, 568×320, 932×430, 1024×768 y 1366×657, pública y privada: el
+    botón cabe siempre. Con el botón nativo «📤 Compartir» (que en móvil
+    sí sale), la sala privada puede pasar de 320 px de alto, y entonces
+    se desplaza.
+  - **Aviso propio** (`src/hud/notice.ts`, `showNotice`) en vez de
+    `alert()`/`confirm()` al conectar. Mientras está abierto se queda con
+    las acciones de menú (`setMenuCapture`) y con el foco. Va por encima
+    de todos los modales (z 4000).
+  - Guion de extremo a extremo, 26/26 con 4 clientes reales. La
+    revisión adversarial encontró 5 leves; están arreglados y probados
+    (20/20). Detalle en BUILD_LOG.
 - **2026-09-29 — Final online: «Vivos: 1» y la calavera del último.** Lo
   investigó un workflow de 3 ángulos más 3 escépticos, y luego se
   reprodujo con 4 clientes reales contra el servidor local.
@@ -298,6 +331,17 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Cómo retomar
 
+**2026-09-29, tarde** — en `dev`: las salidas táctiles del online
+(Desconectado, Reconectando, espera, espectador) y el aviso propio en vez
+de `alert()`/`confirm()`. `game.ts` queda libre. Para repetir la prueba
+del corte, el truco es cerrar el socket desde la página:
+`__game.room.connection.close(4001)` da un cierre de servidor real (el
+servidor devuelve el código). Matar el proceso del 2583 da el corte
+brusco (1006 → reintentos → 4003 a los ~45 s). La ventana de
+mantenimiento se abre en local con
+`DATA_DIR=<scratch> node scripts/maintenance.mjs on --for 5` en
+`server/`, sin reiniciar.
+
 **2026-09-29** (modo paralelo: worktree `.claude/worktrees/interfaz`, dev
 server 5183, servidor local 2583). En `dev`: los tres fallos del HUD de
 producción (contador en la cuenta atrás, final online, cartel del
@@ -314,7 +358,8 @@ Cuatro clientes llenan la sala y la partida arranca sin los 60 s de
 espera. Si la máquina va justa de memoria, el smoke no levanta su propio
 Vite en el 5173: se lanza contra el 5183 con una config en `.tmp/`.
 
-Siguiente del carril: el audio (punto 2), o lo que pidan los buzones.
+Siguiente del carril: salir al título y pausar en táctil (punto 2), el
+audio (punto 3), o lo que pidan los buzones.
 
 **2026-09-24** — reestructura del HUD en móvil hecha entera; para medir
 cualquier cambio de HUD: `node scripts/hud-shots.mjs`.

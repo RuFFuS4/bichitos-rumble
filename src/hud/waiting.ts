@@ -96,8 +96,13 @@ export function showWaitingScreen(): void {
   waitingScreen.classList.remove('hidden');
 }
 
-export function hideWaitingScreen(): void {
-  document.body.classList.remove('waiting-room');
+/** `keepHudHidden`: hide only the room screen and leave body.waiting-room
+ *  on — for a link that drops or dies in the waiting room, where the match
+ *  HUD would otherwise come back (placeholder timer, the stick) behind the
+ *  Reconnecting / Disconnected overlay. The class then goes on the next
+ *  real exit: a phase change or the title. */
+export function hideWaitingScreen(opts: { keepHudHidden?: boolean } = {}): void {
+  if (!opts.keepHudHidden) document.body.classList.remove('waiting-room');
   if (!waitingScreen) return;
   waitingScreen.classList.add('hidden');
 }

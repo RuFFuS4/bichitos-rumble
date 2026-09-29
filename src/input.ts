@@ -136,7 +136,20 @@ export function _setHeld(action: HeldAction, value: boolean): void {
 }
 
 export function _pushMenuAction(action: MenuAction): void {
+  if (menuCapture) {
+    menuCapture(action);
+    return;
+  }
   freshMenuActions.add(action);
+}
+
+/** While set, every menu action goes to this handler instead of the game:
+ *  a modal owns the input (Enter / Esc / gamepad A-B answer it) and the
+ *  screen behind it never sees them. src/hud/notice.ts sets and clears it. */
+let menuCapture: ((action: MenuAction) => void) | null = null;
+
+export function setMenuCapture(handler: ((action: MenuAction) => void) | null): void {
+  menuCapture = handler;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +226,23 @@ function pushEdgeActionsForKey(code: string): void {
   if (code === 'ArrowDown' || code === 'KeyS') _pushMenuAction('down');
   if (code === 'KeyR') _pushMenuAction('restart');
 }
+
+// ---------------------------------------------------------------------------
+// On-screen menu buttons (any device)
+// ---------------------------------------------------------------------------
+// A button carrying `data-menu-action="back"` (or any MenuAction) pushes that
+// action exactly like its key does, so "Back to title" on the Disconnected
+// overlay walks the same path as T / Escape / gamepad Back and game.ts needs
+// no second exit. Touch has no keys: until 2026-09-29 the screens that said
+// "Tap T to leave" had nothing to tap. The click keeps bubbling (the status
+// legend closes on any outside click), so a container with its own tap
+// handler — the end screen's "tap to play again" — must skip these targets.
+
+document.addEventListener('click', (e) => {
+  const el = (e.target as Element | null)?.closest?.('[data-menu-action]') as HTMLElement | null;
+  const action = el?.dataset.menuAction as MenuAction | undefined;
+  if (action) _pushMenuAction(action);
+});
 
 function updateContinuousFromKeyboard(): void {
   // Movement
