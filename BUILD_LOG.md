@@ -1,5 +1,42 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [DISTRIBUCIÓN] El CI arranca la imagen del servidor y prueba el bundle de producción
+
+- **Qué** (subida 1 del plan de cierre limpio y mantenimiento, aprobado
+  por Rafa): solo CI; no toca `server/`, así que no reinicia Railway.
+  - `scripts/probe-server.mjs`: una sonda sin dependencias. Sin `--full`
+    solo lee `/health` (status, el `protocol` de `server/src/protocol.ts`
+    y el guard `on`) y vale contra producción. Con `--full` prueba además
+    el guard (523 `client_outdated` y `server_outdated`, `rejectedJoins`
+    +2) y crea una sala privada con el protocolo correcto (200), que muere
+    sola al caducar el asiento.
+  - Job `server-docker`: arranca la imagen de Railway, la sonda con
+    `--full`, espera a que la sala se destruya y la para con
+    `docker stop -t 10`. Exige ExitCode 0: es el SIGTERM de Railway, y 137
+    querría decir SIGKILL.
+  - Job `smoke`: la misma suite también contra el bundle de producción
+    (`playwright.prod.config.ts`, `npm run test:smoke:prod`). El build
+    lleva un `VITE_SERVER_URL` muerto a propósito: producción solo expone
+    `window.__game`, que leen los tests de portales, si hay URL de
+    servidor. Se compila en `.tmp/dist-prod`, así que `dist/` nunca lleva
+    esa URL.
+  - Node del cliente fijado a `24.x` (`engines`, la versión con la que
+    compila Vercel); el CI del cliente la lee de `package.json`. Antes era
+    `>=20.19`, así que Vercel habría subido de major solo. El servidor
+    sigue en 22 y su `engines` sale con la subida de servidor.
+    - Con Node 22 en local, `npm ci` saca una línea de aviso
+      (`EBADENGINE`), sin más efecto.
+  - El CI corre también en las ramas `claude/**` y `codex/**` que se
+    empujen, así que se ve en verde antes de integrar.
+- **Medido:**
+  - la sonda con `--full` contra un servidor local pasa entera, y la sala
+    privada se destruye sola a los 2 s;
+  - sin `--full`, contra producción, OK;
+  - el smoke de producción da 4/4 en local;
+  - el CI de la rama, en verde (run 36589261334): la sonda `--full` pasa
+    dentro de la imagen, `docker stop` sale con ExitCode 0, el cliente
+    compila con Node 24.21 y el smoke de producción da 4/4.
+
 ## 2026-09-29 — [Arena] Fondo v2, F1: tapando el disco se sabe el bioma
 
 Encargo de GENERAL, con el criterio de Rafa: tapando el disco con la mano

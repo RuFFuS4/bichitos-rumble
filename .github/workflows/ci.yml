@@ -4,16 +4,25 @@
 # existían como rituales manuales (npm run check, parity, server tsc,
 # smoke de Playwright); esto solo los automatiza en push/PR a dev y main.
 #
-# Tres jobs independientes para que un fallo señale su dominio:
-#   client — tsc + verify GLBs + parity cliente/servidor + vite build
-#   server — tsc --noEmit del server Colyseus
-#   smoke  — Playwright chromium contra el dev server (boot regression)
+# Jobs independientes para que un fallo señale su dominio:
+#   client        — tsc + verify GLBs + parity cliente/servidor + vite build
+#   server        — tsc --noEmit del server Colyseus
+#   server-docker — la imagen de Railway: build, arranque, sonda y parada
+#   smoke         — Playwright chromium contra el dev server y contra el
+#                   bundle de producción (vite build + vite preview)
+#
+# Node: el cliente usa la versión de package.json (engines 24.x, la misma
+# con la que compila Vercel); el servidor, la 22 de su imagen node:22-alpine.
+#
+# También corre en las ramas de feature que se empujen (claude/**,
+# codex/**): así el CI se ve en verde ANTES de integrar en dev. Empujar la
+# rama es opcional; sin push, nada corre.
 
 name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, 'claude/**', 'codex/**']
   pull_request:
     branches: [main, dev]
 
@@ -30,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: package.json
           cache: npm
       - run: npm ci
       # npm run check = tsc --noEmit + tests de tool-patch + verify-critter-glbs
@@ -77,6 +86,29 @@ jobs:
       # because the CLI exits 1 without a DB and Actions runs pipefail.
       - run: docker run --rm bichitos-server-ci node -e "import('better-sqlite3').then(() => console.log('better-sqlite3 native OK'))"
       - run: (docker run --rm bichitos-server-ci node scripts/admin-players.mjs list 2>&1 || true) | grep -q "DB file not found" && echo "admin CLI present OK"
+      # The image must also BOOT and serve: /health, the version guard (523
+      # client_outdated / server_outdated) and a private room with the right
+      # protocol (scripts/probe-server.mjs --full; the runner's own Node has
+      # fetch, no npm ci needed). The room is private, so no matchmaking
+      # sees it, and it dies on its own when the seat expires (2 s here).
+      - name: Boot the image and probe it
+        run: |
+          docker run -d --name br-ci -p 127.0.0.1:2567:2567 -e COLYSEUS_SEAT_RESERVATION_TIME=2 bichitos-server-ci
+          node scripts/probe-server.mjs http://127.0.0.1:2567 --full
+          timeout 15 sh -c 'until docker logs br-ci 2>&1 | grep -q "\[BrawlRoom\] disposed"; do sleep 0.5; done'
+      # Railway stops the old container with SIGTERM. node is PID 1 in the
+      # image; Colyseus handles the signal and exits 0. ExitCode 137 would
+      # mean the handler never ran and docker had to SIGKILL it.
+      - name: Stop it cleanly (SIGTERM)
+        run: |
+          docker stop -t 10 br-ci
+          code=$(docker inspect -f '{{.State.ExitCode}}' br-ci)
+          echo "exit code: $code"
+          test "$code" = 0
+      - if: failure()
+        run: docker logs br-ci || true
+      - if: always()
+        run: docker rm -f br-ci || true
 
   smoke:
     name: Smoke (Playwright)
@@ -86,7 +118,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: package.json
           cache: npm
       - run: npm ci
       - name: Cache Playwright browsers
@@ -96,3 +128,6 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
       - run: npm run test:smoke
+      # The same suite against the production bundle: what only breaks
+      # after minification or chunk splitting (playwright.prod.config.ts).
+      - run: npm run test:smoke:prod

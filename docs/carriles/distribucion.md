@@ -175,19 +175,29 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
      §"Superficie programática" y la entrada de `BUILD_LOG.md`. Hoy ya
      los tocaron los otros tres carriles, así que van en el día del
      despliegue.
-8. **Huecos del pipeline** (zona hard-stop, plan antes):
-   - El CI nunca arranca la imagen del servidor ni prueba el bundle de
-     producción. Faltan dos cosas:
-     - `docker run` + `curl /health`, con el guard: que `/health` traiga
-       `protocol`, que `POST {}` dé 523 `client_outdated` y que con el
-       número correcto dé 200;
-     - un smoke contra `vite build && vite preview`.
-   - `engines.node` es `>=20.19`: Vercel compila con 24.x y sube de
-     major solo, mientras CI y Docker usan 22. Hay que fijarlo.
-   - `/health` no dice qué commit sirve.
-   - `onBeforeShutdown` en `BrawlRoom`: hoy un reinicio de Railway en
-     mitad de una partida pública apunta derrota a los humanos
-     verificados.
+8. **Huecos del pipeline** — plan aprobado por Rafa el 2026-09-29
+   (subida 1, CI; subida 2, servidor):
+   - ~~El CI nunca arranca la imagen ni prueba el bundle de producción~~
+     — hecho (subida 1):
+     - `server-docker` arranca la imagen y la sondea con
+       `scripts/probe-server.mjs --full`: `/health`, 523 del guard y una
+       sala privada con 200;
+     - después la para con `docker stop` y exige ExitCode 0, que es el
+       SIGTERM que manda Railway;
+     - el smoke corre también contra el bundle de producción
+       (`npm run test:smoke:prod`).
+   - ~~`engines.node` suelto~~ — el cliente queda fijado a `24.x`, la de
+     Vercel, y su CI la lee de `package.json`. **El servidor en 22 va con
+     la subida 2**: `server/package.json` está bajo `server/` y
+     reiniciaría Railway.
+   - El CI corre también en las ramas `claude/**` y `codex/**` que se
+     empujen: se ve en verde antes de integrar.
+   - Subida 2 (servidor), pendiente:
+     - que `/health` diga qué commit sirve;
+     - el `onBeforeShutdown` de `BrawlRoom`: hoy un reinicio de Railway
+       en mitad de una partida pública apunta derrotas (y, con 2 vivos,
+       una victoria falsa) a los humanos verificados. Va con el aviso de
+       mantenimiento (punto 12).
 9. ~~**`ws@8.20.0` con aviso alto**~~ — hecho el 2026-09-24: ws 8.21.3
    (solo el lockfile, dentro de `^8.19.0`). `npm audit --omit=dev` pasa
    de 11 avisos a 10, sin ningún alto; los que quedan son bajos o
@@ -330,6 +340,8 @@ git push origin main          # dispara Vercel y Railway a la vez
   permanente: arregla el que falla o haz rollback del otro ya.
 
 **3. Después**
+- `node scripts/probe-server.mjs https://bichitos-rumble-production.up.railway.app`
+  (solo lee: `status`, el `protocol` del código y el guard `on`).
 - `/health` con uptime de segundos, `protocol: 2` y
   `protocolGuard: "on"` (eso marca el final de la ventana), y
   `/api/leaderboard` con 200 (el volumen de la DB sigue montado).

@@ -132,6 +132,15 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     nuevas si el generador de la arena cambia.
   - Servidor local en Windows: `npm run dev` en `server/` carga los
     temporizadores precisos (sin ellos corre a 0,72×).
+  - `node scripts/probe-server.mjs <url>` (2026-09-29) sondea un servidor:
+    `/health` con `status`, el `protocol` de `server/src/protocol.ts` y
+    el guard `on`. Solo lee, así que vale contra producción. Con `--full`
+    prueba además el guard (523 `client_outdated` y `server_outdated`) y
+    crea una sala privada, que muere sola; en producción, solo dentro de
+    una ventana de mantenimiento, porque sube `rejectedJoins`. Es la
+    sonda del job `server-docker` del CI.
+  - `npm run test:smoke:prod` pasa el smoke contra el bundle de
+    producción (`vite build` a `.tmp/dist-prod` y `vite preview` en 4174).
 - **Zancada del clip Run** (feeling, 2026-09-21):
   `node scripts/inspect-stride.mjs [id] [--json] [--write] [--check]` mide
   en node, sin navegador, a qué velocidad barre cada Run el pie apoyado y
