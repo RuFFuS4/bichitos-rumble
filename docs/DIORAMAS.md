@@ -20,7 +20,31 @@
 >   bioma pasa a ser su F3.
 > - **Dioramas**: hechas la fase 0 (medición honesta) y el slice 1 (motor
 >   instanciado, 7 primitivas, recetas de los 5 biomas, canto con masa y
->   sombras de contacto). El resto, pendiente.
+>   sombras de contacto). **Slice 2, primera mitad (2026-09-29)**: lo que
+>   no depende del ojo de Rafa.
+>   - **El fleco se regenera** (fase 4). Cada capa de fleco lleva, en su
+>     misma malla, instancias latentes a lo largo del arco exterior de los
+>     anillos interiores (r 8,5, 5,5 y 2,5).
+>     - Cada una va atada al sector que tiene justo por fuera, y aparece
+>       cuando ese sector cae: el borde nuevo sale vestido.
+>     - Su propio stream (`<id>#edge`): el fleco de fuera no se mueve y
+>       todos los clientes lo ven igual, online incluido.
+>     - En el interior respeta el techo de 0,4 u, así que allí es escombro
+>       bajo.
+>     - Jungle, semilla 7: 82 latentes; al caer el anillo exterior se
+>       destapan 41. Hoja en `.tmp/shots-s2/_borde_ab.png`.
+>   - **Doble superficie del diorama** (fase 6):
+>     - `__devApi.getScatterRecipe` / `setScatterRecipe` /
+>       `getScatterPatch` / `getScatterDensity`;
+>     - el applier `scatter-patch`, con 6 tests;
+>     - y en el studio, sección «Arena», el deslizador de densidad con
+>       «copiar patch» y «aplicar al código».
+>     - `SCATTER_DENSITY` pasa a `arena-scatter-recipes.ts`, para que un
+>       patch toque un solo fichero.
+>
+>   Lo que queda del slice 2: el afinado de recetas y la cohesión (paleta
+>   compartida, elementos que se agrupan y sombras de contacto en los
+>   props), en una sola hoja antes/después.
 > - **No existen** `scripts/arena-metrics.mjs` ni
 >   `scripts/validate-arena-packs.mjs`, que el texto da por escritos y
 >   enganchados a `npm run check`. Quien los necesite, que los escriba.

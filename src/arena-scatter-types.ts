@@ -60,7 +60,8 @@ export interface ScatterLayer {
    *  frontal y salían como arbustos enanos (review M1). Opcional y
    *  aditivo: las capas sin `arc` se reparten por todo el disco. */
   arc?: 'any' | 'back';
-  /** Instancias objetivo ANTES de multiplicar por SCATTER_DENSITY. */
+  /** Instancias objetivo ANTES de multiplicar por SCATTER_DENSITY
+   *  (arena-scatter-recipes.ts). */
   count: number;
   /** Banda radial (u de mundo) para 'disc'; profundidad de franja para 'fringe'. */
   rMin: number;
@@ -107,9 +108,6 @@ export const SCATTER_LIMITS = {
   /** Borde trasero: altura máxima (silueta contra el fondo, no tapa). */
   backMaxH: 2.6,
 } as const;
-
-/** Un solo número para afinar toda la capa sin tocar siete recetas. */
-export const SCATTER_DENSITY = 0.5;
 
 /** Sal del stream de scatter — hermana de SALT_VISUAL en arena-look.ts. */
 export const SALT_SCATTER = 0x5c4f_3a11;

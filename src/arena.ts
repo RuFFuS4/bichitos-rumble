@@ -18,7 +18,7 @@ import { ARENA_LOOK, BACKDROP_LOOK, SALT_VISUAL, CLIFF_RAMP_DEFAULT, type CliffR
 import { ArenaBackdrop, type BackdropStats } from './arena-backdrop';
 import { ArenaScatter, type ScatterStats } from './arena-scatter';
 import { getScatterRecipe } from './arena-scatter-recipes';
-import { SCATTER_DENSITY } from './arena-scatter-types';
+import { SCATTER_DENSITY } from './arena-scatter-recipes';
 import {
   type ArenaPackId,
   layoutPackProps,
@@ -1131,6 +1131,17 @@ export class Arena {
   /** Válvula global de densidad (0..1+). Reconstruye la capa con la misma
    *  semilla y el mismo pack, sin cortar la partida. Doble superficie:
    *  lo llama el lab y `__devApi.setScatterDensity`. */
+  /** Densidad del diorama en uso (SCATTER_DENSITY o la del slider). */
+  get scatterDensityValue(): number {
+    return this.scatterDensity;
+  }
+
+  /** Rehace la capa densa con las recetas en memoria (tras un ajuste en
+   *  vivo de `patchScatterRecipe`), conservando semilla y pack. */
+  refreshScatter(): void {
+    this.rebuildScatter();
+  }
+
   setScatterDensity(density: number): void {
     this.scatterDensity = Math.max(0, density);
     this.rebuildScatter();
@@ -1155,9 +1166,13 @@ export class Arena {
         return i >= 0 ? i : null;
       },
     });
-    // Reconstrucción a mitad de partida: lo que ya cayó, cae.
+    // Reconstrucción a mitad de partida: lo que ya cayó, cae, y el borde
+    // que dejó al descubierto sale vestido.
     for (let i = 0; i < this.alive.length; i++) {
       if (!this.alive[i]) this.scatter.hideFragment(i);
+    }
+    for (let i = 0; i < this.alive.length; i++) {
+      if (!this.alive[i]) this.revealScatterEdges(i);
     }
   }
 
@@ -1508,6 +1523,20 @@ export class Arena {
       startY: g.position.y,
       cx: Math.cos(midA) * midR,
       cz: Math.sin(midA) * midR,
+    });
+    // Dioramas slice 2: el borde que este sector tapaba ya viene vestido.
+    this.revealScatterEdges(idx);
+  }
+
+  /** El fleco latente que tapaba el sector `idx` se destapa sobre los
+   *  sectores de dentro que siguen en pie (con su matriz actual: si uno
+   *  tiembla en el aviso, sale donde está). */
+  private revealScatterEdges(idx: number): void {
+    this.scatter?.revealEdges(idx, (host) => {
+      const g = this.fragmentGroups[host];
+      if (!this.alive[host] || !g || !g.visible) return null;
+      g.updateMatrix();
+      return g.matrix;
     });
   }
 

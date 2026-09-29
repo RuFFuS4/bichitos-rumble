@@ -935,3 +935,116 @@ test('look-patch: hex colours stay hex, and must be valid colours', () => {
   assert.throws(() => applyLookPatch(LOOK_SRC, { 'ARENA_LOOK.tintBase': 1.5 }), /hex colour/);
   assert.throws(() => applyLookPatch(LOOK_SRC, { 'ARENA_LOOK.tintBase': 0x1000000 }), /hex colour/);
 });
+
+// ===========================================================================
+// scatter-patch — recetas del diorama y SCATTER_DENSITY (dioramas slice 2)
+// ===========================================================================
+
+import { applyScatterPatch } from '../tool-patch-core.mjs';
+
+const SCATTER_SRC = [
+  '/** densidad */',
+  'export const SCATTER_DENSITY = 0.5;',
+  '',
+  'export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {',
+  '  jungle: {',
+  '    wind: 2.25,               // brisa',
+  '    layers: [',
+  '      // count: 999 (comentario, no se toca)',
+  '      {',
+  "        id: 'jungle_grass',",
+  '        count: 150,             // briznas',
+  '        scale: [0.18, 0.3],',
+  '        tilt: 14,',
+  '      },',
+  '      {',
+  "        id: 'jungle_rocks',",
+  '        count: 40,',
+  '        scale: [0.4, 0.8],',
+  '        tilt: 6,',
+  '      },',
+  '    ],',
+  '  },',
+  '  coral_beach: {',
+  '    wind: 0.8,',
+  '    layers: [',
+  '      {',
+  "        id: 'jungle_grass',",
+  '        count: 7,',
+  '        scale: [1, 2],',
+  '        tilt: 1,',
+  '      },',
+  '    ],',
+  '  },',
+  '};',
+  '',
+].join('\n');
+
+test('scatter-patch: density, wind, a layer number and a scale pair; comments survive', () => {
+  const out = applyScatterPatch(SCATTER_SRC, {
+    SCATTER_DENSITY: 0.65,
+    'jungle.wind': 2.5,
+    'jungle.jungle_grass.count': 180,
+    'jungle.jungle_rocks.scale': [0.35, 0.9],
+  });
+  assert.match(out, /export const SCATTER_DENSITY = 0\.65;/);
+  assert.match(out, /wind: 2\.5,               \/\/ brisa/);
+  assert.match(out, /count: 180,             \/\/ briznas/);
+  assert.match(out, /id: 'jungle_rocks',\n        count: 40,\n        scale: \[0\.35, 0\.9\],/);
+  // Lo que no se pidió, igual: el comentario, la otra capa y el otro pack
+  // (que reutiliza un id de capa) no se tocan.
+  assert.match(out, /\/\/ count: 999 \(comentario, no se toca\)/);
+  assert.match(out, /scale: \[0\.18, 0\.3\],/);
+  assert.match(out, /wind: 0\.8,/);
+  assert.match(out, /count: 7,/);
+});
+
+test('scatter-patch: the same layer id in another pack is its own block', () => {
+  const out = applyScatterPatch(SCATTER_SRC, { 'coral_beach.jungle_grass.count': 9 });
+  assert.match(out, /count: 9,/);
+  assert.match(out, /count: 150,/);
+});
+
+test('scatter-patch: idempotent on second apply', () => {
+  const data = { SCATTER_DENSITY: 0.7, 'jungle.jungle_grass.scale': [0.2, 0.33] };
+  const once = applyScatterPatch(SCATTER_SRC, data);
+  assert.equal(applyScatterPatch(once, data), once);
+});
+
+test('scatter-patch: unknown pack/layer/field and type mismatch throw, never create', () => {
+  assert.throws(() => applyScatterPatch(SCATTER_SRC, { 'desert.wind': 1 }), /pack 'desert' not found/);
+  assert.throws(() => applyScatterPatch(SCATTER_SRC, { 'jungle.nope.count': 1 }), /layer 'nope' found 0 times/);
+  assert.throws(() => applyScatterPatch(SCATTER_SRC, { 'jungle.jungle_grass.rMin': 1 }), /not found/);
+  assert.throws(() => applyScatterPatch(SCATTER_SRC, { 'jungle.jungle_grass.scale': 1 }), /not a plain number/);
+  assert.throws(() => applyScatterPatch(SCATTER_SRC, { 'jungle.jungle_grass.count': [1, 2] }), /pair/);
+});
+
+test('scatter-patch: validate accepts the three key shapes and rejects junk', () => {
+  assert.deepEqual(validateToolPatch({ tool: 'scatter-patch', version: 1, data: {
+    SCATTER_DENSITY: 0.6, 'jungle.wind': 2, 'jungle.jungle_grass.count': 10, 'jungle.jungle_grass.scale': [0.1, 0.2],
+  } }), []);
+  assert.ok(validateToolPatch({ tool: 'scatter-patch', version: 1, data: { SCATTER_DENSITY: -1 } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'scatter-patch', version: 1, data: { 'jungle.jungle_grass.colors': 1 } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'scatter-patch', version: 1, data: { 'jungle.jungle_grass.scale': 0.2 } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'scatter-patch', version: 1, data: { 'jungle.jungle_grass.count': NaN } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'scatter-patch', version: 1, data: { 'jungle': 1 } }).length > 0);
+});
+
+test('scatter-patch: against the REAL arena-scatter-recipes.ts, round-trips', () => {
+  const real = readFileSync(path.join(here, '../../src/arena-scatter-recipes.ts'), 'utf8');
+  const data = {
+    SCATTER_DENSITY: 0.6,
+    'jungle.wind': 2.3,
+    'jungle.jungle_grass_short.count': 160,
+    'frozen_tundra.tundra_fringe_ice_blocks.scale': [0.3, 0.75],
+  };
+  const out = applyScatterPatch(real, data);
+  const lf = out.replace(/\r\n/g, '\n');
+  assert.match(lf, /export const SCATTER_DENSITY = 0\.6;/);
+  assert.match(lf, /id: 'jungle_grass_short',[\s\S]{0,80}count: 160,/);
+  assert.match(lf, /id: 'tundra_fringe_ice_blocks',[\s\S]{0,200}scale: \[0\.3, 0\.75\],/);
+  assert.equal(applyScatterPatch(out, data), out);
+  const a = real.replace(/\r\n/g, '\n').split('\n'), b = lf.split('\n');
+  assert.equal(a.length, b.length);
+  assert.equal(a.filter((l, i) => l !== b[i]).length, 4);
+});

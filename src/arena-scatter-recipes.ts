@@ -50,7 +50,12 @@
 // ---------------------------------------------------------------------------
 
 import type { ArenaPackId } from './arena-decorations';
-import type { ScatterRecipe } from './arena-scatter-types';
+import type { ScatterLayer, ScatterRecipe } from './arena-scatter-types';
+
+/** Un solo número para afinar toda la capa sin tocar siete recetas. Vive
+ *  aquí, con las recetas, para que un `scatter-patch` toque un solo
+ *  fichero (dioramas slice 2). */
+export const SCATTER_DENSITY = 0.5;
 
 export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
 
@@ -929,4 +934,76 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
  *  no hay fallback que inventar: cada pack tiene la suya. */
 export function getScatterRecipe(packId: ArenaPackId): ScatterRecipe {
   return SCATTER_RECIPES[packId];
+}
+
+// --- Afinado en vivo y scatter-patch (dioramas slice 2) --------------------------
+//
+// Doble superficie: `__devApi.setScatterRecipe` cambia estas recetas en
+// memoria y rehace la capa; `scatterPatchData` saca lo que diverge de lo
+// escrito aquí como un `scatter-patch` (scripts/tool-patch-core.mjs), que el
+// studio copia o aplica al código.
+
+/** Campos de una capa que se afinan en vivo y viajan en un scatter-patch
+ *  (`scale` es el par [min, max]). Paletas, primitiva, ancla y yaw cambian
+ *  la naturaleza de la capa: se tocan a mano. */
+export const SCATTER_TUNABLE_FIELDS = [
+  'count', 'rMin', 'rMax', 'clearCenterR', 'clusterCount', 'clusterRadius', 'tilt', 'colorJitter', 'scale',
+] as const;
+type TunableField = (typeof SCATTER_TUNABLE_FIELDS)[number];
+
+/** Las recetas tal como están escritas, antes de cualquier ajuste en vivo. */
+const SCATTER_BASELINE: Record<string, ScatterRecipe> = JSON.parse(JSON.stringify(SCATTER_RECIPES));
+
+/**
+ * Cambia en memoria la receta de un bioma. Claves: `wind` o
+ * `<layerId>.<campo>` con un campo de `SCATTER_TUNABLE_FIELDS`. Números
+ * finitos (≥ 0 salvo el viento); `scale`, un par con min ≤ max.
+ */
+export function patchScatterRecipe(packId: ArenaPackId, patch: Record<string, unknown>): { applied: string[]; rejected: string[] } {
+  const applied: string[] = [];
+  const rejected: string[] = [];
+  const recipe = SCATTER_RECIPES[packId];
+  if (!recipe) return { applied, rejected: Object.keys(patch) };
+  const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  for (const [key, v] of Object.entries(patch)) {
+    if (key === 'wind') {
+      if (finite(v)) { recipe.wind = v; applied.push(key); } else rejected.push(key);
+      continue;
+    }
+    const [layerId, field] = key.split('.');
+    const layer = recipe.layers.find((l) => l.id === layerId);
+    if (!layer || !(SCATTER_TUNABLE_FIELDS as readonly string[]).includes(field ?? '')) { rejected.push(key); continue; }
+    if (field === 'scale') {
+      const ok = Array.isArray(v) && v.length === 2 && v.every(finite) && v[0] >= 0 && v[0] <= v[1];
+      if (ok) { layer.scale = [v[0], v[1]]; applied.push(key); } else rejected.push(key);
+      continue;
+    }
+    if (!finite(v) || v < 0) { rejected.push(key); continue; }
+    (layer as unknown as Record<string, number>)[field as Exclude<TunableField, 'scale'>] = v;
+    applied.push(key);
+  }
+  return { applied, rejected };
+}
+
+/** Lo que diverge de las recetas escritas (y de SCATTER_DENSITY), en el
+ *  formato de datos de un scatter-patch. Vacío si no hay nada que llevar
+ *  al código. */
+export function scatterPatchData(density: number): Record<string, number | [number, number]> {
+  const out: Record<string, number | [number, number]> = {};
+  if (density !== SCATTER_DENSITY) out.SCATTER_DENSITY = density;
+  for (const [packId, recipe] of Object.entries(SCATTER_RECIPES)) {
+    const base = SCATTER_BASELINE[packId];
+    if (!base) continue;
+    if (recipe.wind !== base.wind) out[`${packId}.wind`] = recipe.wind;
+    for (const layer of recipe.layers) {
+      const bl = base.layers.find((l) => l.id === layer.id);
+      if (!bl) continue;
+      for (const f of SCATTER_TUNABLE_FIELDS) {
+        const cur = layer[f as keyof ScatterLayer];
+        const was = bl[f as keyof ScatterLayer];
+        if (JSON.stringify(cur) !== JSON.stringify(was)) out[`${packId}.${layer.id}.${f}`] = cur as number | [number, number];
+      }
+    }
+  }
+  return out;
 }

@@ -1,5 +1,34 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Arena] Dioramas slice 2 (1/2): cada colapso descubre un borde ya vestido, y el diorama tiene doble superficie
+
+Encargo de GENERAL: primero lo que no depende del ojo de Rafa.
+
+- **El fleco se regenera.** Cada capa de fleco lleva, en su misma malla
+  (0 draws de más), instancias latentes a lo largo del arco exterior de
+  los anillos interiores. Cada una va atada al sector que tiene justo por
+  fuera y aparece cuando ese sector cae, en vez del corte pelado de
+  antes. Va con su propio stream: el fleco exterior no se mueve y todos
+  los clientes lo ven igual, online incluido. En el interior respeta el
+  techo de 0,4 u. Antes/después en `.tmp/shots-s2/_borde_ab.png`.
+- **Doble superficie del diorama:** `__devApi.setScatterRecipe` /
+  `getScatterRecipe` / `getScatterPatch` / `getScatterDensity`; el
+  applier `scatter-patch` (6 tests); y en el studio, sección «Arena», el
+  deslizador de densidad con «copiar patch» y «aplicar al código»
+  (comprobado en el navegador: la vista previa del dev server da el diff
+  justo). `SCATTER_DENSITY` se muda a `arena-scatter-recipes.ts`.
+
+Tests: `arena-scatter` gana dos (el fleco nace oculto y solo destapa el
+borde que descubre; con el anfitrión caído sigue oculto), y el de techos
+comprueba también el fleco destapado. `test:sim` 345/345, `check` (tool
+patch 78/78) y golden 3/3 sin regenerar.
+
+Fuera del carril, con el encargo de GENERAL y diff mínimo:
+- `dev-api.ts`: cinco métodos al final.
+- `tool-patch-core.mjs` + su test y `apply-tool-patch.mjs`: solo añadir.
+- `tool-storage.ts`: el tipo `ScatterPatch`.
+- `sidebar.ts`: el panel del diorama en la sección «Arena».
+
 ## 2026-09-29 — [Arena] Fondo v2, F4: el cielo se traga a quien cae, se van el mar y la foto, y el cielo se mide sin navegador
 
 Cierra el fondo v2 (plan en `docs/DIORAMAS.md`, «Estado de la F4»).

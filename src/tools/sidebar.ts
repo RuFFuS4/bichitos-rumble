@@ -35,6 +35,7 @@ import {
   type FeelPatch,
   type AnimPersonalityPatch,
   type AbilityPatch,
+  type ScatterPatch,
 } from './tool-storage';
 import { FEEL } from '../gamefeel';
 import { applyPatchToSource } from './apply-ui';
@@ -728,6 +729,73 @@ export function mountLabSidebar(devApi: DevApi): void {
     const info = devApi.getArenaInfo();
     if (info) navigator.clipboard.writeText(String(info.seed)).catch(() => {});
   });
+
+  // Diorama (ARENA, dioramas slice 2): la válvula global de densidad de la
+  // capa densa, en vivo, y su scatter-patch. La superficie programática
+  // es la misma: __devApi.setScatterDensity / setScatterRecipe /
+  // getScatterPatch. Las recetas por capa se afinan desde ahí; aquí solo
+  // va el número que las mueve todas.
+  tinyLabel(arena, 'Diorama');
+  const scatterRow = row(arena);
+  const scatterLabel = document.createElement('label');
+  scatterLabel.textContent = 'Density';
+  scatterLabel.title = 'SCATTER_DENSITY: multiplica el count de todas las capas del diorama';
+  scatterRow.appendChild(scatterLabel);
+  const scatterSlider = document.createElement('input');
+  scatterSlider.type = 'range';
+  scatterSlider.min = '0';
+  scatterSlider.max = '1.5';
+  scatterSlider.step = '0.05';
+  scatterSlider.style.flex = '1';
+  const scatterNum = document.createElement('input');
+  scatterNum.type = 'number';
+  scatterNum.step = '0.05';
+  scatterNum.style.cssText = 'width: 58px; text-align: right;';
+  scatterRow.appendChild(scatterSlider);
+  scatterRow.appendChild(scatterNum);
+  const scatterInfo = document.createElement('div');
+  scatterInfo.className = 'lab-info';
+  arena.appendChild(scatterInfo);
+  const refreshScatterInfo = (): void => {
+    const st = devApi.getScatterStats();
+    const patch = devApi.getScatterPatch();
+    const pending = Object.keys(patch.data).length;
+    scatterInfo.textContent = st
+      ? `${st.instances} inst · ${st.drawCalls} draws · ${(st.triangles / 1000).toFixed(1)}k tris`
+        + (pending ? ` · ${pending} por llevar al código` : '')
+      : '(sin diorama: empieza una partida)';
+    scatterLabel.style.color = pending ? '#ffdc5c' : '';
+  };
+  const applyDensity = (v: number): void => {
+    if (!Number.isFinite(v) || v < 0) return;
+    devApi.setScatterDensity(v);
+    scatterSlider.value = String(v);
+    scatterNum.value = String(v);
+    refreshScatterInfo();
+  };
+  scatterSlider.addEventListener('input', () => applyDensity(parseFloat(scatterSlider.value)));
+  scatterNum.addEventListener('change', () => applyDensity(parseFloat(scatterNum.value)));
+  const syncDensity = (): void => {
+    const d = devApi.getScatterDensity();
+    scatterSlider.value = String(d);
+    scatterNum.value = String(d);
+    refreshScatterInfo();
+  };
+  syncDensity();
+  const scatterBtns = row(arena);
+  const buildScatterPatch = (): ScatterPatch =>
+    makeToolPatch<ScatterPatch>('scatter-patch', devApi.getScatterPatch().data);
+  button(scatterBtns, '📦 Copy patch', async () => {
+    const patch = buildScatterPatch();
+    if (Object.keys(patch.data).length === 0) { scatterInfo.textContent = '(nada diverge: mueve la densidad o usa setScatterRecipe)'; return; }
+    await copyPatchToClipboard(patch);
+    scatterInfo.textContent = `📦 scatter-patch copiado (${Object.keys(patch.data).length} valores)`;
+  });
+  button(scatterBtns, '⚡ Apply to source', async () => {
+    const patch = buildScatterPatch();
+    if (Object.keys(patch.data).length === 0) { scatterInfo.textContent = '(nada diverge: mueve la densidad o usa setScatterRecipe)'; return; }
+    await applyPatchToSource(patch, { onBeforeApply: () => {}, onApplyFailed: () => {} });
+  }, 'primary');
 
   // =======================================================================
   // GROUP: LIVE CONTROL ---------------------------------------------------
@@ -1840,6 +1908,7 @@ export function mountLabSidebar(devApi: DevApi): void {
   }
 
   function refreshArenaPanel(): void {
+    syncDensity();
     const info = devApi.getArenaInfo();
     if (!info) {
       arenaInfoEl.textContent = '(no arena — start a match)';

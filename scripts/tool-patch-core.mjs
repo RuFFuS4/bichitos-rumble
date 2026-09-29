@@ -70,6 +70,7 @@ export const SUPPORTED_VERSIONS = {
   'anim-personality': [1],
   'ability-patch':    [1],
   'look-patch':       [1],
+  'scatter-patch':    [1],
 };
 
 export const targetByTool = {
@@ -80,7 +81,15 @@ export const targetByTool = {
   'anim-personality': 'src/animation-personality-overrides.ts',
   'ability-patch':    'src/abilities.ts',
   'look-patch':       'src/arena-look.ts',
+  'scatter-patch':    'src/arena-scatter-recipes.ts',
 };
+
+/** scatter-patch: campos numéricos de una capa que se pueden reescribir
+ *  (`scale` es el par [min, max]). Paletas, primitiva, ancla y yaw no:
+ *  cambian la naturaleza de la capa y se tocan a mano. */
+const SCATTER_LAYER_FIELDS = [
+  'count', 'rMin', 'rMax', 'clearCenterR', 'clusterCount', 'clusterRadius', 'tilt', 'colorJitter', 'scale',
+];
 
 /** look-patch: los records de src/arena-look.ts que se pueden reescribir. */
 const LOOK_RECORDS = ['ARENA_LOOK', 'BACKDROP_LOOK'];
@@ -199,6 +208,23 @@ export function validateToolPatch(patch) {
         errors.push(`look-patch: "${path}" is not a finite number or a boolean`);
       }
     }
+  } else if (tool === 'scatter-patch') {
+    for (const [path, v] of Object.entries(data)) {
+      const parts = path.split('.');
+      const tuple = Array.isArray(v) && v.length === 2 && v.every(isFinite_);
+      if (path === 'SCATTER_DENSITY') {
+        if (!isFinite_(v) || v < 0) errors.push(`scatter-patch: SCATTER_DENSITY must be a finite number ≥ 0`);
+      } else if (parts.length === 2 && IDENT_RE.test(parts[0]) && parts[1] === 'wind') {
+        if (!isFinite_(v)) errors.push(`scatter-patch: "${path}" is not a finite number`);
+      } else if (parts.length === 3 && IDENT_RE.test(parts[0]) && /^[A-Za-z0-9_]+$/.test(parts[1])
+        && SCATTER_LAYER_FIELDS.includes(parts[2])) {
+        if (parts[2] === 'scale' ? !tuple : !isFinite_(v)) {
+          errors.push(`scatter-patch: "${path}" must be ${parts[2] === 'scale' ? 'a [min, max] pair' : 'a finite number'}`);
+        }
+      } else {
+        errors.push(`scatter-patch: key "${path}" is not SCATTER_DENSITY, pack.wind or pack.layerId.field (${SCATTER_LAYER_FIELDS.join(', ')})`);
+      }
+    }
   } else if (tool === 'anim-personality') {
     for (const [name, fields] of Object.entries(data)) {
       checkIdent('anim-personality: critter name', name);
@@ -262,6 +288,7 @@ export function applyPatch(source, patch) {
   if (patch.tool === 'anim-personality') return applyAnimPersonality(source, patch.data);
   if (patch.tool === 'ability-patch') return applyAbilityPatch(source, patch.data);
   if (patch.tool === 'look-patch')   return applyLookPatch(source, patch.data);
+  if (patch.tool === 'scatter-patch') return applyScatterPatch(source, patch.data);
   throw new Error(`unknown tool: ${patch.tool}`);
 }
 
@@ -409,6 +436,111 @@ export function applyLookPatch(source, data) {
     out = out.slice(0, numStart) + text + out.slice(numEnd);
   }
   return out;
+}
+
+// ===========================================================================
+// scatter-patch — recetas del diorama y SCATTER_DENSITY (dioramas slice 2)
+// ===========================================================================
+
+/**
+ * Reescribe src/arena-scatter-recipes.ts: lo que el studio y
+ * `__devApi.setScatterDensity` / `setScatterRecipe` afinan en vivo.
+ * Claves:
+ *   · "SCATTER_DENSITY"                  → el número de `export const`;
+ *   · "<pack>.wind"                      → el viento del bioma;
+ *   · "<pack>.<layerId>.<campo>"         → un campo de la capa con ese
+ *     `id` (`scale` es el par [min, max]).
+ * Como feel-patch: solo cambia el valor, la coma y el comentario de
+ * afinado sobreviven byte a byte, nunca crea claves ni capas, y un número
+ * solo sustituye a un número (un par a un par).
+ */
+export function applyScatterPatch(source, data) {
+  let out = source;
+  for (const path of Object.keys(data).sort()) {
+    const value = data[path];
+    const mask = codeMask(out);
+    if (path === 'SCATTER_DENSITY') {
+      const hits = [...out.matchAll(/export const SCATTER_DENSITY\s*=\s*(-?\d+(?:\.\d+)?)/g)]
+        .filter((m) => mask[m.index] === M_CODE);
+      if (hits.length !== 1) throw new Error(`scatter-patch: SCATTER_DENSITY export found ${hits.length} times`);
+      const end = hits[0].index + hits[0][0].length;
+      out = out.slice(0, end - hits[0][1].length) + formatNumber(value) + out.slice(end);
+      continue;
+    }
+    const [pack, layerOrWind, field] = path.split('.');
+    const rec = out.indexOf('export const SCATTER_RECIPES');
+    if (rec < 0) throw new Error('scatter-patch: SCATTER_RECIPES export not found');
+    let recOpen = -1;
+    for (let i = out.indexOf('=', rec); i < out.length; i++) {
+      if (mask[i] === M_CODE && out[i] === '{') { recOpen = i; break; }
+    }
+    const recClose = recOpen < 0 ? -1 : matchBraceMasked(out, recOpen, mask);
+    if (recClose < 0) throw new Error('scatter-patch: SCATTER_RECIPES braces not found');
+    const packOpen = findKeyedOpen(out, mask, recOpen, recClose, pack);
+    if (packOpen < 0) throw new Error(`scatter-patch: pack '${pack}' not found in SCATTER_RECIPES`);
+    const packClose = matchBraceMasked(out, packOpen, mask);
+    if (field === undefined) {
+      out = replaceLeaf(out, mask, packOpen, packClose, layerOrWind, value, path);
+      continue;
+    }
+    const idRe = new RegExp(`\\bid:\\s*(['"])${escapeRegex(layerOrWind)}\\1`, 'g');
+    const ids = [...out.slice(packOpen, packClose).matchAll(idRe)]
+      .map((m) => packOpen + m.index).filter((i) => mask[i] === M_CODE);
+    if (ids.length !== 1) throw new Error(`scatter-patch: layer '${layerOrWind}' found ${ids.length} times in '${pack}'`);
+    // El objeto de la capa: la llave sin cerrar más cercana hacia atrás.
+    let objOpen = -1;
+    for (let i = ids[0], d = 0; i > packOpen; i--) {
+      if (mask[i] !== M_CODE) continue;
+      if (out[i] === '}') d++;
+      else if (out[i] === '{') { if (d === 0) { objOpen = i; break; } d--; }
+    }
+    if (objOpen < 0) throw new Error(`scatter-patch: object of layer '${layerOrWind}' not found`);
+    out = replaceLeaf(out, mask, objOpen, matchBraceMasked(out, objOpen, mask), field, value, path);
+  }
+  return out;
+}
+
+/** Índice de la `{` de `key: {` al primer nivel de [open, close]. */
+function findKeyedOpen(text, mask, open, close, key) {
+  const re = new RegExp(`(^|\\n)([ \\t]*)${escapeRegex(key)}:\\s*\\{`, 'g');
+  const body = text.slice(open, close);
+  const hits = [...body.matchAll(re)].filter((m) => {
+    const k = open + m.index + m[1].length + m[2].length;
+    return mask[k] === M_CODE && braceDepth(text, mask, open, k) === 1;
+  });
+  if (hits.length !== 1) return -1;
+  return open + hits[0].index + hits[0][0].length - 1;
+}
+
+/** Profundidad de llaves (solo código) de `idx` contando desde `open`. */
+function braceDepth(text, mask, open, idx) {
+  let d = 0;
+  for (let i = open; i < idx; i++) {
+    if (mask[i] !== M_CODE) continue;
+    if (text[i] === '{') d++;
+    else if (text[i] === '}') d--;
+  }
+  return d;
+}
+
+/** Cambia el valor de `key:` al primer nivel del objeto [open, close]. */
+function replaceLeaf(text, mask, open, close, key, value, path) {
+  const tuple = Array.isArray(value);
+  const num = '-?\\d+(?:\\.\\d+)?';
+  const valueRe = tuple ? `(\\[\\s*${num}\\s*,\\s*${num}\\s*\\])` : `(${num})`;
+  const re = new RegExp(`(^|\\n)([ \\t]*)${escapeRegex(key)}:[ \\t]*${valueRe}(?=[ \\t]*(?:,|//|/\\*|\\r|\\n|$))`, 'g');
+  const body = text.slice(open, close);
+  const hits = [...body.matchAll(re)].filter((m) => {
+    const k = open + m.index + m[1].length + m[2].length;
+    return mask[k] === M_CODE && braceDepth(text, mask, open, k) === 1;
+  });
+  if (hits.length === 0) throw new Error(`scatter-patch: '${path}' not found (or its value is not a plain ${tuple ? '[min, max] pair' : 'number'})`);
+  if (hits.length > 1) throw new Error(`scatter-patch: '${path}' matches ${hits.length} lines — refusing to guess`);
+  const m = hits[0];
+  const start = open + m.index + m[0].length - m[3].length;
+  const end = open + m.index + m[0].length;
+  const txt = tuple ? `[${formatNumber(value[0])}, ${formatNumber(value[1])}]` : formatNumber(value);
+  return text.slice(0, start) + txt + text.slice(end);
 }
 
 // ===========================================================================

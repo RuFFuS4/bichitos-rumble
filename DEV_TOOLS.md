@@ -424,6 +424,22 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     test:sim` incluye `tests/sim/arena-scatter.test.ts` (determinismo
     byte a byte, techos de altura, coste). Las sombras de contacto son
     `src/blob-shadows.ts`, un InstancedMesh para todos los critters.
+    - **Slice 2** (2026-09-29): `__devApi.getScatterRecipe(pack)`,
+      `setScatterRecipe(pack, { wind, '<layerId>.<campo>': v })` (campos
+      en `SCATTER_TUNABLE_FIELDS`; rehace la capa si es el bioma en juego
+      y devuelve `{applied, rejected, stats}`), `getScatterDensity()` y
+      `getScatterPatch()`, que da lo que diverge de lo escrito como un
+      `scatter-patch`.
+    - El applier `scatter-patch` (`npm run apply-tool-patch --
+      --patch=x.json`) reescribe `src/arena-scatter-recipes.ts`. Claves:
+      `SCATTER_DENSITY`, `<pack>.wind` y `<pack>.<layerId>.<campo>`
+      (`scale` es el par `[min, max]`). Nunca crea claves ni capas.
+    - En el studio (`/tools.html`, sección «Arena»), el deslizador
+      «Density» mueve `SCATTER_DENSITY` en vivo. «📦 Copy patch» y «⚡ Apply
+      to source» llevan al código la densidad y lo afinado con
+      `setScatterRecipe`.
+    - El fleco se regenera: `getScatterStats().layers[i].latent` cuenta el
+      fleco que aún espera a que caiga el sector de fuera.
   - **Instancias de prueba mudas** (directiva de Rafa 2026-09-07):
     `scripts/lib/headless-browser.mjs` (`launchMutedBrowser`,
     `muteGameAudio`, `newMutedPage`). Silencia por dos vías —

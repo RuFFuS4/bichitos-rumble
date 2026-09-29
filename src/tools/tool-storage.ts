@@ -155,7 +155,7 @@ export function storageDivergesFromCode(key: string, codeRef: unknown): boolean 
 // in the lab are emitted. The apply-script merges in-place — entries
 // not in `data` are left untouched in the source file.
 
-export type ToolName = 'calibrate' | 'anim-lab' | 'decor-editor' | 'feel-patch' | 'anim-personality' | 'ability-patch';
+export type ToolName = 'calibrate' | 'anim-lab' | 'decor-editor' | 'feel-patch' | 'anim-personality' | 'ability-patch' | 'scatter-patch';
 
 export interface ToolPatchBase {
   tool: ToolName;
@@ -329,7 +329,22 @@ export interface AbilityPatch extends ToolPatchBase {
   data: Record<string, Record<string, number>>;
 }
 
-export type ToolPatch = CalibratePatch | AnimLabPatch | DecorEditorPatch | FeelPatch | AnimPersonalityPatch | AbilityPatch;
+/**
+ * `scatter-patch`: el diorama afinado en vivo (ARENA, dioramas slice 2).
+ *
+ * Va a src/arena-scatter-recipes.ts. Claves "SCATTER_DENSITY",
+ * "<pack>.wind" y "<pack>.<layerId>.<campo>" (`scale` es el par
+ * [min, max]); solo lo que diverge de lo escrito
+ * (`__devApi.getScatterPatch()`). Como feel-patch: reescribe el valor en
+ * su sitio y nunca crea claves ni capas.
+ */
+export interface ScatterPatch extends ToolPatchBase {
+  tool: 'scatter-patch';
+  version: 1;
+  data: Record<string, number | [number, number]>;
+}
+
+export type ToolPatch = CalibratePatch | AnimLabPatch | DecorEditorPatch | FeelPatch | AnimPersonalityPatch | AbilityPatch | ScatterPatch;
 
 /** Build a fresh ToolPatch envelope with `generated` set to now. The
  *  caller fills `data`. `version` defaults to 1; pass 2 for anim-lab

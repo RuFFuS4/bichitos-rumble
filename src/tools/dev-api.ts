@@ -30,6 +30,7 @@ import {
 } from '../input';
 import { ARENA_LOOK, BACKDROP_LOOK } from '../arena-look';
 import { getPackSky, patchPackSky, type ArenaPackId } from '../arena-decorations';
+import { getScatterRecipe, patchScatterRecipe, scatterPatchData } from '../arena-scatter-recipes';
 import type { BackdropStats } from '../arena-backdrop';
 import { CAPTURE_POSES, type CameraPose } from '../camera';
 import { setCameraPoseOverride } from '../scene-atmosphere';
@@ -1259,6 +1260,32 @@ export class DevApi {
       look[key] = value;
     }
     return { ...FEEL.look };
+  }
+
+  // --- Diorama: recetas en vivo y scatter-patch (ARENA, dioramas slice 2) ---
+
+  /** Densidad del diorama en uso (SCATTER_DENSITY o la del slider). */
+  getScatterDensity(): number {
+    return this.game.arena.scatterDensityValue;
+  }
+
+  /** Receta del diorama de un bioma (copia: mutarla no hace nada). */
+  getScatterRecipe(packId: ArenaPackId): Record<string, unknown> {
+    return JSON.parse(JSON.stringify(getScatterRecipe(packId)));
+  }
+
+  /** Afina la receta en memoria (`wind` o `<layerId>.<campo>`, ver
+   *  SCATTER_TUNABLE_FIELDS) y, si es el bioma en juego, rehace la capa. */
+  setScatterRecipe(packId: ArenaPackId, patch: Record<string, unknown>) {
+    const r = patchScatterRecipe(packId, patch);
+    if (r.applied.length && this.game.arena.getCurrentPackId() === packId) this.game.arena.refreshScatter();
+    return { ...r, stats: this.game.arena.scatterStats() };
+  }
+
+  /** Lo que diverge de las recetas escritas y de SCATTER_DENSITY, como un
+   *  `scatter-patch` listo para `npm run apply-tool-patch`. */
+  getScatterPatch(): { tool: 'scatter-patch'; version: 1; data: Record<string, number | [number, number]> } {
+    return { tool: 'scatter-patch', version: 1, data: scatterPatchData(this.game.arena.scatterDensityValue) };
   }
 }
 

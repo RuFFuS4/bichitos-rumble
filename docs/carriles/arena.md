@@ -46,7 +46,10 @@ el orden de trabajo.
      las tres hojas.
    - Lo que queda del fondo: si Rafa aprueba la F3, borrar `legacyLight`
      y `LEGACY_LIGHT`; si no, ponerlo a `true` por defecto.
-2. **Dioramas slice 2**: afinar recetas sobre capturas (grietas de hielo,
+2. **Dioramas slice 2** — **primera mitad HECHA (2026-09-29)**: el fleco
+   que se regenera al caer un sector, y la doble superficie
+   (`scatter-patch`, `setScatterRecipe`, densidad en el studio). Detalle
+   en la cabecera de DIORAMAS. Lo que queda: afinar recetas sobre capturas (grietas de hielo,
    escala de acentos), fleco del borde que se regenera al caer un sector,
    viento animado barato, recomponer los 73 props autorados,
    `SCATTER_DENSITY` en el studio y applier ToolPatch `scatter-patch`

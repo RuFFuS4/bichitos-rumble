@@ -25,8 +25,8 @@ import { generateArenaLayout, pointInFragment } from '../../src/arena-fragments'
 import { ARENA_PACK_IDS, type ArenaPackId } from '../../src/arena-decorations';
 import { ArenaScatter } from '../../src/arena-scatter';
 import { PRIMITIVE_META } from '../../src/arena-scatter-geometry';
-import { getScatterRecipe } from '../../src/arena-scatter-recipes';
-import { SCATTER_DENSITY, SCATTER_LIMITS } from '../../src/arena-scatter-types';
+import { SCATTER_DENSITY, getScatterRecipe } from '../../src/arena-scatter-recipes';
+import { SCATTER_LIMITS } from '../../src/arena-scatter-types';
 
 /** El mismo criterio de anfitrión que usa Arena.findFragmentAt en su pase
  *  estricto: el fragmento que contiene el punto. */
@@ -48,6 +48,22 @@ function buildFor(packId: ArenaPackId, seed: number, density = SCATTER_DENSITY):
   const scatter = new ArenaScatter();
   scatter.build({ layout, recipe: getScatterRecipe(packId), seed, density, hostOf });
   return scatter;
+}
+
+/** Instancia oculta (escala 0): el fleco latente antes de que un colapso
+ *  lo destape. `decompose` de una matriz nula devuelve escala 1, así que
+ *  hay que saltarla a mano. */
+function isHidden(mesh: THREE.InstancedMesh, i: number): boolean {
+  const a = mesh.instanceMatrix.array;
+  for (let k = i * 16; k < i * 16 + 16; k++) if (a[k] !== 0) return false;
+  return true;
+}
+
+/** Destapa todo el fleco latente, como si hubieran caído todos los
+ *  sectores (anfitriones en su sitio: matriz identidad). */
+function revealAll(scatter: ArenaScatter, fragments: number): void {
+  const id = new THREE.Matrix4();
+  for (let f = 0; f < fragments; f++) scatter.revealEdges(f, () => id);
 }
 
 /** Capas instanciadas (sin los discos de sombra, que van aparte). */
@@ -98,16 +114,18 @@ describe('arena scatter — techos de gameplay', () => {
   const scl = new THREE.Vector3();
   const m = new THREE.Matrix4();
 
-  it('ninguna instancia supera el techo de altura de su zona, en 5 biomas × 3 semillas', () => {
+  it('ninguna instancia supera el techo de altura de su zona, en 5 biomas × 3 semillas (con el fleco latente destapado)', () => {
     for (const packId of ARENA_PACK_IDS) {
       for (const seed of [1, 42, 501]) {
         const scatter = buildFor(packId, seed);
+        revealAll(scatter, generateArenaLayout(seed).fragments.length);
         for (const mesh of layerMeshes(scatter)) {
           const kind = mesh.name.replace('scatter:', '');
           const layer = getScatterRecipe(packId).layers.find(l => l.id === kind);
           expect(layer, `capa ${kind} no está en la receta de ${packId}`).toBeDefined();
           const meta = PRIMITIVE_META[layer!.primitive];
           for (let i = 0; i < mesh.count; i++) {
+            if (isHidden(mesh, i)) continue;
             mesh.getMatrixAt(i, m);
             m.decompose(pos, quat, scl);
             const r = Math.hypot(pos.x, pos.z);
@@ -131,12 +149,73 @@ describe('arena scatter — techos de gameplay', () => {
         const kind = mesh.name.replace('scatter:', '');
         const layer = getScatterRecipe(packId).layers.find(l => l.id === kind)!;
         for (let i = 0; i < mesh.count; i++) {
+          if (isHidden(mesh, i)) continue;
           mesh.getMatrixAt(i, m);
           m.decompose(pos, quat, scl);
           expect(Math.hypot(pos.x, pos.z), `${packId}/${kind} #${i}`).toBeGreaterThanOrEqual(layer.clearCenterR - 1e-6);
         }
       }
     }
+  });
+});
+
+describe('arena scatter — el fleco se regenera (slice 2)', () => {
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scl = new THREE.Vector3();
+  const m = new THREE.Matrix4();
+
+  it('el fleco latente nace oculto y un colapso destapa solo el borde que descubre', () => {
+    const seed = 7;
+    const { layout, hostOf } = makeHostOf(seed);
+    const scatter = new ArenaScatter();
+    scatter.build({ layout, recipe: getScatterRecipe('jungle'), seed, density: SCATTER_DENSITY, hostOf });
+    const latent0 = scatter.stats().layers.reduce((a, l) => a + l.latent, 0);
+    expect(latent0, 'jungle lleva fleco latente').toBeGreaterThan(0);
+
+    // Cae un sector de la banda exterior: se destapa fleco, todo en la
+    // banda de dentro y pegado a su arco exterior (r ≈ 8,5).
+    const outerBand = Math.max(...layout.fragments.map(f => f.band));
+    const fallen = layout.fragments.findIndex(f => f.band === outerBand);
+    const id = new THREE.Matrix4();
+    const before = new Map(layerMeshes(scatter).map(mesh => [mesh.name, Float32Array.from(mesh.instanceMatrix.array)]));
+    scatter.revealEdges(fallen, () => id);
+    const latent1 = scatter.stats().layers.reduce((a, l) => a + l.latent, 0);
+    expect(latent1).toBeLessThan(latent0);
+    const f = layout.fragments[fallen]!;
+    let shown = 0;
+    for (const mesh of layerMeshes(scatter)) {
+      const prev = before.get(mesh.name)!;
+      for (let i = 0; i < mesh.count; i++) {
+        const was = prev.slice(i * 16, i * 16 + 16).every(v => v === 0);
+        if (!was || isHidden(mesh, i)) continue;
+        shown++;
+        mesh.getMatrixAt(i, m);
+        m.decompose(pos, quat, scl);
+        const r = Math.hypot(pos.x, pos.z);
+        expect(r).toBeLessThan(f.innerR + 1e-6);
+        expect(r).toBeGreaterThan(f.innerR - 1);
+        // Dentro del arco angular del sector caído (con el desborde del
+        // racimo, que puede pasar un poco al vecino).
+        const host = hostOf(pos.x * (f.innerR + 0.05) / r, pos.z * (f.innerR + 0.05) / r);
+        expect(host, `instancia ${mesh.name} #${i} destapada por ${fallen}`).toBe(fallen);
+      }
+    }
+    expect(shown).toBe(latent0 - latent1);
+    // Destaparlo otra vez no cambia nada.
+    const snap = layerMeshes(scatter).map(mesh => Float32Array.from(mesh.instanceMatrix.array));
+    scatter.revealEdges(fallen, () => id);
+    layerMeshes(scatter).forEach((mesh, k) => expect(Array.from(mesh.instanceMatrix.array)).toEqual(Array.from(snap[k]!)));
+  });
+
+  it('si el anfitrión ya no está en pie, su fleco sigue oculto', () => {
+    const seed = 7;
+    const { layout, hostOf } = makeHostOf(seed);
+    const scatter = new ArenaScatter();
+    scatter.build({ layout, recipe: getScatterRecipe('jungle'), seed, density: SCATTER_DENSITY, hostOf });
+    const latent0 = scatter.stats().layers.reduce((a, l) => a + l.latent, 0);
+    for (let f = 0; f < layout.fragments.length; f++) scatter.revealEdges(f, () => null);
+    expect(scatter.stats().layers.reduce((a, l) => a + l.latent, 0)).toBe(latent0);
   });
 });
 

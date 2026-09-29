@@ -30,6 +30,16 @@
 //      con la matriz del grupo del fragmento y solo se recompone y se
 //      sube ese rango (addUpdateRange). Es lo que hace que la hierba se
 //      vaya CON el suelo en vez de flotar sobre el vacío.
+//
+//   4. El fleco se REGENERA (dioramas slice 2): cada capa 'fringe' lleva,
+//      en la misma malla, instancias LATENTES a lo largo del arco exterior
+//      de los anillos interiores (r 8,5, 5,5 y 2,5), cada una atada al
+//      sector que tiene justo por fuera (su `gate`). Nacen ocultas y
+//      `revealEdges` las enseña cuando ese sector cae: cada colapso
+//      descubre un borde ya vestido. Se construyen al empezar con su
+//      propio stream (`<id>#edge`), así que el fleco exterior no se mueve y
+//      todos los clientes ven lo mismo, online incluido: solo dependen de
+//      qué ha caído.
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
@@ -70,6 +80,9 @@ export const SCATTER_ENGINE = {
   /** Profundidad mínima del fleco desde el arco exterior: r = outerR
    *  exacto cae fuera de pointInFragment por redondeo. */
   fringeMinDepth: 0.02,
+  /** Cuánto por fuera del arco se busca el sector vecino que tapa el
+   *  fleco latente (el que, al caer, lo destapa). */
+  fringeGateProbe: 0.05,
   roughness: 0.9,
 } as const;
 
@@ -91,6 +104,8 @@ export interface ScatterLayerStats {
   drawCalls: number;
   /** Instancias cuya escala se recortó a los techos de SCATTER_LIMITS. */
   clipped: number;
+  /** Fleco latente que aún no ha destapado ningún colapso. */
+  latent: number;
 }
 
 export interface ScatterStats {
@@ -112,6 +127,13 @@ interface LayerRuntime {
   shadowLocal: Float32Array | null;
   /** [start, count] por índice de fragmento, aplanado (2 × fragmentos). */
   ranges: Int32Array;
+  /** Fleco latente (null si la capa no tiene): por instancia, el sector
+   *  que la destapa al caer (−1 = visible desde el principio), su
+   *  anfitrión, si ya se destapó, y el índice gate → instancias. */
+  gates: Int32Array | null;
+  hosts: Int32Array | null;
+  revealed: Uint8Array | null;
+  byGate: Map<number, number[]> | null;
   triangles: number;
   clipped: number;
 }
@@ -128,6 +150,8 @@ interface Candidate {
   g: number;
   b: number;
   host: number;
+  /** Sector que la destapa al caer; −1 = visible desde el principio. */
+  gate: number;
 }
 
 const TWO_PI = Math.PI * 2;
@@ -177,9 +201,29 @@ function heightCeiling(r: number, z: number): number {
  * banda + 1) haya caído — así cada colapso descubre un borde ya vestido.
  */
 function fringeHosts(layout: ArenaLayout): FragmentDef[] {
+  const outerBand = maxBand(layout);
+  return layout.fragments.filter(f => !f.immune && f.band === outerBand);
+}
+
+/** Anfitriones del fleco LATENTE: todo lo que queda por dentro de la banda
+ *  exterior, centro inmune incluido. Su arco exterior está tapado por el
+ *  anillo de fuera hasta que este cae. */
+function edgeHosts(layout: ArenaLayout): FragmentDef[] {
+  const outerBand = maxBand(layout);
+  return layout.fragments.filter(f => f.immune || f.band < outerBand);
+}
+
+function maxBand(layout: ArenaLayout): number {
   let outerBand = 0;
   for (const f of layout.fragments) outerBand = Math.max(outerBand, f.band);
-  return layout.fragments.filter(f => !f.immune && f.band === outerBand);
+  return outerBand;
+}
+
+/** Longitud total de los arcos exteriores de unos anfitriones. */
+function arcLength(hosts: FragmentDef[]): number {
+  let total = 0;
+  for (const f of hosts) total += f.outerR * (f.endAngle - f.startAngle);
+  return total;
 }
 
 // --- Muestreo ------------------------------------------------------------------
@@ -249,8 +293,9 @@ function discSampler(layer: ScatterLayer, layout: ArenaLayout, rand: () => numbe
  * son centros angulares y pueden desbordar al sector vecino (hostOf
  * decide el anfitrión real).
  */
-function fringeSampler(layer: ScatterLayer, layout: ArenaLayout, rand: () => number): PositionSampler | null {
-  const hosts = fringeHosts(layout);
+function fringeSampler(
+  layer: ScatterLayer, layout: ArenaLayout, rand: () => number, hosts = fringeHosts(layout),
+): PositionSampler | null {
   if (hosts.length === 0) return null;
   const cum: number[] = [];
   let total = 0;
@@ -324,9 +369,32 @@ export class ArenaScatter {
       const start = layer.ranges[fragmentIndex * 2] ?? 0;
       const count = layer.ranges[fragmentIndex * 2 + 1] ?? 0;
       if (count === 0) continue;
-      this.recompose(layer.mesh, layer.local, start, count, matrix);
+      this.recompose(layer.mesh, layer.local, start, count, matrix, layer);
       if (layer.shadow && layer.shadowLocal) {
-        this.recompose(layer.shadow, layer.shadowLocal, start, count, matrix);
+        this.recompose(layer.shadow, layer.shadowLocal, start, count, matrix, layer);
+      }
+    }
+  }
+
+  /**
+   * El sector `fallen` ha caído: enseña el fleco latente que tapaba (el de
+   * los sectores de dentro, a lo largo de su arco). `hostMatrix(h)` es la
+   * matriz del grupo del anfitrión h, o null si ese anfitrión ya no está
+   * en pie: entonces su fleco sigue oculto (se iría con él).
+   */
+  revealEdges(fallen: number, hostMatrix: (host: number) => THREE.Matrix4 | null): void {
+    for (const layer of this.layers) {
+      const list = layer.byGate?.get(fallen);
+      if (!list || !layer.revealed || !layer.hosts) continue;
+      for (const k of list) {
+        if (layer.revealed[k]) continue;
+        const host = layer.hosts[k]!;
+        if (this.hidden.has(host)) continue;
+        const m = hostMatrix(host);
+        if (!m) continue;
+        layer.revealed[k] = 1;
+        this.recompose(layer.mesh, layer.local, k, 1, m, null);
+        if (layer.shadow && layer.shadowLocal) this.recompose(layer.shadow, layer.shadowLocal, k, 1, m, null);
       }
     }
   }
@@ -371,6 +439,7 @@ export class ArenaScatter {
       triangles: l.triangles,
       drawCalls: l.shadow ? 2 : 1,
       clipped: l.clipped,
+      latent: l.revealed && l.gates ? l.gates.reduce((a, g, k) => a + (g >= 0 && !l.revealed![k] ? 1 : 0), 0) : 0,
     }));
     return {
       layers,
@@ -401,40 +470,66 @@ export class ArenaScatter {
     // i es la misma para cualquier density que la incluya.
     let clipped = 0;
     const kept: Candidate[] = [];
-    for (let i = 0; i < n; i++) {
-      const [x, z] = sample();
-      const r = Math.hypot(x, z);
-      let scale = lerp(layer.scale[0], layer.scale[1], rand());
-      const height = scale * meta.height;
-      const ceiling = heightCeiling(r, z);
-      if (height > ceiling) { scale = ceiling / meta.height; clipped++; }
+    const take = (sampler: PositionSampler, count: number, rnd: () => number, latent: boolean) => {
+      for (let i = 0; i < count; i++) {
+        const [x, z] = sampler();
+        const r = Math.hypot(x, z);
+        let scale = lerp(layer.scale[0], layer.scale[1], rnd());
+        const height = scale * meta.height;
+        const ceiling = heightCeiling(r, z);
+        // El fleco latente vive en el interior (r < 8,5) y se recorta al
+        // techo POR DISEÑO: allí es escombro bajo. No cuenta como aviso.
+        if (height > ceiling) { scale = ceiling / meta.height; if (!latent) clipped++; }
 
-      const u = rand();
-      let yaw: number;
-      if (layer.yaw === 'toCenter') yaw = Math.atan2(-x, -z);
-      else if (layer.yaw === 'wind') yaw = Math.PI / 2 - args.recipe.wind + (u - 0.5) * 2 * SCATTER_ENGINE.windJitter;
-      else yaw = u * TWO_PI;
+        const u = rnd();
+        let yaw: number;
+        if (layer.yaw === 'toCenter') yaw = Math.atan2(-x, -z);
+        else if (layer.yaw === 'wind') yaw = Math.PI / 2 - args.recipe.wind + (u - 0.5) * 2 * SCATTER_ENGINE.windJitter;
+        else yaw = u * TWO_PI;
 
-      const tiltMag = layer.tilt * DEG * rand();
-      const v = rand();
-      const tiltDir = layer.yaw === 'wind'
-        ? args.recipe.wind + (v - 0.5) * 2 * SCATTER_ENGINE.windJitter
-        : v * TWO_PI;
+        const tiltMag = layer.tilt * DEG * rnd();
+        const v = rnd();
+        const tiltDir = layer.yaw === 'wind'
+          ? args.recipe.wind + (v - 0.5) * 2 * SCATTER_ENGINE.windJitter
+          : v * TWO_PI;
 
-      const base = palette[Math.floor(rand() * palette.length)];
-      const mul = 1 + (rand() - 0.5) * 2 * layer.colorJitter;
+        const base = palette[Math.floor(rnd() * palette.length)];
+        const mul = 1 + (rnd() - 0.5) * 2 * layer.colorJitter;
 
-      if (r < layer.clearCenterR || r > layout.maxRadius) continue;
-      // null es el contrato; -1 es la convención de findFragmentAt en
-      // arena.ts. Las dos significan "sin fragmento": se descarta.
-      const host = args.hostOf(x, z);
-      if (host === null || host < 0 || host >= layout.fragments.length) continue;
-      kept.push({
-        x, z, scale, yaw, tiltDir, tiltMag, host,
-        r: base ? clamp01(base.r * mul) : 1,
-        g: base ? clamp01(base.g * mul) : 1,
-        b: base ? clamp01(base.b * mul) : 1,
-      });
+        if (r < layer.clearCenterR || r > layout.maxRadius) continue;
+        // null es el contrato; -1 es la convención de findFragmentAt en
+        // arena.ts. Las dos significan "sin fragmento": se descarta.
+        const host = args.hostOf(x, z);
+        if (host === null || host < 0 || host >= layout.fragments.length) continue;
+        // Fleco latente: el sector que tiene justo por fuera de su arco. Si
+        // no hay ninguno (vacío), está al descubierto desde el principio.
+        let gate = -1;
+        if (latent) {
+          const f = layout.fragments[host]!;
+          const a = Math.atan2(z, x);
+          const probeR = f.outerR + SCATTER_ENGINE.fringeGateProbe;
+          const outside = args.hostOf(Math.cos(a) * probeR, Math.sin(a) * probeR);
+          gate = outside === null || outside < 0 || outside === host ? -1 : outside;
+        }
+        kept.push({
+          x, z, scale, yaw, tiltDir, tiltMag, host, gate,
+          r: base ? clamp01(base.r * mul) : 1,
+          g: base ? clamp01(base.g * mul) : 1,
+          b: base ? clamp01(base.b * mul) : 1,
+        });
+      }
+    };
+    take(sample, n, rand, false);
+    // Fleco latente: su propio stream, así que no mueve el exterior. La
+    // cantidad sigue a la longitud de arco, como el fleco de fuera.
+    let hasEdges = false;
+    if (layer.anchor === 'fringe') {
+      const inner = edgeHosts(layout);
+      const outerArc = arcLength(fringeHosts(layout));
+      const nEdge = outerArc > 0 ? Math.round((n * arcLength(inner)) / outerArc) : 0;
+      const edgeRand = scatterRand(args.seed ^ SALT_SCATTER ^ hashLayerId(`${layer.id}#edge`));
+      const edgeSample = nEdge > 0 ? fringeSampler(layer, layout, edgeRand, inner) : null;
+      if (edgeSample) { take(edgeSample, nEdge, edgeRand, true); hasEdges = true; }
     }
     if (clipped > 0) {
       console.warn(`[scatter] ${layer.id}: ${clipped}/${n} instancias recortadas a los techos de SCATTER_LIMITS (revisa scale)`);
@@ -449,6 +544,12 @@ export class ArenaScatter {
       const host = kept[order[k]].host;
       if (ranges[host * 2 + 1] === 0) ranges[host * 2] = k;
       ranges[host * 2 + 1]++;
+    }
+    const gates = hasEdges ? Int32Array.from(order, (i) => kept[i].gate) : null;
+    const hosts = hasEdges ? Int32Array.from(order, (i) => kept[i].host) : null;
+    const byGate = hasEdges ? new Map<number, number[]>() : null;
+    if (gates && byGate) {
+      gates.forEach((g, k) => { if (g >= 0) (byGate.get(g) ?? byGate.set(g, []).get(g)!).push(k); });
     }
 
     const geometry = buildPrimitive(layer.primitive);
@@ -511,13 +612,27 @@ export class ArenaScatter {
     }
 
     const shadowTris = shadow ? triangleCount(shadow.geometry) : 0;
+    const local = Float32Array.from(mesh.instanceMatrix.array);
+    const shadowLocal = shadow ? Float32Array.from(shadow.instanceMatrix.array) : null;
+    // El fleco latente nace oculto: `local` guarda su matriz de verdad.
+    if (gates) {
+      gates.forEach((g, k) => {
+        if (g < 0) return;
+        mesh.instanceMatrix.array.fill(0, k * 16, k * 16 + 16);
+        if (shadow) shadow.instanceMatrix.array.fill(0, k * 16, k * 16 + 16);
+      });
+    }
     return {
       id: layer.id,
       mesh,
       shadow,
-      local: Float32Array.from(mesh.instanceMatrix.array),
-      shadowLocal: shadow ? Float32Array.from(shadow.instanceMatrix.array) : null,
+      local,
+      shadowLocal,
       ranges,
+      gates,
+      hosts,
+      revealed: gates ? new Uint8Array(gates.length) : null,
+      byGate,
       triangles: order.length * (triangleCount(geometry) + shadowTris),
       clipped,
     };
@@ -539,14 +654,19 @@ export class ArenaScatter {
     return shadow;
   }
 
+  /** `matrix × local` en el rango. Con `layer`, el fleco latente que aún
+   *  no se ha destapado se queda a escala 0. */
   private recompose(
     mesh: THREE.InstancedMesh, local: Float32Array,
     start: number, count: number, matrix: THREE.Matrix4,
+    layer: LayerRuntime | null,
   ): void {
     const attr = mesh.instanceMatrix;
     const m = this.tmpMatrix;
+    const gates = layer?.gates, revealed = layer?.revealed;
     for (let i = start; i < start + count; i++) {
       const off = i * 16;
+      if (gates && revealed && gates[i]! >= 0 && !revealed[i]) { attr.array.fill(0, off, off + 16); continue; }
       m.fromArray(local, off).premultiply(matrix).toArray(attr.array, off);
     }
     markRange(attr, start, count);
