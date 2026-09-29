@@ -195,7 +195,7 @@ export function resolveCollisions(
         const aVulnMul = (a.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1) * knockbackScale(a);
         const bVulnMul = (b.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1) * knockbackScale(b);
         if (a.isHeadbutting && b.isHeadbutting) {
-          headbuttClash(a, b, nx, nz, ratioA * aVulnMul, ratioB * bVulnMul, internal);
+          headbuttClash(a, b, nx, nz, ratioA * aVulnMul, ratioB * bVulnMul, aVulnMul, bVulnMul, internal);
         } else if (a.isHeadbutting) {
           b.vx += nx * force * ratioB * bVulnMul;
           b.vz += nz * force * ratioB * bVulnMul;
@@ -249,13 +249,15 @@ function headbuttForceOf(critterName: string): number {
 
 /**
  * Two headbutts meeting — both players in their lunge (Rafa, 2026-09-29:
- * «los dos salen despedidos»). Each takes the other's hit as its victim:
- * `aTakes` / `bTakes` are its mass share × stun vulnerability ×
- * knockbackScale, as for a one-sided headbutt. No recoil: the other's hit
- * already throws each one back. Each is the other's last attacker, and a
- * Kurama in the clash copies whom it hit. It used to go to whoever came
- * first in `players` (join order): only `a` hit. (nx, nz) points from a
- * to b. Mirror of the client's headbuttClash (src/physics.ts).
+ * «los dos salen despedidos»). Each takes the other's hit as its victim
+ * (`aTakes` / `bTakes`: its mass share × stun vulnerability ×
+ * knockbackScale) plus its own recoil, like any headbutt that connects
+ * (`aVuln` / `bVuln`: stun vulnerability × knockbackScale; without it the
+ * strongest won even more, see the client's comment). Each is the other's
+ * last attacker, and a Kurama in the clash copies whom it hit. It used to
+ * go to whoever came first in `players` (join order): only `a` hit.
+ * (nx, nz) points from a to b. Mirror of the client's headbuttClash
+ * (src/physics.ts).
  */
 function headbuttClash(
   a: PlayerSchema,
@@ -264,10 +266,14 @@ function headbuttClash(
   nz: number,
   aTakes: number,
   bTakes: number,
+  aVuln: number,
+  bVuln: number,
   internal: Map<string, InternalLike> | undefined,
 ): void {
-  const toA = headbuttForceOf(b.critterName) * aTakes;
-  const toB = headbuttForceOf(a.critterName) * bTakes;
+  const forceA = headbuttForceOf(a.critterName);
+  const forceB = headbuttForceOf(b.critterName);
+  const toA = forceB * aTakes + forceA * SIM.headbutt.recoilFactor * aVuln;
+  const toB = forceA * bTakes + forceB * SIM.headbutt.recoilFactor * bVuln;
   a.vx -= nx * toA;
   a.vz -= nz * toA;
   b.vx += nx * toB;

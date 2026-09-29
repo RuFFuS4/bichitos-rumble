@@ -79,19 +79,23 @@ function rushContact(rusher: Critter, victim: Critter, dirX: number, dirZ: numbe
 
 /**
  * Two headbutts meeting — both critters in their lunge (Rafa, 2026-09-29:
- * «los dos salen despedidos»). Each takes the other's hit as its victim:
- * `aTakes` / `bTakes` are its mass share × stun vulnerability ×
- * knockbackScale, as for a one-sided headbutt. No recoil: the other's hit
- * already throws each one back. One hit stop and one sound; the shake of
- * the stronger boost; both flash and lean away. It used to go to whoever
- * came first in `critters` (offline, always the player). (nx, nz) points
- * from a to b; each velocity pair is written x then z (attrib-probe reads
- * this function by name). Server mirror: headbuttClash in
- * server/src/sim/physics.ts.
+ * «los dos salen despedidos»). Each takes the other's hit as its victim
+ * (`aTakes` / `bTakes`: its mass share × stun vulnerability ×
+ * knockbackScale) plus its own recoil, like any headbutt that connects
+ * (`aVuln` / `bVuln`: stun vulnerability × knockbackScale). Measured on
+ * 900 bot matches against the old rule: without the recoil, Trunk's
+ * giant one vanished and the strongest critter won even more (eliminated
+ * −10.9 points); with it nobody moves beyond noise
+ * (docs/REPASO_HABILIDADES.md §«Choque de cabezas y All-in del bot»).
+ * One hit stop and one sound; the shake of the stronger boost; both flash
+ * and lean away. It used to go to whoever came first in `critters`
+ * (offline, always the player). (nx, nz) points from a to b; each velocity
+ * pair is written x then z (attrib-probe reads this function by name).
+ * Server mirror: headbuttClash in server/src/sim/physics.ts.
  */
-function headbuttClash(a: Critter, b: Critter, nx: number, nz: number, aTakes: number, bTakes: number): void {
-  const toA = headbuttForceOf(b) * aTakes;
-  const toB = headbuttForceOf(a) * bTakes;
+function headbuttClash(a: Critter, b: Critter, nx: number, nz: number, aTakes: number, bTakes: number, aVuln: number, bVuln: number): void {
+  const toA = headbuttForceOf(b) * aTakes + headbuttForceOf(a) * FEEL.headbutt.recoilFactor * aVuln;
+  const toB = headbuttForceOf(a) * bTakes + headbuttForceOf(b) * FEEL.headbutt.recoilFactor * bVuln;
   a.vx -= nx * toA;
   a.vz -= nz * toA;
   b.vx += nx * toB;
@@ -225,7 +229,7 @@ export function resolveCollisions(critters: Critter[]): void {
         const aVuln = (a.stunTimer > 0 ? FEEL.collision.stunnedVulnerability : 1) * a.knockbackScale;
         const bVuln = (b.stunTimer > 0 ? FEEL.collision.stunnedVulnerability : 1) * b.knockbackScale;
         if (a.isHeadbutting && b.isHeadbutting) {
-          headbuttClash(a, b, nx, nz, massRatioA * aVuln, massRatioB * bVuln);
+          headbuttClash(a, b, nx, nz, massRatioA * aVuln, massRatioB * bVuln, aVuln, bVuln);
         } else if (a.isHeadbutting) {
           b.vx += nx * force * massRatioB * bVuln;
           b.vz += nz * force * massRatioB * bVuln;
