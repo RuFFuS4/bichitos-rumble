@@ -141,6 +141,19 @@ export interface SeaRamp {
   stops: Array<[number, number]>;
 }
 
+/**
+ * La FIRMA de un bioma en el cielo (fondo v2, F1): lo que hace que, tapando
+ * el disco con la mano, se sepa dónde estás (criterio de Rafa). Cada tipo
+ * es una corona sobre los islotes, algo que cuelga debajo y, en algunos, un
+ * elemento propio (docs/DIORAMAS.md §«Fondo v2» §4):
+ *   atoll   — palmera y charca turquesa; cascada blanca que cae al abismo.
+ *   canopy  — islote-maceta con copas apiladas; lianas colgando.
+ *   iceberg — iceberg invertido con tapa nevada; carámbanos.
+ *   mesa    — mesa voladora estratificada; cascada de arena.
+ *   torii   — roca con torii bermellón; un camino de toriis que baja.
+ */
+export type SkyFirma = 'atoll' | 'canopy' | 'iceberg' | 'mesa' | 'torii';
+
 /** Cielo de un bioma (fondo v2, docs/DIORAMAS.md §«Fondo v2»). Lo global y
  *  estructural vive en BACKDROP_LOOK; esto es lo que cambia de un pack a
  *  otro. El horizonte no está aquí: es el `fogColor` del pack. */
@@ -171,6 +184,22 @@ export interface PackSky {
   /** Tapa de los islotes. Más oscura y desaturada que la arena para que
    *  no parezcan una plataforma a la que saltar (riesgo 7). */
   isletTop: number;
+  /** Forma del islote: lados, radio de la punta respecto a la tapa (0 =
+   *  cono en punta, 0,6 = mesa) y alto de la panza en radios. */
+  isletSides: number;
+  isletTip: number;
+  isletDepth: number;
+  /** Firma del bioma y sus cuatro colores. Qué es cada uno depende del
+   *  tipo (el constructor de `arena-backdrop.ts` lo documenta):
+   *    main   — lo principal de la corona (frondas, copas, nieve, torii);
+   *    accent — el segundo tono (charca, copa oscura, hielo, viga negra);
+   *    detail — tronco o piedra;
+   *    hang   — lo que cuelga (cascada, liana, carámbano, arena). */
+  firma: SkyFirma;
+  firmaMain: number;
+  firmaAccent: number;
+  firmaDetail: number;
+  firmaHang: number;
   /** Rebote de luz desde el cielo de abajo: `groundColor` e intensidad del
    *  hemisferio. Es lo que ilumina la panza del cono (plan §6). */
   hemiGround: number;
@@ -251,9 +280,34 @@ export interface BackdropLookConfig {
   isletTopYMax: number;
   isletRadiusMin: number;
   isletRadiusMax: number;
-  isletDepthRatio: number;
   /** Cuánto se oscurece un islote hacia el abismo en la cota más honda. */
   isletDepthDarken: number;
+  /** Jirones (C1): bultos pequeños en el aire entre la isla y el mar, solo
+   *  donde el pasillo del canto los deja (las alas y las esquinas). Van en
+   *  la misma malla que C2 y el cuello: 0 draw calls. */
+  wispCount: number;
+  wispRMin: number;
+  wispRMax: number;
+  wispYMin: number;
+  wispYMax: number;
+  wispSizeMin: number;
+  wispSizeMax: number;
+  /** Cuánto tiran los jirones hacia el color del pozo: se leen como bruma a
+   *  media distancia y no suman fondo claro (decisión 1: ≤8 %). */
+  wispFade: number;
+  /** Largo (u) de lo que cuelga de los islotes: cascadas (atoll, mesa) y
+   *  lianas (canopy). Si toca el pasillo del canto se acorta a la mitad, y
+   *  si aun así lo toca, se quita. */
+  cascadeLen: number;
+  lianaLen: number;
+  /** Camino de toriis (kitsune): cuántas rocas con torii bajan hacia el
+   *  abismo, desde qué radio y cota hasta cuáles, y el radio de cada roca. */
+  toriiPathCount: number;
+  toriiPathR0: number;
+  toriiPathR1: number;
+  toriiPathY0: number;
+  toriiPathY1: number;
+  toriiRockRadius: number;
   /** Altura del mar. 32 u por debajo del disco, y por debajo de
    *  VOID_FLOOR (-30) y de FRAGMENT_KILL_Y (-25): nada del juego lo
    *  atraviesa nunca, y a esa distancia no se puede confundir con suelo
@@ -343,16 +397,33 @@ export const BACKDROP_LOOK: BackdropLookConfig = {
   farSizeMin: 25,
   farSizeMax: 45,
   farFlatten: 0.3,
-  isletCount: 7,
-  isletMinInFrame: 3,
+  // F1: más islotes y más grandes dentro del cuadro de juego: son los que
+  // llevan la firma del bioma, y a 100 u con radio 2 no se leía nada.
+  isletCount: 8,
+  isletMinInFrame: 4,
   isletRMin: 45,
-  isletRMax: 110,
+  isletRMax: 100,
   isletTopYMin: -60,
   isletTopYMax: -28,
-  isletRadiusMin: 1.5,
-  isletRadiusMax: 6,
-  isletDepthRatio: 1.6,
+  isletRadiusMin: 2.5,
+  isletRadiusMax: 7,
   isletDepthDarken: 0.45,
+  wispCount: 30,
+  wispRMin: 25,
+  wispRMax: 70,
+  wispYMin: -30,
+  wispYMax: -20,
+  wispSizeMin: 1.4,
+  wispSizeMax: 3.2,
+  wispFade: 0.6,
+  cascadeLen: 26,
+  lianaLen: 9,
+  toriiPathCount: 6,
+  toriiPathR0: 42,
+  toriiPathR1: 96,
+  toriiPathY0: -24,
+  toriiPathY1: -58,
+  toriiRockRadius: 2.6,
   seaY: -32,
   seaInnerR: 0.6,
   seaOuterR: 300,

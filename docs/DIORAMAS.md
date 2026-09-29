@@ -230,6 +230,37 @@ Tras este cambio dejan de verse en partida y solo sirven para la pantalla final 
 >   - Se mide **sin scatter y sin props**, porque el fleco y las palmeras asoman por el labio y no son culpa del fondo.
 >
 > **Cifras de aceptación:** ver `BUILD_LOG.md` [Arena] del 2026-09-21 (fondo v2 F0) y `.tmp/shots-cielo/metrics/`.
+>
+> **Estado de la F1 (2026-09-29): HECHA.** Cada bioma lleva su FIRMA en el cielo:
+> - **Datos por pack:** `PackSky.firma` y la forma de sus islotes (`isletSides`, `isletTip`, `isletDepth`).
+> - **Coronas:** instanciadas sobre cada islote, con luz.
+> - **Lo que cuelga:** sin luz, fundido al color del pozo.
+> - **Jirones de C1:** van en la malla de nubes.
+>
+> | Bioma | Corona | Lo que cuelga |
+> |---|---|---|
+> | coral (`atoll`) | palmera y charca turquesa | cascadas blancas |
+> | jungle (`canopy`) | islote-maceta con copas apiladas | lianas |
+> | tundra (`iceberg`) | iceberg invertido de 6 caras con nieve y agujas de hielo | carámbanos |
+> | desierto (`mesa`) | mesa voladora de punta ancha con hito de piedras y cactus | cascadas de arena |
+> | kitsune (`torii`) | roca con torii bermellón | — |
+>
+> Kitsune tiene además el **camino de toriis**: 6 rocas que bajan hacia el abismo, cada puerta cruzando su tramo.
+>
+> **Coste:** +2 draws (coronas y colgantes), 0 bytes.
+>
+> **Prueba de Rafa** («tapando el disco se sabe el bioma»):
+> - Se hace con `arena-shots --no-island`.
+> - Hoja a ciegas en `.tmp/shots-f1/_tapado_a_ciegas.png`.
+>
+> **Dónde se aparta del plan:**
+> - Los islotes son más grandes y hay más dentro del cuadro: radio 2,5-7 (antes 1,5-6), 8 en total y al menos 4 en cuadro. A 100 u con radio 2 no se leía ninguna firma.
+> - La punta del cono de jungle no lleva lianas: con pozo claro quedarían oscuras junto al borde del disco al colapsar.
+> - Los jirones son 30 y tiran un 60 % hacia el color del pozo: claros sumaban fondo claro por encima del 8 % (decisión 1).
+> - La cobertura de coral baja a 0,32 y la de kitsune a 0,34, por la misma razón. Se mide ahora con tres semillas, no solo con la 1.
+> - El camino de toriis se coloca **antes** que los islotes normales: al revés, faltaba en la mitad de las semillas. Ahora sale en 300 de 300.
+>
+> **Revisión adversarial:** 3 lentes, un verificador por hallazgo, 15 confirmados y todos arreglados. Entre ellos: toriis girados 90°; lianas que nacían dentro de la maceta y no llegaban al color del pozo; carámbanos metidos en el iceberg; frondas aplastadas en el eje equivocado; una prueba de cascadas tan holgada que quitaba la mitad sin motivo; y `setPackSky` aceptando una firma mal escrita, que dejaba el cielo sin islotes.
 
 ---
 

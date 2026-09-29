@@ -37,10 +37,10 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { BACKDROP_LOOK, SALT_BACKDROP, type CliffRamp, type PackSky, type SeaRamp } from './arena-look';
+import { BACKDROP_LOOK, SALT_BACKDROP, type CliffRamp, type PackSky, type SeaRamp, type SkyFirma } from './arena-look';
 import { FRAG } from './arena-fragments';
 import { GAMEPLAY_CAM_FOV, GAMEPLAY_CAM_LOOKAT, GAMEPLAY_CAM_POSITION } from './camera';
-import { layoutSky, type SkyCamera, type SkyInstance, type SkyLayout } from './arena-sky-layout';
+import { FIRMA_CROWN_HEIGHT, LIANA_ATTACH_T, layoutSky, type SkyCamera, type SkyInstance, type SkyLayout } from './arena-sky-layout';
 
 /**
  * Anillo del mar. Va de `innerR` (justo bajo el disco) a `outerR`, con
@@ -177,8 +177,9 @@ function paintSeaColors(geo: THREE.RingGeometry, ramp: SeaRamp, fogColor: number
 // hermanos más abajo. Dónde va cada cosa lo decide `arena-sky-layout.ts`
 // (módulo hoja, determinista); aquí solo se hacen las mallas.
 //
-// Coste: 0 bytes, 4 draw calls (cúpula, cercanas+cuello, lejanas e
-// islotes), ~30-37k triángulos según la cobertura del bioma. Todo es geometría con
+// Coste: 0 bytes, 6 draw calls (cúpula, nubes —cercanas, cuello y
+// jirones—, lejanas, islotes, coronas y lo que cuelga), ~30-35k triángulos
+// según la cobertura del bioma. Todo es geometría con
 // color de vértice e `InstancedMesh`, sin textura (lección de 9047031:
 // `clouds.png` en un plano 18 u bajo el disco tapó el cuadro de blanco) y
 // sin UV en la cúpula (lección de b054e96: costuras según la GPU).
@@ -273,12 +274,14 @@ function buildBumpGeometry(width: number, height: number, belly: number, shade: 
 }
 
 /**
- * Islote: minicono de 16 lados con tapa. Unidad: tapa en y=0 con radio 1,
- * punta en y=−1. La tapa lleva el color de islote del pack y la panza la
- * rampa de estratos del bioma, para que se lean como hermanos de la isla.
+ * Islote: minicono con tapa, con la forma de su bioma (F1): lados y radio
+ * de la punta salen de `PackSky` (icebergs de 6 caras casi en punta, mesas
+ * de punta ancha…). Unidad: tapa en y=0 con radio 1, punta en y=−1. La
+ * tapa lleva el color de islote del pack y la panza la rampa de estratos
+ * del bioma, para que se lean como hermanos de la isla.
  */
-function buildIsletGeometry(top: number, cliff: CliffRamp): THREE.BufferGeometry {
-  const SIDES = 16, ROWS = 3, TIP = 0.06;
+function buildIsletGeometry(top: number, cliff: CliffRamp, SIDES: number, TIP: number): THREE.BufferGeometry {
+  const ROWS = 3;
   const positions: number[] = [];
   const colors: number[] = [];
   const cTop = new THREE.Color(top);
@@ -307,6 +310,176 @@ function buildIsletGeometry(top: number, cliff: CliffRamp): THREE.BufferGeometry
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.computeVertexNormals();
   return geo;
+}
+
+// ---------------------------------------------------------------------------
+// F1 — las firmas de cada bioma (docs/DIORAMAS.md §«Fondo v2» §4)
+// ---------------------------------------------------------------------------
+//
+// Dos mallas por bioma, las dos instanciadas por islote: la CORONA (encima
+// de la tapa, iluminada, con la misma luz que la isla) y lo que CUELGA
+// (sin luz: su punta se funde con el color del pozo, y la luz rompería
+// esa fusión). Todo con primitivas de three y color de vértice: 0 bytes.
+// Unidad: el radio del islote; la corona crece hasta FIRMA_CROWN_HEIGHT y
+// lo que cuelga baja de y=0 a y=−1 (la escala Y es su largo).
+
+interface Part { geo: THREE.BufferGeometry; color: THREE.Color | ((y: number) => THREE.Color); m: THREE.Matrix4 }
+
+/** Junta primitivas en una geometría no indexada con color de vértice. */
+function compose(parts: Part[]): THREE.BufferGeometry {
+  const pos: number[] = [], nrm: number[] = [], col: number[] = [];
+  const v = new THREE.Vector3();
+  for (const p of parts) {
+    const g = (p.geo.index ? p.geo.toNonIndexed() : p.geo.clone()).applyMatrix4(p.m);
+    g.computeVertexNormals();
+    const P = g.getAttribute('position'), N = g.getAttribute('normal');
+    for (let i = 0; i < P.count; i++) {
+      v.fromBufferAttribute(P, i);
+      pos.push(v.x, v.y, v.z);
+      nrm.push(N.getX(i), N.getY(i), N.getZ(i));
+      const c = typeof p.color === 'function' ? p.color(v.y) : p.color;
+      col.push(c.r, c.g, c.b);
+    }
+    g.dispose();
+    p.geo.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return out;
+}
+
+const M = () => new THREE.Matrix4();
+const at = (x: number, y: number, z: number) => M().makeTranslation(x, y, z);
+
+/** Escala la corona para que su punto más alto sea FIRMA_CROWN_HEIGHT. */
+function fitCrown(geo: THREE.BufferGeometry, firma: SkyFirma): THREE.BufferGeometry {
+  geo.computeBoundingBox();
+  const top = geo.boundingBox!.max.y;
+  if (top > 1e-6) geo.scale(1, FIRMA_CROWN_HEIGHT[firma] / top, 1);
+  return geo;
+}
+
+function buildCoronaGeometry(sky: PackSky): THREE.BufferGeometry | null {
+  const main = new THREE.Color(sky.firmaMain), accent = new THREE.Color(sky.firmaAccent);
+  const detail = new THREE.Color(sky.firmaDetail);
+  const parts: Part[] = [];
+  switch (sky.firma) {
+    case 'atoll': {
+      // Charca turquesa a un lado y una palmera inclinada al otro.
+      parts.push({ geo: new THREE.CircleGeometry(0.42, 12).rotateX(-Math.PI / 2), color: accent, m: at(0.22, 0.03, 0.1) });
+      const lean = M().makeRotationZ(0.28);
+      const trunkBase = new THREE.Vector3(-0.3, 0, -0.1);
+      parts.push({ geo: new THREE.CylinderGeometry(0.05, 0.075, 1.25, 5, 1, true), color: detail,
+        m: at(trunkBase.x, trunkBase.y, trunkBase.z).multiply(lean).multiply(at(0, 0.625, 0)) });
+      const crownPt = new THREE.Vector3(0, 1.25, 0).applyMatrix4(lean).add(trunkBase);
+      for (let i = 0; i < 6; i++) {
+        const yaw = (i / 6) * Math.PI * 2;
+        // Fronda: cono aplanado que sale del penacho y cae un poco.
+        const m = at(crownPt.x, crownPt.y, crownPt.z)
+          .multiply(M().makeRotationY(yaw))
+          .multiply(M().makeRotationZ(-Math.PI / 2 - 0.35))
+          .multiply(at(0, 0.34, 0))
+          // Se aplana el X local, que tras Rz queda casi vertical: así la
+          // cara ancha de la fronda mira arriba (con Z salían cuchillas).
+          .multiply(M().makeScale(0.35, 1, 1));
+        parts.push({ geo: new THREE.ConeGeometry(0.13, 0.7, 3), color: main, m });
+      }
+      break;
+    }
+    case 'canopy': {
+      // Copas apiladas: tres bultos grandes y uno encima, dos tonos.
+      const dome = (r: number) => new THREE.SphereGeometry(r, 8, 3, 0, Math.PI * 2, 0, Math.PI / 2);
+      parts.push({ geo: dome(0.72), color: accent, m: at(0, 0, 0).multiply(M().makeScale(1, 0.85, 1)) });
+      parts.push({ geo: dome(0.5), color: main, m: at(0.34, 0.3, 0.22) });
+      parts.push({ geo: dome(0.46), color: main, m: at(-0.32, 0.34, -0.2) });
+      parts.push({ geo: dome(0.38), color: main, m: at(0.02, 0.62, 0.02) });
+      break;
+    }
+    case 'iceberg': {
+      // Tapa de nieve y dos agujas de hielo que asoman.
+      parts.push({ geo: new THREE.SphereGeometry(1, 6, 2, 0, Math.PI * 2, 0, Math.PI / 2), color: main,
+        m: M().makeScale(0.96, 0.22, 0.96) });
+      parts.push({ geo: new THREE.ConeGeometry(0.2, 0.55, 4), color: accent, m: at(0.3, 0.27, 0.18) });
+      parts.push({ geo: new THREE.ConeGeometry(0.14, 0.4, 4), color: accent, m: at(-0.28, 0.2, -0.3) });
+      break;
+    }
+    case 'mesa': {
+      // Hito de piedras y un cactus: la mesa se lee sola por su forma.
+      parts.push({ geo: new THREE.IcosahedronGeometry(0.16, 0), color: detail, m: at(0.25, 0.12, 0.1) });
+      parts.push({ geo: new THREE.IcosahedronGeometry(0.11, 0), color: main, m: at(0.26, 0.3, 0.1) });
+      parts.push({ geo: new THREE.CylinderGeometry(0.06, 0.07, 0.5, 6), color: accent, m: at(-0.3, 0.25, -0.2) });
+      parts.push({ geo: new THREE.CylinderGeometry(0.04, 0.04, 0.2, 6), color: accent,
+        m: at(-0.22, 0.32, -0.2).multiply(M().makeRotationZ(-Math.PI / 2)) });
+      break;
+    }
+    case 'torii': {
+      // Dos postes bermellón, el nuki bermellón y el kasagi negro encima.
+      parts.push({ geo: new THREE.CylinderGeometry(0.055, 0.07, 1.1, 6, 1, true), color: main, m: at(-0.42, 0.55, 0) });
+      parts.push({ geo: new THREE.CylinderGeometry(0.055, 0.07, 1.1, 6, 1, true), color: main, m: at(0.42, 0.55, 0) });
+      parts.push({ geo: new THREE.BoxGeometry(1.0, 0.07, 0.08), color: main, m: at(0, 0.9, 0) });
+      parts.push({ geo: new THREE.BoxGeometry(1.3, 0.1, 0.15), color: accent, m: at(0, 1.18, 0) });
+      break;
+    }
+  }
+  return parts.length ? fitCrown(compose(parts), sky.firma) : null;
+}
+
+function buildHangGeometry(sky: PackSky): THREE.BufferGeometry | null {
+  const hang = new THREE.Color(sky.firmaHang), abyss = new THREE.Color(sky.abyss);
+  // De su color arriba al del pozo abajo: la punta desaparece en el cielo.
+  const fade = (y: number) => hang.clone().lerp(abyss, Math.min(1, Math.max(0, -y)) ** 0.5);
+  const parts: Part[] = [];
+  switch (sky.firma) {
+    case 'atoll':
+    case 'mesa': {
+      // Cascada: dos cintas cruzadas, de la tapa hacia el abismo.
+      for (const yaw of [0, Math.PI / 2]) {
+        parts.push({ geo: new THREE.PlaneGeometry(1, 1, 1, 4).translate(0, -0.5, 0), color: fade,
+          m: M().makeRotationY(yaw) });
+      }
+      break;
+    }
+    case 'canopy': {
+      // Lianas: cinco tiras finas de largos distintos que nacen EN LA PARED
+      // de la maceta (a la cota LIANA_ATTACH_T de su panza, por fuera de las
+      // aristas) y se funden al pozo cada una en su propio largo.
+      const wall = (1 - (1 - sky.isletTip) * LIANA_ATTACH_T) + 0.02;   // radio de las aristas: fuera en todo ángulo
+      const lianas: Array<[number, number]> = [[0.3, 1], [1.6, 0.7], [2.9, 0.85], [4.1, 0.55], [5.3, 0.65]];
+      for (const [ang, len] of lianas) {
+        parts.push({ geo: new THREE.PlaneGeometry(0.07, len, 1, 2).translate(0, -len / 2, 0),
+          color: (y: number) => fade(y / len),
+          m: at(Math.cos(ang) * wall, 0, Math.sin(ang) * wall).multiply(M().makeRotationY(-ang)) });
+      }
+      break;
+    }
+    case 'iceberg': {
+      // Carámbanos bajo el labio de la tapa, dos por cara y justo FUERA de
+      // la pared (a radio fijo quedaban dentro del iceberg de 6 caras). La
+      // pared se estrecha al bajar, así que el carámbano entero queda fuera.
+      // Unidad = radio también en Y: la cota y de aquí es t = −y/isletDepth
+      // en la panza.
+      const ice = new THREE.Color(sky.firmaHang);
+      const n = sky.isletSides;
+      const apothem = (1 - (1 - sky.isletTip) * 0.02 / sky.isletDepth) * Math.cos(Math.PI / n) + 0.06;
+      for (let k = 0; k < n; k++) {
+        const faceAng = ((k + 0.5) / n) * Math.PI * 2;        // centro de la cara (ver buildIsletGeometry)
+        const halfEdge = Math.sin(Math.PI / n) * apothem / Math.cos(Math.PI / n);
+        for (const s of [-0.45, 0.45]) {
+          const len = 0.22 + 0.28 * (((k * 2 + (s > 0 ? 1 : 0)) * 37) % 10) / 10;
+          const x = Math.cos(faceAng) * apothem - Math.sin(faceAng) * s * halfEdge;
+          const z = Math.sin(faceAng) * apothem + Math.cos(faceAng) * s * halfEdge;
+          parts.push({ geo: new THREE.ConeGeometry(0.07, len, 3), color: ice,
+            m: at(x, -len / 2 - 0.02, z).multiply(M().makeRotationX(Math.PI)) });
+        }
+      }
+      break;
+    }
+    case 'torii':
+      return null;
+  }
+  return compose(parts);
 }
 
 function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, list: SkyInstance[]): THREE.InstancedMesh {
@@ -338,6 +511,8 @@ export interface BackdropStats {
   layers: Record<string, { instances: number; tris: number }>;
   rejected: SkyLayout['rejected'] | null;
   isletsInFrame: number;
+  /** Rocas del camino de toriis (kitsune); 0 si no cupo o no aplica. */
+  toriiPath: number;
   corridorViolations: number;
   corridorDeg: [number, number] | null;
   maxExtent: number;
@@ -382,7 +557,7 @@ export class ArenaBackdrop {
     this.lastStats = {
       mode: 'sea', draws: 1, tris: triCount(geo),
       layers: { sea: { instances: 1, tris: triCount(geo) } },
-      rejected: null, isletsInFrame: 0, corridorViolations: 0, corridorDeg: null,
+      rejected: null, isletsInFrame: 0, toriiPath: 0, corridorViolations: 0, corridorDeg: null,
       maxExtent: BACKDROP_LOOK.seaOuterR, buildMs: performance.now() - t0, hash: null,
     };
   }
@@ -409,13 +584,15 @@ export class ArenaBackdrop {
     };
     // Cercanas y cuello comparten bulto con panza, material y MALLA: una
     // sola draw call (las cifras se reparten por capa para el lab).
+    // Los jirones de C1 (F1) también van en ella.
     const bump = buildBumpGeometry(14, 3, BACKDROP_LOOK.cloudBelly, BACKDROP_LOOK.cloudShade);
-    addLayer('near+neck', bump, cloudMat(), [...layout.near, ...layout.neck]);
-    if (layers['near+neck']) {
+    addLayer('clouds', bump, cloudMat(), [...layout.near, ...layout.neck, ...layout.wisps]);
+    if (layers.clouds) {
       const per = triCount(bump);
-      delete layers['near+neck'];
+      delete layers.clouds;
       layers.near = { instances: layout.near.length, tris: per * layout.near.length };
       layers.neck = { instances: layout.neck.length, tris: per * layout.neck.length };
+      layers.wisps = { instances: layout.wisps.length, tris: per * layout.wisps.length };
     }
     // 12 lados y no 8: con 8, las lejanas (enormes y de color plano) se
     // recortaban como octógonos.
@@ -423,8 +600,21 @@ export class ArenaBackdrop {
     // Islotes iluminados: son hermanos de la isla y reciben su misma luz.
     // Sin niebla: a 60-150 u la FogExp2 los lavaría hacia el horizonte
     // claro y competirían con la arena.
-    addLayer('islets', buildIsletGeometry(sky.isletTop, cliff),
+    addLayer('islets', buildIsletGeometry(sky.isletTop, cliff, sky.isletSides, sky.isletTip),
       new THREE.MeshLambertMaterial({ vertexColors: true, fog: false }), layout.islets);
+    // F1: la firma del bioma. La corona con la misma luz que los islotes;
+    // lo que cuelga, sin luz y sin tinte por hondura (instanceColor blanco),
+    // para que su punta sea exactamente el color del pozo.
+    const coronaGeo = buildCoronaGeometry(sky);
+    if (coronaGeo) {
+      addLayer('coronas', coronaGeo, new THREE.MeshLambertMaterial({ vertexColors: true, fog: false }), layout.coronas);
+    }
+    const hangGeo = buildHangGeometry(sky);
+    if (hangGeo) {
+      const white = layout.hangs.map((it) => ({ ...it, r: 1, g: 1, b: 1 }));
+      addLayer('hangs', hangGeo,
+        new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }), white);
+    }
 
     const domeGeo = buildDomeGeometry(layout.domeStops);
     // DoubleSide y no BackSide: el sentido de los triángulos de una esfera
@@ -455,6 +645,7 @@ export class ArenaBackdrop {
       layers,
       rejected: layout.rejected,
       isletsInFrame: layout.isletsInFrame,
+      toriiPath: layout.toriiPath,
       corridorViolations: layout.corridorViolations,
       corridorDeg: [layout.corridorTopDeg, layout.corridorBottomDeg],
       maxExtent: layout.maxExtent,

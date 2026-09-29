@@ -1,5 +1,59 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Arena] Fondo v2, F1: tapando el disco se sabe el bioma
+
+Encargo de GENERAL, con el criterio de Rafa: tapando el disco con la mano
+tiene que poder decir qué bioma es. Cada bioma lleva ahora su FIRMA en el
+cielo, en los islotes que flotan alrededor (`docs/DIORAMAS.md`, «Estado de
+la F1»):
+
+| Bioma | Firma |
+|---|---|
+| coral | atolones con palmera y charca; cascadas blancas que caen al abismo |
+| jungle | macetas de copas; lianas |
+| tundra | icebergs invertidos con nieve; carámbanos |
+| desierto | mesas voladoras; cascadas de arena |
+| kitsune | rocas con torii, y un camino de toriis que baja hacia el abismo |
+
+Además van los jirones de C1 (bruma a media profundidad). Coste: 0 bytes
+y +2 draws.
+
+**Cifras** (`arena-shots --metrics`, 5 biomas × semillas 1, 7 y 42):
+- ΔL mediano del canto: 65-74,6. p10 ≥39 y mínimo ≥16,8.
+- Pozos oscuros: fondo ≥20 por debajo de la arena y ≤7,8 % de fondo claro
+  (decisión 1: ≤8 %).
+- Jungle (pozo claro): canto 72-74,6.
+- En node, 300 semillas: camino de toriis en 300 de 300 y 0 violaciones
+  del pasillo.
+- Golden 3/3 sin regenerar y `test:sim` 304/304.
+
+**Lo que costó cumplir la decisión 1.** Las firmas y los jirones claros
+sumaban fondo claro (8,5-11,6 %). Arreglo:
+- los jirones pasan de 60 a 30 y tiran un 60 % hacia el pozo;
+- las cascadas se funden antes;
+- la cobertura de coral baja a 0,32 y la de kitsune a 0,34.
+
+Se mide con tres semillas, porque con una sola iba justa.
+
+**Revisión adversarial** (3 lentes, un verificador por hallazgo): 15
+confirmados, todos arreglados. El más serio: el camino de toriis faltaba
+en más de la mitad de las partidas. Se colocaba después de los islotes,
+que le quitaban su único hueco, y además las puertas estaban giradas 90°.
+Los demás:
+- lianas que nacían dentro de la maceta y no llegaban al color del pozo;
+- carámbanos metidos en el iceberg;
+- frondas aplastadas en el eje equivocado;
+- una prueba de cascadas tan holgada que quitaba casi la mitad sin
+  motivo;
+- `setPackSky` aceptando una firma mal escrita, que dejaba el cielo sin un
+  islote;
+- `--no-island` pisando las métricas buenas.
+
+**Herramientas**: `arena-shots --no-island` (la prueba de Rafa) y
+`--gpu`. Ojo: en modo paralelo la GPU falló, con capturas en blanco y
+texturas que no cargan. Por software es lento pero fiable
+(`docs/carriles/arena.md`).
+
 ## 2026-09-29 — [Interfaz] El final online ya no miente, y los cinturones hablan castellano
 
 Encargo de la sesión general, aprobado por Rafa: los tres fallos del HUD

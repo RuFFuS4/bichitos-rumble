@@ -24,7 +24,26 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import type { BackdropLookConfig, PackSky } from './arena-look';
+import type { BackdropLookConfig, PackSky, SkyFirma } from './arena-look';
+
+/**
+ * Altura de la corona de cada firma, en radios del islote (fondo v2, F1).
+ * Es la ÚNICA fuente: la colocación la usa para que la esfera del pasillo
+ * envuelva islote + corona, y los constructores de `arena-backdrop.ts`
+ * escalan su geometría a esta altura.
+ */
+export const FIRMA_CROWN_HEIGHT: Record<SkyFirma, number> = {
+  atoll: 1.5,     // palmera
+  canopy: 1.25,   // copas apiladas
+  iceberg: 0.55,  // tapa de nieve y agujas de hielo
+  mesa: 0.35,     // hito de piedras
+  torii: 1.35,    // torii
+};
+
+/** Cota (fracción del alto de la panza) a la que nacen las lianas de la
+ *  maceta. La comparten la colocación y el constructor, que las pone en la
+ *  pared del islote a esa cota y no dentro. */
+export const LIANA_ATTACH_T = 0.35;
 
 /** Pose de cámara para el pasillo y la prueba de encuadre. */
 export interface SkyCamera {
@@ -49,12 +68,22 @@ export interface SkyLayout {
   neck: SkyInstance[];
   far: SkyInstance[];
   islets: SkyInstance[];
+  /** F1: la corona de cada islote (su posición es la tapa del islote) y lo
+   *  que cuelga (cascada, liana o carámbanos), y los jirones de C1. */
+  coronas: SkyInstance[];
+  hangs: SkyInstance[];
+  wisps: SkyInstance[];
+  /** Rocas del camino de toriis (kitsune); 0 si no cupo ningún rumbo. */
+  toriiPath: number;
   /** Paradas de la cúpula [elevación °, color hex sRGB], de +90 a −90. */
   domeStops: Array<[number, number]>;
   /** Límites del pasillo en elevación (°): lo que la cúpula pinta de pozo. */
   corridorTopDeg: number;
   corridorBottomDeg: number;
-  rejected: { nearCorridor: number; nearSparse: number; far: number; islets: number };
+  rejected: {
+    nearCorridor: number; nearSparse: number; far: number; islets: number;
+    wisps: number; hangsShortened: number; hangsDropped: number;
+  };
   isletsInFrame: number;
   /** Lo que rompe el contrato del pozo detrás del canto (plan §4/§8): el
    *  propio `abyss` fuera de su techo (pozo oscuro) o de su suelo (pozo
@@ -367,23 +396,124 @@ export function layoutSky(p: SkyLayoutParams): SkyLayout {
   }
 
   // --- Islotes hermanos: la escala del mundo -------------------------------
+  // F1: cada islote lleva la FIRMA de su bioma — una corona encima y lo que
+  // cuelga debajo — y su forma (lados, punta, alto) es la del bioma. La
+  // esfera del pasillo envuelve islote + corona; lo que cuelga se comprueba
+  // aparte porque llega mucho más abajo.
   const islets: SkyInstance[] = [];
-  let isletRejected = 0, isletsInFrame = 0;
+  const coronas: SkyInstance[] = [];
+  const hangs: SkyInstance[] = [];
+  let isletRejected = 0, isletsInFrame = 0, hangsShortened = 0, hangsDropped = 0;
+  const crown = FIRMA_CROWN_HEIGHT[sky.firma];
+  const placed: Array<{ x: number; z: number; rad: number }> = [];
+  const isletEnvelope = (topY: number, rad: number, h: number) => {
+    const top = topY + crown * rad, bottom = topY - h;
+    return { cy: (top + bottom) / 2, r: Math.hypot(rad, (top - bottom) / 2) };
+  };
+  /** Colgante de un islote ya colocado. Cascadas y lianas se prueban contra
+   *  el pasillo como una CÁPSULA (esferas del semiancho real a lo largo de
+   *  la cinta; una sola esfera que envolviera 26 u de cinta quitaba la
+   *  mitad sin que tocaran nada). Si la tocan se prueba a media longitud, y
+   *  si aun así, se quitan. Los carámbanos quedan dentro de la esfera del
+   *  islote. */
+  const ribbonTouches = (px: number, py: number, pz: number, halfW: number, len: number) => {
+    const step = Math.max(0.5, halfW);
+    const n = Math.max(1, Math.ceil(len / step));
+    for (let k = 0; k <= n; k++) {
+      if (touchesCorridor(px, py - (k / n) * len, pz, halfW * Math.SQRT2)) return true;
+    }
+    return false;
+  };
+  const addHang = (x: number, topY: number, z: number, rad: number, h: number, rotY: number, rand: () => number, c: THREE.Color) => {
+    if (sky.firma === 'torii') return;
+    if (sky.firma === 'iceberg') { push(hangs, x, topY, z, rad, rad, rad, rotY, c); return; }
+    let len = sky.firma === 'canopy' ? look.lianaLen * (0.7 + 0.6 * rand()) : look.cascadeLen * (0.8 + 0.4 * rand());
+    let px = x, pz = z, py = topY;
+    let w = rad;            // escala X/Z de la instancia
+    let halfW = rad;        // semiancho real de lo que cuelga
+    if (sky.firma === 'canopy') {
+      py = topY - h * LIANA_ATTACH_T;          // de la pared de la maceta
+      halfW = rad * 0.9;
+    } else {
+      // Cascada: sale del borde de la tapa, hacia fuera del islote.
+      const phi = rand() * Math.PI * 2;
+      px = x + Math.cos(phi) * rad * 0.78;
+      pz = z + Math.sin(phi) * rad * 0.78;
+      py = topY - 0.02;
+      w = rad * 0.7;
+      halfW = w * 0.5;
+    }
+    if (!ribbonTouches(px, py, pz, halfW, len)) { push(hangs, px, py, pz, w, len, w, rotY, c); return; }
+    len /= 2;
+    if (!ribbonTouches(px, py, pz, halfW, len)) {
+      hangsShortened++;
+      push(hangs, px, py, pz, w, len, w, rotY, c);
+      return;
+    }
+    hangsDropped++;
+  };
+  // --- Camino de toriis (kitsune): el elemento propio del santuario -------
+  // Rocas con torii que bajan en fila hacia el abismo, cada vez más hondas
+  // y más pequeñas. Se busca un rumbo en el que el camino entero quede
+  // fuera del pasillo y con al menos tres rocas dentro del cuadro de juego;
+  // si ninguno cabe, no hay camino (se cuenta en `toriiPath`). Va ANTES que
+  // los islotes normales, que son los que lo esquivan: al revés, le
+  // quitaban su única ventana y faltaba en la mitad de las semillas.
+  let toriiPath = 0;
+  if (sky.firma === 'torii' && look.toriiPathCount > 1) {
+    const rand = layerRand('torii-path');
+    const start = rand() * Math.PI * 2;
+    const N = look.toriiPathCount;
+    for (let k = 0; k < 36 && toriiPath === 0; k++) {
+      const a0 = start + (k / 36) * Math.PI * 2;
+      const steps: Array<{ x: number; y: number; z: number; rad: number; h: number }> = [];
+      let inView = 0;
+      let ok = true;
+      for (let i = 0; i < N && ok; i++) {
+        const t = i / (N - 1);
+        const a = a0 + Math.sin(t * Math.PI) * 0.12;           // una leve curva
+        const r = lerp(look.toriiPathR0, look.toriiPathR1, t);
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        const y = lerp(look.toriiPathY0, look.toriiPathY1, t);
+        const rad = look.toriiRockRadius * (1 - 0.35 * t);
+        const h = rad * sky.isletDepth;
+        const env = isletEnvelope(y, rad, h);
+        if (touchesCorridor(x, env.cy, z, env.r)) { ok = false; break; }
+        if (inFrame(x, env.cy, z)) inView++;
+        steps.push({ x, y, z, rad, h });
+      }
+      if (!ok || inView < 3) continue;
+      steps.forEach((st, i) => {
+        placed.push({ x: st.x, z: st.z, rad: st.rad });
+        const depthT = Math.min(1, Math.max(0, (look.isletTopYMax - st.y) / (look.isletTopYMax - look.isletTopYMin)));
+        tmp.setScalar(1 - look.isletDepthDarken * depthT);
+        // Cada puerta CRUZA su tramo del camino: el paso del torii (su Z
+        // local) apunta al rumbo local, que se curva. Ry(θ) lleva Z a
+        // (sen θ, 0, cos θ), así que θ = atan2(dx, dz).
+        const prev = steps[Math.max(0, i - 1)]!, next = steps[Math.min(steps.length - 1, i + 1)]!;
+        const rotY = Math.atan2(next.x - prev.x, next.z - prev.z);
+        push(islets, st.x, st.y, st.z, st.rad, st.h, st.rad, rotY, tmp);
+        push(coronas, st.x, st.y, st.z, st.rad, st.rad, st.rad, rotY, tmp);
+      });
+      toriiPath = steps.length;
+    }
+  }
+
   {
     const rand = layerRand('islets');
-    const placed: Array<{ x: number; z: number; rad: number }> = [];
     for (let attempt = 0; attempt < 600 && islets.length < look.isletCount; attempt++) {
       const r = lerp(look.isletRMin, look.isletRMax, rand());
       const a = rand() * Math.PI * 2;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       const topY = lerp(look.isletTopYMin, look.isletTopYMax, rand());
       const rad = lerp(look.isletRadiusMin, look.isletRadiusMax, rand());
-      const h = rad * look.isletDepthRatio;
+      const h = rad * sky.isletDepth;
       const rotY = rand() * Math.PI * 2;
-      const visible = inFrame(x, topY - h / 2, z);
+      const env = isletEnvelope(topY, rad, h);
+      const visible = inFrame(x, env.cy, z);
       // Primero se llenan los que tienen que verse en juego.
       if (isletsInFrame < look.isletMinInFrame && !visible) continue;
-      if (touchesCorridor(x, topY - h / 2, z, Math.hypot(rad, h / 2))
+      if (touchesCorridor(x, env.cy, z, env.r)
         || placed.some(o => Math.hypot(o.x - x, o.z - z) < o.rad + rad + 4)) {
         isletRejected++;
         continue;
@@ -393,6 +523,31 @@ export function layoutSky(p: SkyLayoutParams): SkyLayout {
       const depthT = (look.isletTopYMax - topY) / (look.isletTopYMax - look.isletTopYMin);
       tmp.setScalar(1 - look.isletDepthDarken * depthT);
       push(islets, x, topY, z, rad, h, rad, rotY, tmp);
+      if (crown > 0) push(coronas, x, topY, z, rad, rad, rad, rotY, tmp);
+      addHang(x, topY, z, rad, h, rotY, rand, tmp);
+    }
+  }
+
+  // --- Jirones (C1): el aire entre la isla y el mar -----------------------
+  // Bultos pequeños a media profundidad; el pasillo los deja solo en las
+  // alas y las esquinas del cuadro. Misma malla que C2 (0 draw calls).
+  const wisps: SkyInstance[] = [];
+  let wispCorridor = 0;
+  {
+    const rand = layerRand('wisps');
+    const cloudTop = new THREE.Color(sky.cloudTop);
+    for (let i = 0; i < look.wispCount; i++) {
+      const r = Math.sqrt(lerp(look.wispRMin ** 2, look.wispRMax ** 2, rand()));
+      const a = rand() * Math.PI * 2;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const topY = lerp(look.wispYMin, look.wispYMax, rand());
+      const s = lerp(look.wispSizeMin, look.wispSizeMax, rand());
+      const stretch = 1.4 + 0.8 * rand();                          // alargados: jirón, no bola
+      const bright = 0.9 + 0.1 * rand();
+      const h = 0.75 * s * 0.6;
+      if (touchesCorridor(x, topY - h / 2, z, bumpEnvelope(s * stretch, s * 0.6, s))) { wispCorridor++; continue; }
+      tmp.copy(cloudTop).multiplyScalar(bright).lerp(abyss, look.wispFade);
+      push(wisps, x, topY - h, z, s * stretch, s * 0.6, s, 0, tmp);
     }
   }
 
@@ -414,7 +569,7 @@ export function layoutSky(p: SkyLayoutParams): SkyLayout {
   // --- Cifras -----------------------------------------------------------------
   let maxExtent = 0;
   let h = 0x811c9dc5 | 0;
-  for (const list of [near, neck, far, islets]) {
+  for (const list of [near, neck, far, islets, coronas, hangs, wisps]) {
     for (const it of list) {
       maxExtent = Math.max(maxExtent, Math.hypot(it.x, it.z) + Math.max(it.sx, it.sz));
       for (const n of [it.x, it.y, it.z, it.sx, it.sy, it.sz, it.rotY, it.r, it.g, it.b]) {
@@ -424,10 +579,13 @@ export function layoutSky(p: SkyLayoutParams): SkyLayout {
   }
 
   return {
-    near, neck, far, islets, domeStops,
+    near, neck, far, islets, coronas, hangs, wisps, toriiPath, domeStops,
     corridorTopDeg: topDeg,
     corridorBottomDeg: bottomDeg,
-    rejected: { nearCorridor, nearSparse, far: farRejected, islets: isletRejected },
+    rejected: {
+      nearCorridor, nearSparse, far: farRejected, islets: isletRejected,
+      wisps: wispCorridor, hangsShortened, hangsDropped,
+    },
     isletsInFrame,
     corridorViolations,
     maxExtent,

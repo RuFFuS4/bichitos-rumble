@@ -27,6 +27,7 @@ import * as THREE from 'three';
 import { loadModel } from './model-loader';
 import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
 import { type SeaRamp, type CliffRamp, type PackSky } from './arena-look';
+import { FIRMA_CROWN_HEIGHT } from './arena-sky-layout';
 
 /** Anisotropía máxima del dispositivo, cacheada. La fija el renderer al
  *  arrancar (`setArenaTextureAnisotropy`); sin renderer (tests, headless)
@@ -152,7 +153,11 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       zenith: 0x8fc0b8, abyss: 0x7da07d, abyssDeep: 0x9fbf9f,
       pit: 'light', abyssCeiling: 25.3, abyssFloor: 115.3,
       cloudTop: 0xc4d4b0, cloudFar: 0xb4c8a0, coverage: 0.4,
-      isletTop: 0x46642e, hemiGround: 0x5f7a55, hemiIntensity: 0.7,
+      isletTop: 0x46642e,
+      // Islotes-maceta con copas apiladas y lianas colgando.
+      isletSides: 12, isletTip: 0.35, isletDepth: 1.2,
+      firma: 'canopy', firmaMain: 0x4f8a3c, firmaAccent: 0x2f6a2a, firmaDetail: 0x5a4028, firmaHang: 0x35552a,
+      hemiGround: 0x5f7a55, hemiIntensity: 0.7,
     },
   },
   frozen_tundra: {
@@ -173,7 +178,11 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       zenith: 0x8fb4e8, abyss: 0x264466, abyssDeep: 0x13253a,
       pit: 'dark', abyssCeiling: 77.2, abyssFloor: 167.2,
       cloudTop: 0xeef0fa, cloudFar: 0xdde4f2, coverage: 0.34,
-      isletTop: 0xa6b6c8, hemiGround: 0x8a9cc0, hemiIntensity: 0.7,
+      isletTop: 0xa6b6c8,
+      // Icebergs invertidos (seis caras, casi en punta) con carámbanos.
+      isletSides: 6, isletTip: 0.02, isletDepth: 2.2,
+      firma: 'iceberg', firmaMain: 0xf2f6fb, firmaAccent: 0x9fd6f2, firmaDetail: 0x7fb0d8, firmaHang: 0xcbe8fa,
+      hemiGround: 0x8a9cc0, hemiIntensity: 0.7,
     },
   },
   desert_dunes: {
@@ -193,7 +202,12 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       zenith: 0x9cc0e0, abyss: 0x44220f, abyssDeep: 0x241208,
       pit: 'dark', abyssCeiling: 52.3, abyssFloor: 142.3,
       cloudTop: 0xf0d2a8, cloudFar: 0xe8c49a, coverage: 0.38,
-      isletTop: 0xa27a48, hemiGround: 0xa8784a, hemiIntensity: 0.7,
+      isletTop: 0xa27a48,
+      // Mesas voladoras: tapa ancha, poca punta, la misma roca estratificada
+      // que la isla; cascadas de arena.
+      isletSides: 10, isletTip: 0.55, isletDepth: 0.9,
+      firma: 'mesa', firmaMain: 0xb35a34, firmaAccent: 0x6a8a3a, firmaDetail: 0x8a5a34, firmaHang: 0xe0b070,
+      hemiGround: 0xa8784a, hemiIntensity: 0.7,
     },
   },
   coral_beach: {
@@ -213,8 +227,12 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     sky: {
       zenith: 0x7fd0f0, abyss: 0x0b3a52, abyssDeep: 0x06202e,
       pit: 'dark', abyssCeiling: 58.8, abyssFloor: 148.8,
-      cloudTop: 0xfff2dc, cloudFar: 0xe8f4ee, coverage: 0.38,
-      isletTop: 0xb09e74, hemiGround: 0x6fb3b5, hemiIntensity: 0.7,
+      cloudTop: 0xfff2dc, cloudFar: 0xe8f4ee, coverage: 0.32,
+      isletTop: 0xb09e74,
+      // Atolones con charca turquesa y palmera; cascadas blancas.
+      isletSides: 14, isletTip: 0.12, isletDepth: 1.3,
+      firma: 'atoll', firmaMain: 0x4f9a3c, firmaAccent: 0x3fd0d8, firmaDetail: 0x8a6a44, firmaHang: 0xf4fbff,
+      hemiGround: 0x6fb3b5, hemiIntensity: 0.7,
     },
   },
   kitsune_shrine: {
@@ -236,8 +254,12 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     sky: {
       zenith: 0xb89ac8, abyss: 0x2f1f36, abyssDeep: 0x1a111e,
       pit: 'dark', abyssCeiling: 47.8, abyssFloor: 137.8,
-      cloudTop: 0xdcbccf, cloudFar: 0xd8b4c8, coverage: 0.45,
-      isletTop: 0x86867a, hemiGround: 0x9a7890, hemiIntensity: 0.7,
+      cloudTop: 0xdcbccf, cloudFar: 0xd8b4c8, coverage: 0.34,
+      isletTop: 0x86867a,
+      // Rocas con torii bermellón, y un camino de toriis que baja al abismo.
+      isletSides: 7, isletTip: 0.2, isletDepth: 1.1,
+      firma: 'torii', firmaMain: 0xd8321e, firmaAccent: 0x2a2020, firmaDetail: 0x6e6e66, firmaHang: 0x6e6e66,
+      hemiGround: 0x9a7890, hemiIntensity: 0.7,
     },
   },
 };
@@ -512,14 +534,24 @@ export function getPackSky(packId: ArenaPackId): PackSky {
  * rechazó por desconocidas o de otro tipo, para que quien llama no crea
  * que aplicó lo que no existe. No reconstruye: eso lo decide quien llama.
  */
+/** Valores válidos de los campos de texto de PackSky (la firma sale de su
+ *  fuente única, FIRMA_CROWN_HEIGHT). */
+const SKY_ENUMS: Record<string, readonly unknown[]> = {
+  pit: ['dark', 'light'],
+  firma: Object.keys(FIRMA_CROWN_HEIGHT),
+};
+
 export function patchPackSky(packId: ArenaPackId, patch: Record<string, unknown>): { applied: string[]; rejected: string[] } {
   const applied: string[] = [];
   const rejected: string[] = [];
   if (!Object.prototype.hasOwnProperty.call(PACKS, packId)) return { applied, rejected: Object.keys(patch) };
   const sky = PACKS[packId].sky as unknown as Record<string, unknown>;
   for (const [k, v] of Object.entries(patch)) {
-    const badPit = k === 'pit' && v !== 'dark' && v !== 'light';
-    if (!Object.prototype.hasOwnProperty.call(sky, k) || typeof v !== typeof sky[k] || badPit) { rejected.push(k); continue; }
+    // Los campos de texto son enums: una firma mal escrita dejaba el cielo
+    // sin un solo islote y la respuesta decía que se había aplicado.
+    const allowed = SKY_ENUMS[k];
+    const badEnum = allowed !== undefined && !allowed.includes(v);
+    if (!Object.prototype.hasOwnProperty.call(sky, k) || typeof v !== typeof sky[k] || badEnum) { rejected.push(k); continue; }
     sky[k] = v;
     applied.push(k);
   }

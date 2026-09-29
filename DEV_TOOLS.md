@@ -391,6 +391,17 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
       (varias poses del mismo instante congelado), `--viewport 390x844`,
       `--backdrop sky|sea`, `--scatter 0`, `--no-hud`, `--critters
       A,B,C,D` y `--sky-patch '{json}'`.
+    - **F1 del fondo** (2026-09-29): `--no-island` oculta la isla, los
+      bichos y sus sombras, que es la prueba de Rafa: tapando el disco se
+      tiene que saber el bioma. Sus capturas llevan el sufijo `_noisland`
+      y no miden el canto. `--gpu` renderiza con la GPU; en modo paralelo
+      ha fallado, así que mira las capturas antes de fiarte.
+    - **La firma de cada bioma** también se toca en vivo con
+      `setPackSky(id, { firma, firmaMain, …, isletSides, isletTip,
+      isletDepth })`. `firma` y `pit` se validan contra sus valores; una
+      mal escrita va a `rejected`.
+      `getBackdropStats()` da además `toriiPath`, las rocas del camino de
+      kitsune.
     - **`--metrics`**: escribe `metrics*.json`, que se acumula entre
       ejecuciones (`scripts/lib/arena-metrics.mjs`). Mide el ΔL del canto
       en 64 azimuts sobre el **labio vivo**, más la luma media de fondo y

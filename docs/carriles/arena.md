@@ -30,7 +30,9 @@ el orden de trabajo.
      - El cielo de la victoria es plano: las torres llegan en la F2.
      - Mejor medir la decisión 1 con varias semillas. Con la semilla 1 va
        justa (jungle 7,6 %), con otras baja mucho (0,3-5 %).
-   - F1 firmas por bioma · F2 torres, fondo del pozo, deriva y vida · F3
+   - **F1, las firmas: HECHA (2026-09-29)**. Bloque «Estado de la F1» en
+     DIORAMAS; hojas en `.tmp/shots-f1/` (`_hoja_f1`, `_tapado_a_ciegas`).
+   - Lo que queda: F2 torres, fondo del pozo, deriva y vida · F3
      luz por bioma (absorbe la antigua «fase 3, rig de luz») · F4 caída,
      CLI `arena-sky.mjs`, `look-patch`, test de determinismo y borrado del
      mar y de las fotos.
@@ -103,6 +105,10 @@ el orden de trabajo.
   `ERR_INSUFFICIENT_RESOURCES`, vistos el 2026-09-21. Lo más probable es
   la fuga de VRAM de las fotos (`textureCache` no expulsa nunca). Usa un
   navegador por bioma hasta que F4 borre las fotos.
+- **`--gpu` en modo paralelo falla** (2026-09-29): con los cuatro carriles
+  tirando de la GPU a la vez salieron errores de shader (capturas en
+  blanco) y texturas de GLB que no cargan (props en blanco). Por software
+  va lento pero fiable. Si usas `--gpu`, mira cada captura antes de medir.
 - **El headless renderiza por SOFTWARE por defecto** (lo midió PERSONAJES:
   18 s por fotograma a 1400×900). Con `channel: 'chromium'` y
   `--use-angle=d3d11 --enable-gpu` usa la GPU y sigue mudo. `arena-shots`
@@ -129,7 +135,7 @@ el orden de trabajo.
        PERSONAJES del 25), para que el colapso no vaya a 60 Hz en pantallas
        de 144. **`game.ts` es tuyo hoy** para engancharlo. Cuando integres,
        dilo en el buzón de INTERFAZ: le toca a él.
-  2. **Fondo v2, F1**: firmas por bioma y jirones C1. El criterio de Rafa:
+  2. ✅ **Hecho el 2026-09-29.** **Fondo v2, F1**: firmas por bioma y jirones C1. El criterio de Rafa:
      tapando el disco, tiene que poder decir qué bioma es. Mide la decisión
      1 con varias semillas; con la semilla 1 va justa.
   - Dos notas de aquí abajo **no son tuyas por fichero** y pasan a
@@ -220,12 +226,17 @@ el orden de trabajo.
 
 ## Cómo retomar
 
-**2026-09-22**. El cono y la F0 del fondo v2 están en `dev`, con el mar
-todavía vivo como A/B. Las decisiones de la F0 están tomadas (jungle con
-pozo claro y el rebote aprobado). Lo siguiente es la **F1**: las firmas de
-cada bioma y los jirones C1, que es lo que resuelve de verdad «no se lee
-qué hay abajo»; el criterio es que Rafa, tapando el disco, diga el
-bioma.
+**2026-09-29**. Hecho y en `dev`: los dos desbloqueos del encargo
+(`Arena.simulate`/`present` y `ArenaSim.getLayout()`) y la **F1 del fondo
+v2** (las firmas de cada bioma).
+
+- **Pendiente de Rafa:** la prueba a ciegas del disco tapado
+  (`.tmp/shots-f1/_tapado_a_ciegas.png`). Si algún bioma no se reconoce,
+  ese es el trabajo siguiente. El candidato es tundra.
+- **Después:** F2 (torres del horizonte, fondo del pozo, deriva y vida) o
+  lo que diga el encargo de GENERAL.
+- **Trabajo en paralelo:** en `.claude/worktrees/arena`, con el dev server
+  en el 5182.
 
 - **Para mirar**: `node scripts/arena-shots.mjs --out .tmp/shots-x
   --pose game,victory,low --no-hud`.

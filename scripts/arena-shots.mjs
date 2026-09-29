@@ -15,6 +15,7 @@
 //                                [--backdrop sky|sea] [--scatter 0]
 //                                [--no-hud] [--metrics]
 //                                [--critters A,B,C,D] [--sky-patch '{json}']
+//                                [--gpu] [--no-island]
 //
 // Fondo v2 (docs/DIORAMAS.md §«Fondo v2», §12):
 //   --pose      una o varias poses por pack. Las de fin de partida replican
@@ -32,6 +33,10 @@
 //               Shelly): el A/B del roster necesita a los nueve.
 //   --sky-patch parche del cielo de cada pack antes de empezar
 //               (__devApi.setPackSky), p. ej. el pozo claro de la decisión 2.
+//   --gpu       renderiza con la GPU (por defecto el headless va por
+//               software: ~18 s por fotograma a 1400×900). Sigue mudo.
+//   --no-island oculta la isla y los bichos: el criterio de Rafa para la
+//               F1 del fondo es que, tapando el disco, se sepa el bioma.
 // ---------------------------------------------------------------------------
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -56,12 +61,16 @@ const NO_HUD = args.has('no-hud');
 const METRICS = args.has('metrics');
 const CRITTERS = String(args.get('critters') ?? 'Sergei,Trunk,Kurama,Shelly').split(',');
 const SKY_PATCH = args.has('sky-patch') ? JSON.parse(String(args.get('sky-patch'))) : null;
+const GPU = args.has('gpu');
+const NO_ISLAND = args.has('no-island');
 const HIDE_HUD_CSS = 'body > *:not(canvas) { visibility: hidden !important; }';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 mkdirSync(OUT, { recursive: true });
 
-const browser = await launchMutedBrowser();
+const browser = await launchMutedBrowser(GPU
+  ? { channel: 'chromium', args: ['--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist'] }
+  : {});
 // --viewport WxH: 1280x720 es el caso MAS FAVORABLE (a mas resolucion, la
 // panoramica se amplia mas). Los sets utiles son 1280x720, 1920x1080 y
 // 390x844 (movil retrato), que es donde peor se porta todo.
@@ -145,15 +154,23 @@ for (const pack of PACKS) {
   }
   // Congelado: varias poses del MISMO instante, y nada cae entre ellas.
   await page.evaluate(() => window.__devApi.setSpeed(0));
+  if (NO_ISLAND) {
+    await page.evaluate(() => {
+      window.__game.arena.group.visible = false;
+      for (const c of window.__game.critters) c.mesh.visible = false;
+      if (window.__game.blobShadows?.mesh) window.__game.blobShadows.mesh.visible = false;
+    });
+  }
   if (SCATTER !== null) await page.evaluate((d) => window.__devApi.setScatterDensity(d), SCATTER);
   for (const pose of POSES) {
     await page.evaluate((p) => window.__devApi.setCameraPose(p), pose);
     await sleep(700);
-    const suffix = `${AT > 0 ? `_t${AT}` : ''}${pose !== 'game' ? `_${pose}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}`;
+    const suffix = `${AT > 0 ? `_t${AT}` : ''}${pose !== 'game' ? `_${pose}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}${NO_ISLAND ? '_noisland' : ''}`;
     const file = `${OUT}/${pack}${suffix}.png`;
     const hud = NO_HUD ? await page.addStyleTag({ content: HIDE_HUD_CSS }) : null;
     await page.screenshot({ path: file });
-    if (METRICS && pose === 'game') {
+    // Sin isla no hay canto ni arena que medir: se salta la métrica.
+    if (METRICS && pose === 'game' && !NO_ISLAND) {
       // La métrica siempre sin HUD: la cuenta atrás y los paneles contarían
       // como fondo.
       const tmp = hud ?? await page.addStyleTag({ content: HIDE_HUD_CSS });
@@ -197,7 +214,7 @@ for (const pack of PACKS) {
       const stats = await page.evaluate(() => window.__devApi.getBackdropStats());
       allMetrics[`${pack}${suffix}`] = { ...m, backdrop: stats && {
         mode: stats.mode, draws: stats.draws, tris: stats.tris, corridorViolations: stats.corridorViolations,
-        isletsInFrame: stats.isletsInFrame, maxExtent: Math.round(stats.maxExtent),
+        isletsInFrame: stats.isletsInFrame, toriiPath: stats.toriiPath, maxExtent: Math.round(stats.maxExtent),
         buildMs: Math.round(stats.buildMs * 10) / 10, hash: stats.hash,
       } };
       console.log(`  ${pack.padEnd(16)} ΔL canto mediana ${m.lip.median} · p10 ${m.lip.p10} · min ${m.lip.min} (${m.lip.azimuths} az, ${m.lip.fallingSkipped} cayendo) · fondo ${m.bgMean} / arena ${m.arenaMean} · fondo>p75 ${m.bgAboveArenaP75} %`);
