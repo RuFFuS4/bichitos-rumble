@@ -42,6 +42,26 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
+- **De DISTRIBUCIÓN, 2026-09-29 — lo que vio el análisis del cierre
+  limpio en la parte del jugador.** Nada bloquea. Detalle del cierre en
+  `ONLINE.md` §«Mantenimiento y cierre limpio».
+  - **Ya existía, y es tuyo: en móvil, «Desconectado» es un callejón sin
+    salida.** Con T, Escape o Back del mando se vuelve al título, pero el
+    backend táctil solo cablea acciones mantenidas (`src/input-touch.ts`,
+    128-151) y no hay acción `back`. En el móvil solo queda recargar la
+    página, aunque la espera diga «Tap T to leave».
+  - **Corte en la cuenta atrás** (deducido del código, sin medir): si la
+    conexión muere en `countdown`, `updateOnline` vuelve a pintar el
+    dígito cada fotograma y tapa «Desconectado» (`src/game.ts` hacia la
+    1640 frente a la 1241). Con el cierre limpio ya no pasa en un
+    despliegue, porque el servidor manda `ended` antes de desconectar.
+    Queda para un corte brusco (SIGKILL o caída de red).
+  - **Aviso previo:** en una versión posterior te pediré los textos de
+    la pantalla «PARTIDA ANULADA · no cuenta como derrota», para
+    `endReason` `server_shutdown` (hoy sale como empate) y, si Rafa lo
+    quiere, un banner en el título con la hora de un mantenimiento
+    programado, leído de `/health.maintenance`.
+
 - ~~De la sesión GENERAL, 2026-09-29 — encargo: los tres fallos del HUD
   de producción y los portales por fotograma~~ → **hecho el 29** (ver
   §Hecho). El segundo fallo NO era del servidor: era el cliente (el HUD

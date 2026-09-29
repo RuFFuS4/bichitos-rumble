@@ -192,12 +192,18 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
      reiniciaría Railway.
    - El CI corre también en las ramas `claude/**` y `codex/**` que se
      empujen: se ve en verde antes de integrar.
-   - Subida 2 (servidor), pendiente:
-     - que `/health` diga qué commit sirve;
-     - el `onBeforeShutdown` de `BrawlRoom`: hoy un reinicio de Railway
-       en mitad de una partida pública apunta derrotas (y, con 2 vivos,
-       una victoria falsa) a los humanos verificados. Va con el aviso de
-       mantenimiento (punto 12).
+   - Subida 2 (servidor), **hecha el 2026-09-29 en `dev`**; sale con la
+     próxima subida de servidor:
+     - `/health` dice qué commit sirve (`commit`, `deployment`) y cuántas
+       salas y clientes hay (`live`);
+     - `BrawlRoom.onBeforeShutdown` anula sin puntuar la partida que
+       pilla un cierre. Antes se apuntaban derrotas y, con 2 vivos, una
+       victoria falsa. Lo prueban `server/tests/shutdown-check.mts` y
+       `scripts/online-shutdown-e2e.mjs` en el CI, y los dos fallan con
+       el código de antes;
+     - `server/package.json` en `engines` 22.x, y el CI del servidor la
+       lee de ahí.
+     - Va con el aviso de mantenimiento (punto 12).
 9. ~~**`ws@8.20.0` con aviso alto**~~ — hecho el 2026-09-24: ws 8.21.3
    (solo el lockfile, dentro de `^8.19.0`). `npm audit --omit=dev` pasa
    de 11 avisos a 10, sin ningún alto; los que quedan son bajos o
@@ -233,16 +239,22 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
     2026-09-26): *«en un futuro por si hay partidas deberemos avisar con
     un mensaje de mantenimiento y hacer la subida y las comprobaciones
     durante el tiempo indicado en el mensaje»*.
-    - Hoy no existe: el runbook solo pide que Rafa mire que no haya
-      partidas vivas.
-    - Solo hace falta cuando el push reinicia Railway, es decir, cuando
-      toca `server/`.
-    - Es red y servidor (zona hard-stop): diseño y plan antes de tocar.
-      Por ejemplo, una variable de Railway o un campo de `/health` que el
-      cliente enseñe en el título y en la espera online, con la hora de
-      la ventana.
-    - Va junto al `onBeforeShutdown` del punto 8, que es lo que evita
-      apuntar derrotas si el reinicio pilla una partida.
+    - **Hecho el 2026-09-29, en `dev`; sale con la subida 2.** El plan
+      salió de 3 diseños y 3 jueces, y Rafa lo aprobó con sus cuatro
+      decisiones:
+      - anular sin puntuar;
+      - el interruptor en la shell de Railway;
+      - Node 24 en el cliente y 22 en el servidor;
+      - 3 líneas en `game.ts`.
+    - El interruptor es `node scripts/maintenance.mjs on --for <min>`, en
+      la shell del contenedor. Los pasos están en el paso 0 del runbook y
+      el detalle en `ONLINE.md` §«Mantenimiento y cierre limpio».
+    - Queda para más adelante:
+      - la pantalla «PARTIDA ANULADA · no cuenta como derrota» (ahora se
+        ve como un empate), con unas 20 líneas de `game.ts` y textos de
+        INTERFAZ;
+      - el banner previo en el título («mantenimiento a las 18:30»), en
+        una fase 2 de INTERFAZ sobre `/health.maintenance`.
 13. **Una habilidad activa sigue activa en la pantalla final** (aviso de
     PERSONAJES, 2026-09-25; baja, solo visual): `endMatch` de `BrawlRoom`
     no cancela las habilidades. Medido en v1.11: una sierra lanzada justo
@@ -290,12 +302,39 @@ Desde el worktree de distribución, nunca desde el checkout principal.
 - ¿El push reinicia Railway? Solo si toca `server/` (Railway tiene
   rutas vigiladas: `git diff --stat origin/main <SHA> -- server/`). Si
   no lo toca, no hay ventana de servidor ni partidas cortadas.
-- Si lo reinicia: que no haya partidas online vivas. Un reinicio de
-  Railway las corta y apunta derrotas; solo se ve en los logs de
-  Railway, así que lo mira Rafa. **Si las hay** (Rafa, 2026-09-26):
-  primero un mensaje de mantenimiento que anuncie la ventana, y el push y
-  las comprobaciones de después dentro de ese tiempo. El mecanismo del
-  aviso aún no existe (punto 12).
+- **Si lo reinicia, ventana de mantenimiento** (norma de Rafa,
+  2026-09-26; detalle en `ONLINE.md` §«Mantenimiento y cierre limpio»).
+  Lo mismo vale para cambiar una variable de Railway o usar Redeploy o
+  Restart.
+  a. **Rafa, en la shell del contenedor de Railway** (WORKDIR `/app`):
+     `node scripts/maintenance.mjs on --for 20`. La herramienta se niega
+     fuera del volumen (sin la base de datos al lado).
+  b. Desde el worktree:
+     `node scripts/probe-server.mjs https://bichitos-rumble-production.up.railway.app --maintenance active`.
+     Sirve aunque la subida cambie `NET_PROTOCOL`: en este modo usa el
+     protocolo que anuncia el servidor, no el del checkout.
+  c. Esperar a que `/health` diga `live.matches` = 0, es decir, ninguna
+     partida en cuenta atrás ni en juego. Suele tardar 3 min o menos. No
+     hace falta esperar a `live.clients` = 0: quien mira la pantalla
+     final o espera en una sala vacía no pierde nada con el corte. Si a
+     los 4 min sigue habiendo partidas, se sube igual: el cierre limpio
+     las anula sin puntuar.
+  d. La subida: §1 (merge, tag y push) y §2 (la ventana del despliegue),
+     con el mantenimiento puesto. La ventana sobrevive al reinicio.
+  e. §3 hasta donde no haga falta entrar al online: la sonda, `/health`
+     y las cabeceras.
+  f. **Rafa, en la shell del contenedor NUEVO:**
+     `node scripts/maintenance.mjs off`. Comprobarlo con
+     `node scripts/probe-server.mjs <prod> --maintenance none`.
+  g. Las comprobaciones online de §3, que necesitan entrar, justo
+     después y dentro del tiempo anunciado.
+  - Requisito, una vez: `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=10` en las
+    variables de Railway. Para no reiniciar al guardarla, **Alt+clic en
+    Deploy** en el aviso de cambios pendientes: queda aplicada para el
+    próximo despliegue. Un clic normal redespliega. Con 0, el SIGKILL
+    llega enseguida y el cierre limpio no tiene tiempo.
+  - Hasta que esté desplegado (subida 2 del plan), no hay ventana: se
+    sube sin partidas vivas, lo que se mira en los logs de Railway.
 - Foto de producción:
   - `curl -s https://bichitos-rumble-production.up.railway.app/health`
     y anotar el uptime;
@@ -342,10 +381,19 @@ git push origin main          # dispara Vercel y Railway a la vez
 **3. Después**
 - `node scripts/probe-server.mjs https://bichitos-rumble-production.up.railway.app`
   (solo lee: `status`, el `protocol` del código y el guard `on`).
-- `/health` con uptime de segundos, `protocol: 2` y
+- Si el push tocaba `server/`:
+  - `/health` trae `commit` = el SHA corto del merge;
+  - en el log del proceso viejo de Railway salen
+    `[server] shutting down at …` y `[server] shut down in N ms`. Entre
+    las dos no sale ningún `[Belts] recorded`, y sale un
+    `[Belts] match not recorded (server_shutdown — voided)` por cada
+    partida que se cortó: eso mide el cierre de verdad. Antes de esas dos
+    líneas, las partidas que acabaron normal sí puntúan.
+- `/health` con uptime de segundos, `protocol` = el `NET_PROTOCOL` del
+  SHA desplegado (3 desde v1.9) y
   `protocolGuard: "on"` (eso marca el final de la ventana), y
   `/api/leaderboard` con 200 (el volumen de la DB sigue montado).
-- Guard vivo, **solo después de que `/health` diga `protocol: 2` y
+- Guard vivo, **solo después de que `/health` diga ese `protocol` y
   `protocolGuard: "on"`** (contra v1.7 o con el guard apagado, esta
   sonda crea una sala):
   `curl -s -X POST -H 'content-type: application/json' -d '{}' https://bichitos-rumble-production.up.railway.app/matchmake/joinOrCreate/brawl`
@@ -375,10 +423,12 @@ desparejado ya no desincroniza: deja el online parado con un mensaje
 ("actualizándose" o "recarga"). Pero sigue sin funcionar. Los datos no
 corren riesgo: no hay migraciones.
 - **Si el que rechaza es el servidor** (el propio guard echa a todo el
-  mundo con `/health` en `protocol: 2`): primero `NET_PROTOCOL_GUARD=off`
-  en las variables de Railway, sin revertir nada.
+  mundo con `/health` en el `protocol` nuevo): primero `NET_PROTOCOL_GUARD=off`
+  en las variables de Railway, sin revertir nada. Ojo: cambiar una
+  variable redespliega y reinicia el servidor, así que las partidas vivas
+  se anulan.
 - **Si el que rechaza es el cliente** ("actualizándose" o "recarga" con
-  `/health` ya en `protocol: 2`): el interruptor no sirve. Rollback de
+  `/health` ya en el `protocol` nuevo): el interruptor no sirve. Rollback de
   **los dos lados** (Vercel `dpl_9LKsaf69…` + Railway f41fb7e). Solo
   Vercel serviría v1.7 contra un servidor con guard: todos recibirían
   "recarga", y la recarga volvería a traer v1.7, en bucle.

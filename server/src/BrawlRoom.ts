@@ -26,6 +26,7 @@ import { GameState } from './state/GameState.js';
 import {
   clientProtocolOf, judgeProtocol, isGuardEnabled, rejectMessage, countRejection,
 } from './net-protocol-guard.js';
+import { activeWindow, maintenanceMessage, countMaintenanceRejection } from './maintenance.js';
 import { PlayerSchema } from './state/PlayerSchema.js';
 import { SIM, SPAWN_POSITIONS, isPlayableCritter, DEFAULT_CRITTER, CRITTER_CONFIGS } from './sim/config.js';
 import {
@@ -53,6 +54,9 @@ const WAITING_TIMEOUT = 60;
 const RECONNECT_GRACE_SEC = 30;
 /** Hard cap on humans+bots in one room — matches `maxClients`. */
 const MAX_PLAYERS = 4;
+/** End reason of a match the server cut short (a Railway deploy's SIGTERM
+ *  or a crash): it is voided, never scored (Rafa, 2026-09-29). */
+const SERVER_SHUTDOWN = 'server_shutdown';
 
 interface InputMessage {
   moveX: number;      // -1..1
@@ -187,6 +191,22 @@ export class BrawlRoom extends Room {
    *  vuelve. Lo consultan recordOnlineBeltStats/endMatch (gracia ≠
    *  rage-quit) y onLeave (¿queda algún humano vivo o volviendo?). */
   private graceSids = new Set<string>();
+  /** Set by onBeforeShutdown: a join that lands after it (a seat reserved
+   *  just before the SIGTERM) is turned away in onJoin. */
+  private shuttingDown = false;
+  /** Every live room of this process, for /health's live.matches. */
+  private static readonly liveRooms = new Set<BrawlRoom>();
+
+  /** Rooms with a match in countdown or playing: what a restart would cut
+   *  now (and void). /health → live.matches; the deploy runbook waits for
+   *  0. Players on an end screen or in a waiting room lose nothing. */
+  static liveMatches(): number {
+    let n = 0;
+    for (const r of BrawlRoom.liveRooms) {
+      if (r.state.phase === 'countdown' || r.state.phase === 'playing') n++;
+    }
+    return n;
+  }
   /** Authoritative slow-zone tracker (Kermit Poison Cloud, Kowalski
    *  Arctic Burst). Each zone is consulted by `effectiveSpeed` for
    *  every player and its `ttl` decremented once per tick. Zones
@@ -215,19 +235,36 @@ export class BrawlRoom extends Room {
    * de reservar asiento. Un cliente de otra versión no llega a sentarse en
    * ninguna sala ni a crear una. Las reconexiones no pasan por aquí, y está
    * bien: las salas mueren con cada despliegue.
+   *
+   * Después, la ventana de mantenimiento (server/src/maintenance.ts): con
+   * ella activa no entra nadie nuevo, por ninguna vía, y las partidas en
+   * marcha terminan normal (tampoco aquí pasan las reconexiones). El
+   * interruptor NET_PROTOCOL_GUARD=off apaga solo el guard, no esto.
    */
   static async onAuth(_token: string | undefined, options: JoinOptions = {}, context?: AuthContext) {
-    if (!isGuardEnabled()) return true;
-    const clientProtocol = clientProtocolOf(options.protocol);
-    const verdict = judgeProtocol(clientProtocol);
-    if (verdict === 'ok') return true;
-    countRejection();
-    console.log(`[BrawlRoom] rejected join: ${verdict} (client ${clientProtocol})`);
-    throw new Error(rejectMessage(verdict, clientProtocol, context?.headers?.get?.('accept-language')));
+    const acceptLanguage = context?.headers?.get?.('accept-language');
+    if (isGuardEnabled()) {
+      const clientProtocol = clientProtocolOf(options.protocol);
+      const verdict = judgeProtocol(clientProtocol);
+      if (verdict !== 'ok') {
+        countRejection();
+        console.log(`[BrawlRoom] rejected join: ${verdict} (client ${clientProtocol})`);
+        throw new Error(rejectMessage(verdict, clientProtocol, acceptLanguage));
+      }
+    }
+    const now = Date.now();
+    const maintenance = activeWindow(now);
+    if (maintenance) {
+      countMaintenanceRejection();
+      console.log(`[BrawlRoom] rejected join: maintenance until ${new Date(maintenance.endsAt).toISOString()}`);
+      throw new Error(maintenanceMessage(maintenance, now, acceptLanguage));
+    }
+    return true;
   }
 
   onCreate(_options: unknown) {
     this.tickInterval = 1000 / SIM.tickRate;
+    BrawlRoom.liveRooms.add(this);
 
     // H4 — salas privadas ("Play with Friends"): el cliente crea la sala
     // con `client.create('brawl', { private: true })`. setPrivate la
@@ -292,6 +329,15 @@ export class BrawlRoom extends Room {
   }
 
   onJoin(client: Client, options: JoinOptions = {}) {
+    // A seat reserved just before the SIGTERM whose socket lands after
+    // onBeforeShutdown: turn it away, or the room would keep a client
+    // nobody disconnects and never dispose (the shutdown then waits for
+    // its 8 s cap). server_outdated is the client's "the server is
+    // updating, try again in a minute" (src/game.ts).
+    if (this.shuttingDown) {
+      console.log(`[BrawlRoom] rejected ${client.sessionId}: server shutting down`);
+      throw new Error('El servidor se está reiniciando: prueba otra vez en un minuto. / The server is restarting: try again in a minute. (server_outdated: shutting down)');
+    }
     // Only accept humans in 'waiting' — once we're in countdown/playing the
     // room is locked via maxClients + seat count, but Colyseus can still
     // race a join before lock takes effect (and joinById by shared link
@@ -454,7 +500,7 @@ export class BrawlRoom extends Room {
         } catch {
           // Grace expired (or room disposed): fall through to the
           // permanent-leave logic with FRESH phase/alive state.
-          console.log(`[BrawlRoom] ${sid} reconnect grace expired`);
+          console.log(`[BrawlRoom] ${sid} reconnect grace ended (expired, or the room is closing)`);
           if (this.state.phase === 'waiting' || this.state.phase === 'ended') {
             this.state.players.delete(sid);
             this.internal.delete(sid);
@@ -507,7 +553,7 @@ export class BrawlRoom extends Room {
     if (remainingAlive.length >= 2 && leaver.alive) {
       leaver.isBot = true;
       this.clearHeldInputs(sid);
-      console.log(`[BrawlRoom] ${sid} left during ${phase} → bot takeover (${remainingAlive.length} humans remain)`);
+      console.log(`[BrawlRoom] ${sid} left during ${phase} → bot takeover (${remainingAlive.length} others alive)`);
       return;
     }
 
@@ -572,6 +618,7 @@ export class BrawlRoom extends Room {
 
   onDispose() {
     if (this.tickHandle) clearInterval(this.tickHandle);
+    BrawlRoom.liveRooms.delete(this);
     // Review 2026-09-05 (fix E, defensive) — a room can only dispose
     // once no client and no seat reservation remains, so this is the
     // one place that GUARANTEES nobody is coming back. If the match is
@@ -582,6 +629,43 @@ export class BrawlRoom extends Room {
       this.endMatch('all_humans_left', '');
     }
     console.log(`[BrawlRoom] disposed`);
+  }
+
+  /**
+   * Server shutdown (Colyseus calls it on every room on SIGTERM or an
+   * uncaught exception, before the process exits): a running match is
+   * VOIDED, not scored — one `matches` row with reason server_shutdown and
+   * no player_stats writes (Rafa, 2026-09-29).
+   *
+   * Without it the default disconnect(4001) ran every client through
+   * onLeave: the grace window was refused ("disposing"), bots took the
+   * seats and the last one out ended the match all_humans_left — a loss
+   * and a broken streak for every verified human. With 2 alive, the first
+   * one out ended it opponent_left and handed the OTHER a win.
+   *
+   * endMatch sets 'ended' before the disconnect, so every onLeave takes
+   * the 'ended' early return. broadcastPatch sends that state now, while
+   * the clients are still connected.
+   *
+   * It must never throw: Colyseus calls it room after room in one loop
+   * (MatchMaker lockAndDisposeAll), so an exception here would skip every
+   * room after this one and reject the whole shutdown. An error is logged
+   * and the room disconnects anyway.
+   */
+  onBeforeShutdown() {
+    this.shuttingDown = true;
+    const phase = this.state.phase;
+    console.log(`[BrawlRoom] server shutdown during ${phase} (${this.clients.length} clients)`);
+    try {
+      if (phase === 'countdown' || phase === 'playing') {
+        this.endMatch(SERVER_SHUTDOWN, '');
+        this.broadcastPatch();
+      }
+    } catch (err) {
+      console.error('[BrawlRoom] failed to void the match on shutdown:', err);
+    } finally {
+      super.onBeforeShutdown();
+    }
   }
 
   /**
@@ -768,6 +852,12 @@ export class BrawlRoom extends Room {
    * physics.ts) lande; entonces el Slayer Belt tendrá datos reales.
    */
   private recordOnlineBeltStats(winnerSessionId: string): void {
+    // Una partida que corta el servidor no puntúa (onBeforeShutdown): ni
+    // derrotas, ni victorias, ni rachas rotas.
+    if (this.state.endReason === SERVER_SHUTDOWN) {
+      console.log('[Belts] match not recorded (server_shutdown — voided)');
+      return;
+    }
     // Review 2026-09-05 (fix C): Play with Friends es social, no ranked.
     // Una sala privada la llena quien quiera con sus propias pestañas
     // (dos nicks verificados = "≥2 humanos") y farmearía Throne/Streak

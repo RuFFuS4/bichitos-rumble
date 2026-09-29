@@ -279,12 +279,11 @@ del doc.)
   `BrawlRoom.onLeave` y `room.reconnection.maxRetries = 8` en
   `src/network.ts`. Pasada la gracia, el slot queda en bot-takeover.
   **Lo que no sobrevive es un reinicio del servidor** (cada despliegue
-  de Railway): la sala vive en memoria, Colyseus la cierra y las
-  reconexiones se rechazan. Si era una partida pública con humanos
-  verificados, hoy se les apunta derrota (deducido del código,
-  `BrawlRoom.ts` `recordOnlineBeltStats`): **desplegar sin partidas
-  vivas**. Arreglo futuro, zona hard-stop: `onBeforeShutdown` que cierre
-  con un `endReason` propio sin tocar cinturones.
+  de Railway que toque `server/`): la sala vive en memoria y Colyseus
+  la cierra. Desde el 2026-09-29 la partida se **anula sin puntuar**
+  (ver «Mantenimiento y cierre limpio»); antes se apuntaba una derrota a
+  cada humano verificado, y con 2 vivos una victoria falsa. Con partidas
+  vivas se despliega dentro de una ventana de mantenimiento.
 - **Versiones cliente↔servidor: guard desde v1.8** — ver "Versión de
   protocolo" abajo. Hasta v1.7 no había ninguno. Lo que sigue sin
   cubrir: una pestaña vieja no se entera de que hay versión nueva hasta
@@ -391,13 +390,98 @@ es la **3**.
 **Emergencia:** `NET_PROTOCOL_GUARD=off` en las variables de Railway
 apaga el rechazo **del servidor** sin revertir `main`. El arranque lo
 avisa en el log y `/health` dice `off`; acepta "off" sin distinguir
-mayúsculas.
+mayúsculas. **Cambiar una variable redespliega el servicio**: reinicia
+el servidor y corta las partidas vivas, que se anulan. No apaga la
+ventana de mantenimiento.
 - **Sirve para** un fallo del propio guard (rechaza a todo el mundo con
   los dos lados en el mismo número) y para dejar jugar a las pestañas
   v1.7, que vuelven a jugar desincronizadas: solo en un apuro.
 - **No sirve para** un desparejo de versiones: un cliente v1.8 o
   posterior de otro número se va solo con la sonda o el eco. Eso se
   arregla con rollback de los dos lados.
+
+---
+
+## Mantenimiento y cierre limpio (desde el 2026-09-29)
+
+Norma de Rafa (2026-09-26): *«en un futuro por si hay partidas deberemos
+avisar con un mensaje de mantenimiento y hacer la subida y las
+comprobaciones durante el tiempo indicado en el mensaje»*.
+
+**Qué reinicia el servidor.**
+- Un push a `main` que toque `server/`. Railway tiene rutas vigiladas,
+  así que un push solo de cliente no lo toca.
+- Un cambio de variable en Railway, salvo con Alt+clic en Deploy en el
+  aviso de cambios pendientes: así queda aplicada para el próximo
+  despliegue.
+- Redeploy o Restart en su panel.
+
+**El cierre limpio** (`BrawlRoom.onBeforeShutdown`).
+- Railway para el contenedor con SIGTERM. `node` es el PID 1 y Colyseus
+  atiende la señal por su cuenta.
+- Cada sala con partida en cuenta atrás o en juego la **anula**:
+  - `endMatch('server_shutdown')`, con una fila en `matches` y ningún
+    cambio en `player_stats`;
+  - manda ya el estado `ended` a los clientes y después los desconecta
+    con 4001.
+- Nadie gana ni pierde, ni se rompe ninguna racha. Las anuladas cuentan
+  en `totalMatches` de `/api/metrics/retention`, pero no en la duración
+  media.
+- Un asiento reservado justo antes del SIGTERM, cuyo socket llega
+  después, se rechaza en `onJoin` con «el servidor se está reiniciando».
+  Sin eso, la sala no se cerraba nunca y el cierre esperaba al tope.
+- `index.ts` deja en el log `[server] shutting down at …` y
+  `[server] shut down in N ms`, con un tope de 8 s.
+- Necesita `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=10` en Railway: con 0,
+  el valor por defecto documentado, el SIGKILL llega enseguida y no se
+  ejecuta nada. Eso no escribe datos falsos, pero el jugador ve
+  «Reconectando…».
+
+**La ventana de mantenimiento** (`server/src/maintenance.ts`).
+- Es un fichero en el volumen, `$DATA_DIR/maintenance.json`. Lo escribe
+  `node scripts/maintenance.mjs on --for <min>` desde la shell del
+  contenedor (WORKDIR `/app`), y se quita con `off`; `status` dice lo
+  que hay. La herramienta se niega a hacer nada sin la base de datos al
+  lado: en local diría «abierto» aunque producción siguiera cerrada.
+- No reinicia nada: el servidor lo relee cada 3 s. Sobrevive a la
+  subida, porque está en el volumen, y caduca solo. El tope es de
+  120 min.
+- Con la ventana activa, `onAuth` rechaza toda entrada nueva (partida
+  rápida, sala privada, enlace de amigo) con un 523 y un texto bilingüe:
+  «vuelve en ~N min, mientras puedes jugar offline». El token es
+  `maintenance_window`.
+  - El cliente nuevo lo enseña tal cual. Las pestañas v1.11 lo enseñan
+    dentro de su aviso genérico.
+  - `NET_PROTOCOL_GUARD=off` no se lo salta.
+- Las partidas en marcha terminan normal, en 183 s como mucho (60 de
+  espera, 3 de cuenta atrás y 120 de partida), y sus reconexiones
+  entran.
+- Falla abierta: sin fichero, corrupto o vencido, el online queda
+  abierto y `/health` lo dice.
+
+**`/health`** gana:
+- `commit`, el SHA corto que sirve (`RAILWAY_GIT_COMMIT_SHA`), y
+  `deployment`;
+- `live: {rooms, clients, matches}`:
+  - `matches` son las salas en cuenta atrás o en juego; `0` quiere decir
+    que un despliegue no corta ninguna partida, y es lo que espera el
+    runbook;
+  - `clients` es el ccu de Colyseus: cuenta también a quien está en su
+    gracia de reconexión, mirando la pantalla final o en una sala de
+    espera;
+- `maintenance: {stage: none|active|invalid, endsAt, rejectedJoins}`.
+
+**Pruebas:**
+- `cd server && npm run test:shutdown`: salas reales sin red;
+- `node scripts/online-shutdown-e2e.mjs`: el servidor de verdad, con
+  clientes del SDK y un SIGTERM real;
+- `node scripts/probe-server.mjs <url> --maintenance active|none`. En
+  este modo la sonda usa el protocolo que anuncia el servidor, así que
+  vale antes de una subida que cambie `NET_PROTOCOL`.
+
+Todas corren en el CI (jobs `server-shutdown` y `server-docker`), y las
+dos primeras fallan con el código de antes. El runbook está en
+[`docs/carriles/distribucion.md`](docs/carriles/distribucion.md).
 
 ---
 

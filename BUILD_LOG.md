@@ -1,5 +1,93 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [DISTRIBUCIÓN] Un reinicio del servidor ya no apunta derrotas, y el online se cierra por mantenimiento sin reiniciar
+
+- **Qué** (subida 2 del plan, aprobada por Rafa; toca `server/`, así
+  que sale con la próxima subida de servidor):
+  - **El problema, medido en local.** Colyseus atiende el SIGTERM de
+    Railway, pero `BrawlRoom` lo trataba como si todos se fueran:
+    - con 4 verificados en partida, en 5 ms se apuntaban 4 derrotas y
+      las rachas volvían a 0 (`all_humans_left`);
+    - con 2 vivos, el primero en salir le daba al otro una victoria
+      falsa (`opponent_left`);
+    - no hay historial por jugador, así que no se puede deshacer.
+  - **Cierre limpio** (`BrawlRoom.onBeforeShutdown`):
+    - la partida en cuenta atrás o en juego se anula con
+      `endMatch('server_shutdown')`, una fila en `matches` y nada en
+      `player_stats`;
+    - manda el estado `ended` y después desconecta con 4001;
+    - nunca lanza: Colyseus lo llama sala tras sala en un solo bucle, y
+      una excepción dejaba sin cerrar las demás. Lo cazó el test;
+    - un asiento reservado justo antes del SIGTERM, cuyo socket llega
+      después, se rechaza en `onJoin` con «el servidor se está
+      reiniciando». Sin eso la sala no se cerraba y el cierre salía con 1
+      por el tope de 8 s. Lo cazó la revisión.
+  - **Ventana de mantenimiento** (`server/src/maintenance.ts`,
+    `server/scripts/maintenance.mjs`):
+    - un fichero en el volumen que se enciende desde la shell de
+      Railway;
+    - `onAuth` rechaza toda entrada nueva con un 523 bilingüe («vuelve
+      en ~N min»), incluso con `NET_PROTOCOL_GUARD=off`;
+    - las partidas en marcha terminan y se reconectan;
+    - falla abierta y caduca sola;
+    - el cliente lo enseña limpio: 3 líneas en `game.ts`, tierra de
+      nadie, con permiso de Rafa.
+  - **`/health`** gana `commit`, `deployment`,
+    `live {rooms, clients, matches}` y
+    `maintenance {stage, endsAt, rejectedJoins}`. El runbook espera a
+    `live.matches` = 0, porque `clients` también cuenta las pantallas
+    finales. El cierre deja en el log su hora y su duración, con un tope
+    de 8 s.
+  - **Métricas:** las anuladas cuentan como partidas, pero no en la
+    duración media.
+  - **Node del servidor fijado a 22.x.** Los dos lockfiles, al día con
+    su `engines` (en la subida 1 se quedó el de la raíz).
+- **Medido:**
+  - `server/tests/shutdown-check.mts` (salas reales sin red): sin el
+    arreglo, 6 fallos (derrotas escritas y filas `all_humans_left`);
+    con él, todo OK. Cubre también que una sala que lanza no bloquea el
+    cierre y que un final por tiempo sigue puntuando.
+  - `scripts/online-shutdown-e2e.mjs` (el servidor real, 4 clientes del
+    SDK y un SIGTERM real): sin el arreglo, 4 «recorded loss» y los
+    clientes nunca ven la partida terminada. Con él:
+    - A, B y C: cada cliente ve `ended:server_shutdown` antes de su
+      4001, el proceso sale con 0 (en 9-16 ms, y 1 s con un jugador en
+      gracia) y `player_stats` queda intacto;
+    - R: la reserva que llega tarde se rechaza, y el cierre acaba en
+      94 ms con 0. Sin la guarda, sale con 1 a los 8 s;
+    - M y G: la ventana rechaza las tres vías, deja reconectar, falla
+      abierta con el fichero corrupto, se apaga con `off`, no la salta
+      el guard apagado y sobrevive a un reinicio.
+  - `check`, 313 tests (9 nuevos del módulo de mantenimiento) y tsc de
+    los dos lados, en verde.
+  - CI de la rama en verde sobre el HEAD que se integra (run 36594215672). Los
+    tests corren en Linux con la señal de verdad. El job `server-docker`
+    enciende y apaga la ventana dentro de la imagen, y `docker stop` sale
+    con 0.
+- **Revisión adversarial** (5 lentes y 2 escépticos por hallazgo):
+  15 hallazgos. Uno quedó refutado por inalcanzable. Los 14 que
+  sobrevivieron eran menores o de docs, y están todos arreglados:
+  - la reserva tardía;
+  - `live.matches`;
+  - la sonda con el protocolo del servidor en `--maintenance`, que solo
+    intenta entrar si la ventana está activa;
+  - la herramienta, que se niega fuera del volumen también en
+    `off`/`status`;
+  - el test, que ya no deja un servidor huérfano;
+  - el runbook: dónde se ejecuta cada paso, Alt+Deploy, el orden, y el
+    `protocol` y la comprobación de cinturones bien acotados.
+- **La primera subida** trae el mecanismo, así que no se puede anunciar
+  con él. Antes:
+  - `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=10`;
+  - comprobar que Rafa tiene shell en el contenedor;
+  - hora valle, sin partidas vivas en los logs.
+  - Después, un simulacro: `on --for 3`, la sonda, `off`.
+- **Lecciones:**
+  - un `onBeforeShutdown` de Colyseus que lanza tumba el cierre de todas
+    las salas que vienen detrás;
+  - `live.clients` cuenta a quien está en su gracia de reconexión: para
+    el runbook es lo correcto, porque su partida sigue viva.
+
 ## 2026-09-29 — [PERSONAJES] Los bots leen el aviso de colapso, la bola offline se corta sobre el vacío, y los golpes de embestida no eran el problema
 
 Las dos notas de ARENA que eran de ficheros de PERSONAJES, y la medida

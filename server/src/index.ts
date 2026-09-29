@@ -18,14 +18,22 @@
 // express — see the note in api.ts.
 // ---------------------------------------------------------------------------
 
-import { defineServer, defineRoom } from 'colyseus';
+import { defineServer, defineRoom, matchMaker } from 'colyseus';
 import type { Request, Response, NextFunction } from 'express';
 import { BrawlRoom } from './BrawlRoom.js';
 import { handleApiRequest } from './api.js';
 import { NET_PROTOCOL } from './protocol.js';
 import { isGuardEnabled, rejectedJoins } from './net-protocol-guard.js';
+import { maintenanceStatus } from './maintenance.js';
 
 const PORT = Number(process.env.PORT) || 2567;
+/** Short SHA of the deployed commit (Railway injects it); null elsewhere. */
+const COMMIT = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? null;
+/** Cap on a shutdown. Colyseus waits for every room to dispose with no
+ *  timeout of its own (MatchMaker lockAndDisposeAll); 8 s stays under the
+ *  10 s of RAILWAY_DEPLOYMENT_DRAINING_SECONDS, so the log says what hung
+ *  before Railway's SIGKILL would. */
+const SHUTDOWN_WATCHDOG_MS = 8_000;
 
 const server = defineServer({
   rooms: {
@@ -46,14 +54,28 @@ const server = defineServer({
     // Health check endpoint for hosting platforms (Railway). Also the
     // agent/post-deploy surface of the version guard: which protocol this
     // server speaks, whether the guard is on, and how many joins it has
-    // turned away since boot (ONLINE.md → "Versión de protocolo").
+    // turned away since boot (ONLINE.md → "Versión de protocolo"). And of
+    // the deploy runbook: which commit and deployment are serving, and how
+    // many rooms, clients and matches there are right now. live.clients is
+    // Colyseus' ccu (connected plus those in their reconnect grace, end
+    // screens and waiting rooms included); live.matches counts the rooms
+    // in countdown or playing — 0 means a deploy cuts no match. And the
+    // maintenance window
+    // (server/src/maintenance.ts): stage none | active | invalid, when it
+    // ends, and how many joins it turned away. Always 200 with status 'ok':
+    // Railway's healthcheck and the client's pre-join probe rely on it.
     app.get("/health", (_req: Request, res: Response) => {
+      const { roomCount, ccu } = matchMaker.stats.local;
       res.json({
         status: 'ok',
         uptime: process.uptime(),
         protocol: NET_PROTOCOL,
         protocolGuard: isGuardEnabled() ? 'on' : 'off',
         rejectedJoins: rejectedJoins(),
+        commit: COMMIT,
+        deployment: process.env.RAILWAY_DEPLOYMENT_ID ?? null,
+        live: { rooms: roomCount, clients: ccu, matches: BrawlRoom.liveMatches() },
+        maintenance: maintenanceStatus(),
       });
     });
 
@@ -61,6 +83,25 @@ const server = defineServer({
       res.send('Bichitos Rumble multiplayer server. Connect via WebSocket.');
     });
   },
+});
+
+// Shutdown (Railway's SIGTERM on a deploy, or a crash): Colyseus runs its
+// own graceful shutdown and every BrawlRoom voids its running match
+// (BrawlRoom.onBeforeShutdown). These two hooks put the when and the how
+// long in the log — Railway's teardown with a volume is not documented, so
+// the first deploys measure it — and cap a shutdown that hangs.
+let shutdownStartedAt = 0;
+server.onBeforeShutdown(() => {
+  shutdownStartedAt = Date.now();
+  const { roomCount, ccu } = matchMaker.stats.local;
+  console.log(`[server] shutting down at ${new Date(shutdownStartedAt).toISOString()} — ${roomCount} rooms, ${ccu} clients`);
+  setTimeout(() => {
+    console.error(`[server] shutdown still running after ${SHUTDOWN_WATCHDOG_MS} ms (${matchMaker.stats.local.roomCount} rooms left) — exiting`);
+    process.exit(1);
+  }, SHUTDOWN_WATCHDOG_MS).unref();
+});
+server.onShutdown(() => {
+  console.log(`[server] shut down in ${Date.now() - shutdownStartedAt} ms`);
 });
 
 server.listen(PORT).then(() => {

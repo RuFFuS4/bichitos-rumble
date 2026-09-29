@@ -6,6 +6,8 @@
 // Uso:
 //   node scripts/probe-server.mjs <url>          solo lee /health
 //   node scripts/probe-server.mjs <url> --full   además, el guard y una sala
+//   node scripts/probe-server.mjs <url> --maintenance active|none
+//                                               la ventana de mantenimiento
 //
 // Sin --full no toca nada, así que sirve contra producción:
 //   - /health responde con status 'ok';
@@ -24,6 +26,17 @@
 //     2 s con COLYSEUS_SEAT_RESERVATION_TIME=2). Nunca pasa de la espera,
 //     así que no escribe en la base de datos.
 //
+// Con --maintenance (server/scripts/maintenance.mjs; el servidor relee el
+// fichero cada 3 s):
+//   - active: /health dice stage 'active', y una entrada con el protocolo
+//     que anuncia el propio /health recibe 523 maintenance_window (no crea
+//     sala; cuenta en maintenance.rejectedJoins, no en el rejectedJoins del
+//     guard). Si /health no dice 'active', no intenta entrar;
+//   - none: /health dice stage 'none'.
+//   En este modo el protocol de /health no se compara con el del checkout:
+//   la ventana se abre ANTES de desplegar, con el servidor viejo, y la subida
+//   puede traer otro NET_PROTOCOL.
+//
 // Espera hasta 30 s a que /health conteste (el contenedor recién arrancado).
 // Sale con 0 si todo cuadra y con 1 si algo falla; imprime el detalle.
 // Sin dependencias: el fetch de Node 20+.
@@ -35,8 +48,9 @@ import { fileURLToPath } from 'node:url';
 const args = process.argv.slice(2);
 const base = args.find((a) => !a.startsWith('--'))?.replace(/\/+$/, '');
 const full = args.includes('--full');
-if (!base) {
-  console.error('uso: node scripts/probe-server.mjs <url> [--full]');
+const maintenance = args.includes('--maintenance') ? args[args.indexOf('--maintenance') + 1] : null;
+if (!base || (maintenance !== null && !['active', 'none'].includes(maintenance))) {
+  console.error('uso: node scripts/probe-server.mjs <url> [--full] [--maintenance active|none]');
   process.exit(2);
 }
 
@@ -86,8 +100,19 @@ try {
   const h = await waitForHealth();
   console.log(`[probe] /health ${JSON.stringify(h.body)}`);
   check(h.status === 200 && h.body.status === 'ok', "/health 200 con status 'ok'");
-  check(h.body.protocol === P, `/health protocol ${h.body.protocol} = NET_PROTOCOL ${P}`);
+  if (maintenance) console.log(`[probe] /health protocol ${h.body.protocol} (no se compara en --maintenance)`);
+  else check(h.body.protocol === P, `/health protocol ${h.body.protocol} = NET_PROTOCOL ${P}`);
   check(h.body.protocolGuard === 'on', `/health protocolGuard '${h.body.protocolGuard}' = 'on'`);
+
+  if (maintenance) {
+    const stage = h.body.maintenance?.stage;
+    check(stage === maintenance, `/health maintenance.stage '${stage}' = '${maintenance}'`);
+    if (maintenance === 'active' && stage === 'active') {
+      const served = h.body.protocol;
+      const turned = await matchmake('joinOrCreate', { protocol: served });
+      check(turned.status === 523 && turned.text.includes('maintenance_window'), `POST {protocol:${served}} → ${turned.status} maintenance_window`);
+    }
+  }
 
   if (full) {
     const before = h.body.rejectedJoins;
@@ -111,4 +136,4 @@ if (failures.length) {
   console.error(`[probe] ${failures.length} fallo(s)`);
   process.exit(1);
 }
-console.log(`[probe] todo OK${full ? ' (--full)' : ''}`);
+console.log(`[probe] todo OK${full ? ' (--full)' : ''}${maintenance ? ` (--maintenance ${maintenance})` : ''}`);

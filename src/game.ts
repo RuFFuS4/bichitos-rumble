@@ -943,6 +943,9 @@ export class Game {
         // 'room_already_started' in the race window before the lock
         // lands. Same copy for both.
         alert(t('connect-room-started'));
+      } else if (msg.includes('maintenance_window')) {
+        // Mantenimiento (server/src/maintenance.ts): el texto ya llega en su idioma y con los minutos.
+        alert(msg.replace(/\s*\(maintenance_window[^)]*\)\s*$/, ''));
       } else if (msg.includes('client_outdated')
         || (navigator.onLine !== false && /dynamically imported module|Importing a module script failed/i.test(msg))) {
         // Guard de versión (ONLINE.md): esta pestaña es de una versión

@@ -108,7 +108,7 @@ db.exec(`
     duration_ms      INTEGER NOT NULL,       -- 0 si terminó antes de 'playing'
     humans_at_start  INTEGER NOT NULL,       -- asientos humanos (no-bot) al arrancar el countdown
     humans_verified  INTEGER NOT NULL,       -- de esos, cuántos con identidad online verificada
-    end_reason       TEXT NOT NULL,          -- eliminated | timeout | draw | opponent_left | all_humans_left
+    end_reason       TEXT NOT NULL,          -- eliminated | timeout | draw | opponent_left | all_humans_left | server_shutdown (anulada: no puntúa)
     winner_player_id TEXT,                   -- players.id del ganador verificado, o NULL
     winner_critter   TEXT NOT NULL DEFAULT '',
     private_room     INTEGER NOT NULL DEFAULT 0
@@ -407,7 +407,8 @@ export interface RetentionMetrics {
   /** Partidas por día natural (UTC) de los últimos 14 días. Solo días con
    *  al menos una partida — los vacíos se omiten. */
   byDay: Array<{ day: string; matches: number }>;
-  /** Media de duración sobre partidas que llegaron a 'playing' (>0 ms). */
+  /** Media de duración sobre partidas que llegaron a 'playing' (>0 ms),
+   *  sin las anuladas por un cierre del servidor (su duración está truncada). */
   avgDurationMs: number;
   /** % de partidas con ≥2 humanos en el arranque. */
   pctWithTwoPlusHumans: number;
@@ -433,7 +434,7 @@ export function getRetentionMetrics(): RetentionMetrics {
   `).all(since) as Array<{ day: string; matches: number }>);
 
   const avgRow = db.prepare(
-    'SELECT AVG(duration_ms) AS avg_ms FROM matches WHERE duration_ms > 0',
+    "SELECT AVG(duration_ms) AS avg_ms FROM matches WHERE duration_ms > 0 AND end_reason <> 'server_shutdown'",
   ).get() as { avg_ms: number | null };
 
   const pctRow = db.prepare(`

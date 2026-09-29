@@ -141,6 +141,28 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     sonda del job `server-docker` del CI.
   - `npm run test:smoke:prod` pasa el smoke contra el bundle de
     producción (`vite build` a `.tmp/dist-prod` y `vite preview` en 4174).
+- **Online: cierre limpio y mantenimiento** (DISTRIBUCIÓN, 2026-09-29;
+  detalle en `ONLINE.md` §«Mantenimiento y cierre limpio»):
+  - `node scripts/maintenance.mjs on --for <min> | off | status` cierra
+    o abre el online sin reiniciar. Se ejecuta desde la shell del
+    contenedor en Railway, o desde `server/` contra un servidor local.
+    Se niega si `$DATA_DIR` no tiene la base de datos al lado.
+  - `node scripts/probe-server.mjs <url> --maintenance active|none` lo
+    comprueba desde fuera, con el protocolo que anuncia el servidor.
+  - `GET /health` suma:
+    - `commit` y `deployment`;
+    - `live: {rooms, clients, matches}`: `matches` = 0 quiere decir que
+      un despliegue no corta ninguna partida; `clients` cuenta también la
+      gracia de reconexión y las pantallas finales;
+    - `maintenance: {stage, endsAt, rejectedJoins}`.
+  - `cd server && npm run test:shutdown` prueba el cierre sobre salas
+    reales sin red.
+  - `node scripts/online-shutdown-e2e.mjs [--port 2584] [--scenario A|B|C|R|M|G|all]`
+    usa el servidor de verdad con clientes del SDK:
+    - A, B y C, un SIGTERM a mitad de partida;
+    - R, una reserva de asiento que llega tras el SIGTERM;
+    - M y G, la ventana de mantenimiento con la herramienta real.
+    - Se niega a usar un puerto ocupado.
 - **Zancada del clip Run** (feeling, 2026-09-21):
   `node scripts/inspect-stride.mjs [id] [--json] [--write] [--check]` mide
   en node, sin navegador, a qué velocidad barre cada Run el pie apoyado y

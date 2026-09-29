@@ -7,12 +7,14 @@
 # Jobs independientes para que un fallo señale su dominio:
 #   client        — tsc + verify GLBs + parity cliente/servidor + vite build
 #   server        — tsc --noEmit del server Colyseus
+#   server-shutdown — un cierre del servidor anula la partida, no la puntúa
 #   server-docker — la imagen de Railway: build, arranque, sonda y parada
 #   smoke         — Playwright chromium contra el dev server y contra el
 #                   bundle de producción (vite build + vite preview)
 #
-# Node: el cliente usa la versión de package.json (engines 24.x, la misma
-# con la que compila Vercel); el servidor, la 22 de su imagen node:22-alpine.
+# Node: cada lado usa la de su package.json — el cliente, engines 24.x (la
+# misma con la que compila Vercel); el servidor, 22.x (su imagen
+# node:22-alpine).
 #
 # También corre en las ramas de feature que se empujen (claude/**,
 # codex/**): así el CI se ve en verde ANTES de integrar en dev. Empujar la
@@ -63,11 +65,36 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: server/package.json
           cache: npm
           cache-dependency-path: server/package-lock.json
       - run: npm ci
       - run: npx tsc --noEmit
+
+  server-shutdown:
+    name: Server (cierre limpio)
+    # A server shutdown mid-match (Railway's SIGTERM on every deploy that
+    # touches server/) voids the match instead of scoring it. Two checks:
+    # real rooms on the in-process matchMaker (tests/shutdown-check.mts),
+    # and the real server with 4 SDK clients and a real SIGTERM
+    # (scripts/online-shutdown-e2e.mjs, which needs the root's SDK too).
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: server/package.json
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - run: npm ci
+      - run: npm ci
+        working-directory: server
+      - run: npm run test:shutdown
+        working-directory: server
+      - run: node scripts/online-shutdown-e2e.mjs
 
   server-docker:
     name: Server (docker build)
@@ -96,6 +123,17 @@ jobs:
           docker run -d --name br-ci -p 127.0.0.1:2567:2567 -e COLYSEUS_SEAT_RESERVATION_TIME=2 bichitos-server-ci
           node scripts/probe-server.mjs http://127.0.0.1:2567 --full
           timeout 15 sh -c 'until docker logs br-ci 2>&1 | grep -q "\[BrawlRoom\] disposed"; do sleep 0.5; done'
+      # The maintenance switch as Rafa uses it from Railway's container
+      # shell: the image carries the CLI, the file lands next to the DB and
+      # the running server picks it up (it re-reads every 3 s) — no restart.
+      - name: Maintenance window in the image
+        run: |
+          docker exec br-ci node scripts/maintenance.mjs on --for 5
+          sleep 3.5
+          node scripts/probe-server.mjs http://127.0.0.1:2567 --maintenance active
+          docker exec br-ci node scripts/maintenance.mjs off
+          sleep 3.5
+          node scripts/probe-server.mjs http://127.0.0.1:2567 --maintenance none
       # Railway stops the old container with SIGTERM. node is PID 1 in the
       # image; Colyseus handles the signal and exits 0. ExitCode 137 would
       # mean the handler never ran and docker had to SIGKILL it.
@@ -105,6 +143,8 @@ jobs:
           code=$(docker inspect -f '{{.State.ExitCode}}' br-ci)
           echo "exit code: $code"
           test "$code" = 0
+          docker logs br-ci 2>&1 | grep "\[server\] shutting down"
+          docker logs br-ci 2>&1 | grep "\[server\] shut down in"
       - if: failure()
         run: docker logs br-ci || true
       - if: always()
