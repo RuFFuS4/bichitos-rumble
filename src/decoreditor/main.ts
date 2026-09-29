@@ -88,11 +88,12 @@ const hemi = new THREE.HemisphereLight(0xffffff, 0x404858, 0.85);
 scene.add(hemi);
 
 // Top-down ortho camera: world XZ plane mapped 1:1 to the canvas.
-// Frustum width is set to roughly fit the arena (radius 12) plus a margin.
+// Frustum width is set to fit the arena (FRAG.maxRadius) plus a 2 u margin
+// (fase 5 de ARENA_V2: derivado del radio, 14 con el disco de hoy).
 // We update it in resize() to maintain aspect. Mutable (not const) because
 // wheel-zoom scales it — clamped to ZOOM_MIN/MAX_EXTENT, see the wheel
 // listener next to resize().
-let viewHalfExtent = 14;         // world units visible from centre to edge (roughly)
+let viewHalfExtent = FRAG.maxRadius + 2;   // world units visible from centre to edge (roughly)
 const camera = new THREE.OrthographicCamera(
   -viewHalfExtent, viewHalfExtent,
    viewHalfExtent, -viewHalfExtent,

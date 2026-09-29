@@ -75,8 +75,12 @@ el orden de trabajo.
    sakura: 112-131k → ≤20k tris).
 6. **Fase 4**: props que pertenecen al suelo, y sacar de git el GLB crudo
    de 54 MB de `public/models/arenas/jungle/_raw/`.
-7. **Fase 5**: todo lo visual derivado del radio (deja la capa lista para
-   las arenas de 8 jugadores de H6).
+7. **Fase 5** — **HECHA (2026-09-29)**: todo lo visual derivado del
+   radio con `k = R / 12` (cámara, frustum de sombra, bandas y densidad
+   del diorama, sitio de los props, encuadre del decor-editor). Con R = 12
+   no cambia nada: capturas iguales a las de antes (ni un píxel fuera de lo
+   que ya varía entre pasadas), huella en node idéntica y golden 3/3. Pendiente para
+   H6: que `main.ts` pase el radio a la cámara. Detalle en ARENA_V2 §fase 5.
 
 ## Hecho
 

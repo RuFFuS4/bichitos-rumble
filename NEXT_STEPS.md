@@ -208,7 +208,9 @@ entregable):
       54 MB versionado en `public/models/arenas/jungle/_raw/` — **fuera del
       árbol el 2026-09-29**, máster en `resources/modelos-retirados/`; el
       historial de `.git` sigue pesándolo: reescribirlo es decisión de Rafa).
-- [ ] Fase 5 — todo lo visual en función del radio.
+- [x] Fase 5 — todo lo visual en función del radio (2026-09-29; con R = 12
+      no cambia nada, medido en píxeles y golden. Para H6 falta que
+      `main.ts` pase el radio a la cámara).
 
 **Cola de Rafa (2026-09-07, por orden de lo que dijo)**:
 - [ ] **Feeling de los personajes** — *"se sienten pesados en vez de

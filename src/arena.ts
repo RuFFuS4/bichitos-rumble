@@ -14,7 +14,7 @@ import {
   type ArenaLayout, type FragmentDef,
 } from './arena-fragments';
 import { playArenaWarning } from './audio';
-import { ARENA_LOOK, BACKDROP_LOOK, SALT_VISUAL, CLIFF_RAMP_DEFAULT, type CliffRamp } from './arena-look';
+import { ARENA_LOOK, BACKDROP_LOOK, SALT_VISUAL, CLIFF_RAMP_DEFAULT, lookRadiusScale, type CliffRamp } from './arena-look';
 import { ArenaBackdrop, type BackdropStats } from './arena-backdrop';
 import { ArenaScatter, type ScatterStats } from './arena-scatter';
 import { BlobShadows, BLOB_SHADOW } from './blob-shadows';
@@ -34,7 +34,7 @@ import {
   loadInArenaDecorations,
 } from './arena-decorations';
 import { getDecorLayout } from './arena-decor-layouts';
-import { setSceneFogColor, setSceneClearColor, setSceneHemiGround, setSceneLighting } from './scene-atmosphere';
+import { setSceneFogColor, setSceneClearColor, setSceneHemiGround, setSceneLighting, setSceneShadowRadius } from './scene-atmosphere';
 import { spawnVanishPuff } from './dust-puff';
 
 // Visual parameters for the pre-collapse shake effect. Applied to
@@ -605,6 +605,8 @@ export class Arena {
 
     this.layout = generateArenaLayout(seed);
     this.alive = this.layout.fragments.map(() => true);
+    // Fase 5: la sombra de la key cubre ESTE disco (con R = 12, lo de siempre).
+    setSceneShadowRadius(this.layout.maxRadius);
     this.fragmentGroups = [];
     this.baseColors = [];
     this.level = 0;
@@ -733,19 +735,21 @@ export class Arena {
     // that fragment collapses. Layouts are static per pack (data-only,
     // see arena-decor-layouts.ts) so every client sees the same layout
     // without seed sync.
+    const radiusScale = this.layout ? lookRadiusScale(this.layout.maxRadius) : 1;
     const inArenaLoad = (async () => {
       try {
         const inArena = await loadInArenaDecorations(
           getDecorLayout(packId),
           getPackDecorScale(packId),
+          radiusScale,
         );
         if (myToken !== this.packApplyToken) {
           for (const d of inArena) disposeGroupMeshes(d.mesh);
           return;
         }
         for (const { mesh, placement } of inArena) {
-          const wx = Math.cos(placement.angle) * placement.r;
-          const wz = Math.sin(placement.angle) * placement.r;
+          const wx = Math.cos(placement.angle) * (placement.r * radiusScale);
+          const wz = Math.sin(placement.angle) * (placement.r * radiusScale);
           const hostIdx = this.findFragmentAt(wx, wz);
           if (hostIdx < 0) {
             // Outside any fragment (e.g. between sectors due to jitter).
@@ -876,7 +880,7 @@ export class Arena {
       this.backdrop = new ArenaBackdrop();
       this.sceneRef.add(this.backdrop.group);
     }
-    this.backdrop.buildSky(sky, getPackFogColor(packId), getPackCliff(packId), seed, FRAG.maxRadius);
+    this.backdrop.buildSky(sky, getPackFogColor(packId), getPackCliff(packId), seed, this.layout?.maxRadius ?? FRAG.maxRadius);
     setSceneFogColor(getPackFogColor(packId));
     // El color de limpiado es el del pozo (un frame sin fondo nunca sale
     // claro) y va DESPUÉS: setSceneFogColor lo reescribe. El rebote del
@@ -1239,7 +1243,7 @@ export class Arena {
         const i = this.findFragmentAt(x, z);
         return i >= 0 ? i : null;
       },
-      props: getDecorFootprints(this.appliedPackId),
+      props: getDecorFootprints(this.appliedPackId, lookRadiusScale(this.layout.maxRadius)),
     });
     // Reconstrucción a mitad de partida: lo que ya cayó, cae, y el borde
     // que dejó al descubierto sale vestido.
@@ -1346,7 +1350,7 @@ export class Arena {
       return false;
     }
     const g = new THREE.Group();
-    const r = FRAG.maxRadius + 1.2;
+    const r = (this.layout?.maxRadius ?? FRAG.maxRadius) + 1.2;
     const markers: Array<[string, number, number, number]> = [
       ['E', +r, 0, 0x00ff00],
       ['W', -r, 0, 0xffff00],

@@ -87,6 +87,25 @@ export interface ArenaLookConfig {
   exposure: number;
 }
 
+/**
+ * Radio del disco para el que está afinado todo lo visual (fase 5 de
+ * docs/ARENA_V2.md, «todo en función del radio»). Lo que depende del
+ * tamaño de la arena —cámara de juego, frustum de la sombra, bandas del
+ * diorama, sitio de los props— escala con `k = R / LOOK_REF_RADIUS`, con R
+ * el `maxRadius` del layout. Con el disco de hoy (R = 12) k es exactamente
+ * 1 y no cambia ni un píxel; el perfil 8P de H6 (r 16-17) lo hereda sin
+ * reautorar nada. Lo que tiene tamaño de mundo (critters, props, texturas,
+ * alturas de los techos) NO escala: un bicho no crece porque la isla sí.
+ */
+export const LOOK_REF_RADIUS = 12;
+
+/** k = R / LOOK_REF_RADIUS. Se MULTIPLICA por k (`a * k`), nunca `a * R /
+ *  12`: con R = 12, k = 1 y `a * 1 === a` bit a bit, que es lo que deja
+ *  el disco de hoy exactamente igual. */
+export function lookRadiusScale(radius: number): number {
+  return radius / LOOK_REF_RADIUS;
+}
+
 export const ARENA_LOOK: ArenaLookConfig = {
   tileSize: 4.0,
   bandTint: [1.0, 0.94, 0.88, 0.82],

@@ -1,5 +1,49 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Arena] Fase 5: todo lo visual en función del radio, sin cambiar nada con r = 12
+
+Encargo de GENERAL: es la base de las arenas de 8 de H6, con una
+condición: con r = 12 no puede cambiar nada. Detalle en `docs/ARENA_V2.md`
+§fase 5.
+
+- `LOOK_REF_RADIUS = 12` y `k = R / 12` (`arena-look.ts`). Todo se
+  MULTIPLICA por k, así que con R = 12 cada valor es el mismo bit a bit.
+- Qué pasa a depender del radio:
+  - la cámara de juego, con `gameplayCameraForRadius(R)`;
+  - el pasillo del canto del fondo;
+  - el frustum de la sombra de la key, ±(R + 6);
+  - las bandas y la densidad del diorama: superficie k², borde k;
+  - el sitio de los props, `r · k`, con el mismo tamaño;
+  - el encuadre del decor-editor.
+- Qué no escala, a propósito: `tileSize` (la textura tiene tamaño de
+  mundo) ni las alturas de los techos.
+- Lo que el plan citaba y ya no existe desde la F4 del fondo: la orilla,
+  el anillo de sombra y `arena-ambient.ts`.
+- Para H6 falta una cosa, que es de `main.ts`: pasar el radio a la cámara.
+  Hoy cachea su posición base al arrancar.
+
+Prueba de que con R = 12 no cambia nada:
+- **Píxeles.** Antes/después con la opción nueva `arena-shots
+  --no-critters`, 5 biomas × 3 poses, semilla 7. La opción oculta los
+  bichos, sus sombras y su polvo, cuya animación va por reloj: con ellos,
+  dos pasadas del MISMO código ya diferían en ~5k píxeles.
+  - 13 de 15 capturas son idénticas bit a bit a una pasada del código
+    viejo.
+  - En las 2 restantes (playa) hay 0 píxeles fuera de lo que el código
+    viejo da en sus propias pasadas: dos puntos animados que alternan de
+    una pasada a otra también antes del cambio.
+- **Huella en node.** Matrices y colores del scatter en 5 biomas × 4
+  semillas, hash del cielo, cámara, frustum y proyección de la sombra:
+  la misma antes y después.
+- **Tests y comprobaciones.** Golden 3/3 sin regenerar y `test:sim` en
+  verde (353/353). `tests/sim/arena-radius.test.ts` (nuevo) fija la cámara bit a
+  bit y comprueba un disco de R = 16 fabricado: cámara en la misma
+  dirección, props que cambian de sitio y no de tamaño, y un diorama que
+  crece y respeta los techos.
+
+Fuera del carril, con el encargo de GENERAL y diff mínimo: una línea en
+`NEXT_STEPS.md` (fase 5 marcada).
+
 ## 2026-09-29 — [Arena] Fuera del árbol el GLB crudo de 54 MB
 
 Encargo de GENERAL (higiene de la fase 4). `public/models/arenas/jungle/_raw/tree_jungle_broadleaf.glb`

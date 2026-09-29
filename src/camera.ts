@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { LOOK_REF_RADIUS, lookRadiusScale } from './arena-look';
 
 // ---------------------------------------------------------------------------
 // Gameplay camera pose — single source of truth
@@ -18,8 +19,24 @@ import * as THREE from 'three';
 // is not the camera's problem. Desde el fondo v2 el cielo es una cúpula
 // de color por latitud pegada a la cámara (`src/arena-backdrop.ts`); la
 // foto de fondo (`scene.background`) se borró en su F4.
-export const GAMEPLAY_CAM_POSITION = new THREE.Vector3(0, 23, 25);
-export const GAMEPLAY_CAM_LOOKAT = new THREE.Vector3(0, -3, 0);
+//
+// Fase 5 (ARENA_V2, «todo en función del radio»): la pose es la de un disco
+// de radio R, escalada con k = R / 12 desde la de siempre, (0, 23, 25) →
+// (0, −3, 0). Con R = 12 da exactamente esa. El bucle de main.ts todavía
+// cachea la posición base al arrancar (el temblor escribe respecto a ella),
+// así que una arena de otro radio (perfil 8P, H6) tendrá que pasarle el
+// radio: eso es de main.ts, no de aquí.
+export function gameplayCameraForRadius(radius: number): { position: THREE.Vector3; lookAt: THREE.Vector3 } {
+  const k = lookRadiusScale(radius);
+  return {
+    position: new THREE.Vector3(0, 23 * k, 25 * k),
+    lookAt: new THREE.Vector3(0, -3 * k, 0),
+  };
+}
+
+const REF_POSE = gameplayCameraForRadius(LOOK_REF_RADIUS);
+export const GAMEPLAY_CAM_POSITION = REF_POSE.position;
+export const GAMEPLAY_CAM_LOOKAT = REF_POSE.lookAt;
 /** Campo de visión vertical (°). El pasillo del canto del fondo v2 se
  *  calcula proyectando con esta pose, así que vive junto a ella. */
 export const GAMEPLAY_CAM_FOV = 40;
@@ -68,10 +85,11 @@ export const CAPTURE_POSES: Record<'game' | 'victory' | 'defeat' | 'wide' | 'low
  * the next frame opens with the camera staring at wherever the
  * end-screen was framed.
  */
-export function applyGameplayCameraPose(cam: THREE.PerspectiveCamera): void {
-  cam.position.copy(GAMEPLAY_CAM_POSITION);
+export function applyGameplayCameraPose(cam: THREE.PerspectiveCamera, radius: number = LOOK_REF_RADIUS): void {
+  const pose = radius === LOOK_REF_RADIUS ? REF_POSE : gameplayCameraForRadius(radius);
+  cam.position.copy(pose.position);
   cam.up.set(0, 1, 0);
-  cam.lookAt(GAMEPLAY_CAM_LOOKAT);
+  cam.lookAt(pose.lookAt);
 }
 
 export function createCamera(): THREE.PerspectiveCamera {

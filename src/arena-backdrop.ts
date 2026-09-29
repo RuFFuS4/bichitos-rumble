@@ -22,8 +22,7 @@ import {
   BACKDROP_LOOK, LEGACY_LIGHT, SALT_BACKDROP, lightDirection,
   type CliffRamp, type PackLight, type PackSky, type SkyFirma,
 } from './arena-look';
-import { FRAG } from './arena-fragments';
-import { GAMEPLAY_CAM_FOV, GAMEPLAY_CAM_LOOKAT, GAMEPLAY_CAM_POSITION } from './camera';
+import { GAMEPLAY_CAM_FOV, gameplayCameraForRadius } from './camera';
 import {
   BUMP_SHADE_SPAN, FIRMA_CROWN_HEIGHT, LIANA_ATTACH_T, LIFE_BY_FIRMA, LIFE_SWAY_Z, layoutSky,
   type SkyCamera, type SkyInstance, type SkyLayout, type SkyLife,
@@ -64,13 +63,17 @@ function sampleRamp(ramp: CliffRamp, t: number, out: THREE.Color): THREE.Color {
 // `clouds.png` en un plano 18 u bajo el disco tapó el cuadro de blanco) y
 // sin UV en la cúpula (lección de b054e96: costuras según la GPU).
 
-/** Pose de juego vista como proyector del pasillo del canto. */
-const GAMEPLAY_SKY_CAMERA: SkyCamera = {
-  position: [GAMEPLAY_CAM_POSITION.x, GAMEPLAY_CAM_POSITION.y, GAMEPLAY_CAM_POSITION.z],
-  lookAt: [GAMEPLAY_CAM_LOOKAT.x, GAMEPLAY_CAM_LOOKAT.y, GAMEPLAY_CAM_LOOKAT.z],
-  fovDeg: GAMEPLAY_CAM_FOV,
-  aspect: 16 / 9,
-};
+/** Pose de juego vista como proyector del pasillo del canto: la del disco
+ *  de radio `lipRadius` (fase 5; con 12, la de siempre). */
+function gameplaySkyCamera(lipRadius: number): SkyCamera {
+  const { position: p, lookAt: l } = gameplayCameraForRadius(lipRadius);
+  return {
+    position: [p.x, p.y, p.z],
+    lookAt: [l.x, l.y, l.z],
+    fovDeg: GAMEPLAY_CAM_FOV,
+    aspect: 16 / 9,
+  };
+}
 
 /** Paradas [elevación °, color] ordenadas de +90 a −90 → color. */
 function sampleElevation(stops: Array<[number, number]>, elevDeg: number, out: THREE.Color): THREE.Color {
@@ -498,7 +501,7 @@ export class ArenaBackdrop {
     this.group.renderOrder = 5;
     const layout = layoutSky({
       look: BACKDROP_LOOK, sky, horizon, seed, salt: SALT_BACKDROP, lipRadius,
-      camera: GAMEPLAY_SKY_CAMERA,
+      camera: gameplaySkyCamera(lipRadius),
     });
 
     // F3: la key del bioma (o la de antes, en el A/B) manda en la luz
@@ -714,7 +717,3 @@ export class ArenaBackdrop {
   /** Coste, rechazos, violaciones del pasillo y hash de lo construido. */
   stats(): BackdropStats | null { return this.lastStats; }
 }
-
-/** Radio del disco jugable, por si algún consumidor quiere derivar de él
- *  en vez de repetir el número (preparación del perfil 8P). */
-export const ARENA_RADIUS_REF = FRAG.maxRadius;

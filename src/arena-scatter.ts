@@ -57,6 +57,7 @@ import {
   type ScatterProp,
   type ScatterRecipe,
 } from './arena-scatter-types';
+import { lookRadiusScale } from './arena-look';
 import {
   PRIMITIVE_META,
   buildPrimitive,
@@ -195,9 +196,11 @@ function hashLayerId(id: string): number {
 // --- Reglas de gameplay --------------------------------------------------------
 
 /** Techo de altura en un punto: interior bajo, y en el borde depende de
- *  si el arco da a la cámara (+Z, angle en [0, π]) o al fondo. */
-function heightCeiling(r: number, z: number): number {
-  if (r < SCATTER_LIMITS.innerR) return SCATTER_LIMITS.innerMaxH;
+ *  si el arco da a la cámara (+Z, angle en [0, π]) o al fondo. El radio
+ *  del interior escala con el disco (k, fase 5); las alturas no: son
+ *  cuánto tapa algo al critter, que no crece. */
+function heightCeiling(r: number, z: number, k: number): number {
+  if (r < SCATTER_LIMITS.innerR * k) return SCATTER_LIMITS.innerMaxH;
   return z >= 0 ? SCATTER_LIMITS.frontMaxH : SCATTER_LIMITS.backMaxH;
 }
 
@@ -270,11 +273,12 @@ type PositionSampler = () => [number, number];
 
 /**
  * Capa 'disc': corona [max(rMin, clearCenterR), rMax], uniforme o en
- * racimos alrededor de `clusterCount` centros.
+ * racimos alrededor de `clusterCount` centros. Las bandas escalan con el
+ * disco (k); el radio de los racimos no: una mata es una mata.
  */
-function discSampler(layer: ScatterLayer, layout: ArenaLayout, rand: () => number): PositionSampler | null {
-  const lo = Math.max(layer.rMin, layer.clearCenterR);
-  const hi = Math.min(layer.rMax, layout.maxRadius);
+function discSampler(layer: ScatterLayer, layout: ArenaLayout, rand: () => number, k: number): PositionSampler | null {
+  const lo = Math.max(layer.rMin * k, layer.clearCenterR * k);
+  const hi = Math.min(layer.rMax * k, layout.maxRadius);
   if (hi <= lo) return null;
   // Review M1: los acentos altos van SOLO a la mitad trasera (arc:'back')
   // en vez de recortarse al techo frontal y quedar como arbustos enanos.
@@ -486,7 +490,13 @@ export class ArenaScatter {
 
   private buildLayer(layer: ScatterLayer, args: ScatterBuildArgs): LayerRuntime | null {
     const { layout } = args;
-    const n = Math.round(layer.count * args.density);
+    // Fase 5 (todo en función del radio): k = R / 12. La densidad se
+    // conserva por unidad de superficie ('disc', k²) o de borde ('fringe',
+    // k); las de al pie de los props, por prop. Con el disco de hoy k = 1 y
+    // todo es exactamente lo de siempre.
+    const k = lookRadiusScale(layout.maxRadius);
+    const growth = layer.anchor === 'disc' ? k * k : layer.anchor === 'fringe' ? k : 1;
+    const n = Math.round(layer.count * args.density * growth);
     if (n <= 0) return null;
 
     const rand = scatterRand(args.seed ^ SALT_SCATTER ^ hashLayerId(layer.id));
@@ -496,7 +506,7 @@ export class ArenaScatter {
       ? fringeSampler(layer, layout, rand)
       : layer.anchor === 'props'
         ? propsSampler(layer, args.props ?? [], rand)
-        : discSampler(layer, layout, rand);
+        : discSampler(layer, layout, rand, k);
     if (!sample) return null;
 
     // Cada instancia consume TODAS sus tiradas (posición y luego
@@ -511,7 +521,7 @@ export class ArenaScatter {
         const r = Math.hypot(x, z);
         let scale = lerp(layer.scale[0], layer.scale[1], rnd());
         const height = scale * meta.height;
-        const ceiling = heightCeiling(r, z);
+        const ceiling = heightCeiling(r, z, k);
         // El fleco latente vive en el interior (r < 8,5) y se recorta al
         // techo POR DISEÑO: allí es escombro bajo. No cuenta como aviso.
         if (height > ceiling) { scale = ceiling / meta.height; if (!latent) clipped++; }
@@ -531,7 +541,7 @@ export class ArenaScatter {
         const base = palette[Math.floor(rnd() * palette.length)];
         const mul = 1 + (rnd() - 0.5) * 2 * layer.colorJitter;
 
-        if (r < layer.clearCenterR || r > layout.maxRadius) continue;
+        if (r < layer.clearCenterR * k || r > layout.maxRadius) continue;
         // null es el contrato; -1 es la convención de findFragmentAt en
         // arena.ts. Las dos significan "sin fragmento": se descarta.
         const host = args.hostOf(x, z);

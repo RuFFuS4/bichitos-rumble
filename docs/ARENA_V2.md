@@ -160,6 +160,47 @@ Sustituir literales por `layout.maxRadius`: orilla, anillo de sombra, fondo por 
 
 Ficheros: `src/arena.ts`, `src/scene-atmosphere.ts`, `src/camera.ts`, `src/decoreditor/main.ts`, `src/arena-ambient.ts`, `src/arena-look.ts`.
 
+> **Hecha (2026-09-29, carril ARENA).** La referencia única es
+> `LOOK_REF_RADIUS = 12` y `lookRadiusScale(R)` en `src/arena-look.ts`: se
+> multiplica por `k = R / 12`, así que con el disco de hoy k = 1 y
+> `a * 1 === a` bit a bit.
+> - **Cámara:** `gameplayCameraForRadius(R)` en `src/camera.ts`. Con R = 12
+>   da (0, 23, 25) → (0, −3, 0) exactos, y `GAMEPLAY_CAM_*` salen de ella.
+>   `applyGameplayCameraPose(cam, R = 12)`. El pasillo del canto del fondo
+>   se proyecta desde la cámara del radio del labio.
+> - **Sombras:** el frustum de la key es ±(R + 6) (`setSceneShadowRadius`,
+>   que la arena llama con `layout.maxRadius`; si el radio no cambia, no
+>   hace nada). El mapa sigue en 1024²: los 2048² si R > 14 se deciden
+>   midiendo con el perfil 8P.
+> - **Diorama:** las bandas `disc` y `clearCenterR` escalan con k, y la
+>   densidad se conserva por superficie (k²) o por borde (`fringe`, k). El
+>   interior de los techos (`innerR`) escala; las alturas no.
+> - **Props:** el layout autorado para r = 12 se coloca a `r · k`
+>   (`loadInArenaDecorations`, `getDecorFootprints`), con el mismo tamaño.
+> - **Decor-editor:** encuadre `FRAG.maxRadius + 2`.
+> - **Fuera de alcance, a propósito:**
+>   - La orilla, el anillo de sombra y `arena-ambient.ts` ya no existen
+>     (F4 del fondo), y `rimInset` tampoco.
+>   - `tileSize` NO escala: la textura tiene tamaño de mundo, como los
+>     bichos. Con R/3, en 8P la hierba saldría un 40 % más grande.
+>   - El bucle de `main.ts` cachea la posición base de la cámara al
+>     arrancar, así que el perfil 8P tendrá que pasarle el radio. Es de
+>     `main.ts`, no de este carril.
+> - **Prueba de que con R = 12 no cambia nada:**
+>   - Capturas antes/después, 5 biomas × 3 poses, con `arena-shots
+>     --no-critters` (oculta los bichos, sus sombras y su polvo, cuya
+>     animación va por reloj). 13 de 15 son idénticas bit a bit a una
+>     pasada del código viejo. En las otras 2 (playa, cámara de juego y
+>     baja) no hay NINGÚN píxel con un valor que el código viejo no dé
+>     también: son dos puntos animados que alternan entre dos estados de
+>     una pasada a otra, igual con el código de antes (tres pasadas viejas:
+>     A = B, y C difiere en 311 píxeles).
+>   - La huella en node (matrices del scatter en 4 semillas, hash del
+>     cielo, cámara, frustum), idéntica.
+>   - Golden 3/3.
+>   - `tests/sim/arena-radius.test.ts` fija la cámara y comprueba un disco
+>     de R = 16 fabricado.
+
 ### Resumen
 
 | Fase | Días | Payload | Gameplay | Golden |

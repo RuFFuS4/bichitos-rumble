@@ -628,15 +628,15 @@ export function getPackDecorScale(packId: ArenaPackId): number {
  * huella medida por tipo, así que el diorama crece al pie de cada prop
  * sin esperar a los GLB.
  */
-export function getDecorFootprints(packId: ArenaPackId): ScatterProp[] {
+export function getDecorFootprints(packId: ArenaPackId, radiusScale: number = 1): ScatterProp[] {
   const packScale = getPackDecorScale(packId);
   const out: ScatterProp[] = [];
   for (const p of getDecorLayout(packId)) {
     const type = DECOR_TYPES[p.type];
     if (!type) continue;
     out.push({
-      x: Math.cos(p.angle) * p.r,
-      z: Math.sin(p.angle) * p.r,
+      x: Math.cos(p.angle) * (p.r * radiusScale),
+      z: Math.sin(p.angle) * (p.r * radiusScale),
       radius: type.footprint * p.scale * packScale,
       type: p.type,
     });
@@ -671,6 +671,7 @@ export interface InArenaDecor {
 export async function loadInArenaDecorations(
   placements: DecorPlacement[],
   packScale: number = 1.0,
+  radiusScale: number = 1,
 ): Promise<InArenaDecor[]> {
   if (placements.length === 0) return [];
 
@@ -713,10 +714,13 @@ export async function loadInArenaDecorations(
       // the fit factor so width + depth + height all scale uniformly.
       mesh.scale.setScalar(1);
       mesh.rotation.y = p.rotY;
+      // Fase 5: el layout está autorado para r = 12; en un disco de otro
+      // radio el prop va al mismo sitio relativo (`radiusScale` = k) y
+      // conserva su tamaño.
       mesh.position.set(
-        Math.cos(p.angle) * p.r,
+        Math.cos(p.angle) * (p.r * radiusScale),
         0,
-        Math.sin(p.angle) * p.r,
+        Math.sin(p.angle) * (p.r * radiusScale),
       );
       mesh.updateMatrixWorld(true);
       const bboxRaw = new THREE.Box3().setFromObject(mesh);

@@ -17,6 +17,7 @@
 //                                [--no-hud] [--metrics]
 //                                [--critters A,B,C,D] [--sky-patch '{json}']
 //                                [--gpu] [--no-island] [--sky-time S]
+//                                [--no-critters]
 //
 // Fondo v2 (docs/DIORAMAS.md §«Fondo v2», §12):
 //   --pose      una o varias poses por pack. Las de fin de partida replican
@@ -40,6 +41,12 @@
 //               software: ~18 s por fotograma a 1400×900). Sigue mudo.
 //   --no-island oculta la isla y los bichos: el criterio de Rafa para la
 //               F1 del fondo es que, tapando el disco, se sepa el bioma.
+//   --no-critters oculta los bichos y sus sombras de contacto: su animación
+//               de reposo va por reloj y cambia de una pasada a otra (medido:
+//               ~5k píxeles), con sus sombras y el polvo de su caída. Sin
+//               ellos, dos pasadas del mismo código salen
+//               idénticas bit a bit: es la prueba de las refactorizaciones que
+//               no deben cambiar nada (fase 5, «todo en función del radio»).
 //   --sky-time  pone el reloj del fondo (deriva de las nubes y vida, F2) en
 //               S segundos sobre el instante congelado: separa el efecto de
 //               la deriva del del colapso. Sufijo `_skyS`. Sin él, el reloj
@@ -78,6 +85,7 @@ const CRITTERS = String(args.get('critters') ?? 'Sergei,Trunk,Kurama,Shelly').sp
 const SKY_PATCH = args.has('sky-patch') ? JSON.parse(String(args.get('sky-patch'))) : null;
 const GPU = args.has('gpu');
 const NO_ISLAND = args.has('no-island');
+const NO_CRITTERS = args.has('no-critters');
 const SKY_TIME = args.has('sky-time') ? Number(args.get('sky-time')) : null;
 const HIDE_HUD_CSS = 'body > *:not(canvas) { visibility: hidden !important; }';
 
@@ -177,6 +185,17 @@ for (const pack of PACKS) {
       if (window.__game.blobShadows?.mesh) window.__game.blobShadows.mesh.visible = false;
     });
   }
+  if (NO_CRITTERS) {
+    await page.evaluate(() => {
+      for (const c of window.__game.critters) c.mesh.visible = false;
+      if (window.__game.blobShadows?.mesh) window.__game.blobShadows.mesh.visible = false;
+      // Y el polvo de su caída de entrada (dust-puff.ts: anillos sueltos en
+      // la escena): casi transparente, pero su fase varía 1/255 entre pasadas.
+      for (const o of window.__game.arena.group.parent?.children ?? []) {
+        if (o.isMesh && o.geometry?.type === 'RingGeometry' && o.material?.transparent) o.visible = false;
+      }
+    });
+  }
   if (SCATTER !== null) await page.evaluate((d) => window.__devApi.setScatterDensity(d), SCATTER);
   // El reloj del fondo se fija siempre: desde que el cielo corre en la
   // cuenta atrás, lo que pase entre llegar a ella y congelar movería la
@@ -215,7 +234,7 @@ for (const pack of PACKS) {
       await page.evaluate((p) => window.__devApi.setCameraPose(p), pose);
     }
     await sleep(700);
-    const suffix = `${LOOK_SUFFIX}${AT > 0 ? `_t${AT}` : ''}${SKY_TIME !== null ? `_sky${SKY_TIME}` : ''}${pose !== 'game' ? `_${pose}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}${NO_ISLAND ? '_noisland' : ''}`;
+    const suffix = `${LOOK_SUFFIX}${AT > 0 ? `_t${AT}` : ''}${SKY_TIME !== null ? `_sky${SKY_TIME}` : ''}${pose !== 'game' ? `_${pose}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}${NO_ISLAND ? '_noisland' : ''}${NO_CRITTERS ? '_nocritters' : ''}`;
     const file = `${OUT}/${pack}${suffix}.png`;
     const hud = NO_HUD ? await page.addStyleTag({ content: HIDE_HUD_CSS }) : null;
     await page.screenshot({ path: file });

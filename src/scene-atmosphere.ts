@@ -29,7 +29,7 @@
 import * as THREE from 'three';
 import {
   ARENA_LOOK, LEGACY_KEY_POSITION, LEGACY_LIGHT, LEGACY_RIM_POSITION, keyIntensityOf, lightDirection,
-  type PackLight,
+  LOOK_REF_RADIUS, type PackLight,
 } from './arena-look';
 import { setArenaTextureAnisotropy } from './arena-decorations';
 import { applyGameplayCameraPose, type CameraPose } from './camera';
@@ -43,8 +43,8 @@ const DEFAULT_HEMI_GROUND = 0x4a3a26;
 const DEFAULT_HEMI_INTENSITY = 0.55;
 
 /** Distancia de la key y la rim al origen (u), las de la luz de siempre.
- *  La de la key cuenta: su cámara de sombra (near 5, far 60, ±18 u) va
- *  desde ahí. */
+ *  La de la key cuenta: su cámara de sombra (near 5, far 60, ±(R + 6) u)
+ *  va desde ahí. */
 const KEY_DISTANCE = Math.hypot(...LEGACY_KEY_POSITION);
 const RIM_DISTANCE = Math.hypot(...LEGACY_RIM_POSITION);
 
@@ -53,6 +53,11 @@ let boundRenderer: THREE.WebGLRenderer | null = null;
 let hemi: THREE.HemisphereLight | null = null;
 let key: THREE.DirectionalLight | null = null;
 let rim: THREE.DirectionalLight | null = null;
+/** Margen (u) del frustum de la sombra de la key sobre el radio del disco:
+ *  ±(R + 6), ±18 con el disco de hoy (fase 5 de ARENA_V2). */
+const KEY_SHADOW_MARGIN = 6;
+/** Radio al que está ajustado ese frustum ahora mismo. */
+let shadowRadius = LOOK_REF_RADIUS;
 let cameraOverride: CameraPose | null = null;
 let restoreGameplayPose = false;
 
@@ -120,10 +125,7 @@ export function initSceneAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRen
   key.shadow.mapSize.set(1024, 1024);
   key.shadow.camera.near = 5;
   key.shadow.camera.far = 60;
-  key.shadow.camera.left = -18;
-  key.shadow.camera.right = 18;
-  key.shadow.camera.top = 18;
-  key.shadow.camera.bottom = -18;
+  fitKeyShadow(key, shadowRadius);
   key.shadow.bias = -0.002;
   key.shadow.radius = 2.5;   // borde suave sin PCFSoft (deprecado en r185)
   scene.add(key);
@@ -131,6 +133,28 @@ export function initSceneAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRen
   rim = new THREE.DirectionalLight();
   scene.add(rim);
   setSceneLighting(null);
+}
+
+/** Frustum ortográfico de la sombra de la key: el disco y su margen. */
+function fitKeyShadow(light: THREE.DirectionalLight, radius: number): void {
+  const e = radius + KEY_SHADOW_MARGIN;
+  light.shadow.camera.left = -e;
+  light.shadow.camera.right = e;
+  light.shadow.camera.top = e;
+  light.shadow.camera.bottom = -e;
+}
+
+/**
+ * Ajusta el frustum de la sombra al radio del disco (lo llama la arena al
+ * construir el layout). Con el radio que ya tiene no hace nada: el disco
+ * de hoy nunca lo toca. El mapa sigue en 1024²; el plan pide 2048² en
+ * escritorio si R > 14, y eso se decide midiendo con el perfil 8P (H6).
+ */
+export function setSceneShadowRadius(radius: number): void {
+  if (!key || radius === shadowRadius) return;
+  shadowRadius = radius;
+  fitKeyShadow(key, radius);
+  key.shadow.camera.updateProjectionMatrix();
 }
 
 /**

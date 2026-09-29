@@ -470,6 +470,15 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
       tiene que saber el bioma. Sus capturas llevan el sufijo `_noisland`
       y no miden el canto. `--gpu` renderiza con la GPU; en modo paralelo
       ha fallado, así que mira las capturas antes de fiarte.
+    - **Fase 5** (2026-09-29): `--no-critters` oculta los bichos, sus
+      sombras y el polvo de su caída; sufijo `_nocritters`. Su animación de
+      reposo va por reloj: con ellos, dos pasadas del mismo código difieren
+      en ~5k píxeles, y sin ellos las capturas se repiten bit a bit salvo
+      dos puntos animados (linterna del santuario y poza de la playa), que
+      alternan entre dos estados. Es la prueba de una refactorización que
+      no debe cambiar nada. Captura antes (dos o tres pasadas) y después
+      con `--no-critters`, y exige que cada píxel del después coincida con
+      el de alguna pasada del antes.
     - **La firma de cada bioma** también se toca en vivo con
       `setPackSky(id, { firma, firmaMain, …, isletSides, isletTip,
       isletDepth })`. `firma` y `pit` se validan contra sus valores; una
