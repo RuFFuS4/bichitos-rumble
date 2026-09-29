@@ -16,6 +16,7 @@
 
 import type { PlayerSchema } from '../state/PlayerSchema.js';
 import { dashGlideFactor, findGripTarget, getAbilityKit, type AbilityDef } from './abilities.js';
+import { pointInFragment, type ArenaLayout } from './arena-fragments.js';
 import { SIM } from './config.js';
 
 export interface BotInput {
@@ -77,6 +78,42 @@ interface BotArenaView {
   /** Radio vivo en UNA dirección (fase 0.5) — ver ArenaSim.radiusAt. */
   radiusAt(angle: number): number;
   isOnArena(x: number, z: number): boolean;
+  /** The collapse warning (ArenaSim.warningBatch / getLayout). Optional:
+   *  a bare disc (tests) has none. */
+  readonly warningBatch?: number;
+  getLayout?(): Readonly<ArenaLayout>;
+}
+
+/**
+ * The floor as a bot should read it: the tiles of the batch under the
+ * collapse warning already count as gone (bots used to chase onto a
+ * shaking tile and drop with it, 6.7 % of all falls). Mirror of
+ * floorAfterWarning in src/bot.ts.
+ */
+function floorAfterWarning(arena: BotArenaView): BotArenaView {
+  const batch = arena.warningBatch ?? -1;
+  const layout = batch >= 0 ? arena.getLayout?.() : undefined;
+  const indices = layout?.batches[batch]?.indices;
+  if (!layout || !indices) return arena;
+  const doomed = indices.map((i) => layout.fragments[i]);
+  return {
+    currentRadius: arena.currentRadius,
+    isOnArena: (x, z) => arena.isOnArena(x, z) && !doomed.some((f) => pointInFragment(x, z, f)),
+    // ArenaSim.radiusAt without the doomed tiles: the farthest outer edge
+    // of a live tile in this direction (a point just inside that edge is
+    // on the arena only if the tile is alive).
+    radiusAt: (angle) => {
+      const x = Math.cos(angle);
+      const z = Math.sin(angle);
+      let maxR = layout.immuneRadius;
+      for (const f of layout.fragments) {
+        if (f.immune || maxR >= f.outerR || indices.includes(f.index)) continue;
+        const p = f.outerR - 0.001;
+        if (pointInFragment(x * p, z * p, f) && arena.isOnArena(x * p, z * p)) maxR = f.outerR;
+      }
+      return maxR;
+    },
+  };
 }
 
 /** A J leaves along the facing: its near and far probe points must both
@@ -224,19 +261,22 @@ export function computeBotInput(
   const d = Math.max(0.01, Math.sqrt(dx * dx + dz * dz));
   let moveX = dx / d;
   let moveZ = dz / d;
+  // Where the bot may go: no shaking tiles. The shell's edge pressure
+  // (below) keeps the real rim. Mirror of src/bot.ts.
+  const floor = arena ? floorAfterWarning(arena) : undefined;
 
   // --- Edge awareness (balance v2) — mirror of src/bot.ts: void probe
   // ahead (collapse-pattern aware) + radial danger-band inward blend.
-  if (arena) {
+  if (floor) {
     const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
     if (rd > 0.01) {
-      if (!arena.isOnArena(bot.x + moveX * LOOK_AHEAD, bot.z + moveZ * LOOK_AHEAD)) {
+      if (!floor.isOnArena(bot.x + moveX * LOOK_AHEAD, bot.z + moveZ * LOOK_AHEAD)) {
         moveX = -bot.x / rd;
         moveZ = -bot.z / rd;
       } else {
         // 2026-09-06 (fase 0.5): radio de SU dirección, no el global —
         // ver la nota en ArenaSim.radiusAt.
-        const danger = rd - (arena.radiusAt(Math.atan2(bot.z, bot.x)) - EDGE_MARGIN);
+        const danger = rd - (floor.radiusAt(Math.atan2(bot.z, bot.x)) - EDGE_MARGIN);
         if (danger > 0) {
           const w = Math.min(1, danger / EDGE_MARGIN) * EDGE_STEER;
           moveX -= (bot.x / rd) * w;
@@ -271,7 +311,7 @@ export function computeBotInput(
   const kit = getAbilityKit(bot.critterName);
   const moving = movementActive(bot, kit);
   const ability1 =
-    nearestDist > 3.0 && nearestDist < 6.0 && !moving && dashStaysOnArena(bot, kit[0], arena) && rollAt(FIRE_RATES.mobility);
+    nearestDist > 3.0 && nearestDist < 6.0 && !moving && dashStaysOnArena(bot, kit[0], floor) && rollAt(FIRE_RATES.mobility);
   // 2026-08-24 paridad con src/bot.ts (hallazgo del review adversarial:
   // el cañón de Sebastian era solo-cliente y online nunca salía en
   // 1v1). El slot 2 dispara según la FORMA del def, resuelta del kit
@@ -337,7 +377,7 @@ export function computeBotInput(
   } else if (def2?.type === 'blink' && def2.zoneAtOrigin && def2.zone) {
     const reach = def2.blinkDistance ?? 4.0;
     ability2 = !ability1 && !moving && nearestDist < def2.zone.radius * SIM.bots.trapRadiusFrac &&
-      (!arena || arena.isOnArena(bot.x + facingX * reach, bot.z + facingZ * reach)) &&
+      (!floor || floor.isOnArena(bot.x + facingX * reach, bot.z + facingZ * reach)) &&
       rollAt(FIRE_RATES.trap);
   } else {
     const r = Math.min(def2?.radius ?? SIM.groundPound.radius, SIM.bots.nearbyRadius);

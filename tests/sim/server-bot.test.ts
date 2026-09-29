@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import type { PlayerSchema } from '../../server/src/state/PlayerSchema.js';
 import { getAbilityKit } from '../../server/src/sim/abilities.js';
 import { computeBotInput } from '../../server/src/sim/bot.js';
+import { ArenaSim } from '../../server/src/sim/arena.js';
 import { SIM } from '../../server/src/sim/config.js';
 
 /** The move vector's LENGTH is the bot's pace (fraction of a player's
@@ -113,6 +114,35 @@ describe('server bot — computeBotInput', () => {
     // probe at x = 11.5 + 1.1 = 12.6 > 12 → off arena → steer = -pos/|pos|
     expect(input.moveX).toBeCloseTo(-PACE, 10);
     expect(Math.abs(input.moveZ)).toBeLessThan(1e-10);
+  });
+
+  it('edge awareness: a tile under the collapse warning counts as void (ARENA note, 2026-09-29)', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9999);
+    const sim = new ArenaSim(501);
+    while (sim.warningBatch < 0) sim.tick(0.1);
+    const layout = sim.getLayout();
+    const doomed = layout.fragments[layout.batches[sim.warningBatch].indices[0]];
+    let span = doomed.endAngle - doomed.startAngle;
+    if (span < 0) span += Math.PI * 2;
+    const ang = doomed.startAngle + span / 2;
+    const at = (r: number) => ({ x: Math.cos(ang) * r, z: Math.sin(ang) * r });
+    // The bot stands on the live tile just inside the doomed one and chases
+    // a target standing on it: the probe (1.1 u ahead) lands on the doomed tile.
+    const bot = makePlayer({ sessionId: 'bot', ...at(doomed.innerR - 0.5) });
+    const target = makePlayer({ sessionId: 't', ...at((doomed.innerR + doomed.outerR) / 2 + 1) });
+    const view = (warningBatch: number) => ({
+      currentRadius: sim.currentRadius,
+      radiusAt: (a: number) => sim.radiusAt(a),
+      isOnArena: (x: number, z: number) => sim.isOnArena(x, z),
+      getLayout: () => sim.getLayout(),
+      warningBatch,
+    });
+    const rd = Math.hypot(bot.x, bot.z);
+    const warned = computeBotInput(bot, [bot, target], view(sim.warningBatch));
+    expect(warned.moveX).toBeCloseTo((-bot.x / rd) * PACE, 6); // full turn inward
+    expect(warned.moveZ).toBeCloseTo((-bot.z / rd) * PACE, 6);
+    const unwarned = computeBotInput(bot, [bot, target], view(-1));
+    expect(unwarned.moveX * bot.x + unwarned.moveZ * bot.z).toBeGreaterThan(0); // still chases outward
   });
 
   it('the pace is applied AFTER the void probe (a pre-scaled vector would shorten the probe)', () => {
