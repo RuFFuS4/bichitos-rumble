@@ -1,5 +1,56 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [DISTRIBUCIÓN] H5: la build de CrazyGames, detrás de un flag y probada en localhost (F0)
+
+- **Qué** (plan `docs/H5_CRAZYGAMES.md`, aprobado por Rafa: F0 ya, sin
+  online en esa build, sin exclusividad y sin rewarded hasta H6):
+  - `src/platform.ts`: un adaptador neutro con carga, `gameplay(on)` y
+    `midgameBreak()`. En la web e itch no hace nada. En la build de
+    CrazyGames (`VITE_PLATFORM`) carga `src/platform-crazygames.ts`, que
+    envuelve el SDK v3:
+    - silencio solo en `adStarted`;
+    - el juego sigue con cualquier `adError` o si el SDK no contesta
+      (topes de 30 s y 120 s);
+    - `settings.muteAudio` manda.
+  - Ganchos (tierra de nadie, con permiso de Rafa):
+    - `main.ts`, +5 líneas: el arranque y el final de la carga;
+    - `game.ts`, +19 −3:
+      - juego y pausa en partida, final, título, cuenta atrás y la fase
+        del servidor;
+      - el descanso dentro de `restartMatch`, solo con R en la pantalla
+        final offline y tras 3 min de partida acumulada;
+      - T se ignora mientras dura.
+  - Build: `.env.crazygames`, sin servidor ni Sentry y declarados vacíos.
+    `vite.config.ts` inyecta el SDK y quita el SEO propio y los assets de
+    licencia pendiente, solo en ese modo. `npm run build:crazygames`
+    compila en `.tmp/crazygames/dist`.
+  - `check-payload-budget`:
+    - la build web falla si aparece el SDK;
+    - la de CrazyGames falla con rutas absolutas o si se cuela el
+      servidor o Sentry;
+    - las dos, con más de 1500 ficheros.
+  - `privacy.html` y `terms.html`: enlaces internos relativos, sin cambiar
+    el texto.
+- **Medido:**
+  - 15 tests nuevos con un SDK falso, estables en 5 ejecuciones;
+  - `scripts/smoke-crazygames.mjs` en un navegador mudo con el SDK en
+    modo local:
+    - build real: carga en orden, sin online, ni Railway ni Sentry, y la
+      pausa avisa sin pedir anuncio;
+    - dev server: R pide el anuncio, «mute ad on → mute ad off → midgame
+      finished», T ignorado y la siguiente partida arranca.
+  - En la web nada cambia: `check` sin el SDK y sin el chunk de la
+    plataforma, 363 tests, smoke 4/4 y 4/4 contra producción, golden 3/3.
+- **Falta** (su buzón, `docs/carriles/interfaz.md`):
+  - INTERFAZ: rutas relativas (la música saldría muda bajo la subruta de
+    CG), silencio externo, ocultar Compartir y la pestaña online, y un
+    botón «Jugar otra» para el móvil;
+  - Rafa: el texto de `privacy.html`.
+  - Después, meter `build:crazygames` y el smoke en el CI.
+- **Visto de paso:** `public/privacy.html` dice «No ads» y «no
+  trackers», y ya es falso en la web por Sentry. Se lo ha subido a Rafa
+  la sesión GENERAL.
+
 ## 2026-09-29 — [Arena] Fase 5: todo lo visual en función del radio, sin cambiar nada con r = 12
 
 Encargo de GENERAL: es la base de las arenas de 8 de H6, con una

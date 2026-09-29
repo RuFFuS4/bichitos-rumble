@@ -63,6 +63,7 @@ import { getRandomPackId, isArenaPackId, type ArenaPackId } from './arena-decora
 import { getPreviewPackId } from './arena-decor-layouts';
 import { seedMatchRng, matchRng } from './match-rng';
 import { t, tf } from './i18n';
+import * as platform from './platform';
 
 type Phase = 'title' | 'character_select' | 'countdown' | 'playing' | 'ended' | 'online';
 
@@ -419,6 +420,7 @@ export class Game {
 
   private setPaused(v: boolean): void {
     this.paused = v;
+    if (this.phase === 'playing') platform.gameplay(!v);
     if (this.pauseMenuEl) {
       this.pauseMenuEl.classList.toggle('hidden', !v);
     }
@@ -473,6 +475,7 @@ export class Game {
   private enterTitle(): void {
     clearMenuActions();
     this.phase = 'title';
+    platform.gameplay(false);
     this.selectForOnline = false;
     // A quit-to-title from the pause menu leaves this.paused still true;
     // clear here so the next match doesn't start frozen.
@@ -561,6 +564,7 @@ export class Game {
     hideEndScreen();
     showMatchHud();
     this.phase = 'countdown';
+    platform.gameplay(false);
     // Sentinel: -1 means "scene still loading, don't tick the countdown
     // yet". Once `arena.waitForPack` resolves (or its timeout fires) we
     // swap this for the real `FEEL.match.countdown` and the "3, 2, 1,
@@ -812,8 +816,11 @@ export class Game {
    * - Online: leave the current room, WAIT for the leave to propagate
    *   (otherwise joinOrCreate matches the old locked room and we're
    *   stuck), then re-queue with the same critter.
+   * `adBreak` (R on the offline end screen): the natural break between
+   * matches, where a platform ad may play (platform.ts; nothing on the own
+   * site).
    */
-  private async restartMatch(): Promise<void> {
+  private async restartMatch(opts: { adBreak?: boolean } = {}): Promise<void> {
     if (this.portalRedirecting) return;
     if (this.restartInProgress) return;
     this.restartInProgress = true;
@@ -849,6 +856,12 @@ export class Game {
         }
         await this.connectOnlineWith(critterName);
       } else {
+        if (opts.adBreak) {
+          hideEndScreen();
+          showOverlay(t('hud-preparing-arena'));
+          await platform.midgameBreak();
+          if (this.phase !== 'ended') return;
+        }
         this.enterCountdown();
       }
     } finally {
@@ -1545,6 +1558,7 @@ export class Game {
     if (serverPhase !== this.lastServerPhase) {
       console.log('[Game] server phase:', this.lastServerPhase, '→', serverPhase);
       this.lastServerPhase = serverPhase;
+      platform.gameplay(serverPhase === 'playing');
       // Always drop the waiting screen when leaving waiting.
       if (serverPhase !== 'waiting') hideWaitingScreen();
       // With the link down this transition is stale news (a tab hidden
@@ -1829,6 +1843,7 @@ export class Game {
   private enterEnded(result: EndResult, title: string, subtitle: string): void {
     clearMenuActions();
     this.phase = 'ended';
+    platform.gameplay(false);
     // Wipe floating status emoji DOM nodes so the celebration / defeat
     // pose isn't decorated with the residual frenzy/stun glyphs from
     // the moment the match ended. The per-frame loop in main.ts won't
@@ -2187,6 +2202,7 @@ export class Game {
           showOverlay(t('hud-go'));
           window.setTimeout(() => hideOverlay(), 450);
           this.phase = 'playing';
+          platform.gameplay(true);
           // Stamp the moment the match really starts. Used by recordWin
           // to compute duration for the Speedrun Belt badge.
           this.matchStartMs = performance.now();
@@ -2345,9 +2361,9 @@ export class Game {
         }
 
         if (consumeMenuAction('restart')) {
-          this.restartMatch();
+          this.restartMatch({ adBreak: true });
         }
-        if (consumeMenuAction('back')) {
+        if (consumeMenuAction('back') && !this.restartInProgress) {
           // T: always hard-return to title (drops online room if any)
           if (this.room) {
             void this.abandonRoom(this.room);

@@ -84,8 +84,20 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
      `?lang` ni idioma guardado, aceptar el locale que dé el SDK después
      de `init()` y volver a aplicar los textos. Te lo paso por
      `window.__platform` cuando esté.
+  7. **Un botón explícito «Jugar otra» en la pantalla final** (opcional,
+     pero sin él el móvil nunca tiene descanso con anuncio). Hoy la
+     pantalla final reinicia tocando en cualquier parte, y Rafa decidió
+     que el anuncio sale solo con R o con un botón explícito, nunca con un
+     toque cualquiera: un toque residual del táctil lo lanzaría por
+     sorpresa.
+     - Ese botón llamaría a lo mismo que la R.
+     - El gancho ya está en `game.ts` (`restartMatch({ adBreak: true })`).
+       Si lo añades, avísame y lo conecto.
   - Los puntos 2 y 4 también valen para la web, sin efecto visible.
     Compruébalo con `npm run test:smoke` y `npm run test:smoke:prod`.
+  - Para ver tu parte en marcha: `npm run build:crazygames` (hoy falla por
+    las rutas absolutas del punto 2) y `node scripts/smoke-crazygames.mjs`
+    (su parte 3 da hoy los 404 de la música bajo una subruta).
 
 - **De DISTRIBUCIÓN, 2026-09-29 — lo que vio el análisis del cierre
   limpio en la parte del jugador.** Nada bloquea. Detalle del cierre en

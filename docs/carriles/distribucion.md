@@ -125,8 +125,20 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
       `package.json`; sin online en esa build; sin exclusividad; sin
       rewarded hasta H6.
     - **F0**: una build aparte (`--mode crazygames`) detrás de
-      `VITE_PLATFORM`, probada en localhost, sin publicar. La parte de
-      INTERFAZ está en su buzón.
+      `VITE_PLATFORM`, probada en localhost, sin publicar.
+      - **Lo mío está hecho el 2026-09-29, en `dev`**: el adaptador
+        (`src/platform.ts` y `src/platform-crazygames.ts`), los ganchos en
+        `main.ts` y `game.ts`, `npm run build:crazygames` con sus
+        comprobaciones, 15 tests y `scripts/smoke-crazygames.mjs`.
+      - Lo que falta es de INTERFAZ (su buzón): rutas relativas de la
+        música y de privacidad/términos, el silencio externo, ocultar
+        Compartir y la pestaña online del Salón. Hasta entonces,
+        `build:crazygames` falla por las rutas absolutas y el smoke por
+        los 404 de la música bajo la subruta.
+      - Cuando lo integre: cablear en `main.ts` `onExternalMute` con su
+        `setExternalMute`, y meter `build:crazygames` y el smoke en el
+        CI.
+      - Pendiente de Rafa: el texto nuevo de `public/privacy.html`.
     - **F1** (Basic) espera a las licencias (punto 5) y al sí de Rafa;
       **F2** (Full), a que CG nos elija.
 5. **Licencias y facturas de los assets de IA** (Meshy/Tripo): es un

@@ -1,6 +1,7 @@
-import { defineConfig } from 'vite';
-import { resolve } from 'node:path';
+import { defineConfig, type Plugin } from 'vite';
+import { resolve, join } from 'node:path';
 import { execSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
 // Dev-only ToolPatch endpoints (H3 slice 4): `apply: 'serve'` inside the
 // plugin means it is structurally absent from production builds.
 // @ts-expect-error — plain .mjs module, not covered by tsconfig (scripts/)
@@ -22,6 +23,35 @@ try {
     .toString().trim();
 } catch { /* keep 'dev' */ }
 
+// H5 — the CrazyGames build (`vite build --mode crazygames`, see
+// docs/H5_CRAZYGAMES.md). Only in that mode: their SDK script goes in the
+// head, before the game's module; what points at www.bichitosrumble.com
+// goes away (canonical, JSON-LD, Open Graph/Twitter, the PWA manifest), and
+// so do the files behind it (og-image, manifest, sitemap, robots) — CG
+// hosts the page, and og-image's licence row is still pending. Any other
+// mode never runs this plugin, so the own site and itch are untouched.
+function crazyGamesBuild(): Plugin {
+  let outDir = 'dist';
+  return {
+    name: 'bichitos-crazygames-build',
+    apply: (_config, env) => env.mode === 'crazygames',
+    configResolved(config) { outDir = config.build.outDir; },
+    transformIndexHtml(html) {
+      return html
+        .replace(/\n\s*<link rel="manifest"[^>]*>/, '')
+        .replace(/\n\s*<link rel="canonical"[^>]*>/, '')
+        .replace(/\n\s*<script type="application\/ld\+json">[\s\S]*?<\/script>/, '')
+        .replace(/\n\s*<meta (?:property="og:|name="twitter:)[^>]*>/g, '')
+        .replace('</title>', '</title>\n  <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>');
+    },
+    closeBundle() {
+      for (const f of ['og-image.jpg', 'manifest.webmanifest', 'sitemap.xml', 'robots.txt']) {
+        rmSync(join(outDir, f), { force: true });
+      }
+    },
+  };
+}
+
 // Five HTML entries: the normal game (index), the internal dev/balance
 // tool (tools), the roster calibration lab (calibrate), the animation
 // validation + override lab (anim-lab), and the in-arena decoration
@@ -41,7 +71,7 @@ try {
 // library caches.
 export default defineConfig({
   base: './',
-  plugins: [toolPatchDevPlugin(), htmlPartialsPlugin()],
+  plugins: [toolPatchDevPlugin(), htmlPartialsPlugin(), crazyGamesBuild()],
   define: {
     __BUILD_COMMIT__: JSON.stringify(buildCommit),
   },

@@ -32,6 +32,16 @@
   which the 9 critter GLBs are ~4 MB (they were 46 MB before the F2
   diet). `npm run check` (the CI gate) runs the same plus the parity
   scripts and the critter-GLB version/RUN_GAIT checks.
+- **Builds per platform**, all from the same code:
+  - the own site and itch (itch switches the Vibe Jam portals off at
+    runtime with `?ref=itch`);
+  - Steam: `VITE_PORTAL=off`;
+  - CrazyGames (H5, `docs/H5_CRAZYGAMES.md`):
+    `npm run build:crazygames` = `vite build --mode crazygames`
+    (`.env.crazygames`: `VITE_PLATFORM=crazygames`, no online, no Sentry)
+    into `.tmp/crazygames/dist`. Their SDK is injected only there;
+    `check-payload-budget` fails the regular build if it ever shows up,
+    and fails the CrazyGames one on root-absolute URLs.
 - The animation pipeline (mesh2motion) is **not** part of this build:
   it lives in the sibling repo `bichitos-mesh2motion` since 2026-08-18.
 
@@ -39,12 +49,18 @@
 - **Vercel** — client hosting, autodeploy from `main` (`dev` → preview).
   Build = `npm run build`.
 - **Railway** — server hosting, autodeploy from `main` with
-  `server/Dockerfile`. Client and server go out together but not at the
-  same instant; there is no client↔server version handshake yet (see
-  `ONLINE.md` → Limitaciones).
+  `server/Dockerfile`, only when the push touches `server/` (watched
+  paths). Client and server go out together but not at the same instant;
+  the version guard (`NET_PROTOCOL`, `ONLINE.md` → «Versión de
+  protocolo») turns a mismatched pair away instead of letting it desync.
 - **GitHub Actions** (`.github/workflows/ci.yml`) — on push/PR to `dev`
-  and `main`: client `check` + `test:sim`, server `tsc`, server docker
-  build, Playwright smoke.
+  and `main`, and on pushed `claude/**` / `codex/**` branches:
+  - client `check` + `test:sim`;
+  - server `tsc`;
+  - the clean-shutdown tests;
+  - the server image built, booted, probed and stopped;
+  - the Playwright smoke against the dev server and against the
+    production bundle.
 - **Hostinger** — custom domain `bichitosrumble.com`
 - **GitHub** — source control. Dev branch `dev`; main branch `main`;
   every merge to `main` is a tagged milestone.

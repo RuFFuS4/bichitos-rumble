@@ -32,7 +32,9 @@ import { rm, stat, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const DIST = 'dist';
+// The folder to clean: dist/ by default; the CrazyGames build passes its own
+// (scripts/build-crazygames.mjs).
+const DIST = process.argv[2] ?? 'dist';
 const TARGET_NAME = '_raw';
 // H2 2026-08-18 — dev-only subsites that Vite copies verbatim from
 // public/ but production must NOT ship. `animations` (the vendored

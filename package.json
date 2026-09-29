@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && node scripts/clean-dist-raw.mjs && node scripts/check-payload-budget.mjs",
+    "build:crazygames": "node scripts/build-crazygames.mjs",
     "preview": "vite preview",
     "verify:glbs": "node scripts/verify-critter-glbs.mjs",
     "inspect:clips": "node scripts/inspect-clips.mjs",

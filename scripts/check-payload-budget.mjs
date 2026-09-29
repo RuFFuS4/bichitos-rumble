@@ -23,13 +23,28 @@
 // los nueve GLB de bicho suman ~3,9 MB. Un asset nuevo entra ya dietado
 // (ASSET_PIPELINE.md §«Recetas post-import») o no entra: quien quiera
 // más margen lo pide al carril DISTRIBUCIÓN (docs/carriles/distribucion.md).
+//
+// H5 (docs/H5_CRAZYGAMES.md), sobre el mismo recorrido:
+//   - como mucho 1500 ficheros, el tope de CrazyGames;
+//   - la build web (la de siempre) no puede llevar el SDK de CrazyGames
+//     (sdk.crazygames.com): fuera de sus dominios espera 7 s antes de
+//     rendirse;
+//   - con --crazygames (scripts/build-crazygames.mjs, que pasa su carpeta):
+//     ninguna ruta absoluta a la raíz (CG sirve el juego bajo una subruta
+//     y darían 404: la música saldría muda sin error), y ni el servidor
+//     online ni Sentry, que esa build no lleva (Rafa, 2026-09-29).
+//
+//   node scripts/check-payload-budget.mjs [carpeta] [--crazygames]
 // ---------------------------------------------------------------------------
 
-import { stat, readdir } from 'node:fs/promises';
+import { stat, readdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const DIST = 'dist';
+const args = process.argv.slice(2);
+const DIST = args.find((a) => !a.startsWith('--')) ?? 'dist';
+const CRAZYGAMES = args.includes('--crazygames');
+const MAX_FILES = 1500;
 // 2026-08-24 dieta de payload: 96.9 → 69.7 MB (gltfpack de 53 GLBs de
 // arenas/belts −26 MB, belts PNG→WebP, audio -vn VBR5). Ratchet a 75.
 // 2026-09-24 (PERSONAJES, F2): Kurama, Sebastian y Kermit por receta
@@ -74,5 +89,35 @@ for (const f of overFile) {
   console.error(`[payload-budget] FAIL: ${f.path} (${(f.size / (1024 * 1024)).toFixed(1)} MB) > ${FILE_BUDGET_MB} MB per-file`);
   fail = true;
 }
+if (files.length > MAX_FILES) {
+  console.error(`[payload-budget] FAIL: ${files.length} ficheros > ${MAX_FILES} (tope de CrazyGames)`);
+  fail = true;
+}
+
+// Lo que dicen el HTML y el JS (el resto son assets binarios).
+const texts = await Promise.all(files
+  .filter((f) => /\.(html|js|css)$/.test(f.path))
+  .map(async (f) => ({ path: f.path, text: await readFile(f.path, 'utf8') })));
+const where = (re) => texts.filter((t) => re.test(t.text)).map((t) => t.path);
+if (!CRAZYGAMES) {
+  for (const p of where(/sdk\.crazygames\.com/)) {
+    console.error(`[payload-budget] FAIL: ${p} lleva el SDK de CrazyGames, que solo va en su build`);
+    fail = true;
+  }
+} else {
+  // Rutas absolutas a la raíz en atributos HTML y en literales de JS
+  // ("/audio/...", 'href="/'), sin contar las de protocolo (//host).
+  const rootUrl = /(?:\b(?:href|src)=["']\/(?!\/)|["'`]\/(?:audio|images|models|privacy|terms)\b)/;
+  for (const p of where(rootUrl)) {
+    console.error(`[payload-budget] FAIL: ${p} usa rutas absolutas a la raíz: en CrazyGames darían 404`);
+    fail = true;
+  }
+  for (const p of where(/railway\.app|\.sentry\.io|ingest\.[a-z.]*sentry/)) {
+    console.error(`[payload-budget] FAIL: ${p} lleva el servidor online o Sentry, que la build de CrazyGames no lleva`);
+    fail = true;
+  }
+}
+console.log(`[payload-budget] ${files.length} ficheros (tope ${MAX_FILES})`);
+
 if (fail) process.exit(1);
 console.log('[payload-budget] OK');

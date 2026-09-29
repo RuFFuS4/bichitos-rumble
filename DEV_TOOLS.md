@@ -141,6 +141,20 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     sonda del job `server-docker` del CI.
   - `npm run test:smoke:prod` pasa el smoke contra el bundle de
     producción (`vite build` a `.tmp/dist-prod` y `vite preview` en 4174).
+- **Plataformas (H5, CrazyGames)** (DISTRIBUCIÓN, 2026-09-29; detalle en
+  `docs/H5_CRAZYGAMES.md`):
+  - `window.__platform.state` (en todas las builds): `name` (web o
+    crazygames), `backend` (none, pending, ready u off), `gameplay`,
+    `gameplayMs`, `mute` y `log`, el registro de lo avisado al portal.
+    Escribir `gameplayMs` salta el umbral de 3 min del primer anuncio en
+    una prueba.
+  - `npm run build:crazygames` compila la build de CrazyGames en
+    `.tmp/crazygames/dist` y pasa sus comprobaciones.
+  - `node scripts/smoke-crazygames.mjs` la prueba en un navegador mudo,
+    con el SDK en modo local: el build real, el anuncio del descanso con
+    R y la subruta sin 404.
+  - `vite --mode crazygames` en el dev server da el mismo modo, con
+    `__game` para conducirlo.
 - **Online: cierre limpio y mantenimiento** (DISTRIBUCIÓN, 2026-09-29;
   detalle en `ONLINE.md` §«Mantenimiento y cierre limpio»):
   - `node scripts/maintenance.mjs on --for <min> | off | status` cierra

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { initObservability } from './observability';
+import { initPlatform, loadingStop } from './platform';
 import { applyStaticI18n, t } from './i18n';
 import { createCamera, handleResize, syncSize, applyGameplayCameraPose } from './camera';
 import { Game } from './game';
@@ -8,6 +9,9 @@ import { Game } from './game';
 // before any other module runs its boot code. Inert without
 // VITE_SENTRY_DSN (see src/observability.ts).
 initObservability();
+// H5 (docs/H5_CRAZYGAMES.md): the CrazyGames build loads its SDK and starts
+// the loading report here; everywhere else this does nothing.
+initPlatform();
 
 // i18n static pass — resolve every data-i18n/-html/-placeholder in the
 // document BEFORE anything is shown (title screen included). English is
@@ -304,6 +308,7 @@ if (btnMusic) {
 
 // Game
 const game = new Game(scene);
+requestAnimationFrame(() => loadingStop()); // the title is up: loading done (platform.ts)
 
 // 2026-04-30 final-polish — wire the live arena into the abilities
 // module so Sihans Sinkhole can knock out real fragments from

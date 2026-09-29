@@ -130,6 +130,32 @@ la misma build. El resto de requisitos de Full van en slices aparte (1 clic
 hasta jugar, guardado en la nube de CG y, si algún día hay online en CG,
 cuentas de CG verificadas en el servidor).
 
+### Estado de la F0 (2026-09-29)
+
+- **DISTRIBUCIÓN, hecho y en `dev`:**
+  - `src/platform.ts` y `src/platform-crazygames.ts`;
+  - los ganchos de `main.ts` (carga) y `game.ts` (juego, pausa y el
+    anuncio con R en la pantalla final offline);
+  - `.env.crazygames` y el modo de build en `vite.config.ts`;
+  - `npm run build:crazygames`;
+  - las comprobaciones de `check-payload-budget`;
+  - `tests/sim/platform.test.ts` (15 casos, con un SDK falso);
+  - `scripts/smoke-crazygames.mjs`.
+- **Medido en localhost, con el SDK en modo local:**
+  - carga avisada en orden;
+  - ni online ni peticiones a Railway o Sentry;
+  - la pausa avisa de parar y seguir sin pedir anuncio;
+  - R pide el anuncio, el juego se silencia solo mientras se ve, T se
+    ignora y después arranca la partida siguiente;
+  - en la web, ni el SDK ni el chunk de la plataforma.
+- **Falta, de INTERFAZ:**
+  - las rutas relativas (hoy `build:crazygames` falla por ellas y el
+    smoke da 404 de la música bajo la subruta);
+  - el silencio externo;
+  - ocultar Compartir y la pestaña online del Salón;
+  - un botón «Jugar otra», para que el móvil tenga descanso.
+- **Falta, de Rafa:** el texto de `privacy.html`.
+
 ## Qué ve el jugador
 
 - **En la web y en itch**: nada cambia.
