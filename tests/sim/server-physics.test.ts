@@ -145,4 +145,59 @@ describe('server physics — resolveCollisions', () => {
     expect(di.lastAttackTimeMs).toBeTypeOf('number');
     expect(internal.get('atk')!.lastAttackerSid).toBeUndefined();
   });
+
+  // Rafa 2026-09-29, «los dos salen despedidos»: before, the first in the
+  // array hit and only recoiled, and the other's headbutt was ignored.
+  type Credit = { respawnTimer: number; lastAttackerSid?: string | null; lastAttackTimeMs?: number };
+  const clash = (first: string, second: string, stun: { first?: number; second?: number } = {}) => {
+    const a = makePlayer({ sessionId: first, critterName: first, x: 0, z: 0, isHeadbutting: true, stunTimer: stun.first });
+    const b = makePlayer({ sessionId: second, critterName: second, x: 1.0, z: 0, isHeadbutting: true, stunTimer: stun.second });
+    const internal = new Map<string, Credit>([[first, { respawnTimer: 0 }], [second, { respawnTimer: 0 }]]);
+    resolveCollisions([a, b], internal);
+    return { a, b, internal };
+  };
+
+  it('headbutt clash: each takes the OTHER\'s hit with the victim\'s mass share, no recoil', () => {
+    // Trunk 48·3.5 = 168, mass 1.2 · Kowalski 16·3.5·1.20 = 67.2, mass 0.8
+    const { a: trunk, b: kow, internal } = clash('Trunk', 'Kowalski');
+    expect(kow.vx).toBeCloseTo(168 * 1.2 / 2.0, 10);    // +100.8, away from Trunk
+    expect(trunk.vx).toBeCloseTo(-67.2 * 0.8 / 2.0, 10); // −26.88: Kowalski's hit, not his own 58.8 recoil
+    expect(kow.vz).toBe(0);
+    expect(trunk.vz).toBe(0);
+    // Each is the other's last attacker (Slayer credit either way).
+    expect(internal.get('Trunk')!.lastAttackerSid).toBe('Kowalski');
+    expect(internal.get('Kowalski')!.lastAttackerSid).toBe('Trunk');
+  });
+
+  it('headbutt clash: the array order no longer decides — swapping it mirrors the result', () => {
+    for (const [x, y] of [['Trunk', 'Kowalski'], ['Sergei', 'Sihans'], ['Shelly', 'Sebastian']]) {
+      const xy = clash(x, y);
+      const yx = clash(y, x);
+      expect(yx.a.vx).toBeCloseTo(-xy.b.vx, 10); // y's speed away from x, both orders
+      expect(yx.b.vx).toBeCloseTo(-xy.a.vx, 10); // x's
+    }
+    // Equal masses, different forces: Sergei 68.6 vs Sihans 35, both 1.0.
+    const { a: sergei, b: sihans } = clash('Sergei', 'Sihans');
+    expect(sihans.vx).toBeCloseTo(34.3, 10);
+    expect(sergei.vx).toBeCloseTo(-17.5, 10);
+  });
+
+  it('headbutt clash: same positions, reversed array → identical result', () => {
+    const mk = () => ({
+      t: makePlayer({ sessionId: 't', critterName: 'Trunk', x: 0, z: 0, isHeadbutting: true }),
+      k: makePlayer({ sessionId: 'k', critterName: 'Kowalski', x: 1.0, z: 0, isHeadbutting: true }),
+    });
+    const p = mk(); resolveCollisions([p.t, p.k]);
+    const q = mk(); resolveCollisions([q.k, q.t]);
+    expect(q.t.vx).toBeCloseTo(p.t.vx, 10); // −26.88 both ways (before: −58.8 vs −26.88)
+    expect(q.k.vx).toBeCloseTo(p.k.vx, 10); // +100.8 both ways (before: +100.8 vs +23.52)
+    expect(q.t.x).toBeCloseTo(p.t.x, 10);
+    expect(q.k.x).toBeCloseTo(p.k.x, 10);
+  });
+
+  it('headbutt clash: each side keeps its own vulnerability (stun ×4 on the stunned one only)', () => {
+    const { a: sergei, b: kow } = clash('Sergei', 'Kowalski', { second: 0.5 });
+    expect(kow.vx).toBeCloseTo(68.6 * 1.0 / 1.8 * 4, 10);  // 152.44
+    expect(sergei.vx).toBeCloseTo(-67.2 * 0.8 / 1.8, 10);  // −29.87, unstunned
+  });
 });

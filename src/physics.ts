@@ -77,6 +77,36 @@ function rushContact(rusher: Critter, victim: Critter, dirX: number, dirZ: numbe
   triggerCameraShake(FEEL.shake.chargeRush);
 }
 
+/**
+ * Two headbutts meeting — both critters in their lunge (Rafa, 2026-09-29:
+ * «los dos salen despedidos»). Each takes the other's hit as its victim:
+ * `aTakes` / `bTakes` are its mass share × stun vulnerability ×
+ * knockbackScale, as for a one-sided headbutt. No recoil: the other's hit
+ * already throws each one back. One hit stop and one sound; the shake of
+ * the stronger boost; both flash and lean away. It used to go to whoever
+ * came first in `critters` (offline, always the player). (nx, nz) points
+ * from a to b; each velocity pair is written x then z (attrib-probe reads
+ * this function by name). Server mirror: headbuttClash in
+ * server/src/sim/physics.ts.
+ */
+function headbuttClash(a: Critter, b: Critter, nx: number, nz: number, aTakes: number, bTakes: number): void {
+  const toA = headbuttForceOf(b) * aTakes;
+  const toB = headbuttForceOf(a) * bTakes;
+  a.vx -= nx * toA;
+  a.vz -= nz * toA;
+  b.vx += nx * toB;
+  b.vz += nz * toB;
+  triggerHitStop(FEEL.hitStop.headbutt);
+  triggerCameraShake(FEEL.shake.headbutt * Math.max(a.config.headbuttBoost ?? 1.0, b.config.headbuttBoost ?? 1.0));
+  applyImpactFeedback(a, -nx, -nz);
+  applyImpactFeedback(b, nx, nz);
+  playSound('headbuttHit');
+  a.matchStats.hitsReceived++;
+  b.matchStats.hitsReceived++;
+  if (a.config.name === 'Kurama') a.lastHitTargetCritter = b.config.name;
+  if (b.config.name === 'Kurama') b.lastHitTargetCritter = a.config.name;
+}
+
 /** The attacker takes `force` back along (dirX, dirZ), with a hit's feedback. */
 function reflectOff(attacker: Critter, dirX: number, dirZ: number, force: number, hitStop: number, shake: number): void {
   attacker.vx += dirX * force;
@@ -194,7 +224,9 @@ export function resolveCollisions(critters: Critter[]): void {
         // × each side's knockbackScale (Sergei's Frenzy), recoil included.
         const aVuln = (a.stunTimer > 0 ? FEEL.collision.stunnedVulnerability : 1) * a.knockbackScale;
         const bVuln = (b.stunTimer > 0 ? FEEL.collision.stunnedVulnerability : 1) * b.knockbackScale;
-        if (a.isHeadbutting) {
+        if (a.isHeadbutting && b.isHeadbutting) {
+          headbuttClash(a, b, nx, nz, massRatioA * aVuln, massRatioB * bVuln);
+        } else if (a.isHeadbutting) {
           b.vx += nx * force * massRatioB * bVuln;
           b.vz += nz * force * massRatioB * bVuln;
           a.vx -= nx * force * FEEL.headbutt.recoilFactor * aVuln;
