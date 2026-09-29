@@ -35,9 +35,13 @@ el orden de trabajo.
    - **F2, el cielo se mueve: HECHA (2026-09-29)**. Torres del horizonte,
      fondo del pozo, deriva y vida. Bloque «Estado de la F2» en DIORAMAS;
      hoja en `.tmp/shots-f2/_hoja_f2.png`.
-   - Lo que queda: F3 luz por bioma (absorbe la antigua «fase 3, rig de
-     luz») · F4 caída, CLI `arena-sky.mjs`, `look-patch`, test de
-     determinismo y borrado del mar y de las fotos.
+   - **F3, la luz de cada bioma: HECHA (2026-09-29), con A/B.** La luz de
+     antes sigue a `legacyLight`. Bloque «Estado de la F3» en DIORAMAS;
+     hojas en `.tmp/shots-f3/` (`_hoja_f3_escena`, `_roster_f3`). Nota en
+     el buzón de PERSONAJES.
+   - Lo que queda: F4 caída, CLI `arena-sky.mjs`, `look-patch`, test de
+     determinismo y borrado del mar y de las fotos (y, si Rafa aprueba
+     la F3, de `legacyLight`).
 2. **Dioramas slice 2**: afinar recetas sobre capturas (grietas de hielo,
    escala de acentos), fleco del borde que se regenera al caer un sector,
    viento animado barato, recomponer los 73 props autorados,
@@ -247,16 +251,19 @@ el orden de trabajo.
 
 **2026-09-29**. Hecho y en `dev`: los dos desbloqueos del encargo
 (`Arena.simulate`/`present` y `ArenaSim.getLayout()`), la **F1 del fondo
-v2** (las firmas de cada bioma) y la **F2** (torres, fondo del pozo,
-deriva y vida).
+v2** (las firmas de cada bioma), la **F2** (torres, fondo del pozo,
+deriva y vida) y la **F3** (la luz de cada bioma, con A/B).
 
 - **Pendiente de Rafa:** la prueba a ciegas del disco tapado
   (`.tmp/shots-f1/_tapado_a_ciegas.png`). Si algún bioma no se reconoce,
   ese es el trabajo siguiente. El candidato es tundra. La nieve de la F2
   ayuda a tundra, pero no entra en la hoja a ciegas, que es de la F1.
-  También la hoja de la F2: `.tmp/shots-f2/_hoja_f2.png`.
-- **Después:** F3 (la luz de cada bioma) o lo que diga el encargo de
-  GENERAL.
+  También la hoja de la F2 (`.tmp/shots-f2/_hoja_f2.png`) y las dos
+  del A/B de la F3 (`.tmp/shots-f3/_hoja_f3_escena.png` y
+  `_roster_f3.png`). Si Rafa descarta la F3: `legacyLight: true` por
+  defecto, sin deshacer nada.
+- **Después:** F4 (la caída, la CLI sin navegador, `look-patch` y el test
+  de determinismo) o lo que diga el encargo de GENERAL.
 - **Trabajo en paralelo:** en `.claude/worktrees/arena`, con el dev server
   en el 5182.
 

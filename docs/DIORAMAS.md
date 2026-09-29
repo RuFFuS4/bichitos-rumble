@@ -296,6 +296,44 @@ Tras este cambio dejan de verse en partida y solo sirven para la pantalla final 
 > - `corridorViolations`: 0 en 200 semillas × 5 biomas (node), y `maxExtent` 385 (límite 403,5).
 >
 > **Revisión adversarial:** 3 lentes y un verificador por lente. Confirmó 6 de 8 hallazgos y se arreglaron todos; el de la cuenta atrás, en `src/game.ts`, justo después. Eran estos: el contrato del pozo claro sin contar la sombra; un `Euler` compartido que heredaba el orden de las aves en lo que cae; una `driftDegPerSec` negativa, que giraría hacia el lado no comprobado; y la cabecera de la malla, que exageraba draws y triángulos. Los dos refutados (literales de la vida copiados a mano entre ficheros) se centralizaron igualmente en `BACKDROP_LOOK` y en constantes exportadas de la colocación.
+>
+> **Estado de la F3 (2026-09-29): HECHA, con A/B.** Cada bioma tiene su luz, y la de antes sigue a un interruptor, sin deshacer nada:
+> - **Datos por bioma** (`PackSky`): rumbo, altura y color de la key, y rumbo, altura, color e intensidad de la rim. Son campos planos, así que `setPackSky` los valida uno a uno.
+> - **La intensidad de la key no es un dato.** `keyIntensityOf` la deriva en lineal para que el suelo de la arena reciba la misma luz de key que antes (`keyFloorGain` 1).
+> - **Una sola dirección de key por bioma** alimenta la luz de la escena, el lado claro horneado en las nubes y un halo de sol en la cúpula. `keyDirX/Y/Z` desaparecen de `BACKDROP_LOOK`.
+> - **La punta de cada rampa del canto** no baja del 55 % de la L del labio. Es una regla en `getPackCliff`, no un retoque de datos: tundra, desierto y coral la incumplían (0,35-0,39).
+> - **A/B:** `BACKDROP_LOOK.legacyLight` devuelve la luz de antes entera (key, rim, nubes, sin halo y rampas tal cual). Desde la CLI, `arena-shots --look-patch '{"legacyLight":true}'`.
+>
+> | Bioma | Key: rumbo · altura · color | Rim | Cara del bicho frente a antes |
+> |---|---|---|---|
+> | jungle | −45° · 42° · cálida `0xfff0c4` | verdosa | +3 % |
+> | tundra | −40° · 40° · fría `0xf0f4ff` | azul | +19 % |
+> | desierto | −40° · 42° · naranja `0xffe2b0` | polvo | +11 % |
+> | coral | −35° · 50° · blanca `0xfff4e2` | turquesa | −10 % |
+> | kitsune | −60° · 40° · atardecer `0xffcfb8` | violeta, más alta | −22 % |
+>
+> **Hojas para Rafa** (en `.tmp/shots-f3/`):
+> - `_hoja_f3_escena.png`: los 5 biomas en juego, cámara baja y victoria; cada par es antes | F3.
+> - `_roster_f3.png`: los 9 bichos en fila en los 5 biomas, antes | F3.
+>
+> **Dónde se aparta del plan:**
+> - **Las alturas de la key van a 40-50°, no a 25-35°.** Con 25-35° sin compensar, la arena se oscurecía contra el pozo: kitsune bajaba a 58,3 de mediana y 8,4 de mínimo en el canto (contrato: ≥15), y tundra pasaba al 8,3 % de fondo claro (tope: 8 %). Compensando la intensidad para que el suelo no pierda luz, una key muy baja quema las caras de frente (tundra, +52 %). De 40° a 50° cumple el contrato y cambia poco a los bichos.
+> - **Todas las keys siguen en el cuarto delantero izquierdo** (−35° a −60°), como la de antes. Probé el desierto a +35°, por la derecha, y las caras de la fila quedaban en sombra. Cada bioma se distingue por la altura, el color y la rim, no por el rumbo.
+> - **El halo del sol no se ve en ninguna pose de captura.** El sol va a 40-50° de altura y ±20° de radio, y la cámara de victoria llega a +3,9°. Se deja por coherencia (el sol y la luz no pueden desfasarse) y por las victorias reales, que miran hacia donde mire el ganador.
+> - **Los rumbos de la rim** van a la espalda: 130-150°.
+>
+> **Cifras** (`arena-shots --metrics`, semillas 1, 7 y 42, y la 7 con la deriva a 15°):
+> - ΔL del canto: mediana 66,1-75,1, p10 ≥40,9, mínimo ≥17,7. Kitsune mejora (74,1; antes 72,4).
+> - Fondo claro en pozos oscuros: ≤7,8 %.
+> - Los 5 biomas, sin errores de consola.
+>
+> **Revisión adversarial** (2 lentes y un verificador por lente): 5 confirmados, todos arreglados.
+> - La compensación estaba hecha con la luma sRGB del color, y three ilumina en lineal: kitsune se quedaba con un 14 % menos de key.
+> - El modo mar aclaraba también la punta del canto.
+> - La altura solo se acotaba en la escena, no en las nubes ni en el halo.
+> - `cliffTipMinRatio` no avisaba de que el canto se nota en la partida siguiente.
+>
+> Además, `setPackSky` rechaza ahora números no finitos, y `--look-patch` entra en el nombre de las capturas.
 
 ---
 

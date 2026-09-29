@@ -11,15 +11,20 @@
 //   node scripts/arena-shots.mjs [--out .tmp/shots] [--seed 1]
 //                                [--at-seconds 0] [--packs a,b]
 //                                [--viewport 1280x720]
-//                                [--pose game,victory,wide,defeat,low]
+//                                [--pose game,victory,wide,defeat,low,lineup]
 //                                [--backdrop sky|sea] [--scatter 0]
+//                                [--look-patch '{json}']
 //                                [--no-hud] [--metrics]
 //                                [--critters A,B,C,D] [--sky-patch '{json}']
 //                                [--gpu] [--no-island] [--sky-time S]
 //
 // Fondo v2 (docs/DIORAMAS.md §«Fondo v2», §12):
 //   --pose      una o varias poses por pack. Las de fin de partida replican
-//               las fórmulas de game.ts con el bicho en el centro; `low` es
+//               las fórmulas de game.ts con el bicho en el centro. `lineup`
+//               pone a los cuatro bichos en fila de cara a un plano bajo:
+//               el A/B del roster (F0, F3). Los mueve de sitio, así que va
+//               la última de la lista, y necesita la partida en juego
+//               (--at-seconds 1 o más). `low` es
 //               la cámara baja de las hojas del cono (src/camera.ts).
 //   --backdrop  A/B del fondo: `sky` (la isla en el cielo) o `sea` (el mar
 //               con la foto de antes).
@@ -61,6 +66,14 @@ const ALL = ['jungle', 'frozen_tundra', 'desert_dunes', 'coral_beach', 'kitsune_
 const PACKS = args.get('packs') ? String(args.get('packs')).split(',') : ALL;
 const POSES = String(args.get('pose') ?? 'game').split(',');
 const BACKDROP = args.get('backdrop');
+// --look-patch: parche de BACKDROP_LOOK antes de empezar (__devApi.setBackdropLook),
+// p. ej. '{"legacyLight":true}' para el A/B de la luz de la F3.
+const LOOK_PATCH = args.has('look-patch') ? JSON.parse(String(args.get('look-patch'))) : null;
+// Entra en el nombre de las capturas y en la clave de las métricas: un A/B
+// en la misma carpeta no se pisa. {"legacyLight":true} → `_legacyLight`.
+const LOOK_SUFFIX = LOOK_PATCH
+  ? Object.entries(LOOK_PATCH).map(([k, v]) => `_${k}${v === true ? '' : `-${v}`}`).join('').replace(/[^\w.-]/g, '')
+  : '';
 const SCATTER = args.has('scatter') ? Number(args.get('scatter')) : null;
 const NO_HUD = args.has('no-hud');
 const METRICS = args.has('metrics');
@@ -92,6 +105,10 @@ await page.waitForFunction(() => !!window.__devApi, null, { timeout: 30000 });
 // El panel del lab tapa un tercio del encuadre: fuera para las capturas.
 await page.addStyleTag({ content: '#lab-sidebar { display: none !important; }' });
 
+if (LOOK_PATCH) {
+  const r = await page.evaluate((patch) => window.__devApi.setBackdropLook(patch), LOOK_PATCH);
+  if (r.rejected.length) console.warn(`  --look-patch: rechazado (${r.rejected})`);
+}
 if (BACKDROP) {
   const r = await page.evaluate((mode) => window.__devApi.setBackdropLook({ mode }), BACKDROP);
   if (r.rejected.length) console.warn(`  --backdrop ${BACKDROP}: rechazado (${r.rejected})`);
@@ -173,9 +190,39 @@ for (const pack of PACKS) {
   // vida de una captura a otra. Sin --sky-time, el instante pedido.
   await page.evaluate((t) => window.__game.arena.setBackdropTime(t), SKY_TIME ?? AT);
   for (const pose of POSES) {
-    await page.evaluate((p) => window.__devApi.setCameraPose(p), pose);
+    if (pose === 'lineup') {
+      // En la cuenta atrás, la caída de entrada vuelve a encarar a cada bicho
+      // hacia el centro en cada fotograma: la fila solo vale ya jugando.
+      if (await page.evaluate(() => window.__game.phase) !== 'playing') {
+        console.warn(`  ${pack}: lineup necesita la partida en juego (--at-seconds 1 o más); se salta`);
+        continue;
+      }
+      // Fila de cuatro, de cara a la cámara, en el lado de +Z del disco.
+      await page.evaluate(() => {
+        const xs = [-2.7, -0.9, 0.9, 2.7];
+        window.__game.critters.forEach((c, i) => {
+          c.x = xs[i]; c.z = 2; c.vx = 0; c.vz = 0;
+          c.mesh.position.x = xs[i]; c.mesh.position.z = 2; c.mesh.rotation.y = 0;
+        });
+        window.__devApi.setCameraPose({ position: [0, 1.0, 8.5], lookAt: [0, 1.1, 2] });
+        // Los props que quedan ENTRE la cámara y la fila (en jungle, una
+        // ruina del borde tapaba a los cuatro) se ocultan hasta la foto.
+        const hidden = [];
+        const p = new window.__game.arena.group.position.constructor();
+        for (const g of window.__game.arena.fragmentGroups ?? []) {
+          for (const c of g.children) {
+            if (c.userData?.groundRole || !c.visible) continue;
+            c.getWorldPosition(p);
+            if (p.z > 2.8 && p.z < 9 && Math.abs(p.x) < 6.5) { c.visible = false; hidden.push(c); }
+          }
+        }
+        window.__lineupHidden = hidden;
+      });
+    } else {
+      await page.evaluate((p) => window.__devApi.setCameraPose(p), pose);
+    }
     await sleep(700);
-    const suffix = `${AT > 0 ? `_t${AT}` : ''}${SKY_TIME !== null ? `_sky${SKY_TIME}` : ''}${pose !== 'game' ? `_${pose}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}${NO_ISLAND ? '_noisland' : ''}`;
+    const suffix = `${LOOK_SUFFIX}${AT > 0 ? `_t${AT}` : ''}${SKY_TIME !== null ? `_sky${SKY_TIME}` : ''}${pose !== 'game' ? `_${pose}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}${NO_ISLAND ? '_noisland' : ''}`;
     const file = `${OUT}/${pack}${suffix}.png`;
     const hud = NO_HUD ? await page.addStyleTag({ content: HIDE_HUD_CSS }) : null;
     await page.screenshot({ path: file });
@@ -230,12 +277,15 @@ for (const pack of PACKS) {
       console.log(`  ${pack.padEnd(16)} ΔL canto mediana ${m.lip.median} · p10 ${m.lip.p10} · min ${m.lip.min} (${m.lip.azimuths} az, ${m.lip.fallingSkipped} cayendo) · fondo ${m.bgMean} / arena ${m.arenaMean} · fondo>p75 ${m.bgAboveArenaP75} %`);
     }
     if (hud) await hud.evaluate((el) => el.remove());
+    if (pose === 'lineup') {
+      await page.evaluate(() => { for (const c of window.__lineupHidden ?? []) c.visible = true; window.__lineupHidden = []; });
+    }
     console.log(`  ${pack.padEnd(16)} → ${file}`);
   }
   await page.evaluate(() => { window.__devApi.setCameraPose(null); window.__devApi.setSpeed(1); });
 }
 if (METRICS) {
-  const file = `${OUT}/metrics${AT > 0 ? `_t${AT}` : ''}${SKY_TIME !== null ? `_sky${SKY_TIME}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}.json`;
+  const file = `${OUT}/metrics${LOOK_SUFFIX}${AT > 0 ? `_t${AT}` : ''}${SKY_TIME !== null ? `_sky${SKY_TIME}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}.json`;
   // Se ACUMULA con lo que ya hubiera: lanzar bioma a bioma (un navegador
   // por bioma, ver docs/carriles/arena.md) no debe pisar las cifras.
   const prev = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};

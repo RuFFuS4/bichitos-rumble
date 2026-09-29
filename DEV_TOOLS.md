@@ -466,6 +466,28 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
         sobre el instante congelado. Separa la deriva del colapso: con
         `--sky-time 150`, la deriva está en su extremo, 15°. Por debajo
         llama a `Arena.setBackdropTime(s)`.
+    - **F3 del fondo** (2026-09-29): la luz de cada bioma.
+      - **Datos:** `PackSky.keyAzimuthDeg`, `keyElevationDeg`, `keyColor`,
+        `keyFloorGain` y los mismos cuatro de la rim con `rimIntensity`.
+        Se tocan en vivo con `setPackSky`, que rechaza números no finitos.
+        La altura se acota a 5-89°.
+      - **Intensidad de la key:** no es un dato. `keyIntensityOf(light)`
+        (`src/arena-look.ts`) la deriva, en lineal, para que el suelo
+        reciba `keyFloorGain` veces la luz de antes. Así, cambiar altura o
+        color no rompe el contrato del canto.
+      - **A/B:** `setBackdropLook({ legacyLight: true })` devuelve la luz de
+        antes entera: key, rim, nubes horneadas, sin halo y rampas del
+        canto tal cual. También `sunHaloDeg`, `sunHaloStrength` y
+        `cliffTipMinRatio`. Ojo: `legacyLight` y `cliffTipMinRatio` cambian
+        el canto de la isla, que se hornea al construir la arena. En vivo,
+        `rebuilt: true` rehace el fondo y los islotes, pero el canto no se
+        ve hasta la partida siguiente.
+      - **Capturas:** `arena-shots --look-patch '{json}'` (parche de
+        `BACKDROP_LOOK` antes de empezar; entra en el sufijo de los
+        ficheros y en la clave de las métricas). La pose `lineup` pone a
+        los cuatro bichos en fila de cara a un plano bajo, que es el A/B del
+        roster. Necesita `--at-seconds 1` o más, va la última de la lista,
+        y oculta solo los props que quedan entre la cámara y la fila.
     - **`--metrics`**: escribe `metrics*.json`, que se acumula entre
       ejecuciones (`scripts/lib/arena-metrics.mjs`). Mide el ΔL del canto
       en 64 azimuts sobre el **labio vivo**, más la luma media de fondo y

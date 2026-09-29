@@ -1,5 +1,49 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Arena] Fondo v2, F3: cada bioma tiene su luz, y la de antes sigue a un interruptor
+
+Encargo de GENERAL: la F3 del plan, entregada con A/B, porque Rafa lleva
+tres fases del cielo sin mirar y la luz toca también a los bichos. Detalle
+en `docs/DIORAMAS.md`, «Estado de la F3».
+
+**Qué hace:**
+- La key y la rim tienen rumbo, altura, color e intensidad por bioma
+  (`PackSky`), y las aplica `setSceneLighting`.
+- La misma dirección de key hornea el lado claro de las nubes y pone un
+  halo de sol en la cúpula.
+- La punta de la rampa del canto no baja del 55 % del labio: la panza del
+  cono ya no sale casi negra en tundra, desierto y coral.
+- `BACKDROP_LOOK.legacyLight` devuelve la luz de antes entera. Si Rafa
+  la descarta, basta con ponerlo a `true`.
+
+**Lo que enseñaron las capturas:** las keys bajas del plan (25-35°)
+oscurecían la arena contra el pozo. El canto de kitsune bajaba a un mínimo
+de 8,4 (contrato: ≥15) y tundra pasaba al 8,3 % de fondo claro. Por eso:
+- la intensidad de la key ya no es un dato: se deriva, en lineal, para que
+  el suelo reciba la misma luz que antes;
+- las alturas quedan en 40-50°;
+- todas las keys, en el cuarto delantero izquierdo (a la derecha, las
+  caras quedaban en sombra).
+
+Cifras (semillas 1, 7 y 42, y la 7 con la deriva a 15°): ΔL mediano 66-75
+y mínimo ≥17,7 (kitsune mejora), fondo claro ≤7,8 %.
+
+**Los bichos:** un tinte por bioma. La luz en la cara va de −22 % (kitsune)
+a +19 % (tundra). Hojas A/B en `.tmp/shots-f3/_hoja_f3_escena.png` y
+`_roster_f3.png` (los 9 bichos, los 5 biomas). Nota en el buzón de
+PERSONAJES.
+
+**Revisión adversarial** (2 lentes): 5 confirmados, arreglados. El que más
+pesaba: la compensación usaba la luma sRGB y three ilumina en lineal
+(kitsune perdía un 14 % de key).
+
+**Herramientas:** `arena-shots --look-patch '{json}'` y la pose `lineup`
+(los cuatro bichos en fila, de frente; `--at-seconds 1`).
+
+**Antes, en `dev`** (`b91c3e1`): el cielo ya se mueve desde la cuenta
+atrás offline, con una línea en `game.ts` (permiso de GENERAL, ya
+soltado).
+
 ## 2026-09-29 — [Arena] Fondo v2, F2: el cielo se mueve y la victoria tiene horizonte
 
 Encargo de GENERAL, mientras Rafa hace la prueba a ciegas de la F1. Detalle

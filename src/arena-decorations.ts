@@ -26,7 +26,7 @@
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
 import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
-import { type SeaRamp, type CliffRamp, type PackSky } from './arena-look';
+import { BACKDROP_LOOK, type SeaRamp, type CliffRamp, type PackSky } from './arena-look';
 import { FIRMA_CROWN_HEIGHT } from './arena-sky-layout';
 
 /** Anisotropía máxima del dispositivo, cacheada. La fija el renderer al
@@ -159,6 +159,8 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       firma: 'canopy', firmaMain: 0x4f8a3c, firmaAccent: 0x2f6a2a, firmaDetail: 0x5a4028, firmaHang: 0x35552a,
       lifeColor: 0x2e5a1f,
       hemiGround: 0x5f7a55, hemiIntensity: 0.7,
+      keyAzimuthDeg: -45, keyElevationDeg: 42, keyColor: 0xfff0c4, keyFloorGain: 1,
+      rimAzimuthDeg: 140, rimElevationDeg: 35, rimColor: 0xb8e0a0, rimIntensity: 0.5,
     },
   },
   frozen_tundra: {
@@ -185,6 +187,8 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       firma: 'iceberg', firmaMain: 0xf2f6fb, firmaAccent: 0x9fd6f2, firmaDetail: 0x7fb0d8, firmaHang: 0xcbe8fa,
       lifeColor: 0xf6f9ff,
       hemiGround: 0x8a9cc0, hemiIntensity: 0.7,
+      keyAzimuthDeg: -40, keyElevationDeg: 40, keyColor: 0xf0f4ff, keyFloorGain: 1,
+      rimAzimuthDeg: 150, rimElevationDeg: 30, rimColor: 0xa8c4ff, rimIntensity: 0.6,
     },
   },
   desert_dunes: {
@@ -211,6 +215,8 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       firma: 'mesa', firmaMain: 0xb35a34, firmaAccent: 0x6a8a3a, firmaDetail: 0x8a5a34, firmaHang: 0xe0b070,
       lifeColor: 0x7a4e30,
       hemiGround: 0xa8784a, hemiIntensity: 0.7,
+      keyAzimuthDeg: -40, keyElevationDeg: 42, keyColor: 0xffe2b0, keyFloorGain: 1,
+      rimAzimuthDeg: 145, rimElevationDeg: 30, rimColor: 0xf0b890, rimIntensity: 0.5,
     },
   },
   coral_beach: {
@@ -237,6 +243,8 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       firma: 'atoll', firmaMain: 0x4f9a3c, firmaAccent: 0x3fd0d8, firmaDetail: 0x8a6a44, firmaHang: 0xf4fbff,
       lifeColor: 0xf4f6f8,
       hemiGround: 0x6fb3b5, hemiIntensity: 0.7,
+      keyAzimuthDeg: -35, keyElevationDeg: 50, keyColor: 0xfff4e2, keyFloorGain: 1,
+      rimAzimuthDeg: 150, rimElevationDeg: 35, rimColor: 0x9fd8f0, rimIntensity: 0.55,
     },
   },
   kitsune_shrine: {
@@ -265,6 +273,8 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       firma: 'torii', firmaMain: 0xd8321e, firmaAccent: 0x2a2020, firmaDetail: 0x6e6e66, firmaHang: 0x6e6e66,
       lifeColor: 0xf2b8cc,
       hemiGround: 0x9a7890, hemiIntensity: 0.7,
+      keyAzimuthDeg: -60, keyElevationDeg: 40, keyColor: 0xffcfb8, keyFloorGain: 1,
+      rimAzimuthDeg: 130, rimElevationDeg: 38, rimColor: 0xc8a0e0, rimIntensity: 0.65,
     },
   },
 };
@@ -556,7 +566,12 @@ export function patchPackSky(packId: ArenaPackId, patch: Record<string, unknown>
     // sin un solo islote y la respuesta decía que se había aplicado.
     const allowed = SKY_ENUMS[k];
     const badEnum = allowed !== undefined && !allowed.includes(v);
-    if (!Object.prototype.hasOwnProperty.call(sky, k) || typeof v !== typeof sky[k] || badEnum) { rejected.push(k); continue; }
+    // Y los números, finitos: un NaN en la luz dejaba luz y nubes en NaN.
+    const badNumber = typeof v === 'number' && !Number.isFinite(v);
+    if (!Object.prototype.hasOwnProperty.call(sky, k) || typeof v !== typeof sky[k] || badEnum || badNumber) {
+      rejected.push(k);
+      continue;
+    }
     sky[k] = v;
     applied.push(k);
   }
@@ -574,8 +589,40 @@ export function getPackFogColor(packId: ArenaPackId): number {
 
 /** Rampa de estratos del canto del pack (vertex color de la pared de cada
  *  fragmento, `src/arena.ts`). */
+/**
+ * Rampa del canto del bioma. Con la luz de la F3 (no `legacyLight`), la
+ * punta no baja de `cliffTipMinRatio` de la L del labio (plan §6): se
+ * aclara solo la última parada, y es una REGLA, no un retoque de los datos,
+ * para que el A/B devuelva la rampa de antes tal cual.
+ */
 export function getPackCliff(packId: ArenaPackId): CliffRamp {
-  return PACKS[packId].cliff;
+  const ramp = PACKS[packId].cliff;
+  // El modo mar (A/B de la F0) también va con todo lo de antes.
+  if (BACKDROP_LOOK.legacyLight || BACKDROP_LOOK.mode === 'sea') return ramp;
+  return liftCliffTip(ramp, BACKDROP_LOOK.cliffTipMinRatio);
+}
+
+/** Luma Rec.601 de un color sRGB 0xRRGGBB, en 0-255 (la escala de las
+ *  medidas del plan). */
+function hexLuma(hex: number): number {
+  return 0.299 * ((hex >> 16) & 255) + 0.587 * ((hex >> 8) & 255) + 0.114 * (hex & 255);
+}
+
+/** La rampa con la punta aclarada (en sRGB, conservando el tono mientras
+ *  ningún canal satura) hasta `minRatio` de la L del labio. */
+export function liftCliffTip(ramp: CliffRamp, minRatio: number): CliffRamp {
+  const stops = ramp.stops;
+  if (stops.length < 2) return ramp;
+  const target = minRatio * hexLuma(stops[0]![1]);
+  let tip = stops[stops.length - 1]![1];
+  if (hexLuma(tip) >= target) return ramp;
+  let [r, g, b] = [(tip >> 16) & 255, (tip >> 8) & 255, tip & 255];
+  for (let i = 0; i < 200 && hexLuma(tip) < target; i++) {
+    // Escala; si un canal ya satura, tira hacia el blanco.
+    [r, g, b] = [r, g, b].map((c) => Math.min(255, Math.max(c * 1.02, c + 1))) as [number, number, number];
+    tip = (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
+  }
+  return { stops: [...stops.slice(0, -1), [stops[stops.length - 1]![0], tip]] };
 }
 
 // ---------------------------------------------------------------------------

@@ -34,7 +34,7 @@ import {
   loadInArenaDecorations,
 } from './arena-decorations';
 import { getDecorLayout } from './arena-decor-layouts';
-import { setSceneSkyboxTexture, setSceneFogColor, setSceneClearColor, setSceneHemiGround } from './scene-atmosphere';
+import { setSceneSkyboxTexture, setSceneFogColor, setSceneClearColor, setSceneHemiGround, setSceneLighting } from './scene-atmosphere';
 
 // Visual parameters for the pre-collapse shake effect. Applied to
 // `fragmentGroup.position.x/z` ONLY — collisions and `isOnArena` use the
@@ -860,9 +860,12 @@ export class Arena {
       setSceneClearColor(sky.abyss);
       setSceneSkyboxTexture(null);
       setSceneHemiGround(sky.hemiGround, sky.hemiIntensity);
+      // F3: la luz del bioma, o la de siempre en el A/B.
+      setSceneLighting(BACKDROP_LOOK.legacyLight ? null : sky);
       return Promise.resolve();
     }
     setSceneHemiGround(null);
+    setSceneLighting(null);
     return loadPackSkyboxTexture(packId)
       .then((tex) => {
         // Superada por otro pack, o por un cambio a modo cielo en vivo.
@@ -894,6 +897,7 @@ export class Arena {
     setSceneSkyboxTexture(null);
     setSceneFogColor(null);
     setSceneHemiGround(null);
+    setSceneLighting(null);
     if (this.backdrop) {
       this.sceneRef.remove(this.backdrop.group);
       this.backdrop.dispose();

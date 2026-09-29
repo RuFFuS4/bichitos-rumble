@@ -26,7 +26,10 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { ARENA_LOOK } from './arena-look';
+import {
+  ARENA_LOOK, LEGACY_KEY_POSITION, LEGACY_LIGHT, LEGACY_RIM_POSITION, keyIntensityOf, lightDirection,
+  type PackLight,
+} from './arena-look';
 import { setArenaTextureAnisotropy } from './arena-decorations';
 import { applyGameplayCameraPose, type CameraPose } from './camera';
 
@@ -38,9 +41,17 @@ const DEFAULT_HEMI_SKY = 0x9cc7ea;
 const DEFAULT_HEMI_GROUND = 0x4a3a26;
 const DEFAULT_HEMI_INTENSITY = 0.55;
 
+/** Distancia de la key y la rim al origen (u), las de la luz de siempre.
+ *  La de la key cuenta: su cámara de sombra (near 5, far 60, ±18 u) va
+ *  desde ahí. */
+const KEY_DISTANCE = Math.hypot(...LEGACY_KEY_POSITION);
+const RIM_DISTANCE = Math.hypot(...LEGACY_RIM_POSITION);
+
 let boundScene: THREE.Scene | null = null;
 let boundRenderer: THREE.WebGLRenderer | null = null;
 let hemi: THREE.HemisphereLight | null = null;
+let key: THREE.DirectionalLight | null = null;
+let rim: THREE.DirectionalLight | null = null;
 let cameraOverride: CameraPose | null = null;
 let restoreGameplayPose = false;
 
@@ -101,8 +112,9 @@ export function initSceneAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRen
   // Key con más componente LATERAL que antes (8,25,12 → elevación 60°,
   // casi cenital: aplastaba el relieve y dejaba las paredes del canto sin
   // gradiente). Bajarla da sombra larga y separa tapa de acantilado.
-  const key = new THREE.DirectionalLight(0xfff1d4, 1.35);
-  key.position.set(-11, 17, 13);
+  // Arranca con la luz de siempre (LEGACY_LIGHT); cada bioma pone la suya
+  // con `setSceneLighting` (fondo v2, F3).
+  key = new THREE.DirectionalLight();
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
   key.shadow.camera.near = 5;
@@ -115,9 +127,29 @@ export function initSceneAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRen
   key.shadow.radius = 2.5;   // borde suave sin PCFSoft (deprecado en r185)
   scene.add(key);
 
-  const rim = new THREE.DirectionalLight(0x9fb4e8, 0.55);
-  rim.position.set(-10, 14, -14);
+  rim = new THREE.DirectionalLight();
   scene.add(rim);
+  setSceneLighting(null);
+}
+
+/**
+ * Luz del bioma (fondo v2, F3): rumbo, altura, color e intensidad de la key
+ * y la rim. `null` vuelve a la de siempre (menús, modo mar y el A/B de
+ * `BACKDROP_LOOK.legacyLight`). La altura la acota `lightDirection` (5-89°)
+ * y la intensidad de la key sale de `keyIntensityOf`. Afecta a los bichos
+ * (nota en el buzón de PERSONAJES, 2026-09-29).
+ */
+export function setSceneLighting(light: PackLight | null): void {
+  if (!key || !rim) return;
+  const l = light ?? LEGACY_LIGHT;
+  const [kx, ky, kz] = lightDirection(l.keyAzimuthDeg, l.keyElevationDeg);
+  key.position.set(kx * KEY_DISTANCE, ky * KEY_DISTANCE, kz * KEY_DISTANCE);
+  key.color.setHex(l.keyColor);
+  key.intensity = keyIntensityOf(l);
+  const [rx, ry, rz] = lightDirection(l.rimAzimuthDeg, l.rimElevationDeg);
+  rim.position.set(rx * RIM_DISTANCE, ry * RIM_DISTANCE, rz * RIM_DISTANCE);
+  rim.color.setHex(l.rimColor);
+  rim.intensity = l.rimIntensity;
 }
 
 /**

@@ -203,6 +203,31 @@ antes de commitear el JSON.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De ARENA, 2026-09-29 — la F3 del fondo v2 cambia la luz de los bichos
+  (cada bioma tiene la suya).** Para que lo sepas; no tienes que hacer
+  nada.
+  - Qué cambia: la key y la rim ya no son las mismas en los cinco biomas.
+    Cada una lleva su rumbo, altura, color e intensidad
+    (`PackSky.key*` / `rim*`, en `src/arena-decorations.ts`), y la aplica
+    `setSceneLighting` (`src/scene-atmosphere.ts`). La key sigue en el
+    cuarto delantero izquierdo, entre −35° y −60° de rumbo, a 40-50° de
+    altura. Su intensidad se deriva para que el suelo reciba la misma luz
+    que antes: los bichos no se oscurecen ni se queman.
+  - Cuánto cambia a los bichos: poco, un tinte por bioma (frío en tundra,
+    naranja en el desierto, rosado en kitsune). La luz que les da en la
+    cara va de −22 % (kitsune, atardecer) a +19 % (tundra).
+  - La hoja A/B con los 9 bichos en fila, antes y después, en los cinco
+    biomas:
+    `R:\Proyectos_Trabajos\WorkSpaces\Claude\bichitos-rumble\.tmp\shots-f3\_roster_f3.png`
+    (ruta absoluta: `.tmp/` no existe en tu worktree).
+  - **Si capturas bichos para comparar**, la luz depende del bioma. La de
+    antes sigue a mano con `__devApi.setBackdropLook({ legacyLight: true })`
+    antes de empezar la partida, o con `arena-shots --look-patch
+    '{"legacyLight":true}'`. `arena-shots --pose lineup --at-seconds 1`
+    saca a los cuatro en fila, de frente.
+  - Si algún bicho se ve mal con la luz de su bioma, dímelo por aquí: se
+    ajusta en los datos del bioma, sin tocar el bicho.
+
 - **De INTERFAZ, 2026-09-29 — `src/game.ts` queda libre, y es tuyo para el
   evento de golpe online.** Lo he tocado en seis líneas, todas del portal:
   - el import;

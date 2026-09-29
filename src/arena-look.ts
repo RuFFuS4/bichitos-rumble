@@ -208,6 +208,93 @@ export interface PackSky {
    *  hemisferio. Es lo que ilumina la panza del cono (plan §6). */
   hemiGround: number;
   hemiIntensity: number;
+  /** F3 — la luz del bioma (plan §6). La key y la rim, cada una con su
+   *  rumbo (azimut, ° en el plano XZ desde +Z, el lado de la cámara, hacia
+   *  +X), su altura sobre el horizonte (°, acotada a 5-89), su color y su
+   *  intensidad. La
+   *  dirección de la key es la ÚNICA fuente de tres cosas: la luz de la
+   *  escena, el lado claro horneado en las nubes y el halo del sol de la
+   *  cúpula (así no pueden desfasarse). Campos planos a propósito:
+   *  `setPackSky` los valida uno a uno.
+   *  La intensidad de la key NO es un dato: se deriva (`keyIntensityOf`)
+   *  para que el suelo de la arena reciba `keyFloorGain` veces la luz de
+   *  key de antes (1 = la misma), con la altura y el color que sean. Con
+   *  una key baja sin compensar, la arena se oscurecía contra el pozo y el
+   *  canto de kitsune caía a un mínimo de 8,4 (contrato: ≥15). Así, tocar
+   *  la elevación o el color en el lab no rompe el contrato del canto. */
+  keyAzimuthDeg: number;
+  keyElevationDeg: number;
+  keyColor: number;
+  keyFloorGain: number;
+  rimAzimuthDeg: number;
+  rimElevationDeg: number;
+  rimColor: number;
+  rimIntensity: number;
+}
+
+/** La luz de un bioma, sola (F3). */
+export type PackLight = Pick<PackSky,
+  'keyAzimuthDeg' | 'keyElevationDeg' | 'keyColor' | 'keyFloorGain'
+  | 'rimAzimuthDeg' | 'rimElevationDeg' | 'rimColor' | 'rimIntensity'>;
+
+const DEG = 180 / Math.PI;
+
+/**
+ * La luz de ANTES de la F3, la misma para todos los biomas: key cálida en
+ * `LEGACY_KEY_POSITION` (×1,35, con sombra) y rim fría en
+ * `LEGACY_RIM_POSITION`. Única fuente de esos números: `scene-atmosphere`
+ * arranca con ella, saca de ahí la distancia de sus luces y la vuelve a
+ * poner con `BACKDROP_LOOK.legacyLight` (el A/B de la F3).
+ */
+export const LEGACY_KEY_POSITION = [-11, 17, 13] as const;
+export const LEGACY_RIM_POSITION = [-10, 14, -14] as const;
+const LEGACY_KEY_INTENSITY = 1.35;
+const [LKX, LKY, LKZ] = LEGACY_KEY_POSITION;
+const [LRX, LRY, LRZ] = LEGACY_RIM_POSITION;
+export const LEGACY_LIGHT: PackLight = {
+  keyAzimuthDeg: Math.atan2(LKX, LKZ) * DEG,
+  keyElevationDeg: Math.atan2(LKY, Math.hypot(LKX, LKZ)) * DEG,
+  keyColor: 0xfff1d4,
+  keyFloorGain: 1,
+  rimAzimuthDeg: Math.atan2(LRX, LRZ) * DEG,
+  rimElevationDeg: Math.atan2(LRY, Math.hypot(LRX, LRZ)) * DEG,
+  rimColor: 0x9fb4e8,
+  rimIntensity: 0.55,
+};
+
+/** La altura de una luz se acota a 5-89°: por debajo, la sombra de la key
+ *  se saldría de su cámara; a 90°, el rumbo deja de existir. */
+const clampElevation = (deg: number) => Math.min(89, Math.max(5, deg));
+
+/** Vector unitario hacia una luz de rumbo `azimuthDeg` y altura
+ *  `elevationDeg` (la convención de `PackLight`, altura acotada). Lo usan
+ *  la luz de la escena, las nubes horneadas y el halo: acotan igual. */
+export function lightDirection(azimuthDeg: number, elevationDeg: number): [number, number, number] {
+  const az = azimuthDeg / DEG, el = clampElevation(elevationDeg) / DEG;
+  return [Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)];
+}
+
+/** Luminancia relativa (Rec. 709) de un color sRGB 0xRRGGBB, en LINEAL:
+ *  three pasa el color de una luz a lineal antes de iluminar, así que la
+ *  luz que llega es proporcional a esto (con la luma sRGB, kitsune y el
+ *  desierto recibían un 10-14 % menos de lo calculado). */
+export function linearLuminance(hex: number): number {
+  const lin = (c: number) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin((hex >> 16) & 255) + 0.7152 * lin((hex >> 8) & 255) + 0.0722 * lin(hex & 255);
+}
+
+/** Luz de key que recibe el suelo (normal +Y) con la luz de antes. */
+const LEGACY_FLOOR_KEY = LEGACY_KEY_INTENSITY
+  * Math.sin(clampElevation(LEGACY_LIGHT.keyElevationDeg) / DEG) * linearLuminance(LEGACY_LIGHT.keyColor);
+
+/** Intensidad de la key de una luz: la que da al suelo `keyFloorGain`
+ *  veces la luz de key de antes. Con `LEGACY_LIGHT` da exactamente 1,35. */
+export function keyIntensityOf(light: PackLight): number {
+  const floorPerUnit = Math.sin(clampElevation(light.keyElevationDeg) / DEG) * linearLuminance(light.keyColor);
+  return (light.keyFloorGain * LEGACY_FLOOR_KEY) / Math.max(1e-3, floorPerUnit);
 }
 
 export interface BackdropLookConfig {
@@ -240,7 +327,8 @@ export interface BackdropLookConfig {
   cloudBelly: number;
   /** Cuánto se nota la luz key horneada en las nubes cercanas: 0 = plano,
    *  1 = el lado de sombra baja al 55 %. Sin esto, vistas desde arriba son
-   *  discos planos. La dirección es la de la key (`keyDirX/Y/Z`). */
+   *  discos planos. La dirección es la de la key del bioma (F3), o la de
+   *  antes con `legacyLight`. */
   cloudShade: number;
   /** Nubes cercanas (C2): cúmulos candidatos (cada uno 3-4 bultos),
    *  anillo, altura de las cimas (más hondas junto al pozo, subiendo hacia
@@ -419,11 +507,22 @@ export interface BackdropLookConfig {
    *  recortada sobre el fondo. */
   islandShadow: number;
   islandShadowReach: number;
-  /** Dirección de la luz key en el plano (debe seguir a la de
-   *  scene-atmosphere) para que la sombra caiga del lado correcto. */
-  keyDirX: number;
-  keyDirY: number;
-  keyDirZ: number;
+  /** F3 — A/B de la luz: `true` devuelve la de antes (la misma key y rim
+   *  en todos los biomas, sin halo y con las rampas del canto tal cual).
+   *  Para comparar y, si hace falta, descartar la F3 sin deshacer nada.
+   *  El canto de la isla la lee al construirse: en vivo se nota en la
+   *  partida siguiente. */
+  legacyLight: boolean;
+  /** Halo del sol en la cúpula, alrededor de la key: radio (°) y cuánto se
+   *  tiñe del color de la key en el centro. Ancho a propósito: las filas de
+   *  la cúpula van cada 7,5° y uno estrecho se facetaría. */
+  sunHaloDeg: number;
+  sunHaloStrength: number;
+  /** La punta de la rampa del canto no baja de esta fracción de la L del
+   *  labio (plan §6): con menos, la panza del cono salía casi negra. Como
+   *  `legacyLight`: los islotes la leen en vivo, pero el canto de la isla
+   *  se hornea al construirse y se nota en la partida siguiente. */
+  cliffTipMinRatio: number;
 }
 
 export const BACKDROP_LOOK: BackdropLookConfig = {
@@ -548,7 +647,8 @@ export const BACKDROP_LOOK: BackdropLookConfig = {
   hazeCurve: 0.85,
   islandShadow: 0.55,
   islandShadowReach: 34,
-  keyDirX: -11,
-  keyDirY: 17,
-  keyDirZ: 13,
+  legacyLight: false,
+  sunHaloDeg: 20,
+  sunHaloStrength: 0.35,
+  cliffTipMinRatio: 0.55,
 };

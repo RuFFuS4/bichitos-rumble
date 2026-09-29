@@ -37,7 +37,10 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { BACKDROP_LOOK, SALT_BACKDROP, type CliffRamp, type PackSky, type SeaRamp, type SkyFirma } from './arena-look';
+import {
+  BACKDROP_LOOK, LEGACY_LIGHT, SALT_BACKDROP, lightDirection,
+  type CliffRamp, type PackLight, type PackSky, type SeaRamp, type SkyFirma,
+} from './arena-look';
 import { FRAG } from './arena-fragments';
 import { GAMEPLAY_CAM_FOV, GAMEPLAY_CAM_LOOKAT, GAMEPLAY_CAM_POSITION } from './camera';
 import {
@@ -121,9 +124,9 @@ function paintSeaColors(geo: THREE.RingGeometry, ramp: SeaRamp, fogColor: number
   const c = new THREE.Color();
   const FOG_TMP = new THREE.Color();
   const inner = BACKDROP_LOOK.seaInnerR;
-  // Dirección de la luz key proyectada en el plano (src/scene-atmosphere.ts).
-  const lightX = BACKDROP_LOOK.keyDirX;
-  const lightZ = BACKDROP_LOOK.keyDirZ;
+  // Dirección de la luz key proyectada en el plano. El mar solo vive en
+  // el A/B de la F0, que va con la luz de antes.
+  const [lightX, , lightZ] = lightDirection(LEGACY_LIGHT.keyAzimuthDeg, LEGACY_LIGHT.keyElevationDeg);
   const lightLen = Math.hypot(lightX, lightZ) || 1;
 
   for (let i = 0; i < pos.count; i++) {
@@ -210,12 +213,19 @@ function sampleElevation(stops: Array<[number, number]>, elevDeg: number, out: T
   return out.setHex(stops[stops.length - 1]![1]);
 }
 
+/** Halo del sol en la cúpula (F3): dirección unitaria de la key, su color
+ *  y cuánto tiñe en el centro. */
+interface SunHalo { dir: THREE.Vector3; color: THREE.Color; strength: number; radiusDeg: number }
+
 /**
  * Cúpula latitud-longitud SIN UV. Las filas van en cada parada de color
  * (para que el pozo empiece exactamente donde toca), cada 2,5° en la
  * franja del horizonte al pozo y cada 7,5° en el resto. Se ve desde dentro.
+ * Con `halo` (F3), el cielo se tiñe del color de la key alrededor del sol;
+ * solo por encima del horizonte, y a 0 en él: la franja del horizonte
+ * tiene que seguir siendo exactamente el `fogColor` (§5, C3).
  */
-function buildDomeGeometry(stops: Array<[number, number]>): THREE.BufferGeometry {
+function buildDomeGeometry(stops: Array<[number, number]>, halo: SunHalo | null): THREE.BufferGeometry {
   const lats = new Set<number>();
   for (let e = 90; e >= -90; e -= 7.5) lats.add(e);
   // Más filas donde cambia el color de verdad (horizonte → pozo).
@@ -226,13 +236,23 @@ function buildDomeGeometry(stops: Array<[number, number]>): THREE.BufferGeometry
   const R = BACKDROP_LOOK.domeRadius;
   const positions: number[] = [];
   const colors: number[] = [];
-  const c = new THREE.Color();
+  const row = new THREE.Color(), c = new THREE.Color(), v = new THREE.Vector3();
+  const haloRad = halo ? (halo.radiusDeg * Math.PI) / 180 : 0;
   for (const e of rows) {
     const phi = (e * Math.PI) / 180;
-    sampleElevation(stops, e, c);
+    sampleElevation(stops, e, row);
+    // Se apaga en los 5° de encima del horizonte.
+    const aboveHorizon = Math.min(1, Math.max(0, e / 5));
     for (let j = 0; j <= cols; j++) {
       const lam = (j / cols) * Math.PI * 2;
-      positions.push(R * Math.cos(phi) * Math.cos(lam), R * Math.sin(phi), R * Math.cos(phi) * Math.sin(lam));
+      v.set(Math.cos(phi) * Math.cos(lam), Math.sin(phi), Math.cos(phi) * Math.sin(lam));
+      positions.push(R * v.x, R * v.y, R * v.z);
+      c.copy(row);
+      if (halo && aboveHorizon > 0) {
+        const t = Math.min(1, v.angleTo(halo.dir) / haloRad);
+        const k = halo.strength * aboveHorizon * (1 - t * t * (3 - 2 * t));
+        if (k > 0) c.lerp(halo.color, k);
+      }
       colors.push(c.r, c.g, c.b);
     }
   }
@@ -256,7 +276,9 @@ function buildDomeGeometry(stops: Array<[number, number]>): THREE.BufferGeometry
  * (lejanas: `instanceColor` es entonces el color final exacto y se puede
  * fundir al 100 % con el horizonte — multiplicar solo oscurece).
  */
-function buildBumpGeometry(width: number, height: number, belly: number, shade: number): THREE.BufferGeometry {
+function buildBumpGeometry(
+  width: number, height: number, belly: number, shade: number, keyDir: readonly [number, number, number],
+): THREE.BufferGeometry {
   const geo = new THREE.SphereGeometry(1, width, height, 0, Math.PI * 2, 0, Math.PI / 2);
   geo.scale(1, 0.75, 1);
   geo.deleteAttribute('uv');
@@ -264,8 +286,8 @@ function buildBumpGeometry(width: number, height: number, belly: number, shade: 
   const nrm = geo.getAttribute('normal');
   // Luz key horneada: lado claro y lado en sombra. Las instancias no giran
   // (`rotY` 0 en el layout), así que la dirección vale en el espacio del
-  // bulto. Es la misma key de scene-atmosphere (BACKDROP_LOOK.keyDir*).
-  const L = new THREE.Vector3(BACKDROP_LOOK.keyDirX, BACKDROP_LOOK.keyDirY, BACKDROP_LOOK.keyDirZ).normalize();
+  // bulto. Es la key del bioma (F3), la misma que ilumina la escena.
+  const L = new THREE.Vector3(...keyDir).normalize();
   const n = new THREE.Vector3();
   const colors = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
@@ -632,6 +654,11 @@ export class ArenaBackdrop {
       camera: GAMEPLAY_SKY_CAMERA,
     });
 
+    // F3: la key del bioma (o la de antes, en el A/B) manda en la luz
+    // horneada de las nubes y en el halo del sol.
+    const light: PackLight = BACKDROP_LOOK.legacyLight ? LEGACY_LIGHT : sky;
+    const keyDir = lightDirection(light.keyAzimuthDeg, light.keyElevationDeg);
+
     const cloudMat = () => new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
     const layers: BackdropStats['layers'] = {};
     const addLayer = (name: string, geo: THREE.BufferGeometry, mat: THREE.Material, list: SkyInstance[]) => {
@@ -645,7 +672,7 @@ export class ArenaBackdrop {
     // con panza y material. Van en DOS mallas: la quieta y la de la deriva,
     // que gira entera alrededor del eje (F2; qué va en cada una lo decide
     // la colocación). Las cifras se reparten por capa para el lab.
-    const bump = buildBumpGeometry(14, 3, BACKDROP_LOOK.cloudBelly, BACKDROP_LOOK.cloudShade);
+    const bump = buildBumpGeometry(14, 3, BACKDROP_LOOK.cloudBelly, BACKDROP_LOOK.cloudShade, keyDir);
     const per = triCount(bump);
     addLayer('cloudsStill', bump, cloudMat(), layout.cloudsStill);
     const drift = addLayer('cloudsDrift', bump.clone(), cloudMat(), layout.cloudsDrift);
@@ -660,12 +687,12 @@ export class ArenaBackdrop {
     // recorta contra el cielo en la victoria) y con la deriva: giran enteras.
     // Sin panza (1): con ella, cada piso sacaba su franja oscura.
     const towers = addLayer('towers',
-      buildBumpGeometry(BACKDROP_LOOK.towerSides, BACKDROP_LOOK.towerRows, 1, BACKDROP_LOOK.cloudShade),
+      buildBumpGeometry(BACKDROP_LOOK.towerSides, BACKDROP_LOOK.towerRows, 1, BACKDROP_LOOK.cloudShade, keyDir),
       cloudMat(), layout.towers);
     if (towers) this.driftMeshes.push(towers);
     // 12 lados y no 8: con 8, las lejanas (enormes y de color plano) se
     // recortaban como octógonos.
-    addLayer('far', buildBumpGeometry(12, 2, 1, 0), cloudMat(), layout.far);
+    addLayer('far', buildBumpGeometry(12, 2, 1, 0, keyDir), cloudMat(), layout.far);
     // Islotes iluminados: son hermanos de la isla y reciben su misma luz.
     // Sin niebla: a 60-150 u la FogExp2 los lavaría hacia el horizonte
     // claro y competirían con la arena.
@@ -685,7 +712,10 @@ export class ArenaBackdrop {
         new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }), white);
     }
 
-    const domeGeo = buildDomeGeometry(layout.domeStops);
+    const domeGeo = buildDomeGeometry(layout.domeStops, BACKDROP_LOOK.legacyLight ? null : {
+      dir: new THREE.Vector3(...keyDir), color: new THREE.Color(light.keyColor),
+      strength: BACKDROP_LOOK.sunHaloStrength, radiusDeg: BACKDROP_LOOK.sunHaloDeg,
+    });
     // DoubleSide y no BackSide: el sentido de los triángulos de una esfera
     // hecha a mano depende del orden de filas y columnas, y con la cara
     // equivocada la cúpula no se pinta y lo que se ve es el color de
