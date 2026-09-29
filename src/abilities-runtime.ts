@@ -18,7 +18,7 @@ import type { Critter } from './critter';
 import { triggerHitStop, triggerCameraShake, applyDashFeedback, applyLandingFeedback, applyImpactFeedback, applyYankVisual, createFrozenFrameGate, FEEL } from './gamefeel';
 import { play as playSound } from './audio';
 import { spawnDustPuff } from './dust-puff';
-import { spawnLocalProjectile } from './projectiles';
+import { setProjectileArena, spawnLocalProjectile } from './projectiles';
 import { FRAG, pointInFragment, type ArenaLayout } from './arena-fragments';
 import {
   COPYCAT_KEYS,
@@ -52,10 +52,13 @@ interface ArenaForAbilities {
   killFragmentIndices(indices: number[]): void;
   isOnArena(x: number, z: number): boolean;
   getLayout(): ArenaLayout | null;
+  radiusAt(angle: number): number;
 }
 let _arenaRef: ArenaForAbilities | null = null;
 export function setArenaForAbilities(a: ArenaForAbilities | null): void {
   _arenaRef = a;
+  // The snowball's edge cut reads the same arena.
+  setProjectileArena(a);
 }
 
 /** Live floor at (x, z): the wired arena's alive fragments, or the whole

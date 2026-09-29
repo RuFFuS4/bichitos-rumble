@@ -7,6 +7,7 @@ import {
 } from './abilities-runtime';
 import { FEEL } from './gamefeel';
 import { matchRng } from './match-rng';
+import { pointInFragment, type ArenaLayout } from './arena-fragments';
 
 /** Minimal arena view for edge awareness (balance v2). */
 interface BotArenaView {
@@ -14,6 +15,43 @@ interface BotArenaView {
   /** Radio vivo en UNA dirección (fase 0.5) — ver Arena.radiusAt. */
   radiusAt(angle: number): number;
   isOnArena(x: number, z: number): boolean;
+  /** The collapse warning (Arena.getCollapseState / getLayout). Optional:
+   *  a bare disc (tests, headless) has none. */
+  getCollapseState?(): { warningBatch: number };
+  getLayout?(): ArenaLayout | null;
+}
+
+/**
+ * The floor as a bot should read it: the tiles of the batch under the
+ * collapse warning (3 s of shaking) already count as gone. Every probe
+ * used to read only the live tiles, so bots chased onto a shaking tile and
+ * dropped with it: 6.7 % of all falls in 540 bot matches (ARENA's note,
+ * 2026-09-29). Mirror: server/src/sim/bot.ts.
+ */
+function floorAfterWarning(arena: BotArenaView): BotArenaView {
+  const batch = arena.getCollapseState?.().warningBatch ?? -1;
+  const layout = batch >= 0 ? arena.getLayout?.() : null;
+  const indices = layout?.batches[batch]?.indices;
+  if (!layout || !indices) return arena;
+  const doomed = indices.map((i) => layout.fragments[i]);
+  return {
+    currentRadius: arena.currentRadius,
+    isOnArena: (x, z) => arena.isOnArena(x, z) && !doomed.some((f) => pointInFragment(x, z, f)),
+    // Arena.radiusAt without the doomed tiles: the farthest outer edge of
+    // a live tile in this direction (a point just inside that edge is on
+    // the arena only if the tile is alive).
+    radiusAt: (angle) => {
+      const x = Math.cos(angle);
+      const z = Math.sin(angle);
+      let maxR = layout.immuneRadius;
+      for (const f of layout.fragments) {
+        if (f.immune || maxR >= f.outerR || indices.includes(f.index)) continue;
+        const p = f.outerR - 0.001;
+        if (pointInFragment(x * p, z * p, f) && arena.isOnArena(x * p, z * p)) maxR = f.outerR;
+      }
+      return maxR;
+    },
+  };
 }
 
 /**
@@ -103,6 +141,9 @@ export function updateBot(
   const dx = nearest.x - bot.x;
   const dz = nearest.z - bot.z;
   const dist = Math.sqrt(dx * dx + dz * dz);
+  // Where the bot may go: no shaking tiles. The shell's edge pressure
+  // (below) keeps the real rim.
+  const floor = arena ? floorAfterWarning(arena) : undefined;
 
   // --- Movement: chase the target, with the same steering reduction as
   // the player has during a mobility-tagged ability's active window.
@@ -126,7 +167,7 @@ export function updateBot(
     // Runs BEFORE the confusion inversion on purpose: a confused bot
     // SHOULD still be able to stumble into the void — that's the point
     // of Toxic Touch.
-    if (arena) {
+    if (floor) {
       const rd = Math.sqrt(bot.x * bot.x + bot.z * bot.z);
       if (rd > 0.01) {
         // Review 2026-08-24: la sonda usa la DIRECCIÓN normalizada, no
@@ -138,7 +179,7 @@ export function updateBot(
         const dirZ = dl > 0.001 ? nz / dl : nz;
         const aheadX = bot.x + dirX * FEEL.bots.lookAhead;
         const aheadZ = bot.z + dirZ * FEEL.bots.lookAhead;
-        if (!arena.isOnArena(aheadX, aheadZ)) {
+        if (!floor.isOnArena(aheadX, aheadZ)) {
           nx = -bot.x / rd;
           nz = -bot.z / rd;
         } else {
@@ -146,7 +187,7 @@ export function updateBot(
           // `currentRadius` un bot plantado sobre el borde de la mitad ya
           // caída (patrón axis-split) no sentía peligro alguno mientras
           // sobreviviera un sector exterior en la otra punta del disco.
-          const danger = rd - (arena.radiusAt(Math.atan2(bot.z, bot.x)) - FEEL.bots.edgeMargin);
+          const danger = rd - (floor.radiusAt(Math.atan2(bot.z, bot.x)) - FEEL.bots.edgeMargin);
           if (danger > 0) {
             const w = Math.min(1, danger / FEEL.bots.edgeMargin) * FEEL.bots.edgeSteer;
             nx -= (bot.x / rd) * w;
@@ -243,7 +284,7 @@ export function updateBot(
     nearestDist > 3.0 &&
     nearestDist < 6.0 &&
     !movementActive(bot) &&
-    dashStaysOnArena(bot, mobilityAbility.def, arena)
+    dashStaysOnArena(bot, mobilityAbility.def, floor)
   ) {
     if (roll(FEEL.bots.fireRatesPerSec.mobility)) {
       activateAbility(mobilityAbility, bot);
@@ -343,7 +384,7 @@ export function updateBot(
     const ry = bot.mesh.rotation.y;
     if (
       nearestDist < utility.def.zone.radius * FEEL.bots.trapRadiusFrac &&
-      (!arena || arena.isOnArena(bot.x + Math.sin(ry) * reach, bot.z + Math.cos(ry) * reach)) &&
+      (!floor || floor.isOnArena(bot.x + Math.sin(ry) * reach, bot.z + Math.cos(ry) * reach)) &&
       roll(FEEL.bots.fireRatesPerSec.trap)
     ) {
       activateAbility(utility, bot);

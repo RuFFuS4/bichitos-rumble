@@ -282,6 +282,23 @@ export function tickProjectiles(
       pr.mesh.parent?.remove(pr.mesh);
       (pr.mesh.material as THREE.Material).dispose();
       activeProjectiles.splice(i, 1);
+      continue;
+    }
+    // Well past the live floor in its direction it flies over the void:
+    // gone, silently, as the server's cut does (BrawlRoom). Offline a ball
+    // used to cross the fallen half of the arena (ARENA's note).
+    if (floorRadiusAt && Math.hypot(pr.x, pr.z) > floorRadiusAt(Math.atan2(pr.z, pr.x)) + FEEL.snowball.voidMargin) {
+      pr.mesh.parent?.remove(pr.mesh);
+      (pr.mesh.material as THREE.Material).dispose();
+      activeProjectiles.splice(i, 1);
     }
   }
+}
+
+/** The live floor's radius in a direction (Arena.radiusAt), for the
+ *  offline edge cut; wired by abilities-runtime's setArenaForAbilities.
+ *  Without it (tests, headless), balls only expire by ttl. */
+let floorRadiusAt: ((angle: number) => number) | null = null;
+export function setProjectileArena(arena: { radiusAt(angle: number): number } | null): void {
+  floorRadiusAt = arena ? (angle) => arena.radiusAt(angle) : null;
 }

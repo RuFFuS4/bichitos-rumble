@@ -264,6 +264,25 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   - La tanda dice cuánto cae un bicho; esto dice por qué. Las grabaciones
     de la tanda no sirven para ventanas cortas: sus eventos llevan el
     reloj de pared (ERROR_LOG 2026-09-25).
+  - Desde el 2026-09-29 `floor` cuenta también los lotes del colapso. Antes
+    solo contaba el Sinkhole, y las caídas por colapso salían como
+    `contact` o `alone`.
+- **¿Quién tiró a quién, y con qué?** (2026-09-29):
+  `node scripts/attrib-probe.mjs --url=... [--players=...] [--matches=100]
+  [--shard=i/n] [--kit=Bicho.slot.campo=valor] [--feel=sec.key=val]`, y
+  después `node scripts/attrib-analyze.mjs <dir> [--compare=<dir>]`.
+  - Juega partidas deterministas de bots en el laboratorio. De **cada**
+    caída de **cada** bicho apunta el último empujón, su autor y qué
+    hacía la víctima: cabezazo, rebote propio, J, K, L, All-in, agarre,
+    suelo o solo.
+  - `--kit` cambia en vivo cualquier campo numérico de las habilidades,
+    y `--feel` cualquier valor de FEEL. Con `--compare` sobre el mismo
+    plan salen los Δ emparejados con su intervalo de confianza. Así se
+    mide un «qué pasaría si» sin tocar el código.
+  - La sonda del pase de balance de las embestidas: 900 partidas y unas
+    400 apariciones por bicho. Unos 25 min con 3 procesos en paralelo; a
+    6, en una máquina compartida, se caen navegadores (`--resume`
+    reanuda).
 - **Servidor «foto fija» para capturas largas** (2026-09-24):
   `npx vite --config scripts/vite.snapshot.config.mjs --port 5182
   --strictPort` levanta un segundo servidor sin vigilancia de ficheros ni

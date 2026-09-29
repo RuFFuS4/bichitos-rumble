@@ -107,10 +107,16 @@ await page.evaluate(({ CRITTER, feel, CONTACT }) => {
     });
     if (buf.length > 120) buf.shift();
     if (me.falling && !wasFalling && buf.length >= 2) {
-      const prev = buf[buf.length - 2]; // last sample still on the floor
+      const prev = buf[buf.length - 2]; // the step before the fall
       const last30 = buf.slice(-30);    // 0.5 s
       const speed = Math.hypot(prev.vx, prev.vz);
-      const floorGone = prev.onFloor && !g.arena.isOnArena(prev.x, prev.z);
+      // The last spot it stood on live floor, now dead: the floor went
+      // under it. Not `prev`: a collapse batch drops at the end of a step
+      // (after checkFalloff), so `prev` was sampled on the already-dead
+      // tile and a batch drop never read as 'floor' (2026-09-29).
+      let lastOn = null;
+      for (let i = buf.length - 2; i >= 0 && !lastOn; i--) if (buf[i].onFloor) lastOn = buf[i];
+      const floorGone = !!lastOn && !g.arena.isOnArena(lastOn.x, lastOn.z);
       const minEnemy = Math.min(...last30.map((b) => b.nearest));
       const steer = buf.slice(-18).reduce((s, b) => s + (b.input ? radial(b, b.mx, b.mz) : 0), 0) / 18;
       P.falls.push({

@@ -385,6 +385,10 @@ lo mismo.
     de dash, que castigan al que se queda quieto. Kowalski lanza la
     bola y Sergei el Shockwave con carga previa, y ninguno de los dos
     tiene un dash que golpee fuerte.
+  - *Corregido el 2026-09-29, midiendo a escala: los golpes de dash no son
+    la causa* (§«Pase de balance de las embestidas: medido»). «Contacto»
+    metía en el mismo saco cabezazos, el rebote propio y el All-in, y la
+    comparación antes/después de la tanda entera tenía ±8 puntos de ruido.
 - **Sergei** ya era de los más débiles con bots (70 %) y queda el peor
   (78 %). Su golpe de dash (22) es el más flojo. Queda para un pase de
   balance con más partidas: hoy la tanda tiene ±8 puntos de ruido.
@@ -621,6 +625,69 @@ su escéptico.
   - el brillo verde de una sierra activa sigue en la pantalla final, en
     los dos modos: ni `enterEnded` ni el `endMatch` del servidor cancelan
     las habilidades.
+
+### Pase de balance de las embestidas: medido (2026-09-29)
+
+Encargo de la sesión general, aprobado por Rafa: que Kowalski y Sergei
+dejen de perder tanto por los golpes de dash. Se hizo en dos pasos. Tres
+agentes midieron primero la mecánica, las palancas y el suelo. Después,
+una sonda nueva (`scripts/attrib-probe.mjs`) atribuyó cada caída de cada
+bicho a su último empujón y a su autor.
+- **Muestra:** 900 partidas deterministas, 100 por bicho como jugador,
+  unas 400 apariciones por bicho. La tanda anterior tenía 40-80.
+- **Control:** el mismo plan repetido tres veces sale idéntico, y los
+  impulsos cuadran con las fórmulas.
+
+**Eliminado por bicho** (con su IC del 95 %):
+
+| Bicho | Eliminado | Victorias |
+|---|---|---|
+| Shelly | 71,8 % [67,1–76,1] | 2,9 % |
+| Sergei | 70,6 % [66,0–74,9] | 4,7 % |
+| Sihans | 66,3 % [61,5–70,7] | 9,3 % |
+| Cheeto | 62,6 % [57,6–67,3] | 12,3 % |
+| Kurama | 58,2 % [53,2–62,9] | 12,5 % |
+| Kowalski | 54,1 % [49,2–58,9] | 14,8 % |
+| Sebastian | 51,7 % [46,9–56,5] | 13,8 % |
+| Kermit | 50,8 % [46,1–55,6] | 17,7 % |
+| Trunk | 34,0 % [29,6–38,7] | 26,5 % |
+
+- **Los golpes de dash no son el problema.**
+  - Causan el 0,55 % de las caídas: 45 de 8.213, y 2.874 golpes que
+    acertaron.
+  - Con los cuatro a 0 y las mismas 900 partidas, nadie se mueve más de
+    2 puntos: Kowalski −0,5 [−6,0; +5,0], Sergei −0,5 [−6,4; +5,4].
+  - Se quedan como están: dan golpe, que era lo que pidió Rafa, y no
+    desequilibran.
+- **Kowalski no está mal: está a media tabla.** El «65 %» era su cifra
+  como jugador. En la tanda, la partida acaba cuando cae el jugador, y
+  eso sube a todos (Kowalski 67 % como jugador).
+- **Los que pierden son Shelly y Sergei. Trunk gana de largo.**
+- **Lo que tira de verdad** (causa principal, % de las caídas de cada
+  bicho):
+  - cabezazos, 22-43 %;
+  - el rebote de su propio cabezazo, 10-26 % (Trunk 26 %);
+  - las L, 6-22 %. De ahí, el All-in del bot de Sebastian es el 11,8 % de
+    **todas** las caídas y la primera causa de Sergei;
+  - el suelo, 7-17 %;
+  - las K, 4-8 %.
+- **El bot de Sebastian no falla nunca el All-in.** Solo suelta con
+  alguien en la línea: 971 caídas y 0 fallos, 3,1 eliminaciones por
+  minuto con él en la partida. Una persona falla. Según la regla 6 de
+  `docs/BALANCE.md`, la tanda mide aquí un bot perfecto, no el juego.
+- **Fallo de física, en el cliente y en el servidor.** Cuando dos bichos
+  se cabecean a la vez, gana siempre el que va antes en la lista de
+  `resolveCollisions`, que mira `a` primero.
+  - Pasa en la mitad de los cabezazos que aciertan (26.163 de 51.536).
+  - Offline, el jugador es el primero y gana siempre el choque.
+  - Online gana el que entró antes en la sala.
+  - Es el estado más común en el golpe que tira a Kowalski y a Sergei:
+    en el 47 % y el 39 % de sus caídas por golpe.
+- **Qué falta decidir (Rafa):** cómo se resuelve el choque de cabezas y
+  si el bot del All-in debe fallar como una persona. Después se vuelve a
+  medir, y solo si Shelly y Sergei siguen abajo hay pase para ellos. El
+  rebote propio es global y ayudaría sobre todo a Trunk, que ya gana:
+  mejor no tocarlo.
 
 ## Preguntas a Rafa — respondidas el 2026-09-25
 
