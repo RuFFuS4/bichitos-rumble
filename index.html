@@ -1911,11 +1911,17 @@
        dismiss after 6 s. Placeholder emoji icons until the Phase 5 PNG
        assets land; the CSS won't need touching then — just swap the
        inner element of .badge-toast-icon to <img>. */
+    /* Top: below the timer + alive cluster (#hud-top-center ends ~75 px),
+       above the end-screen result title (2026-09-29: at top 30 px it
+       covered the timer on desktop and «¡VICTORIA!» on phones). Short
+       screens move it to the bottom-left corner — see the max-height
+       block. --toast-tx is the horizontal centring the animation keeps. */
     .badge-toast {
+      --toast-tx: -50%;
       position: fixed;
-      top: 30px;
+      top: 90px;
       left: 50%;
-      transform: translate(-50%, -24px);
+      transform: translate(var(--toast-tx), -24px);
       display: flex;
       align-items: center;
       gap: 16px;
@@ -1945,13 +1951,25 @@
     .badge-toast.hidden {
       display: none;
     }
+    /* Mid-height screens (a 1366×768 laptop has ~657 px inside the
+       browser): no room between the timer and the result title, so the
+       toast takes the timer's place while it shows — on the end screen the
+       timer and the alive count are only the final state (review
+       2026-09-29: at 90 px it covered «¡VICTORIA!» there). Range syntax so
+       a zoomed 520.x px height isn't left between this and max-height:520px.
+       Known edge: a portal arrival on a 521-565 px window has one more
+       end-screen row, and the toast grazes the title's top. */
+    @media (520px < height <= 740px) {
+      .badge-toast { top: 8px; }
+      body.badge-toast-visible #hud-top-center { visibility: hidden; }
+    }
     .badge-toast.badge-toast-enter {
       animation: badge-toast-enter 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.1) forwards;
     }
     @keyframes badge-toast-enter {
-      0%   { opacity: 0; transform: translate(-50%, -24px) scale(0.92); }
-      60%  { opacity: 1; transform: translate(-50%, 6px)   scale(1.04); }
-      100% { opacity: 1; transform: translate(-50%, 0px)   scale(1);    }
+      0%   { opacity: 0; transform: translate(var(--toast-tx), -24px) scale(0.92); }
+      60%  { opacity: 1; transform: translate(var(--toast-tx), 6px)   scale(1.04); }
+      100% { opacity: 1; transform: translate(var(--toast-tx), 0px)   scale(1);    }
     }
     /* Shine sweep across the panel when it appears — "newly earned" feel. */
     .badge-toast-shine {
@@ -2081,6 +2099,10 @@
       -webkit-tap-highlight-color: transparent;
     }
     body.touch-mode.match-active #touch-controls { display: block; }
+    /* End screen: the stick and the buttons do nothing there ("tap to play
+       again" takes the whole screen), and their corners are where the
+       belt toast goes on short screens. */
+    body.touch-mode.match-active.end-screen-active #touch-controls { display: none; }
 
     #touch-joystick {
       position: absolute;
@@ -2342,6 +2364,23 @@
       #touch-actions { width: 156px; height: 156px; bottom: 16px; right: 16px; }
       .touch-button { width: 54px; height: 54px; font-size: 12px; }
       .touch-btn-headbutt { width: 70px; height: 70px; font-size: 18px; }
+
+      /* Belt toast: phones have no free band at the top (the result title
+         sits right under the timer), so it takes the bottom-left corner,
+         free on the end screen once the stick is hidden. */
+      .badge-toast {
+        --toast-tx: 0%;
+        top: auto;
+        bottom: 12px;
+        left: 12px;
+        min-width: 0;
+        /* Clear of the centred share button and "tap to play again"
+           prompt (~173 px wide, so its left edge is 50vw − 87 px). */
+        max-width: min(300px, calc(50vw - 112px));
+        padding: 10px 14px 10px 10px;
+        gap: 10px;
+      }
+      .badge-toast-icon { width: 44px; height: 44px; }
 
       /* Title signature (`by @RGomezR14`) — tighten so it doesn't
          eat the bottom of a 340-px-tall match HUD. */

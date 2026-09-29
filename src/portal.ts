@@ -177,7 +177,7 @@ export function initPortals(scene: THREE.Scene): void {
   graceTimer = GRACE_PERIOD;
   expanded = false;
   expansionT = 0;
-  if (!portalEnabled) return; // no meshes → updatePortals never triggers
+  if (!portalEnabled) return; // no meshes → simulatePortals never triggers
 
   // Exit portal — always present
   exitPortal = createPortalMesh(EXIT_COLOR, 'NEXT GAME');
@@ -196,20 +196,21 @@ export function initPortals(scene: THREE.Scene): void {
   // Apply initial minimized visual state immediately, so countdown and the
   // first frame of 'playing' both render the portal at 0.5× scale / low glow
   // instead of a visible pop from 1.0× to 0.5× when the match starts.
-  if (exitPortal) animatePortal(exitPortal, 0);
-  if (startPortal) animatePortal(startPortal, 0);
+  animatePortals();
 }
 
 /**
- * Animate portals and check player collision. Call every frame during 'playing'.
- * Returns 'exit' | 'start' if a redirect was triggered, null otherwise.
+ * Portal SIMULATION — once per sim step (fixed 1/60 since PERSONAJES' fixed
+ * step): expansion toward its target, the start portal's grace timer and the
+ * local player's collision. Returns 'exit' | 'start' if a redirect was
+ * triggered, null otherwise. The visuals are animatePortals(), per frame.
  *
  * IMPORTANT: this function must ONLY be called with the local player's
  * coordinates. Bots must never trigger a portal redirect. The portal meshes
  * have no physics hitbox — bots pass through them visually but do not
  * interact with collision or redirect logic.
  */
-export function updatePortals(playerX: number, playerZ: number, dt: number): 'exit' | 'start' | null {
+export function simulatePortals(playerX: number, playerZ: number, dt: number): 'exit' | 'start' | null {
   if (redirected) return null;
 
   // Smooth expansion toward target (0 or 1)
@@ -221,10 +222,6 @@ export function updatePortals(playerX: number, playerZ: number, dt: number): 'ex
   // are purely cosmetic — walking through them does nothing. This avoids
   // accidental redirects from combat knockback.
   const isUsable = expansionT > TRIGGER_EXPANSION_THRESHOLD;
-
-  // Animate
-  if (exitPortal) animatePortal(exitPortal, dt);
-  if (startPortal) animatePortal(startPortal, dt);
 
   // Grace timer for start portal
   if (graceTimer > 0) {
@@ -258,6 +255,17 @@ export function updatePortals(playerX: number, playerZ: number, dt: number): 'ex
   }
 
   return null;
+}
+
+/**
+ * Portal VISUALS — once per rendered frame: spin, pulse, particles and the
+ * "PRESS P" hint, scaled by the expansion simulatePortals() keeps. Time
+ * comes from Date.now(), so it needs no dt: it runs at the screen's rate
+ * and keeps moving through a hit stop.
+ */
+export function animatePortals(): void {
+  if (exitPortal) animatePortal(exitPortal);
+  if (startPortal) animatePortal(startPortal);
 }
 
 /** Remove portal meshes from scene and release GPU resources. */
@@ -401,7 +409,7 @@ function createPortalParticles(color: number): THREE.Points {
   return new THREE.Points(geo, mat);
 }
 
-function animatePortal(portal: THREE.Group, _dt: number): void {
+function animatePortal(portal: THREE.Group): void {
   const t = Date.now() * 0.001;
   const T = expansionT; // 0..1 smoothed
 
@@ -529,7 +537,7 @@ function redirectToRef(): void {
  * mid-transition and the user sees a flash of empty dark.
  *
  * The overlay is fire-and-forget: once this runs, `redirected = true` is
- * already set by updatePortals(), so further frames won't retrigger.
+ * already set by simulatePortals(), so further frames won't retrigger.
  * If the user closes the tab during the animation, nothing leaks — the
  * class just stays on the body until the next page load.
  */

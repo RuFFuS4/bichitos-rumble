@@ -47,7 +47,11 @@ export function updateHUD(aliveCount: number, timeLeft: number): void {
 
 // ---- Lives HUD ----------------------------------------------------------
 
-let liveEls: { root: HTMLElement; hearts: HTMLElement }[] = [];
+/** One per lives corner. `critter` is the one it was built for: corners
+ *  are painted by identity, never by array position, because online a
+ *  seat can vanish (a leaver) in the same patch that ends the match and
+ *  every later corner would shift onto the wrong critter. */
+let liveEls: { root: HTMLElement; hearts: HTMLElement; critter: Critter }[] = [];
 
 /**
  * Build lives display. One corner per critter (up to 4):
@@ -123,7 +127,10 @@ export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = 
 
     const hearts = document.createElement('span');
     hearts.className = 'lives-hearts';
-    renderHearts(hearts, c.lives, true);
+    // Dead-aware: a rebuild on the end screen (an online isBot flip when a
+    // dropped player reconnects) must keep the skulls, not redraw hearts.
+    renderHearts(hearts, c.lives, c.alive);
+    if (!c.alive) corner.classList.add('is-dead');
 
     corner.appendChild(dot);
     corner.appendChild(name);
@@ -143,7 +150,17 @@ export function initAllLivesHUD(critters: Critter[], localPlayerIndex: number = 
       corner.appendChild(badge);
     }
 
-    liveEls.push({ root: corner, hearts });
+    liveEls.push({ root: corner, hearts, critter: c });
+  }
+
+  // The alive counter is only refreshed by updateHUD once the match is
+  // playing, so the countdown showed the markup's English "Alive: 4"
+  // (DISTRIBUCIÓN, 2026-09-26). Localise it as soon as the corners exist —
+  // except on the end screen, where repaintLivesHUD's final count stands:
+  // an online rebuild there (a reconnect flips isBot) gets a list without
+  // the seats that already left (review 2026-09-29).
+  if (aliveEl && !document.body.classList.contains('end-screen-active')) {
+    aliveEl.textContent = tf('hud-alive', { n: critters.filter((c) => c.alive).length });
   }
 }
 
@@ -170,19 +187,45 @@ function renderHearts(el: HTMLElement, lives: number, alive: boolean): void {
   el.innerHTML = slot.repeat(lives);
 }
 
-/** Update lives display each frame. */
+/** Update lives display each frame. Each critter paints the corner built
+ *  for it (see `liveEls`); a critter with no corner is ignored. */
 export function updateAllLivesHUD(critters: Critter[]): void {
-  for (let i = 0; i < critters.length && i < liveEls.length; i++) {
-    const c = critters[i];
-    const el = liveEls[i];
-    if (!c.alive) {
-      renderHearts(el.hearts, 0, false);
-      el.root.classList.add('is-dead');
-    } else {
-      renderHearts(el.hearts, c.lives, true);
-      el.root.classList.remove('is-dead');
-    }
+  for (const c of critters) {
+    const el = liveEls.find((e) => e.critter === c);
+    if (el) paintLivesCorner(el);
   }
+}
+
+/**
+ * Final repaint for the end screen (called by showEndScreen): every corner
+ * and the alive counter from the critters as they are NOW.
+ *
+ * Online the server writes the last elimination and phase 'ended' in the
+ * same tick, so they reach the client in one patch, and game.ts only
+ * paints the HUD while the phase is countdown/playing. The HUD froze on the
+ * last playing frame, with the final victim still falling on its last
+ * life: "Vivos: 2" and no skull (DISTRIBUCIÓN, 2026-09-26; root cause
+ * checked by a 3-angle review + 3 skeptics, 2026-09-29). By the time the end
+ * screen shows, the critters already carry the final state.
+ *
+ * A critter whose mesh has left the scene was disposed — its seat is gone
+ * (a leaver) — so its corner keeps its last paint and it doesn't count as
+ * alive. Eliminated critters are only hidden and stay in the scene.
+ */
+export function repaintLivesHUD(): void {
+  let alive = 0;
+  for (const el of liveEls) {
+    if (!el.critter.mesh.parent) continue;
+    paintLivesCorner(el);
+    if (el.critter.alive) alive++;
+  }
+  if (aliveEl && liveEls.length > 0) aliveEl.textContent = tf('hud-alive', { n: alive });
+}
+
+function paintLivesCorner(el: typeof liveEls[number]): void {
+  const c = el.critter;
+  renderHearts(el.hearts, c.lives, c.alive);
+  el.root.classList.toggle('is-dead', !c.alive);
 }
 
 // ---- Overlay (countdown) ------------------------------------------------

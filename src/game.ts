@@ -38,7 +38,7 @@ import { getDisplayRoster, getRosterEntry, getPlayableNames, getIdlePreloadNames
 import { preloadModels } from './model-loader';
 import {
   isFromPortal, resolvePortalCharacter, setPortalPlayerInfo,
-  initPortals, updatePortals, disposePortals,
+  initPortals, simulatePortals, animatePortals, disposePortals,
   getPortalExitUrl, getPortalReturnUrl, clearPortalContext,
   togglePortalExpanded, hasStartPortal,
 } from './portal';
@@ -1319,12 +1319,14 @@ export class Game {
     // the server a 'portal' forfeit message and redirect. The server marks
     // us dead authoritatively; the remaining player gets a proper victory.
     if (this.player && this.player.alive && !this.portalRedirecting) {
-      const hit = updatePortals(this.player.x, this.player.z, dt);
+      const hit = simulatePortals(this.player.x, this.player.z, dt);
       if (hit) {
         this.triggerOnlinePortalExit(hit);
         return; // skip further state processing this tick
       }
     }
+    // Online runs once per frame: the portals' visuals go here too.
+    animatePortals();
 
     // Gameplay input only while the server is actually playing. During
     // waiting/countdown/ended the server ignores inputs anyway, but
@@ -2181,7 +2183,7 @@ export class Game {
             togglePortalExpanded();
           }
           if (this.player.alive && !this.player.falling) {
-            const portalHit = updatePortals(this.player.x, this.player.z, effectiveDt);
+            const portalHit = simulatePortals(this.player.x, this.player.z, effectiveDt);
             if (portalHit) return; // redirect in progress, freeze game loop
           }
         }
@@ -2346,6 +2348,9 @@ export class Game {
         for (const c of this.critters) c.present(dt);
         break;
       case 'playing': {
+        // The portals' visuals run on wall-clock time (portal.ts), at the
+        // display rate and through pauses and freezes alike.
+        animatePortals();
         // Paused, or frozen with nothing new to show: nothing moves, so the
         // freeze holds the frame of the blow (with showImpactFrame for the
         // victim) at any refresh rate. The step that lands the blow isn't

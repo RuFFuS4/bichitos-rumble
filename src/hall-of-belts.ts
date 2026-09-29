@@ -15,6 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import { BADGE_CATALOG, type BadgeDef } from './badges';
+import { t, tf, tPlural, tContent, type I18nKey } from './i18n';
 import { getStats } from './stats';
 import {
   fetchAllLeaderboards,
@@ -34,33 +35,33 @@ let currentTab: BeltsTab = 'offline';
 // for who holds what, but the display metadata lives here.
 const ONLINE_BELT_META: Array<{
   id: OnlineBeltId;
-  name: string;
+  name: string;              // proper noun — not translated
   icon: string;
   imgPath: string;
-  criterion: string;
+  criterionKey: I18nKey;
   /** Format the raw metric into something human-readable. */
   format: (entry: LeaderboardEntry) => string;
 }> = [
   { id: 'throne-online',    name: 'Throne Belt',    icon: '👑',
     imgPath: './images/belts/throne-online.webp',
-    criterion: 'Most online wins',
-    format: (e) => `${e.value} wins` },
+    criterionKey: 'belts-crit-throne',
+    format: (e) => tPlural('belts-fmt-wins', e.value) },
   { id: 'flash-online',     name: 'Flash Belt',     icon: '⚡',
     imgPath: './images/belts/flash-online.webp',
-    criterion: 'Fastest online win',
+    criterionKey: 'belts-crit-flash',
     format: (e) => `${(e.value / 1000).toFixed(1)}s` },
   { id: 'ironclad-online',  name: 'Ironclad Belt',  icon: '🛡️',
     imgPath: './images/belts/ironclad-online.webp',
-    criterion: 'Best lives-per-match ratio (min 5 matches)',
-    format: (e) => `${e.value.toFixed(2)} lives/match (${e.secondaryValue} matches)` },
+    criterionKey: 'belts-crit-ironclad',
+    format: (e) => tf('belts-fmt-lives-matches', { v: e.value.toFixed(2), m: e.secondaryValue ?? 0 }) },
   { id: 'slayer-online',    name: 'Slayer Belt',    icon: '🗡️',
     imgPath: './images/belts/slayer-online.webp',
-    criterion: 'Most human kills',
-    format: (e) => `${e.value} kills` },
+    criterionKey: 'belts-crit-slayer',
+    format: (e) => tPlural('belts-fmt-kills', e.value) },
   { id: 'hot-streak-online', name: 'Hot Streak Belt', icon: '🔥',
     imgPath: './images/belts/hot-streak-online.webp',
-    criterion: 'Longest win streak',
-    format: (e) => `${e.value} in a row` },
+    criterionKey: 'belts-crit-hot-streak',
+    format: (e) => tPlural('belts-fmt-streak', e.value) },
 ];
 
 /**
@@ -75,25 +76,25 @@ export function initHallOfBelts(): void {
   modalEl.setAttribute('aria-hidden', 'true');
   modalEl.innerHTML = `
     <div class="belts-backdrop" data-belts-close="1"></div>
-    <div class="belts-panel" role="dialog" aria-label="Hall of Belts">
+    <div class="belts-panel" role="dialog" aria-label="${t('belts-dialog')}">
       <div class="belts-header">
-        <h2 class="belts-title">🏆 Hall of Belts</h2>
+        <h2 class="belts-title">${t('belts-title')}</h2>
         <div class="belts-tabs" role="tablist">
           <button class="belts-tab" data-tab="offline" role="tab" aria-selected="true">
-            <span class="belts-tab-icon">🏅</span> Offline (16)
+            <span class="belts-tab-icon">🏅</span> ${tf('belts-tab-offline', { n: BADGE_CATALOG.length })}
           </button>
           <button class="belts-tab" data-tab="online" role="tab" aria-selected="false">
-            <span class="belts-tab-icon">🌐</span> Online (5)
+            <span class="belts-tab-icon">🌐</span> ${tf('belts-tab-online', { n: ONLINE_BELT_META.length })}
           </button>
         </div>
         <div class="belts-progress"></div>
-        <button class="belts-close" data-belts-close="1" aria-label="Close">✕</button>
+        <button class="belts-close" data-belts-close="1" aria-label="${t('belts-close')}">✕</button>
       </div>
       <div class="belts-body">
         <div class="belts-grid" role="list"></div>
       </div>
       <div class="belts-footer">
-        <kbd>B</kbd> or <kbd>Esc</kbd> to close · hover a belt for details
+        ${t('belts-footer')}
       </div>
     </div>
   `;
@@ -182,14 +183,16 @@ function rebuildOfflineGrid(): void {
   }
 
   const won = BADGE_CATALOG.filter((b) => unlocked.has(b.id)).length;
-  progress.textContent = `${won} / ${BADGE_CATALOG.length} unlocked`;
+  progress.textContent = tf('belts-progress', { won, total: BADGE_CATALOG.length });
 }
 
 function renderOfflineSlot(badge: BadgeDef, isUnlocked: boolean): HTMLDivElement {
   const slot = document.createElement('div');
   slot.className = `belt-slot ${isUnlocked ? 'unlocked' : 'locked'} belt-${badge.category}`;
   slot.setAttribute('role', 'listitem');
-  slot.setAttribute('title', `${badge.name}\n${badge.description}`);
+  // Name = proper noun (i18n contract); description = content text.
+  const desc = tContent(badge.description);
+  slot.setAttribute('title', `${badge.name}\n${desc}`);
   // 2026-05-01 final block — unlocked slots try to render the 3D
   // belt GLB as a thumbnail. Pipeline: 2D PNG ships first as the
   // immediate fallback (cheap), then `getBeltThumbnail` upgrades
@@ -202,13 +205,13 @@ function renderOfflineSlot(badge: BadgeDef, isUnlocked: boolean): HTMLDivElement
   slot.innerHTML = `
     <div class="belt-icon">${iconHtml}</div>
     <div class="belt-name">${escapeHtml(badge.name)}</div>
-    <div class="belt-desc">${escapeHtml(badge.description)}</div>
+    <div class="belt-desc">${escapeHtml(desc)}</div>
   `;
   if (isUnlocked) {
     slot.classList.add('belt-slot-clickable');
     slot.setAttribute('role', 'button');
     slot.setAttribute('tabindex', '0');
-    const open = () => openBeltViewer(badge.id, badge.name, badge.description);
+    const open = () => openBeltViewer(badge.id, badge.name, desc);
     slot.addEventListener('click', open);
     slot.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
@@ -234,12 +237,13 @@ function rebuildOnlineGrid(): void {
   const grid = modalEl.querySelector('.belts-grid') as HTMLDivElement;
   const progress = modalEl.querySelector('.belts-progress') as HTMLDivElement;
   grid.className = 'belts-grid belts-grid-online';
-  grid.innerHTML = '<div class="belts-online-loading">Loading leaderboards…</div>';
+  grid.innerHTML = `<div class="belts-online-loading">${t('belts-loading')}</div>`;
 
   const identity = getCachedIdentity();
+  // textContent: the nickname is user input, never innerHTML.
   progress.textContent = identity
-    ? `Playing as ${identity.nickname}`
-    : 'No nickname yet — pick one in Online Multiplayer to compete';
+    ? tf('belts-playing-as', { nick: identity.nickname })
+    : t('belts-no-nick');
 
   // The response is small (5 belts × 10 rows ≈ a few KB), so a single
   // fetch replaces whatever loading state was rendered.
@@ -257,7 +261,7 @@ function rebuildOnlineGrid(): void {
       if (currentTab !== 'online' || !modalEl) return;
       grid.innerHTML = `
         <div class="belts-online-error">
-          Could not reach the server. Try again in a moment.
+          ${t('belts-error')}
         </div>
       `;
     });
@@ -271,10 +275,11 @@ function renderOnlineColumn(
   const col = document.createElement('div');
   col.className = 'belt-online-col';
   const holder = entries[0];
-  const holderText = holder ? `${escapeHtml(holder.nickname)} — ${escapeHtml(meta.format(holder))}` : 'Nobody yet — be the first';
+  const holderText = holder ? `${escapeHtml(holder.nickname)} — ${escapeHtml(meta.format(holder))}` : t('belts-nobody');
+  const criterion = t(meta.criterionKey);
 
   const rowsHtml = entries.length === 0
-    ? '<li class="belt-online-empty">No rankings yet</li>'
+    ? `<li class="belt-online-empty">${t('belts-no-rankings')}</li>`
     : entries.slice(0, 10).map((e, i) => {
         const isMe = myPlayerId && e.playerId === myPlayerId;
         const cls = `belt-online-row${i === 0 ? ' holder' : ''}${isMe ? ' is-me' : ''}`;
@@ -290,14 +295,14 @@ function renderOnlineColumn(
   const iconHtml = `<img class="belt-img-online" src="${escapeHtml(meta.imgPath)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${meta.icon}'}))">`;
   col.innerHTML = `
     <div class="belt-online-head">
-      <div class="belt-online-icon belt-online-icon-clickable" data-bv-belt="${escapeHtml(meta.id)}" tabindex="0" role="button" aria-label="${escapeHtml(meta.name)} preview">${iconHtml}</div>
+      <div class="belt-online-icon belt-online-icon-clickable" data-bv-belt="${escapeHtml(meta.id)}" tabindex="0" role="button" aria-label="${escapeHtml(tf('belts-preview', { name: meta.name }))}">${iconHtml}</div>
       <div class="belt-online-meta">
         <div class="belt-online-name-big">${escapeHtml(meta.name)}</div>
-        <div class="belt-online-criterion">${escapeHtml(meta.criterion)}</div>
+        <div class="belt-online-criterion">${escapeHtml(criterion)}</div>
       </div>
     </div>
     <div class="belt-online-holder">
-      Current holder: <strong>${holderText}</strong>
+      ${t('belts-holder')} <strong>${holderText}</strong>
     </div>
     <ol class="belt-online-list">${rowsHtml}</ol>
   `;
@@ -305,7 +310,7 @@ function renderOnlineColumn(
   // thumbnail + wire click → openBeltViewer for a rotating close-up.
   const iconWrap = col.querySelector('.belt-online-icon-clickable') as HTMLElement | null;
   if (iconWrap) {
-    const open = () => openBeltViewer(meta.id, meta.name, meta.criterion);
+    const open = () => openBeltViewer(meta.id, meta.name, criterion);
     iconWrap.addEventListener('click', open);
     iconWrap.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }

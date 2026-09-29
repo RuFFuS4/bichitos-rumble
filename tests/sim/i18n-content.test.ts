@@ -9,10 +9,12 @@
 
 import { describe, expect, it } from 'vitest';
 import { CRITTER_ABILITIES } from '../../src/abilities';
+import { BADGE_CATALOG } from '../../src/badges';
 import { getDisplayRoster } from '../../src/roster';
 import { CONTENT_ES } from '../../src/i18n';
 
-/** Todas las frases de contenido que enseña la selección de bicho. */
+/** Todas las frases de contenido: la ficha de la selección de bicho y la
+ *  descripción de cada cinturón (cartel de desbloqueo y Salón). */
 function contentSources(): string[] {
   const out = new Set<string>();
   for (const entry of getDisplayRoster()) {
@@ -25,11 +27,12 @@ function contentSources(): string[] {
     if (kit) for (const def of kit) out.add(def.description);
     else for (const planned of entry.plannedAbilities ?? []) out.add(planned.description);
   }
+  for (const badge of BADGE_CATALOG) out.add(badge.description);
   return [...out].filter(Boolean);
 }
 
 describe('i18n content (ES)', () => {
-  it('every role, tagline and ability description has a Spanish translation', () => {
+  it('every role, tagline, ability and belt description has a Spanish translation', () => {
     const missing = contentSources().filter((s) => !(s in CONTENT_ES));
     expect(missing, `sin traducir en src/i18n.ts CONTENT_ES:\n${missing.join('\n')}`).toEqual([]);
   });

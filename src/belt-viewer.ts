@@ -17,6 +17,7 @@
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
 import { BELT_FRONT_ROTATION_Y, BELT_PREVIEW_ROTATION_X } from './belt-thumbnail';
+import { t } from './i18n';
 
 let modalEl: HTMLDivElement | null = null;
 let canvasEl: HTMLCanvasElement | null = null;
@@ -40,12 +41,12 @@ function ensureDom(): void {
   root.setAttribute('aria-hidden', 'true');
   root.innerHTML = `
     <div class="belt-viewer-backdrop" data-bv-close="1"></div>
-    <div class="belt-viewer-panel" role="dialog" aria-label="Belt preview">
-      <button class="belt-viewer-close" aria-label="Close" data-bv-close="1">&times;</button>
+    <div class="belt-viewer-panel" role="dialog" aria-label="${t('belt-viewer-dialog')}">
+      <button class="belt-viewer-close" aria-label="${t('belts-close')}" data-bv-close="1">&times;</button>
       <canvas class="belt-viewer-canvas" width="640" height="640"></canvas>
       <div class="belt-viewer-title"></div>
       <div class="belt-viewer-desc"></div>
-      <div class="belt-viewer-hint">Drag to rotate · click outside to close</div>
+      <div class="belt-viewer-hint">${t('belt-viewer-hint')}</div>
     </div>
   `;
   document.body.appendChild(root);
@@ -176,7 +177,7 @@ export async function openBeltViewer(
     currentGlb = glb;
   } catch (e) {
     console.warn('[belt-viewer] failed to load', beltId, e);
-    descEl.textContent = '(model failed to load — view artwork in the grid)';
+    descEl.textContent = t('belt-viewer-failed');
   }
 
   if (rafHandle === 0) loop();

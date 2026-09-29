@@ -42,65 +42,21 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
-- **De ARENA, 2026-09-29 — `src/game.ts` ya es tuyo.** ARENA integró en
-  `dev` su parte (encargo de GENERAL). Toca tres sitios, con diff mínimo:
-  - el paso offline 7 llama a `arena.simulate(effectiveDt)`, antes
-    `arena.update`;
-  - `presentFrame`, en `'playing'`, llama a `arena.present(presentDt)` con
-    la misma puerta que los bichos (nada en pausa ni con 0 s);
-  - en `'ended'` llama a `arena.tickVisuals(dt)`, para que los
-    fragmentos que caían terminen de caer en la pantalla final.
-
-  `Arena.update` ya no existe. Online no cambia nada.
-
-- **De la sesión GENERAL, 2026-09-29 — tu encargo (aprobado por Rafa).**
-  Trabajas **en paralelo** con los otros tres: en tu worktree, puerto 5183
-  (`docs/SESIONES.md` §Modo paralelo).
-  1. **Los tres fallos del HUD que se ven en producción** (nota de
-     DISTRIBUCIÓN del 26, justo abajo): «ALIVE» en inglés durante la
-     cuenta atrás; el final online con «VIVOS: 2» y el último eliminado sin
-     calavera; y el cartel del cinturón en inglés tapando el cronómetro.
-     Si el segundo resulta ser que el servidor no manda la última
-     eliminación, deja lo medido en el buzón de DISTRIBUCIÓN en vez de
-     tocar la red.
-  2. **Portales a la frecuencia de la pantalla** (nota de PERSONAJES del
-     25): `simulatePortals` y `animatePortals`. **`game.ts` es de ARENA
-     hasta que integre y te avise en este buzón**; hasta entonces, deja la
-     función lista, y la llamada desde `game.ts` la metes tú después.
-
-- **De DISTRIBUCIÓN, 2026-09-26 — tres detalles del HUD vistos en las
-  sondas de v1.11.** Ninguno es de v1.11 ni bloquea; salen igual en
-  local y en producción.
-  - **«ALIVE: 4» en inglés durante la cuenta atrás.**
-    `src/hud/hud.partial.html:761` trae de serie `Alive: 4`, y
-    `src/hud/runtime.ts:40` solo lo traduce con `tf('hud-alive')` cuando
-    el HUD se actualiza en partida. Al empezar ya dice «VIVOS: 4».
-  - **Final online: «VIVOS: 2» y el último eliminado sin calavera.** En
-    una sala de 4 donde tres caen hasta la eliminación, el panel final
-    deja el contador y el retrato del último como si siguiera vivo.
-    Parece que el HUD no recibe la eliminación que cierra la partida.
-    Captura: `online-final-B.png` de la sonda, pídemela si la quieres.
-  - **El cartel del cinturón sale en inglés y tapa el cronómetro.**
-    `src/badge-toast.ts:45` escribe `NEW BELT UNLOCKED` sin pasar por
-    i18n. Se vio con «Speedrun Belt» al ganar una Shelly invitada en
-    menos de 30 s.
-
-- **De PERSONAJES, 2026-09-25 — paso fijo: los portales se animan aún por
-  paso de simulación.** Sin prisa, nada roto.
-  - Desde el segundo corte del paso fijo (`dev`), el juego simula a 1/60
-    y presenta una vez por fotograma.
-  - `updatePortals(x, z, dt)` (portal.ts:212) lo llama la simulación y
-    hace a la vez la expansión, la gracia, la colisión y
-    `animatePortal`. Por eso la animación del portal va a 60 Hz a 144 y
-    se congela con el golpe.
-  - Propuesta:
-    - `simulatePortals(x, z, dt)` por paso: expansión, gracia y colisión;
-    - `animatePortals()` por fotograma. `animatePortal` ya usa
-      `Date.now()`, así que puede ir sin puerta.
-  - Cuando exista, PERSONAJES llama a la segunda desde `game.ts`.
-  - Los iconos de estado ya se colocan una sola vez por fotograma, con la
-    pose dibujada y la cámara del fotograma (`presentStatusIcons` en
-    `frame-ticks.ts`), y antes eran dos. Nada que hacer por tu lado.
+- ~~De la sesión GENERAL, 2026-09-29 — encargo: los tres fallos del HUD
+  de producción y los portales por fotograma~~ → **hecho el 29** (ver
+  §Hecho). El segundo fallo NO era del servidor: era el cliente (el HUD
+  no se repintaba al entrar en `ended`), así que DISTRIBUCIÓN no tiene
+  nada que tocar por él. Sí le queda un caso límite del servidor que salió
+  en el análisis (nota en su buzón).
+- ~~De ARENA, 2026-09-29 — `game.ts` ya es tuyo~~ → usado para enganchar
+  los portales (seis líneas). Al integrar lo dejo libre y aviso a
+  PERSONAJES, que tiene pendiente el evento de golpe online.
+- ~~De DISTRIBUCIÓN, 2026-09-26 — tres detalles del HUD de las sondas de
+  v1.11~~ → los tres, hechos el 29 (§Hecho). El final online se
+  reprodujo tal cual con 4 clientes reales y se comprobó arreglado.
+- ~~De PERSONAJES, 2026-09-25 — portales a la frecuencia de pantalla~~ →
+  hecho el 29: `simulatePortals` por paso y `animatePortals` por
+  fotograma, ya llamadas desde `game.ts`.
 
 - **De PERSONAJES, 2026-09-24/25 — repaso de habilidades.** Detalle en
   [`docs/REPASO_HABILIDADES.md`](../REPASO_HABILIDADES.md).
@@ -137,6 +93,76 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
   hecho (ver §Hecho, miniaturas).
 
 ## Hecho
+
+- **2026-09-29 — Final online: «Vivos: 1» y la calavera del último.** Lo
+  investigó un workflow de 3 ángulos más 3 escépticos, y luego se
+  reprodujo con 4 clientes reales contra el servidor local.
+  - **Causa.** El servidor escribe la última eliminación (`alive=false`) y
+    `phase='ended'` en el mismo tick, así que llegan en un único parche.
+    `game.ts` solo pinta el HUD online en `countdown`/`playing`. El HUD se
+    quedaba en el último fotograma de juego, con el último bicho cayendo
+    en su última vida: «Vivos: 2», sin corazones y sin calavera.
+  - **Arreglo, solo en el HUD.** `showEndScreen` llama a
+    `repaintLivesHUD()`, que repinta las fichas y el contador con el estado
+    final de cada bicho. Cada ficha guarda su `Critter` y se pinta por
+    identidad, nunca por posición. Así, un abandono que borra un asiento en
+    el mismo parche no desplaza las demás fichas (el caso que encontró un
+    escéptico). Un bicho cuya malla salió de la escena se fue de la sala:
+    no cuenta como vivo. `initAllLivesHUD` respeta `alive`, para que una
+    reconstrucción en la pantalla final no borre calaveras. En la pantalla
+    final tampoco toca el contador: una reconexión reconstruye sin los
+    asientos que ya se fueron, y el recuento de `repaintLivesHUD` es el que
+    vale (lo cazó la revisión).
+  - **Prueba A/B** (el mismo guion de 4 clientes: 3 se tiran y 1 queda
+    quieto). Sin arreglo: «Vivos: 2», con el servidor en 1 y Shelly sin
+    calavera. Con arreglo: «Vivos: 1» y las tres calaveras. El final por
+    abandono voluntario (`opponent_left`) también sale bien.
+- **2026-09-29 — «VIVOS» en castellano desde la cuenta atrás.**
+  `initAllLivesHUD` pone el contador en cuanto existen las fichas. Antes
+  se veía el «Alive: 4» del HTML hasta el primer fotograma de juego.
+- **2026-09-29 — El cartel de cinturón nuevo, en castellano y sin tapar
+  nada.** La etiqueta y la descripción (`tContent`) ya están traducidas.
+  El sitio depende del alto de pantalla:
+  - **Más de 740 px**: a 90 px, entre el reloj y el «¡VICTORIA!».
+  - **De 521 a 740 px** (un portátil 1366×768 deja ~657 útiles): arriba
+    del todo, y mientras se ve oculta el reloj y el contador
+    (`body.badge-toast-visible`). No hay otro hueco, y a 90 px tapaba el
+    título.
+  - **Hasta 520 px** (móviles): abajo a la izquierda. El cartel de
+    cinturón online va abajo a la derecha, para que no se pisen cuando
+    salen juntos.
+
+  En la pantalla final se esconden el joystick y los botones
+  (`body.end-screen-active`), que ahí no hacían nada. Los dos carteles se
+  cierran al salir de la pantalla final (`hideBadgeToast`,
+  `hideOnlineBeltToast`). Antes, un «jugar otra vez» rápido los dejaba
+  encima de los controles en la partida siguiente, y el local se comía el
+  primer toque. Ocultar no es consumir: el cinturón solo se da por visto si
+  el cartel estuvo al menos 1,5 s en pantalla (`MIN_SEEN_MS`). Si no,
+  vuelve en la siguiente victoria, incluso tras recargar, porque
+  `recentlyUnlocked` se guarda. Medido: una salida a los 200 ms lo
+  conserva y lo reenseña; una a los 2 s lo consume.
+
+  Lo de las alturas intermedias, los dos carteles en móvil y el ciclo de
+  vida salió de dos pasadas de revisión adversarial: 5 dimensiones y luego
+  el delta, con 2 escépticos por hallazgo. Medido sin solapes en
+  1920×1080, 1280×720, 1366×657, 1280×609, 844×390 y 667×375. Casos
+  límite conocidos:
+  - en 568×320 (el iPhone SE de primera generación), los carteles pisan
+    un poco la fila de estadísticas durante sus 4-6 s: ahí no hay hueco;
+  - quien llega por el portal del jam, en una ventana de 521-565 px de
+    alto, tiene una fila más en la pantalla final, y el cartel roza la
+    parte de arriba del título.
+- **2026-09-29 — Los cinturones, enteros en castellano.** El Salón (las
+  dos pestañas, los criterios y formatos online), el visor 3D y el cartel
+  de cinturón online. Las descripciones van por `CONTENT_ES`, cubiertas
+  por el test de contenido. Hay plurales con `tPlural` («1 victoria»). Los
+  nombres de los cinturones son propios y no se traducen.
+- **2026-09-29 — Portales a la frecuencia de pantalla.** `simulatePortals`
+  (expansión, gracia y colisión, por paso) y `animatePortals` (visual, por
+  fotograma). `game.ts` las llama en el paso offline, en `presentFrame` y
+  en `updateOnline`. Medido: el aro gira en cada fotograma, también en
+  pausa y durante un hit stop, cuando antes se congelaba.
 
 - **2026-09-24 — La selección cabe entera también en escritorio y en
   iPad** (opción de Rafa: encoger el 3D con el alto, sin cambiar el
@@ -252,12 +278,23 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 ## Cómo retomar
 
-**2026-09-24** — en `dev`: miniaturas con contorno y encuadre, y sprites
-de Sergei y Shelly a la paleta nueva. El portal, cerrado en `dev`, sale
-con el despliegue de H4.5 (lo lleva DISTRIBUCIÓN). Las miniaturas ya
-comparten materiales con `Critter`. La reestructura del HUD en móvil está
-hecha entera: modo táctil en móviles grandes y tablets, enfriamiento en
-los botones, cuatro vidas, ficha en castellano y selección compacta. La
-selección cabe también en escritorio (portátil incluido) y en iPad. Para
-medir cualquier cambio de HUD: `node scripts/hud-shots.mjs`. Siguiente del
-carril: audio (punto 2), o lo que pidan los buzones.
+**2026-09-29** (modo paralelo: worktree `.claude/worktrees/interfaz`, dev
+server 5183, servidor local 2583). En `dev`: los tres fallos del HUD de
+producción (contador en la cuenta atrás, final online, cartel del
+cinturón), los cinturones enteros en castellano y los portales por
+fotograma. Todo sale con el próximo despliegue, que lleva DISTRIBUCIÓN.
+`game.ts` queda libre (aviso en el buzón de PERSONAJES).
+
+Para probar online en local desde el worktree:
+- servidor: `PORT=2583 DATA_DIR=<scratch> npm run dev` en `server/`;
+- cliente: `VITE_SERVER_URL=ws://localhost:2583 npx vite --port 5183
+  --strictPort`.
+
+Cuatro clientes llenan la sala y la partida arranca sin los 60 s de
+espera. Si la máquina va justa de memoria, el smoke no levanta su propio
+Vite en el 5173: se lanza contra el 5183 con una config en `.tmp/`.
+
+Siguiente del carril: el audio (punto 2), o lo que pidan los buzones.
+
+**2026-09-24** — reestructura del HUD en móvil hecha entera; para medir
+cualquier cambio de HUD: `node scripts/hud-shots.mjs`.

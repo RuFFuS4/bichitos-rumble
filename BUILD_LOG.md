@@ -1,5 +1,42 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Interfaz] El final online ya no miente, y los cinturones hablan castellano
+
+Encargo de la sesión general, aprobado por Rafa: los tres fallos del HUD
+que DISTRIBUCIÓN vio en producción y los portales a la frecuencia de
+pantalla.
+
+- **«VIVOS: 2» y sin calavera al acabar online.** Lo investigó un
+  workflow (3 ángulos y 3 escépticos) y se reprodujo con 4 clientes
+  reales. La causa **no era el servidor**: la última eliminación y
+  `phase='ended'` llegan en el mismo parche, y el cliente solo pinta el
+  HUD en `countdown`/`playing`. Se arregla en el HUD:
+  - `showEndScreen` repinta las fichas y el contador con el estado final;
+  - las fichas se emparejan por bicho, no por posición, para que un
+    abandono no las desplace.
+
+  Prueba A/B con el mismo guion: sin arreglo, «Vivos: 2» con el servidor
+  en 1; con arreglo, «Vivos: 1» y las tres calaveras. El análisis destapó
+  además un caso límite del servidor: fin por tiempo durante una caída de
+  última vida, que da empate. Queda en el buzón de DISTRIBUCIÓN.
+- **«ALIVE: 4» en la cuenta atrás.** El contador se traduce en cuanto
+  existen las fichas.
+- **El cartel de cinturón nuevo.** Ahora va en castellano y no tapa nada.
+  Su sitio depende del alto: entre el reloj y el título en pantallas altas;
+  en portátiles, en el sitio del reloj, que se oculta mientras se ve; en
+  móvil, abajo a la izquierda (antes tapaba el «¡VICTORIA!»). Los
+  controles táctiles se esconden en la pantalla final, y el cartel se
+  cierra al salir de ella. De paso, el Salón de los Cinturones, el visor
+  3D y el cartel online, que estaban enteros en inglés. Una revisión
+  adversarial (5 dimensiones y 2 escépticos por hallazgo) destapó tres
+  colocaciones que la primera versión dejaba mal: el cartel sobre el
+  joystick en la partida siguiente, los portátiles de 657 px y los dos
+  carteles pisándose en móvil. Están arregladas y medidas.
+- **Portales.** `simulatePortals` va por paso y `animatePortals` por
+  fotograma. Con eso siguen girando en la pausa y en el hit stop.
+  `game.ts` (con el relevo de ARENA) cambia en seis líneas y queda libre
+  para PERSONAJES.
+
 ## 2026-09-29 — [DISTRIBUCIÓN] El Sinkhole online ya no se come la baldosa de Sihans
 
 - **Qué:** el punto 9 del repaso de habilidades, el único que quedó fuera

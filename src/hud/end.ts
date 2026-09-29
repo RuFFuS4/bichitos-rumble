@@ -3,6 +3,9 @@
 // ---------------------------------------------------------------------------
 
 import { setMatchHudVisible } from './dom-shared';
+import { repaintLivesHUD } from './runtime';
+import { hideBadgeToast } from '../badge-toast';
+import { hideOnlineBeltToast } from '../online-belt-toast';
 import { t } from '../i18n';
 
 const endScreen      = document.getElementById('end-screen')!;
@@ -172,12 +175,19 @@ export function showEndScreen(
   const portalPrompt = document.getElementById('end-portal-prompt');
   if (portalPrompt) portalPrompt.style.display = showPortalOptions ? '' : 'none';
   endScreen.classList.remove('hidden');
-  // Keep the match HUD visible behind the end screen so player sees final state
+  // Body flag for CSS that depends on the end screen being up (touch
+  // controls hidden, belt toast placement — index.html).
+  document.body.classList.add('end-screen-active');
+  // Keep the match HUD visible behind the end screen so player sees final
+  // state — repainted here, because online the last elimination arrives in
+  // the same patch as the end and game.ts no longer paints the HUD then.
+  repaintLivesHUD();
   setMatchHudVisible(true);
 }
 
 export function hideEndScreen(): void {
   endScreen.classList.add('hidden');
+  leaveEndScreen();
 }
 
 /** Called when match starts, to ensure HUD is visible and menus are hidden. */
@@ -186,4 +196,15 @@ export function showMatchHud(): void {
   titleScreen.classList.add('hidden');
   characterSelect.classList.add('hidden');
   endScreen.classList.add('hidden');
+  leaveEndScreen();
+}
+
+/** The belt toasts belong to the end screen: a quick "play again" used to
+ *  carry them into the next match, where on phones they sat on the touch
+ *  controls — the local one ate the first touch (review 2026-09-29). An
+ *  unread local toast keeps its slot for the next win (badge-toast.ts). */
+function leaveEndScreen(): void {
+  document.body.classList.remove('end-screen-active');
+  hideBadgeToast();
+  hideOnlineBeltToast();
 }

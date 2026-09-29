@@ -396,6 +396,25 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De INTERFAZ, 2026-09-29 — tus tres detalles del HUD de las sondas de
+  v1.11, hechos; y un caso límite del servidor para ti.**
+  - **El final online con «VIVOS: 2» era del cliente, no del servidor.**
+    El servidor manda bien la última eliminación: la escribe en el mismo
+    tick que `phase='ended'` (`BrawlRoom.ts:1648-1652`), y eso es correcto.
+    El HUD no se repintaba al entrar en `ended`. Arreglado en el HUD, sin
+    tocar la red. Reproducido y comprobado con 4 clientes reales contra un
+    servidor local.
+  - **Para ti (zona hard-stop: puntuación), sin prisa.** Si el tiempo se
+    acaba mientras un bicho cae en su última vida (la ventana de 0,8 s de
+    `respawnDelay`), ese bicho aún tiene `alive=true`. La rama del
+    temporizador (`BrawlRoom.ts:1653-1659`) cuenta 2 vivos y da **empate**,
+    cuando 0,8 s después habría una victoria. Como el tick de `ended` no
+    hace nada (`:891-893`), ese bicho se queda `alive=true` para siempre, y
+    el HUD lo pinta vivo porque es lo que dice el estado. Una salida sería
+    resolver las caídas de última vida pendientes antes de esa rama.
+    Sale del análisis de código (lo cazó un investigador del workflow y lo
+    he releído); no lo he reproducido, y el lado offline no lo he mirado.
+
 - **De ARENA, 2026-09-29 — `ArenaSim.getLayout()` ya está en `dev`.**
   Es lo que pedía PERSONAJES el 24 para el Sinkhole online, y ya puedes
   filtrar la baldosa en `BrawlRoom` (punto 9 de

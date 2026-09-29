@@ -356,6 +356,63 @@ const DICT = {
   'select-stat-speed':        { en: 'Speed',                    es: 'Velocidad' },
   'select-stat-weight':       { en: 'Weight',                   es: 'Peso' },
   'select-stat-power':        { en: 'Power',                    es: 'Fuerza' },
+
+  // ---- Toast de cinturón nuevo (badge-toast.ts) ----------------------------
+  'belt-toast-label':         { en: 'NEW BELT UNLOCKED',        es: '¡CINTURÓN NUEVO!' },
+
+  // ---- Salón de los Cinturones (hall-of-belts.ts) ---------------------------
+  // Los nombres de los cinturones son propios y no se traducen.
+  'belts-title':              { en: '🏆 Hall of Belts',          es: '🏆 Salón de los Cinturones' },
+  'belts-dialog':             { en: 'Hall of Belts',             es: 'Salón de los Cinturones' },
+  'belts-tab-offline':        { en: 'Offline ({n})',             es: 'Local ({n})' },
+  'belts-tab-online':         { en: 'Online ({n})',              es: 'Online ({n})' },
+  'belts-close':              { en: 'Close',                     es: 'Cerrar' },
+  // [html] <kbd> incrustado
+  'belts-footer':             { en: '<kbd>B</kbd> or <kbd>Esc</kbd> to close · hover a belt for details',
+                                es: '<kbd>B</kbd> o <kbd>Esc</kbd> para cerrar · pasa por encima de un cinturón para ver el detalle' },
+  'belts-progress':           { en: '{won} / {total} unlocked',  es: '{won} / {total} conseguidos' },
+  'belts-loading':            { en: 'Loading leaderboards…',     es: 'Cargando clasificaciones…' },
+  'belts-playing-as':         { en: 'Playing as {nick}',         es: 'Juegas como {nick}' },
+  // Va en la cabecera, en un hueco estrecho: corto.
+  'belts-no-nick':            { en: 'No nickname yet — pick one in Online Multiplayer to compete',
+                                es: 'Elige un nick en Online para competir' },
+  'belts-error':              { en: 'Could not reach the server. Try again in a moment.',
+                                es: 'No se ha podido conectar con el servidor. Prueba otra vez en un momento.' },
+  'belts-holder':             { en: 'Current holder:',           es: 'En manos de:' },
+  'belts-nobody':             { en: 'Nobody yet — be the first', es: 'Nadie todavía: ¡estrénalo tú!' },
+  'belts-no-rankings':        { en: 'No rankings yet',           es: 'Aún no hay clasificación' },
+  'belts-preview':            { en: '{name} preview',            es: 'Vista de {name}' },
+  // Criterio y formato de los 5 cinturones online (hall-of-belts.ts y
+  // online-belt-toast.ts, que lo espeja)
+  'belts-crit-throne':        { en: 'Most online wins',          es: 'Más victorias online' },
+  'belts-crit-flash':         { en: 'Fastest online win',        es: 'Victoria online más rápida' },
+  'belts-crit-ironclad':      { en: 'Best lives-per-match ratio (min 5 matches)',
+                                es: 'Mejor media de vidas por partida (mín. 5 partidas)' },
+  'belts-crit-slayer':        { en: 'Most human kills',          es: 'Más bajas de humanos' },
+  'belts-crit-hot-streak':    { en: 'Longest win streak',        es: 'Racha de victorias más larga' },
+  // Singular aparte (tPlural): «1 victoria», no «1 victorias».
+  'belts-fmt-wins':           { en: '{n} wins',                  es: '{n} victorias' },
+  'belts-fmt-wins-one':       { en: '{n} win',                   es: '{n} victoria' },
+  'belts-fmt-lives':          { en: '{v} lives/match',           es: '{v} vidas/partida' },
+  'belts-fmt-lives-matches':  { en: '{v} lives/match ({m} matches)', es: '{v} vidas/partida ({m} partidas)' },
+  'belts-fmt-kills':          { en: '{n} kills',                 es: '{n} bajas' },
+  'belts-fmt-kills-one':      { en: '{n} kill',                  es: '{n} baja' },
+  'belts-fmt-streak':         { en: '{n} in a row',              es: '{n} seguidas' },
+  'belts-fmt-streak-one':     { en: '{n} in a row',              es: '{n} seguida' },
+
+  // ---- Toast de cinturón online (online-belt-toast.ts) -----------------------
+  // [html] {belt} y {nick} llegan ya escapados y con su <strong>
+  'belt-online-mine-head':    { en: '🏆 You took a belt!',       es: '🏆 ¡Te has hecho con un cinturón!' },
+  'belt-online-head':         { en: 'Belt changed hands',        es: 'El cinturón cambia de manos' },
+  'belt-online-mine-body':    { en: 'You now hold the {belt}',   es: 'Ahora tienes el {belt}' },
+  'belt-online-other-body':   { en: '{nick} now holds the {belt}', es: '{nick} tiene ahora el {belt}' },
+
+  // ---- Visor 3D del cinturón (belt-viewer.ts) --------------------------------
+  'belt-viewer-dialog':       { en: 'Belt preview',              es: 'Vista del cinturón' },
+  'belt-viewer-hint':         { en: 'Drag to rotate · click outside to close',
+                                es: 'Arrastra para girar · pulsa fuera para cerrar' },
+  'belt-viewer-failed':       { en: '(model failed to load — view artwork in the grid)',
+                                es: '(no se ha podido cargar el modelo: mira la ilustración en la cuadrícula)' },
 } as const satisfies Record<string, Entry>;
 
 /** Toda clave válida del diccionario — typo en t('...') = error de compilación. */
@@ -410,12 +467,21 @@ export function tf(key: I18nKey, vars: Record<string, string | number>): string 
     name in vars ? String(vars[name]) : match);
 }
 
+/** tf() with `{n}`, using the `-one` key when n is 1 ('belts-fmt-wins' →
+ *  'belts-fmt-wins-one') if it exists. */
+export function tPlural(key: I18nKey, n: number): string {
+  const one = `${key}-one`;
+  return tf(n === 1 && one in DICT ? (one as I18nKey) : key, { n });
+}
+
 // ---------------------------------------------------------------------------
-// Contenido de juego — rol, lema y descripción de habilidad de cada bicho
+// Contenido de juego — rol, lema y descripción de habilidad de cada bicho,
+// y la descripción de cada cinturón
 // ---------------------------------------------------------------------------
 //
-// Ese texto vive en inglés en el código de PERSONAJES (src/roster.ts,
-// src/abilities.ts), no en index.html. No se copia a DICT: se traduce POR EL
+// Ese texto vive en inglés en el código (src/roster.ts y src/abilities.ts de
+// PERSONAJES; src/badges.ts, con umbrales en plantilla), no en index.html.
+// No se copia a DICT: se traduce POR EL
 // PROPIO TEXTO INGLÉS, como un msgid de gettext. Si PERSONAJES cambia una
 // frase, su traducción deja de casar y se ve el inglés nuevo — nunca una
 // traducción que ya no corresponde. tests/sim/i18n-content.test.ts avisa
@@ -508,6 +574,32 @@ export const CONTENT_ES: Readonly<Record<string, string>> = {
     'Onda de choque con la pinza — fuerte empuje frontal',
   'Charge then strike — devastating on hit, costly on miss':
     'Carga y golpea — devastador si acierta, caro si falla',
+  // Cinturones (src/badges.ts): la descripción de cada uno. Los nombres
+  // son propios y no se traducen. Las de campeón salen de una plantilla
+  // con el umbral (CHAMPION_WINS_THRESHOLD): si cambia, el test avisa.
+  'Win 5 matches with Sergei.':     'Gana 5 partidas con Sergei.',
+  'Win 5 matches with Trunk.':      'Gana 5 partidas con Trunk.',
+  'Win 5 matches with Kurama.':     'Gana 5 partidas con Kurama.',
+  'Win 5 matches with Shelly.':     'Gana 5 partidas con Shelly.',
+  'Win 5 matches with Kermit.':     'Gana 5 partidas con Kermit.',
+  'Win 5 matches with Sihans.':     'Gana 5 partidas con Sihans.',
+  'Win 5 matches with Kowalski.':   'Gana 5 partidas con Kowalski.',
+  'Win 5 matches with Cheeto.':     'Gana 5 partidas con Cheeto.',
+  'Win 5 matches with Sebastian.':  'Gana 5 partidas con Sebastian.',
+  'Win a match in 30 seconds or less.':
+    'Gana una partida en 30 segundos o menos.',
+  'Win a match without losing a single life.':
+    'Gana una partida sin perder ni una vida.',
+  'Win a match without taking a single headbutt.':
+    'Gana una partida sin recibir ni un cabezazo.',
+  'Reach 20 total wins across the roster.':
+    'Suma 20 victorias entre todos los bichos.',
+  'Win at least one match with every playable critter.':
+    'Gana al menos una partida con cada bicho jugable.',
+  'Win a match with only one life left (comeback victory).':
+    'Gana una partida con una sola vida (remontada).',
+  'Win at least one match after taking 10+ headbutts.':
+    'Gana al menos una partida tras recibir 10 cabezazos o más.',
 };
 
 /** Texto de contenido de juego (ver arriba) en el idioma activo; sin

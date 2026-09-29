@@ -18,6 +18,7 @@
 import type { BeltChangedEvent } from './network-events';
 import { getCachedIdentity } from './online-identity';
 import { getBeltThumbnail } from './belt-thumbnail';
+import { t, tf, tPlural } from './i18n';
 
 interface BeltMeta {
   name: string;
@@ -31,15 +32,15 @@ interface BeltMeta {
 
 const BELT_META: Record<BeltChangedEvent['belt'], BeltMeta> = {
   'throne-online':    { name: 'Throne Belt',    icon: '👑', imgPath: './images/belts/throne-online.webp',
-                        format: (v) => `${v} wins` },
+                        format: (v) => tPlural('belts-fmt-wins', v) },
   'flash-online':     { name: 'Flash Belt',     icon: '⚡', imgPath: './images/belts/flash-online.webp',
                         format: (v) => `${(v / 1000).toFixed(1)}s` },
   'ironclad-online':  { name: 'Ironclad Belt',  icon: '🛡️', imgPath: './images/belts/ironclad-online.webp',
-                        format: (v) => `${v.toFixed(2)} lives/match` },
+                        format: (v) => tf('belts-fmt-lives', { v: v.toFixed(2) }) },
   'slayer-online':    { name: 'Slayer Belt',    icon: '🗡️', imgPath: './images/belts/slayer-online.webp',
-                        format: (v) => `${v} kills` },
+                        format: (v) => tPlural('belts-fmt-kills', v) },
   'hot-streak-online': { name: 'Hot Streak Belt', icon: '🔥', imgPath: './images/belts/hot-streak-online.webp',
-                        format: (v) => `${v} in a row` },
+                        format: (v) => tPlural('belts-fmt-streak', v) },
 };
 
 let toastEl: HTMLDivElement | null = null;
@@ -129,6 +130,22 @@ function ensureToast(): HTMLDivElement {
       }
       #online-belt-toast strong { color: #ffdc5c; font-weight: 800; }
       #online-belt-toast.is-me strong { color: #fff; }
+      /* Phones: the end screen fills the bottom centre (share button,
+         "tap to play again") and the local belt toast takes the
+         bottom-left corner (index.html), so this one takes the
+         bottom-right — they used to overlap when an online win also
+         unlocked a local belt (review 2026-09-29). */
+      @media (max-height: 520px) {
+        #online-belt-toast {
+          left: auto;
+          right: 12px;
+          bottom: 12px;
+          min-width: 0;
+          max-width: min(300px, calc(50vw - 112px));
+          transform: translateY(16px);
+        }
+        #online-belt-toast.visible { transform: translateY(0); }
+      }
     `;
     document.head.appendChild(style);
   }
@@ -144,6 +161,17 @@ export function initOnlineBeltToast(): void {
   ensureToast();
 }
 
+/** The end screen is closing (hud/end.ts): the card goes with it, or on
+ *  phones it would sit on the touch buttons into the next match. */
+export function hideOnlineBeltToast(): void {
+  if (!toastEl) return;
+  toastEl.classList.remove('visible');
+  if (hideTimer !== null) {
+    window.clearTimeout(hideTimer);
+    hideTimer = null;
+  }
+}
+
 /**
  * Pop the toast for one belt-change event. If a previous toast is still
  * visible the element is reused and the timer is reset — no stacking.
@@ -155,12 +183,13 @@ export function showOnlineBeltToast(ev: BeltChangedEvent): void {
   const me = getCachedIdentity();
   const isMe = !!me && me.playerId === ev.playerId;
 
-  const head = isMe
-    ? '🏆 You took a belt!'
-    : 'Belt changed hands';
+  const head = isMe ? t('belt-online-mine-head') : t('belt-online-head');
+  // innerHTML below: the nickname (user input) and the belt name are
+  // escaped BEFORE they go into the dictionary value.
+  const belt = `<strong>${meta.icon} ${escapeHtml(meta.name)}</strong>`;
   const body = isMe
-    ? `You now hold the <strong>${meta.icon} ${escapeHtml(meta.name)}</strong>`
-    : `<strong>${escapeHtml(ev.nickname)}</strong> now holds the <strong>${meta.icon} ${escapeHtml(meta.name)}</strong>`;
+    ? tf('belt-online-mine-body', { belt })
+    : tf('belt-online-other-body', { nick: `<strong>${escapeHtml(ev.nickname)}</strong>`, belt });
 
   el.classList.toggle('is-me', isMe);
   // Prefer AI-generated PNG, fallback to emoji via onerror. The 3D

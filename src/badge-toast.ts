@@ -21,11 +21,17 @@
 import { clearRecentlyUnlocked, getStats } from './stats';
 import { getBadgeById } from './badges';
 import { getBeltThumbnail } from './belt-thumbnail';
+import { t, tContent } from './i18n';
 
 const AUTO_DISMISS_MS = 6000;
+/** Leaving the end screen hides the toast; it only counts as seen (slot
+ *  consumed) after this long on screen — a quick "play again" would
+ *  otherwise announce the belt for a few frames and never again. */
+const MIN_SEEN_MS = 1500;
 
 let toastEl: HTMLDivElement | null = null;
 let dismissTimer: number | null = null;
+let shownAt = 0;
 
 /**
  * One-time DOM setup. Called from main.ts at boot so the toast node
@@ -42,7 +48,7 @@ export function initBadgeToast(): void {
     <div class="badge-toast-shine"></div>
     <div class="badge-toast-icon"></div>
     <div class="badge-toast-body">
-      <div class="badge-toast-label">NEW BELT UNLOCKED</div>
+      <div class="badge-toast-label">${t('belt-toast-label')}</div>
       <div class="badge-toast-name"></div>
       <div class="badge-toast-desc"></div>
     </div>
@@ -69,7 +75,8 @@ export function maybeShowBadgeToast(): void {
     clearRecentlyUnlocked();
     return;
   }
-  renderToast(badge.icon, badge.imgPath, badge.name, badge.description);
+  // Name = proper noun (i18n contract); description = content text.
+  renderToast(badge.icon, badge.imgPath, badge.name, tContent(badge.description));
   // BLOQUE FINAL micropass v2 — upgrade the 2D PNG to the rendered 3D
   // thumbnail asynchronously, same pattern Hall of Belts uses. The
   // PNG remains the immediate fallback so the toast never flashes
@@ -84,17 +91,37 @@ export function maybeShowBadgeToast(): void {
 /**
  * Close the toast and clear the `recentlyUnlocked` slot so the next
  * end-screen doesn't re-show the same badge. Called from the toast's
- * click handler AND from the auto-dismiss timer.
+ * click handler and the auto-dismiss timer. No-op while hidden: a belt
+ * unlocked but not shown yet must keep its slot.
  */
 export function dismissBadgeToast(): void {
+  if (!toastEl || toastEl.classList.contains('hidden')) return;
+  hideToastEl();
+  clearRecentlyUnlocked();
+}
+
+/**
+ * The end screen is closing (hud/end.ts): the toast belongs to it, so it
+ * goes too — left up, on phones it sat on the joystick in the next match.
+ * The slot is only consumed if the toast was on screen long enough to be
+ * read (MIN_SEEN_MS); otherwise the next end screen shows it again.
+ */
+export function hideBadgeToast(): void {
+  if (!toastEl || toastEl.classList.contains('hidden')) return;
+  const seen = performance.now() - shownAt >= MIN_SEEN_MS;
+  hideToastEl();
+  if (seen) clearRecentlyUnlocked();
+}
+
+function hideToastEl(): void {
   if (!toastEl) return;
   toastEl.classList.add('hidden');
   toastEl.classList.remove('badge-toast-enter');
+  document.body.classList.remove('badge-toast-visible');
   if (dismissTimer !== null) {
     window.clearTimeout(dismissTimer);
     dismissTimer = null;
   }
-  clearRecentlyUnlocked();
 }
 
 // ---------------------------------------------------------------------------
@@ -117,6 +144,9 @@ function renderToast(icon: string, imgPath: string, name: string, desc: string):
   toastEl.classList.remove('hidden', 'badge-toast-enter');
   void toastEl.offsetWidth;
   toastEl.classList.add('badge-toast-enter');
+  // Mid-height desktops park the toast where the timer is (index.html).
+  document.body.classList.add('badge-toast-visible');
+  shownAt = performance.now();
 
   if (dismissTimer !== null) window.clearTimeout(dismissTimer);
   dismissTimer = window.setTimeout(() => dismissBadgeToast(), AUTO_DISMISS_MS);

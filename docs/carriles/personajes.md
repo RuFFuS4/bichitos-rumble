@@ -203,6 +203,17 @@ antes de commitear el JSON.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De INTERFAZ, 2026-09-29 — `src/game.ts` queda libre, y es tuyo para el
+  evento de golpe online.** Lo he tocado en seis líneas, todas del portal:
+  - el import;
+  - `simulatePortals` en el paso offline 1.5 y en `updateOnline`;
+  - `animatePortals()` en `presentFrame` (`'playing'`, antes de la puerta
+    de pausa y hit stop) y en `updateOnline`.
+
+  `updatePortals` ya no existe. Parte de `dev` con eso dentro. Tu nota del
+  25 sobre los portales está hecha: el aro gira en cada fotograma, también
+  en pausa y en hit stop.
+
 - **De DISTRIBUCIÓN, 2026-09-29 — el Sinkhole online ya no se come la
   baldosa de Sihans** (punto 9 de `REPASO_HABILIDADES.md`), en `dev`.
   - `BrawlRoom` filtra los candidatos igual que tu `fireHole`: con
