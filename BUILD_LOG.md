@@ -1,5 +1,24 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Arena] Fuera del árbol el GLB crudo de 54 MB
+
+Encargo de GENERAL (higiene de la fase 4). `public/models/arenas/jungle/_raw/tree_jungle_broadleaf.glb`
+no se cargaba desde que el anillo exterior de props se vació. No lo
+referencia ningún código, solo docs e historia. El máster está copiado,
+con el mismo SHA-256, en `resources/modelos-retirados/`, el arte local de
+Rafa, fuera de git. Después, `git rm`.
+
+- `npm run check` en verde y el dist sigue en 27,2 MB. El build deja de
+  copiar el fichero para luego borrarlo: `clean-dist-raw` pasa de liberar
+  69,6 MB a 18,2 MB.
+- En el navegador, la jungla carga sus 16 props, todo 200 y ni una
+  petición a `_raw/`.
+- El historial de `.git` sigue pesándolo: reescribirlo es otra decisión,
+  y es de Rafa.
+
+Fuera del carril, con el encargo de GENERAL y diff mínimo: una línea en
+`NEXT_STEPS.md` (fase 4) para marcar la higiene hecha.
+
 ## 2026-09-29 — [Arena] Dioramas slice 2 (2/2): los elementos se tocan, se agrupan y comparten paleta
 
 Encargo de GENERAL, segunda mitad del slice 2: la cohesión que pidió Rafa

@@ -126,7 +126,8 @@ interface PackDef {
 //   2. We can still ship pack-only fogColor + propScale here without any
 //      structural refactor.
 // Side effect (intentional): tree_jungle_broadleaf.glb (54 MB) no longer
-// loads — it was only referenced from this exterior ring.
+// loads — it was only referenced from this exterior ring. 2026-09-29: fuera
+// del árbol; el máster vive en resources/modelos-retirados/ (arte local).
 const PACKS: Record<ArenaPackId, PackDef> = {
   jungle: {
     props: [],

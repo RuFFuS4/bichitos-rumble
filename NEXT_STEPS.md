@@ -205,7 +205,9 @@ entregable):
 - [ ] Fase 2 — colapso que se lee y se siente.
 - [ ] Fase 3 — cada bioma es un sitio.
 - [ ] Fase 4 — props que pertenecen al suelo (+ higiene: GLB crudo de
-      54 MB versionado en `public/models/arenas/jungle/_raw/`).
+      54 MB versionado en `public/models/arenas/jungle/_raw/` — **fuera del
+      árbol el 2026-09-29**, máster en `resources/modelos-retirados/`; el
+      historial de `.git` sigue pesándolo: reescribirlo es decisión de Rafa).
 - [ ] Fase 5 — todo lo visual en función del radio.
 
 **Cola de Rafa (2026-09-07, por orden de lo que dijo)**:
