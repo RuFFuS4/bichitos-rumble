@@ -404,7 +404,7 @@ export function updateBot(
   // --- Risky ability (Sebastian's All-in): a miss falls into the void.
   // Same hold-and-release path as the player: charge only with someone
   // in the real hit lane (narrowed by allInLaneInset), and never on top of
-  // another ability. tickAllInCharge re-checks on release. Offline only:
+  // another ability. tickAllInCharge looks once and lets go. Offline only:
   // online the room gives a bot no way to drop a charge (sim/bot.ts).
   const risky = findAbilityByTag(bot.abilityStates, 'risky');
   if (
@@ -414,27 +414,75 @@ export function updateBot(
     roll(FEEL.bots.fireRatesPerSec.risky)
   ) {
     const scene = sceneOf(bot);
-    if (scene) startSebastianAllInCharge(bot, scene);
+    if (scene) {
+      startSebastianAllInCharge(bot, scene);
+      // Drawn here and only here: a match without a Sebastian bot rolls
+      // exactly what it rolled before.
+      if (bot.lHoldCharging) allInFlaws.set(bot, drawAllInFlaw(bot.mesh.rotation.y));
+    }
   }
 }
 
+/** A bot's All-in charge, flawed like a person: drawn when it starts. */
+interface AllInFlaw {
+  /** The facing it meant to aim at: the one it charged with. */
+  aimRy: number;
+  /** Radians the aim still has to drift off (sign = side). */
+  driftLeft: number;
+  /** Seconds from the look to the release. */
+  reactionSec: number;
+  /** Charge age at which it lets go; null until it has looked. */
+  releaseAt: number | null;
+}
+const allInFlaws = new WeakMap<Critter, AllInFlaw>();
+
+/** Two matchRng() rolls: the reaction, uniform in [allInReactionMinSec,
+ *  allInReactionMaxSec], and the aim error, uniform in ±allInAimErrorDeg. */
+function drawAllInFlaw(aimRy: number): AllInFlaw {
+  const b = FEEL.bots;
+  const reactionSec = b.allInReactionMinSec + matchRng() * (b.allInReactionMaxSec - b.allInReactionMinSec);
+  const driftLeft = THREE.MathUtils.degToRad((2 * matchRng() - 1) * b.allInAimErrorDeg);
+  return { aimRy, driftLeft, reactionSec, releaseAt: null };
+}
+
 /**
- * The bot's side of the All-in hold: after allInReactionSec it releases if
- * the full hit lane still holds someone, and otherwise drops the charge
- * without spending the cooldown (the old blind release was half of
- * Sebastian's falls). The release waits for the def's holdToFireMinMs like
- * the player's. With no move input the bot keeps the aim it started with.
+ * The bot's side of the All-in hold, failing like a person (Rafa,
+ * 2026-09-29). From the start its aim drifts off by the drawn error at the
+ * aim's own turn rate, so the line shows where the dash will go. At
+ * allInLookSec it looks at the full lane it meant to aim at: empty, it
+ * drops the charge without spending the cooldown; someone there, it
+ * commits and lets go a reaction time later WITHOUT looking again, so the
+ * error or whoever walks out meanwhile makes it miss, and a miss is
+ * Sebastian's fall. The release still waits for the def's holdToFireMinMs.
+ * It used to look and release in the same step: 0 misses in 971 All-in
+ * falls (REPASO_HABILIDADES §«Pase de balance de las embestidas: medido»).
+ * The player's hold (tickSebastianHoldToFire) has none of this.
  */
 function tickAllInCharge(bot: Critter, allCritters: Critter[], dt: number): void {
+  const flaw = allInFlaws.get(bot);
+  if (flaw && flaw.driftLeft !== 0) {
+    const turn = Math.sign(flaw.driftLeft) *
+      Math.min(Math.abs(flaw.driftLeft), THREE.MathUtils.degToRad(FEEL.allIn.aimTurnDegPerSec) * dt);
+    const ry = bot.mesh.rotation.y + turn;
+    bot.mesh.rotation.y = Math.atan2(Math.sin(ry), Math.cos(ry));
+    flaw.driftLeft -= turn;
+  }
   advanceAllInCharge(bot, dt);
-  if (bot.lHoldChargeTime < FEEL.bots.allInReactionSec) return;
   const risky = findAbilityByTag(bot.abilityStates, 'risky');
   const scene = sceneOf(bot);
-  if (risky && scene && findAllInTarget(risky.def, bot, allCritters)) {
-    releaseSebastianAllInCharge(bot, allCritters, scene);
-  } else {
+  if (!flaw || !risky || !scene) {
     cancelSebastianAllInCharge(bot);
+    return;
   }
+  if (flaw.releaseAt === null) {
+    if (bot.lHoldChargeTime < FEEL.bots.allInLookSec) return;
+    if (!findAllInTarget(risky.def, bot, allCritters, 0, flaw.aimRy)) {
+      cancelSebastianAllInCharge(bot);
+      return;
+    }
+    flaw.releaseAt = bot.lHoldChargeTime + flaw.reactionSec;
+  }
+  if (bot.lHoldChargeTime >= flaw.releaseAt) releaseSebastianAllInCharge(bot, allCritters, scene);
 }
 
 /** The scene the bot's mesh was added to (Critter's constructor adds it
