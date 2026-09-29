@@ -25,7 +25,8 @@
 
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
-import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
+import { DECOR_TYPES, getDecorLayout, type DecorPlacement } from './arena-decor-layouts';
+import type { ScatterProp } from './arena-scatter-types';
 import { BACKDROP_LOOK, type CliffRamp, type PackSky } from './arena-look';
 import { FIRMA_CROWN_HEIGHT } from './arena-sky-layout';
 
@@ -617,6 +618,29 @@ const PACK_DECOR_SCALE: Record<ArenaPackId, number> = {
  */
 export function getPackDecorScale(packId: ArenaPackId): number {
   return PACK_DECOR_SCALE[packId] ?? 1.0;
+}
+
+/**
+ * Los props del pack como los ve el scatter (dioramas slice 2): centro y
+ * radio de la huella en el mundo. Sale del MISMO layout que carga
+ * loadInArenaDecorations (vista previa del editor incluida) y de la
+ * huella medida por tipo, así que el diorama crece al pie de cada prop
+ * sin esperar a los GLB.
+ */
+export function getDecorFootprints(packId: ArenaPackId): ScatterProp[] {
+  const packScale = getPackDecorScale(packId);
+  const out: ScatterProp[] = [];
+  for (const p of getDecorLayout(packId)) {
+    const type = DECOR_TYPES[p.type];
+    if (!type) continue;
+    out.push({
+      x: Math.cos(p.angle) * p.r,
+      z: Math.sin(p.angle) * p.r,
+      radius: type.footprint * p.scale * packScale,
+      type: p.type,
+    });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

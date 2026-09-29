@@ -40,6 +40,12 @@
 //      propio stream (`<id>#edge`), así que el fleco exterior no se mueve y
 //      todos los clientes ven lo mismo, online incluido: solo dependen de
 //      qué ha caído.
+//
+//   5. Las capas 'props' crecen AL PIE de los props del pack (dioramas
+//      slice 2, cohesión): una corona alrededor del faldón de cada prop,
+//      repartida en proporción a su perímetro. Los props llegan como datos
+//      (layout + huella medida por tipo, `ScatterBuildArgs.props`), no como
+//      GLB cargados: el scatter sigue siendo síncrono y determinista.
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
@@ -48,6 +54,7 @@ import {
   SALT_SCATTER,
   SCATTER_LIMITS,
   type ScatterLayer,
+  type ScatterProp,
   type ScatterRecipe,
 } from './arena-scatter-types';
 import {
@@ -95,6 +102,9 @@ export interface ScatterBuildArgs {
   /** Fragmento que hospeda un punto del disco (índice en layout.fragments)
    *  o null si ninguno: la instancia se descarta. */
   hostOf: (x: number, z: number) => number | null;
+  /** Props del pack, para las capas 'props'. Sin ellos, esas capas no
+   *  salen (el resto del diorama es el mismo). */
+  props?: readonly ScatterProp[];
 }
 
 export interface ScatterLayerStats {
@@ -324,6 +334,29 @@ function fringeSampler(
   };
 }
 
+/**
+ * Capa 'props': corona [radius + rMin, radius + rMax] alrededor de cada
+ * prop que pase el filtro (`near`, y `arc:'back'` ⇒ solo los de z < 0).
+ * Cada instancia elige prop con peso proporcional al perímetro medio de
+ * su corona —una roca grande se viste más que una estrella de mar— y
+ * luego un punto uniforme en área dentro de ella.
+ */
+function propsSampler(layer: ScatterLayer, props: readonly ScatterProp[], rand: () => number): PositionSampler | null {
+  const back = layer.arc === 'back';
+  const hosts = props.filter(p => (!layer.near || layer.near.includes(p.type)) && (!back || p.z < 0));
+  if (hosts.length === 0 || layer.rMax < layer.rMin) return null;
+  const cum: number[] = [];
+  let total = 0;
+  for (const p of hosts) { total += p.radius + (layer.rMin + layer.rMax) / 2; cum.push(total); }
+  return () => {
+    const p = hosts[pickWeighted(cum, rand())]!;
+    const lo = p.radius + layer.rMin, hi = p.radius + layer.rMax;
+    const rho = Math.sqrt(lerp(lo * lo, hi * hi, rand()));
+    const phi = rand() * TWO_PI;
+    return [p.x + Math.cos(phi) * rho, p.z + Math.sin(phi) * rho];
+  };
+}
+
 // --- Motor ---------------------------------------------------------------------
 
 export class ArenaScatter {
@@ -461,7 +494,9 @@ export class ArenaScatter {
     const palette = layer.colors.map(c => new THREE.Color(c));
     const sample = layer.anchor === 'fringe'
       ? fringeSampler(layer, layout, rand)
-      : discSampler(layer, layout, rand);
+      : layer.anchor === 'props'
+        ? propsSampler(layer, args.props ?? [], rand)
+        : discSampler(layer, layout, rand);
     if (!sample) return null;
 
     // Cada instancia consume TODAS sus tiradas (posición y luego

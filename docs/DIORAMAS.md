@@ -42,9 +42,42 @@
 >     - `SCATTER_DENSITY` pasa a `arena-scatter-recipes.ts`, para que un
 >       patch toque un solo fichero.
 >
->   Lo que queda del slice 2: el afinado de recetas y la cohesión (paleta
->   compartida, elementos que se agrupan y sombras de contacto en los
->   props), en una sola hoja antes/después.
+>
+>   **Slice 2, segunda mitad (2026-09-29): la cohesión** que pidió Rafa el
+>   7 («no parecen muy cohesionados los elementos»). Hoja única
+>   antes/después en `.tmp/shots-s2/_cohesion_ab.png` (semilla 7, cinco
+>   biomas, cámara de juego y pose wide).
+>   - **Lo bajo crece pegado a los props.** Ancla nueva `'props'`: la capa
+>     se siembra en una corona alrededor del faldón de cada prop de su
+>     `near`, repartida según su perímetro. Helechos al pie de las
+>     palmeras, cascotes y hierba contra los sillares, ventisqueros y
+>     esquirlas contra el hielo, lascas y paja junto a agujas y vagoneta,
+>     cantos y hierba de duna contra rocas y casco, musgo en linternas y
+>     torii, pétalos bajo el sakura y brotes al pie del bambú.
+>   - **Los acentos altos se agrupan.** Arbustos, témpanos, agujas,
+>     abanicos de coral y azaleas del arco trasero pasan de racimos al azar
+>     a formar grupo con los props de allí. Los huesos sueltos del desierto
+>     dejan la pista y rodean los montones de huesos.
+>   - **Paleta compartida.** Lo que imita el material de un GLB toma su
+>     color MEDIDO en el navegador: hielo cian en vez de azul real,
+>     arenisca naranja en vez de rojo, coral de los GLB, gris de roca
+>     mojada, verde de bambú. Los abanicos de coral pasan de cono a mata
+>     (el cono se leía como pinchos).
+>   - **Sombra de contacto en los props.** Un pool `BlobShadows` propio de
+>     la arena (1 draw): una sombra por prop, radio √(ancho × fondo) / 2 ×
+>     `ARENA_LOOK.propShadowScale` (1,35) y opacidad
+>     `propShadowOpacity` (0,5), recortada en el labio. Se retira cuando
+>     su fragmento empieza a caer. A 1 × y 0,27 era invisible: el prop tapa
+>     el centro oscuro.
+>   - **Datos nuevos:** `DECOR_TYPES[t].footprint`, el radio de la base de
+>     los 32 tipos, medido en el navegador. Con él el scatter crece al pie
+>     de cada prop sin esperar a que cargue el GLB, síncrono y determinista.
+>   - **Coste** (semilla 7): de 9-10 a 11-12 draws de scatter por bioma,
+>     +46 a +96 instancias y +0,2k a +1,7k triángulos; más 1 draw del
+>     pool de sombras de props. Cero recortes contra `SCATTER_LIMITS`: las
+>     capas que tocan un prop del interior se quedan en ≤ 0,4 u, y las
+>     altas excluyen los props de faldón grande que meterían la corona en
+>     el interior.
 > - **No existen** `scripts/arena-metrics.mjs` ni
 >   `scripts/validate-arena-packs.mjs`, que el texto da por escritos y
 >   enganchados a `npm run check`. Quien los necesite, que los escriba.

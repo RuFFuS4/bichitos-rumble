@@ -1,5 +1,36 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Arena] Dioramas slice 2 (2/2): los elementos se tocan, se agrupan y comparten paleta
+
+Encargo de GENERAL, segunda mitad del slice 2: la cohesión que pidió Rafa
+el 7 («no parecen muy cohesionados los elementos»), en una sola hoja
+antes/después (`.tmp/shots-s2/_cohesion_ab.png`, semilla 7, cinco biomas).
+
+- **Ancla `'props'` en el scatter.** Una capa puede crecer en una corona
+  alrededor del faldón de los props de su `near`. Los props llegan como
+  datos (layout + la huella de la base de cada tipo, medida en el
+  navegador y guardada en `DECOR_TYPES[t].footprint`), así que el
+  diorama sigue siendo síncrono y determinista, online incluido. Doce
+  capas nuevas o reconvertidas en los cinco biomas.
+- **Acentos altos agrupados** con los props del arco trasero en vez de
+  racimos al azar; los huesos del desierto dejan la pista.
+- **Paleta compartida:** lo que imita el material de un GLB toma su color
+  medido (hielo cian, arenisca, coral, roca mojada, bambú).
+- **Sombra de contacto en los props:** un pool `BlobShadows` propio de la
+  arena (1 draw), afinable en vivo con `ARENA_LOOK.propShadowScale` /
+  `propShadowOpacity` (`setArenaLook`, `look-patch`). A 1 × / 0,27 era
+  invisible (el prop tapa el centro); A/B headless de tres variantes,
+  elegida 1,35 / 0,5.
+
+Coste: de 9-10 a 11-12 draws de scatter por bioma, +46 a +96 instancias,
++0,2k a +1,7k triángulos, más 1 draw de sombras. Cero recortes contra
+`SCATTER_LIMITS`. Tests: `arena-scatter` gana tres (cada capa `'props'`
+tiene a quién vestir; cada instancia cae en la corona de un prop de su
+filtro; sin props el resto del diorama es el mismo byte a byte) y todos
+los contratos existentes cubren ya las capas nuevas.
+
+Todo dentro del carril ARENA; no toca `game.ts` ni `dev-api.ts`.
+
 ## 2026-09-29 — [Arena] Dioramas slice 2 (1/2): cada colapso descubre un borde ya vestido, y el diorama tiene doble superficie
 
 Encargo de GENERAL: primero lo que no depende del ojo de Rafa.

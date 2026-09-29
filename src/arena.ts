@@ -17,6 +17,7 @@ import { playArenaWarning } from './audio';
 import { ARENA_LOOK, BACKDROP_LOOK, SALT_VISUAL, CLIFF_RAMP_DEFAULT, type CliffRamp } from './arena-look';
 import { ArenaBackdrop, type BackdropStats } from './arena-backdrop';
 import { ArenaScatter, type ScatterStats } from './arena-scatter';
+import { BlobShadows, BLOB_SHADOW } from './blob-shadows';
 import { getScatterRecipe } from './arena-scatter-recipes';
 import { SCATTER_DENSITY } from './arena-scatter-recipes';
 import {
@@ -29,6 +30,7 @@ import {
   getPackCliff,
   getPackGroundTile,
   getPackDecorScale,
+  getDecorFootprints,
   loadInArenaDecorations,
 } from './arena-decorations';
 import { getDecorLayout } from './arena-decor-layouts';
@@ -510,6 +512,19 @@ export class Arena {
    *  es compartida. Se le avisa de cada fragmento que tiembla o cae para
    *  que su rango de instancias se mueva con él. */
   private scatter: ArenaScatter | null = null;
+  /** Sombras de contacto de los props del pack (dioramas slice 2). Pool
+   *  propio de la arena —el de los critters es de Game— colgado de la
+   *  escena (nunca de un fragmento: ver blob-shadows.ts). 1 draw call. */
+  private readonly propShadows = new BlobShadows(BLOB_SHADOW.propCapacity);
+  /** Slots de sombra por fragmento anfitrión: se devuelven cuando ese
+   *  fragmento empieza a caer, o la sombra se quedaría sobre el vacío. */
+  private propShadowSlots = new Map<number, number[]>();
+  /** Lo medido de cada prop (centro, radio de su huella en planta y techo
+   *  en el labio): con esto se recoloca la sombra cuando cambia el look. */
+  private propShadowSpecs = new Map<number, { x: number; z: number; r: number; max: number }>();
+  /** Escala y opacidad con las que se pintaron: si ARENA_LOOK cambia
+   *  (setArenaLook, look-patch en vivo), tickVisuals las repinta. */
+  private propShadowLook: [number, number] = [ARENA_LOOK.propShadowScale, ARENA_LOOK.propShadowOpacity];
   private scatterDensity = SCATTER_DENSITY;
   /** Per-prop batch association. When batch `N` collapses, every prop
    *  with `batchIndex === N` enters the falling-decoration queue. */
@@ -563,6 +578,7 @@ export class Arena {
     // Si vuelve, que sea por bioma (PackDef.look, fase 3), no global.
 
     scene.add(this.group);
+    scene.add(this.propShadows.mesh);
   }
 
   // --- Seed-based layout build -------------------------------------------
@@ -748,6 +764,7 @@ export class Arena {
             continue;
           }
           host.attach(mesh);
+          this.addPropShadow(hostIdx, mesh);
         }
       } catch (err) {
         console.warn('[Arena] in-arena decor load failed:', packId, err);
@@ -910,8 +927,63 @@ export class Arena {
     this.clearGroundTexture();
   }
 
+  /** Sombra de contacto bajo un prop recién colgado de su fragmento: la
+   *  bbox de MUNDO ya asentada por el auto-grounding, con el radio
+   *  recortado para que no se pinte un disco sobre el vacío del borde. */
+  private addPropShadow(host: number, mesh: THREE.Object3D): void {
+    if (!this.alive[host]) return;
+    const box = new THREE.Box3().setFromObject(mesh);
+    if (box.isEmpty()) return;
+    const slot = this.propShadows.add();
+    if (slot < 0) return;
+    const c = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const edge = (this.layout?.maxRadius ?? FRAG.maxRadius) - Math.hypot(c.x, c.z);
+    const spec = {
+      x: c.x, z: c.z,
+      r: 0.5 * Math.sqrt(Math.max(0, size.x * size.z)),
+      max: Math.max(0, edge) + BLOB_SHADOW.propEdgeOverhang,
+    };
+    this.propShadowSpecs.set(slot, spec);
+    this.placePropShadow(slot, spec);
+    const list = this.propShadowSlots.get(host);
+    if (list) list.push(slot); else this.propShadowSlots.set(host, [slot]);
+  }
+
+  private placePropShadow(slot: number, s: { x: number; z: number; r: number; max: number }): void {
+    this.propShadows.set(slot, s.x, s.z, Math.min(s.max, s.r * ARENA_LOOK.propShadowScale), ARENA_LOOK.propShadowOpacity);
+  }
+
+  /** Si el look de la sombra de los props cambió en vivo, repinta todas. */
+  private syncPropShadowLook(): void {
+    const [scale, opacity] = this.propShadowLook;
+    if (scale === ARENA_LOOK.propShadowScale && opacity === ARENA_LOOK.propShadowOpacity) return;
+    this.propShadowLook = [ARENA_LOOK.propShadowScale, ARENA_LOOK.propShadowOpacity];
+    for (const [slot, spec] of this.propShadowSpecs) this.placePropShadow(slot, spec);
+  }
+
+  /** El fragmento `host` empieza a caer: sus props se van con él y sus
+   *  sombras, fuera. */
+  private dropPropShadows(host: number): void {
+    const list = this.propShadowSlots.get(host);
+    if (!list) return;
+    for (const slot of list) {
+      this.propShadows.remove(slot);
+      this.propShadowSpecs.delete(slot);
+    }
+    this.propShadowSlots.delete(host);
+  }
+
+  private clearPropShadows(): void {
+    for (const host of [...this.propShadowSlots.keys()]) this.dropPropShadows(host);
+  }
+
   /** Drop every prop mesh from the scene and dispose GPU resources. */
   private clearDecorations(): void {
+    // Los props de dentro de la arena se van con sus fragmentos (los
+    // desecha buildFromSeed); sus sombras, aquí, que es por donde pasan
+    // applyPack y clearPack.
+    this.clearPropShadows();
     if (!this.decorationsGroup) return;
     this.sceneRef.remove(this.decorationsGroup);
     disposeGroupMeshes(this.decorationsGroup);
@@ -1050,6 +1122,8 @@ export class Arena {
     this.backdrop?.tick(dt);
     // F4: el destello donde desaparece un bicho que cae.
     this.tickVanish();
+    // Dioramas slice 2: la sombra de los props sigue a ARENA_LOOK en vivo.
+    this.syncPropShadowLook();
   }
 
   // 2026-09-29 (encargo de la sesión general; nota de PERSONAJES del 25):
@@ -1165,6 +1239,7 @@ export class Arena {
         const i = this.findFragmentAt(x, z);
         return i >= 0 ? i : null;
       },
+      props: getDecorFootprints(this.appliedPackId),
     });
     // Reconstrucción a mitad de partida: lo que ya cayó, cae, y el borde
     // que dejó al descubierto sale vestido.
@@ -1524,8 +1599,10 @@ export class Arena {
       cx: Math.cos(midA) * midR,
       cz: Math.sin(midA) * midR,
     });
-    // Dioramas slice 2: el borde que este sector tapaba ya viene vestido.
+    // Dioramas slice 2: el borde que este sector tapaba ya viene vestido,
+    // y las sombras de sus props no se quedan pintadas sobre el vacío.
     this.revealScatterEdges(idx);
+    this.dropPropShadows(idx);
   }
 
   /** El fleco latente que tapaba el sector `idx` se destapa sobre los

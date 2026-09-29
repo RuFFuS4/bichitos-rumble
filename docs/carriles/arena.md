@@ -46,10 +46,13 @@ el orden de trabajo.
      las tres hojas.
    - Lo que queda del fondo: si Rafa aprueba la F3, borrar `legacyLight`
      y `LEGACY_LIGHT`; si no, ponerlo a `true` por defecto.
-2. **Dioramas slice 2** — **primera mitad HECHA (2026-09-29)**: el fleco
+2. **Dioramas slice 2** — **HECHO (2026-09-29)**. Primera mitad: el fleco
    que se regenera al caer un sector, y la doble superficie
-   (`scatter-patch`, `setScatterRecipe`, densidad en el studio). Detalle
-   en la cabecera de DIORAMAS. Lo que queda: afinar recetas sobre capturas (grietas de hielo,
+   (`scatter-patch`, `setScatterRecipe`, densidad en el studio). Segunda
+   mitad: la cohesión (ancla `'props'`, acentos agrupados, paleta medida
+   de los GLB, sombra de contacto en los props), hoja
+   `.tmp/shots-s2/_cohesion_ab.png` pendiente del ojo de Rafa. Detalle en
+   la cabecera de DIORAMAS. Lo que quedaba antes del slice: afinar recetas sobre capturas (grietas de hielo,
    escala de acentos), fleco del borde que se regenera al caer un sector,
    viento animado barato, recomponer los 73 props autorados,
    `SCATTER_DENSITY` en el studio y applier ToolPatch `scatter-patch`

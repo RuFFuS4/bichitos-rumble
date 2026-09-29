@@ -87,53 +87,60 @@ export const DECOR_TYPES: Record<string, {
    *  and applying a uniform scale. Multiplied by placement.scale at
    *  per-instance level. Critter reference height = 1.7 u. */
   displayHeight: number;
+  /** Radio de la huella de la BASE (u) a placement.scale 1 y escala de
+   *  pack 1: media de ancho y fondo del 25 % inferior del GLB ya ajustado
+   *  a displayHeight, medida en el navegador (dioramas slice 2,
+   *  2026-09-29). Es lo que usa el scatter para crecer al pie del prop
+   *  (anchor 'props') sin esperar a que el GLB cargue. Si cambia el GLB,
+   *  se vuelve a medir. */
+  footprint: number;
   /** Optional friendly label for the editor UI. Defaults to the key. */
   label?: string;
 }> = {
   // --- jungle ---
-  'rock_jungle':    { glbPath: './models/arenas/jungle/stone_ruin_block.glb', displayHeight: 1.0, label: 'Rock (jungle)' },
-  'totem_jungle':   { glbPath: './models/arenas/jungle/totem_tiki.glb',       displayHeight: 2.2, label: 'Totem' },
-  'palm_jungle':    { glbPath: './models/arenas/jungle/tree_palm_mid.glb',    displayHeight: 2.8, label: 'Palm (mid)' },
-  'palmtall_jungle':{ glbPath: './models/arenas/jungle/tree_palm_tall.glb',   displayHeight: 3.5, label: 'Palm (tall)' },
+  'rock_jungle':    { glbPath: './models/arenas/jungle/stone_ruin_block.glb', displayHeight: 1.0, footprint: 0.59, label: 'Rock (jungle)' },
+  'totem_jungle':   { glbPath: './models/arenas/jungle/totem_tiki.glb',       displayHeight: 2.2, footprint: 0.54, label: 'Totem' },
+  'palm_jungle':    { glbPath: './models/arenas/jungle/tree_palm_mid.glb',    displayHeight: 2.8, footprint: 0.16, label: 'Palm (mid)' },
+  'palmtall_jungle':{ glbPath: './models/arenas/jungle/tree_palm_tall.glb',   displayHeight: 3.5, footprint: 0.52, label: 'Palm (tall)' },
 
   // --- frozen_tundra ---
-  'iceshard_tundra':     { glbPath: './models/arenas/frozen_tundra/ice_shard.glb',     displayHeight: 1.4, label: 'Ice shard' },
-  'iceberg_tundra':      { glbPath: './models/arenas/frozen_tundra/iceberg_low.glb',    displayHeight: 0.9, label: 'Iceberg (low)' },
-  'icebergmid_tundra':   { glbPath: './models/arenas/frozen_tundra/iceberg_mid.glb',    displayHeight: 1.8, label: 'Iceberg (mid)' },
-  'icebergtall_tundra':  { glbPath: './models/arenas/frozen_tundra/iceberg_tall.glb',   displayHeight: 2.5, label: 'Iceberg (tall)' },
-  'pine_tundra':         { glbPath: './models/arenas/frozen_tundra/pine_snow.glb',      displayHeight: 2.5, label: 'Pine (snowy)' },
-  'signpost_tundra':     { glbPath: './models/arenas/frozen_tundra/signpost_wood.glb',  displayHeight: 1.8, label: 'Signpost' },
+  'iceshard_tundra':     { glbPath: './models/arenas/frozen_tundra/ice_shard.glb',     displayHeight: 1.4, footprint: 0.32, label: 'Ice shard' },
+  'iceberg_tundra':      { glbPath: './models/arenas/frozen_tundra/iceberg_low.glb',    displayHeight: 0.9, footprint: 0.77, label: 'Iceberg (low)' },
+  'icebergmid_tundra':   { glbPath: './models/arenas/frozen_tundra/iceberg_mid.glb',    displayHeight: 1.8, footprint: 0.56, label: 'Iceberg (mid)' },
+  'icebergtall_tundra':  { glbPath: './models/arenas/frozen_tundra/iceberg_tall.glb',   displayHeight: 2.5, footprint: 0.49, label: 'Iceberg (tall)' },
+  'pine_tundra':         { glbPath: './models/arenas/frozen_tundra/pine_snow.glb',      displayHeight: 2.5, footprint: 0.53, label: 'Pine (snowy)' },
+  'signpost_tundra':     { glbPath: './models/arenas/frozen_tundra/signpost_wood.glb',  displayHeight: 1.8, footprint: 0.62, label: 'Signpost' },
 
   // --- desert_dunes ---
-  'cactus_desert':       { glbPath: './models/arenas/desert_dunes/cactus_saguaro.glb',          displayHeight: 2.0, label: 'Cactus' },
-  'spire_desert':        { glbPath: './models/arenas/desert_dunes/sandstone_spire_short.glb',   displayHeight: 1.8, label: 'Sandstone spire (short)' },
-  'spiretall_desert':    { glbPath: './models/arenas/desert_dunes/sandstone_spire_tall.glb',    displayHeight: 2.8, label: 'Sandstone spire (tall)' },
-  'bones_desert':        { glbPath: './models/arenas/desert_dunes/bones_skull_scatter.glb',     displayHeight: 0.6, label: 'Bones scatter' },
-  'flag_desert':         { glbPath: './models/arenas/desert_dunes/cloth_flag_tattered.glb',     displayHeight: 2.0, label: 'Tattered flag' },
-  'minecart_desert':     { glbPath: './models/arenas/desert_dunes/minecart_rusted.glb',         displayHeight: 1.0, label: 'Rusted minecart' },
-  'palm_desert':         { glbPath: './models/arenas/desert_dunes/palm_desert.glb',             displayHeight: 2.6, label: 'Palm (desert)' },
+  'cactus_desert':       { glbPath: './models/arenas/desert_dunes/cactus_saguaro.glb',          displayHeight: 2.0, footprint: 0.33, label: 'Cactus' },
+  'spire_desert':        { glbPath: './models/arenas/desert_dunes/sandstone_spire_short.glb',   displayHeight: 1.8, footprint: 0.28, label: 'Sandstone spire (short)' },
+  'spiretall_desert':    { glbPath: './models/arenas/desert_dunes/sandstone_spire_tall.glb',    displayHeight: 2.8, footprint: 0.33, label: 'Sandstone spire (tall)' },
+  'bones_desert':        { glbPath: './models/arenas/desert_dunes/bones_skull_scatter.glb',     displayHeight: 0.6, footprint: 0.32, label: 'Bones scatter' },
+  'flag_desert':         { glbPath: './models/arenas/desert_dunes/cloth_flag_tattered.glb',     displayHeight: 2.0, footprint: 0.10, label: 'Tattered flag' },
+  'minecart_desert':     { glbPath: './models/arenas/desert_dunes/minecart_rusted.glb',         displayHeight: 1.0, footprint: 0.84, label: 'Rusted minecart' },
+  'palm_desert':         { glbPath: './models/arenas/desert_dunes/palm_desert.glb',             displayHeight: 2.6, footprint: 0.31, label: 'Palm (desert)' },
 
   // --- coral_beach ---
-  'coral_beach':         { glbPath: './models/arenas/coral_beach/coral_brain.glb',           displayHeight: 1.2, label: 'Coral brain' },
-  'coralpink_beach':     { glbPath: './models/arenas/coral_beach/coral_stack_pink.glb',      displayHeight: 1.5, label: 'Coral stack (pink)' },
-  'coralred_beach':      { glbPath: './models/arenas/coral_beach/coral_stack_red.glb',       displayHeight: 1.5, label: 'Coral stack (red)' },
-  'shell_beach':         { glbPath: './models/arenas/coral_beach/seashell_scatter.glb',      displayHeight: 0.6, label: 'Shell scatter' },
-  'starfish_beach':      { glbPath: './models/arenas/coral_beach/starfish_decor.glb',        displayHeight: 0.7, label: 'Starfish' },
-  'boulder_beach':       { glbPath: './models/arenas/coral_beach/boulder_wet.glb',           displayHeight: 0.9, label: 'Wet boulder' },
-  'shipwreck_beach':     { glbPath: './models/arenas/coral_beach/shipwreck_hull_piece.glb',  displayHeight: 1.0, label: 'Shipwreck hull piece' },
+  'coral_beach':         { glbPath: './models/arenas/coral_beach/coral_brain.glb',           displayHeight: 1.2, footprint: 0.54, label: 'Coral brain' },
+  'coralpink_beach':     { glbPath: './models/arenas/coral_beach/coral_stack_pink.glb',      displayHeight: 1.5, footprint: 0.26, label: 'Coral stack (pink)' },
+  'coralred_beach':      { glbPath: './models/arenas/coral_beach/coral_stack_red.glb',       displayHeight: 1.5, footprint: 0.38, label: 'Coral stack (red)' },
+  'shell_beach':         { glbPath: './models/arenas/coral_beach/seashell_scatter.glb',      displayHeight: 0.6, footprint: 0.37, label: 'Shell scatter' },
+  'starfish_beach':      { glbPath: './models/arenas/coral_beach/starfish_decor.glb',        displayHeight: 0.7, footprint: 0.15, label: 'Starfish' },
+  'boulder_beach':       { glbPath: './models/arenas/coral_beach/boulder_wet.glb',           displayHeight: 0.9, footprint: 1.31, label: 'Wet boulder' },
+  'shipwreck_beach':     { glbPath: './models/arenas/coral_beach/shipwreck_hull_piece.glb',  displayHeight: 1.0, footprint: 1.12, label: 'Shipwreck hull piece' },
   // palm_beach_tilted.glb (5.8 MB) — heaviest in this pack. Included for
   // composition variety; if a future build is bandwidth-sensitive,
   // reconsider. Listed in BUILD_LOG audit as the largest beach prop.
-  'palm_beach':          { glbPath: './models/arenas/coral_beach/palm_beach_tilted.glb',     displayHeight: 3.0, label: 'Palm (tilted, beach)' },
+  'palm_beach':          { glbPath: './models/arenas/coral_beach/palm_beach_tilted.glb',     displayHeight: 3.0, footprint: 0.22, label: 'Palm (tilted, beach)' },
 
   // --- kitsune_shrine ---
-  'lantern_shrine':       { glbPath: './models/arenas/kitsune_shrine/stone_lantern_small.glb',  displayHeight: 1.4, label: 'Stone lantern (small)' },
-  'lanternlarge_shrine':  { glbPath: './models/arenas/kitsune_shrine/stone_lantern.glb',        displayHeight: 1.8, label: 'Stone lantern (large)' },
-  'bamboo_shrine':        { glbPath: './models/arenas/kitsune_shrine/bamboo_cluster.glb',       displayHeight: 2.4, label: 'Bamboo cluster' },
-  'sakura_shrine':        { glbPath: './models/arenas/kitsune_shrine/sakura_tree.glb',          displayHeight: 3.2, label: 'Sakura tree' },
-  'toriismall_shrine':    { glbPath: './models/arenas/kitsune_shrine/torii_gate_small.glb',     displayHeight: 1.8, label: 'Torii gate (small)' },
-  'toriilarge_shrine':    { glbPath: './models/arenas/kitsune_shrine/torii_gate_large.glb',     displayHeight: 2.6, label: 'Torii gate (large)' },
-  'kitsunestatue_shrine': { glbPath: './models/arenas/kitsune_shrine/kitsune_statue_white.glb', displayHeight: 1.6, label: 'Kitsune statue' },
+  'lantern_shrine':       { glbPath: './models/arenas/kitsune_shrine/stone_lantern_small.glb',  displayHeight: 1.4, footprint: 0.35, label: 'Stone lantern (small)' },
+  'lanternlarge_shrine':  { glbPath: './models/arenas/kitsune_shrine/stone_lantern.glb',        displayHeight: 1.8, footprint: 0.30, label: 'Stone lantern (large)' },
+  'bamboo_shrine':        { glbPath: './models/arenas/kitsune_shrine/bamboo_cluster.glb',       displayHeight: 2.4, footprint: 0.34, label: 'Bamboo cluster' },
+  'sakura_shrine':        { glbPath: './models/arenas/kitsune_shrine/sakura_tree.glb',          displayHeight: 3.2, footprint: 0.56, label: 'Sakura tree' },
+  'toriismall_shrine':    { glbPath: './models/arenas/kitsune_shrine/torii_gate_small.glb',     displayHeight: 1.8, footprint: 0.82, label: 'Torii gate (small)' },
+  'toriilarge_shrine':    { glbPath: './models/arenas/kitsune_shrine/torii_gate_large.glb',     displayHeight: 2.6, footprint: 0.79, label: 'Torii gate (large)' },
+  'kitsunestatue_shrine': { glbPath: './models/arenas/kitsune_shrine/kitsune_statue_white.glb', displayHeight: 1.6, footprint: 0.49, label: 'Kitsune statue' },
 };
 
 /**

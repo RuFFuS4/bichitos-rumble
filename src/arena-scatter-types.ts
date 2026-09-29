@@ -45,9 +45,27 @@ export type ScatterYaw = 'random' | 'toCenter' | 'wind';
 /** Dónde se coloca la capa respecto a la geometría del disco. */
 export type ScatterAnchor =
   | 'disc'     // sobre la tapa, en la banda radial [rMin, rMax]
-  | 'fringe';  // pegada al arco EXTERIOR de cada fragmento vivo (el borde
+  | 'fringe'   // pegada al arco EXTERIOR de cada fragmento vivo (el borde
                // vestido: cuando un sector cae, el siguiente ya tiene su
                // franja). rMin/rMax se interpretan como offset hacia dentro.
+  | 'props';   // al pie de los props del pack (dioramas slice 2, cohesión):
+               // corona [rMin, rMax] medida desde el FALDÓN de cada prop
+               // (su huella), no desde su centro. Lo que junta la hierba,
+               // la nieve o el escombro con la palmera, el iceberg o la
+               // aguja en vez de dejarlos plantados en un suelo pelado.
+
+/** Un prop del pack visto por el scatter: dónde está y cuánto ocupa su
+ *  base. Datos estáticos (layout + huella medida por tipo), así que el
+ *  scatter se construye síncrono y todos los clientes ven lo mismo sin
+ *  esperar a los GLB. */
+export interface ScatterProp {
+  x: number;
+  z: number;
+  /** Radio de la huella de la base en el mundo (u). */
+  radius: number;
+  /** Tipo de DECOR_TYPES (lo que filtra `ScatterLayer.near`). */
+  type: string;
+}
 
 export interface ScatterLayer {
   /** Identificador estable: sala la semilla y nombra el InstancedMesh. */
@@ -63,14 +81,19 @@ export interface ScatterLayer {
   /** Instancias objetivo ANTES de multiplicar por SCATTER_DENSITY
    *  (arena-scatter-recipes.ts). */
   count: number;
-  /** Banda radial (u de mundo) para 'disc'; profundidad de franja para 'fringe'. */
+  /** Solo con anchor 'props': tipos de prop (claves de DECOR_TYPES) a
+   *  cuyo pie crece la capa. Sin él, al pie de todos los del pack. */
+  near?: readonly string[];
+  /** Banda radial (u de mundo) para 'disc'; profundidad de franja para
+   *  'fringe'; distancia desde el faldón del prop para 'props'. */
   rMin: number;
   rMax: number;
   /** Radio libre alrededor del centro: por debajo no se coloca nada. */
   clearCenterR: number;
   /** Racimos: si clusterCount > 0, las instancias se agrupan alrededor de
    *  clusterCount centros con radio clusterRadius (Poisson aproximado).
-   *  0 = reparto uniforme con jitter. */
+   *  0 = reparto uniforme con jitter. Con anchor 'props' se ignoran: el
+   *  racimo ES el prop. */
   clusterCount: number;
   clusterRadius: number;
   /** Escala [min, max] sobre la primitiva de 1 u. La ALTURA resultante

@@ -27,6 +27,15 @@
 //       bioma. Solo caben en el arco trasero (backMaxH 2,6); el contrato
 //       no tiene campo angular, así que en el arco frontal el motor los
 //       recorta a 1,2 y avisa por consola (ver concerns del informe).
+//   (6) al pie de los props — anchor 'props' (dioramas slice 2, cohesión):
+//       Rafa, 2026-09-07: «no parecen muy cohesionados los elementos».
+//       Tres reglas. Lo bajo crece PEGADO al faldón de cada prop
+//       (helechos, cascotes, ventisqueros, musgo). Los acentos altos del
+//       arco trasero se agrupan con los props de allí en vez de salpicar
+//       el anillo. Y lo que imita el material de un GLB (hielo, arenisca,
+//       coral, roca mojada, bambú) toma el color MEDIDO de ese GLB.
+//       rMin/rMax son distancia desde el faldón; las capas que tocan un
+//       prop del interior (r < 8,5) se quedan en ≤ 0,4 u.
 //
 // Convenciones de escala (primitivas de 1 u de alto con base en y=0):
 //   dome  → alto = scale, ancho = 2,6 × scale.   pebble → alto = scale,
@@ -210,17 +219,20 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
       },
       // Matorrales redondos densos del arco trasero: los que en la
       // referencia rodean el árbol grande y el tótem.
+      // Cohesión (slice 2): los arbustos crecen DETRÁS de las ruinas y las
+      // palmeras del arco trasero, no sueltos por el anillo.
       {
         id: 'jungle_bushes',
         primitive: 'dome',
-        anchor: 'disc',
+        anchor: 'props',
         arc: 'back',
+        near: ['rock_jungle', 'totem_jungle', 'palm_jungle', 'palmtall_jungle'],
         count: 30,
-        rMin: 9.0,
-        rMax: 11.4,
+        rMin: 0.1,
+        rMax: 1.1,
         clearCenterR: 0,
-        clusterCount: 7,
-        clusterRadius: 1.2,
+        clusterCount: 0,
+        clusterRadius: 0,
         // 2026-09-07, sobre captura: a 1,4-2,4 u eran pedruscos casi negros
         // que tapaban el canto. Arbusto de verdad: ≤1,3 u y verdes con luz.
         scale: [0.7, 1.2],
@@ -229,6 +241,66 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         colorJitter: 0.07,
         yaw: 'random',
         blobShadow: true,
+      },
+      // Cohesión (slice 2): helechos al pie de cada palmera. El verde va
+      // de la hierba oliva al lima del GLB de la palmera: es el puente entre los dos.
+      {
+        id: 'jungle_prop_ferns',
+        primitive: 'tuft',
+        anchor: 'props',
+        near: ['palm_jungle', 'palmtall_jungle'],
+        count: 50,
+        rMin: 0,
+        rMax: 0.6,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.5, 0.95],
+        tilt: 16,
+        colors: [0x5d7a10, 0x6f9a1a, 0x495802, 0x7fae20],
+        colorJitter: 0.06,
+        yaw: 'random',
+        blobShadow: false,
+      },
+      // Cohesión (slice 2): cascotes al pie de los sillares y del tótem, del
+      // mismo gris verdoso que el GLB (#d1d29f medido): la ruina se desmorona.
+      {
+        id: 'jungle_prop_rubble',
+        primitive: 'pebble',
+        anchor: 'props',
+        near: ['rock_jungle', 'totem_jungle'],
+        count: 80,
+        rMin: 0,
+        rMax: 0.45,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.1, 0.24],
+        tilt: 20,
+        colors: [0xc9c9a0, 0xb0b08a, 0x9a9a78, 0x8a8a6a],
+        colorJitter: 0.05,
+        yaw: 'random',
+        blobShadow: false,
+      },
+      // Cohesión (slice 2): la hierba sube pegada a la piedra. ≤ 0,4 u:
+      // hay un sillar en r 7,8, dentro del techo interior.
+      {
+        id: 'jungle_prop_grass',
+        primitive: 'grassCross',
+        anchor: 'props',
+        near: ['rock_jungle', 'totem_jungle'],
+        count: 70,
+        rMin: 0,
+        rMax: 0.3,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.2, 0.38],
+        tilt: 14,
+        colors: [0x767006, 0x898704, 0x6d7903, 0x9d980d],
+        colorJitter: 0.06,
+        yaw: 'wind',
+        blobShadow: false,
       },
     ],
   },
@@ -357,6 +429,8 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
       // Racimos de cristales de hielo azules al pie de los icebergs: el
       // detalle más repetido de la referencia. Un punto por debajo de la
       // saturación de la ilustración (los critters mandan).
+      // Paleta compartida (slice 2): el cian de los icebergs GLB (#9af6fc,
+      // #43bede medidos), no el azul real de antes, que parecía otro material.
       {
         id: 'tundra_ice_crystals',
         primitive: 'shard',
@@ -369,7 +443,7 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         clusterRadius: 0.9,
         scale: [0.4, 1.15],
         tilt: 18,
-        colors: [0x5a9ada, 0x7ab8ee, 0x9fd0f6, 0x4a86cc],
+        colors: [0x7fd8ee, 0x9fe6f6, 0x5cc0de, 0x43bede],
         colorJitter: 0.06,
         yaw: 'random',
         blobShadow: false,
@@ -388,30 +462,74 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         clusterRadius: 1.1,
         scale: [0.3, 0.8],
         tilt: 16,
-        colors: [0x7ea0e5, 0xc9daf7, 0x97d1f8, 0x556294],
+        colors: [0x8fdcef, 0xc9f0f8, 0x9af6fc, 0x556294],
         colorJitter: 0.05,
         yaw: 'random',
         blobShadow: false,
       },
       // Témpanos pequeños del arco trasero, torcidos: un témpano recto
       // lee "cubo", uno inclinado lee "hielo a la deriva".
+      // Cohesión (slice 2): los témpanos se amontonan junto a los icebergs GLB
+      // del arco trasero, con su mismo cian. Sin el iceberg bajo: su faldón
+      // llega a r 8,4 y la corona entraría en el techo interior.
       {
         id: 'tundra_icebergs',
         primitive: 'shard',
-        anchor: 'disc',
+        anchor: 'props',
         arc: 'back',
+        near: ['icebergmid_tundra', 'icebergtall_tundra', 'iceshard_tundra'],
         count: 30,
-        rMin: 9.2,
-        rMax: 11.4,
+        rMin: 0.1,
+        rMax: 1.0,
         clearCenterR: 0,
-        clusterCount: 7,
-        clusterRadius: 1.2,
+        clusterCount: 0,
+        clusterRadius: 0,
         scale: [1.5, 2.6],
         tilt: 12,
-        colors: [0x478eda, 0x3d80d7, 0x6eacee],
+        colors: [0x43bede, 0x6fd0ea, 0x9af0fa],
         colorJitter: 0.05,
         yaw: 'random',
         blobShadow: true,
+      },
+      // Cohesión (slice 2): ventisqueros apilados contra la base de cada
+      // hielo, pino y poste. ≤ 0,4 u: hay un iceberg en r 7,5.
+      {
+        id: 'tundra_prop_snowdrift',
+        primitive: 'dome',
+        anchor: 'props',
+        near: ['iceberg_tundra', 'icebergmid_tundra', 'icebergtall_tundra', 'iceshard_tundra', 'pine_tundra', 'signpost_tundra'],
+        count: 70,
+        rMin: 0,
+        rMax: 0.5,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.18, 0.38],
+        tilt: 6,
+        colors: [0xf2f4fb, 0xe6eafc, 0xfafbfe],
+        colorJitter: 0.03,
+        yaw: 'random',
+        blobShadow: false,
+      },
+      // Cohesión (slice 2): esquirlas del mismo hielo alrededor de cada
+      // iceberg: lo que se ha desprendido de él.
+      {
+        id: 'tundra_prop_ice_chips',
+        primitive: 'pebble',
+        anchor: 'props',
+        near: ['iceberg_tundra', 'icebergmid_tundra', 'icebergtall_tundra', 'iceshard_tundra'],
+        count: 60,
+        rMin: 0.05,
+        rMax: 0.8,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.08, 0.2],
+        tilt: 25,
+        colors: [0x9af6fc, 0x7fd8ee, 0xc9f0f8],
+        colorJitter: 0.05,
+        yaw: 'random',
+        blobShadow: false,
       },
     ],
   },
@@ -476,25 +594,30 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
       // Costillas y huesos medio enterrados en pilas, como los que rodean
       // la calavera de la referencia (el prop bones_desert pone la
       // calavera; esto pone el resto del esqueleto).
+      // Cohesión (slice 2): los huesos sueltos rodean los montones de huesos
+      // GLB (y toman su marfil) en vez de salpicar la pista como palitos blancos.
       {
         id: 'desert_bones',
         primitive: 'log',
-        anchor: 'disc',
+        anchor: 'props',
+        near: ['bones_desert'],
         count: 30,
-        rMin: 3.0,
-        rMax: 8.5,
-        clearCenterR: 3.0,
-        clusterCount: 5,
-        clusterRadius: 0.9,
+        rMin: 0.1,
+        rMax: 1.2,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
         scale: [0.12, 0.22],
         tilt: 6,
-        colors: [0xe4dfd3, 0xfcfcfa, 0xd8d0c0],
+        colors: [0xe4cfac, 0xefe0c4, 0xd4bf9a],
         colorJitter: 0.03,
         yaw: 'random',
         blobShadow: false,
       },
       // Rocas rojas redondeadas amontonadas en el anillo exterior, al pie
       // de cactus y agujas (montones, como en la referencia).
+      // Paleta compartida (slice 2): del rojo de la ilustración hacia la
+      // arenisca de las agujas GLB, para que roca suelta y aguja sean la misma piedra.
       {
         id: 'desert_red_rocks',
         primitive: 'pebble',
@@ -507,7 +630,7 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         clusterRadius: 1.3,
         scale: [0.15, 0.45],
         tilt: 14,
-        colors: [0xad4d27, 0xce6232, 0x80351c, 0xda7339],
+        colors: [0xb85a2a, 0xd0703a, 0x8d4222, 0xe08736],
         colorJitter: 0.07,
         yaw: 'random',
         blobShadow: true,
@@ -565,30 +688,74 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         clusterRadius: 1.1,
         scale: [0.35, 0.85],
         tilt: 16,
-        colors: [0xad4d27, 0x8d351e, 0xce6232, 0x5a2f19],
+        colors: [0xc9702c, 0x9c4e24, 0xe08736, 0x5a2f19],
         colorJitter: 0.06,
         yaw: 'random',
         blobShadow: false,
       },
       // Agujas de roca roja del arco trasero: las torres de la
       // referencia, en pequeño y en racimo.
+      // Cohesión (slice 2): las agujas forman afloramiento con los props del
+      // arco trasero y toman la arenisca de las agujas GLB (#e08736 medido).
+      // Sin la vagoneta: su faldón (1,4 u) metería la corona en el interior.
       {
         id: 'desert_rock_spires',
         primitive: 'shard',
-        anchor: 'disc',
+        anchor: 'props',
         arc: 'back',
+        near: ['flag_desert', 'palm_desert', 'cactus_desert', 'bones_desert'],
         count: 24,
-        rMin: 9.2,
-        rMax: 11.4,
+        rMin: 0.2,
+        rMax: 1.1,
         clearCenterR: 0,
-        clusterCount: 6,
-        clusterRadius: 1.3,
+        clusterCount: 0,
+        clusterRadius: 0,
         scale: [1.5, 2.6],
         tilt: 10,
-        colors: [0xad4d27, 0x8d351e, 0xce6232],
+        colors: [0xe08736, 0xc9702c, 0xd68655, 0xb05a2a],
         colorJitter: 0.06,
         yaw: 'random',
         blobShadow: true,
+      },
+      // Cohesión (slice 2): lascas de arenisca al pie de las agujas, la
+      // vagoneta y los huesos: la roca se deshace alrededor de sí misma.
+      {
+        id: 'desert_prop_rubble',
+        primitive: 'pebble',
+        anchor: 'props',
+        near: ['spire_desert', 'spiretall_desert', 'minecart_desert', 'bones_desert'],
+        count: 70,
+        rMin: 0,
+        rMax: 0.6,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.1, 0.26],
+        tilt: 22,
+        colors: [0xe08736, 0xc9702c, 0xd68655, 0x9c4e24],
+        colorJitter: 0.05,
+        yaw: 'random',
+        blobShadow: false,
+      },
+      // Cohesión (slice 2): paja seca donde hay sombra o agua: al pie de
+      // cactus, palmera, bandera y vagoneta.
+      {
+        id: 'desert_prop_grass',
+        primitive: 'grassCross',
+        anchor: 'props',
+        near: ['cactus_desert', 'palm_desert', 'flag_desert', 'minecart_desert'],
+        count: 50,
+        rMin: 0,
+        rMax: 0.5,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.3, 0.6],
+        tilt: 18,
+        colors: [0xb0793b, 0x99602a, 0xc9a25a],
+        colorJitter: 0.06,
+        yaw: 'wind',
+        blobShadow: false,
       },
     ],
   },
@@ -639,7 +806,7 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         clusterRadius: 0,
         scale: [0.22, 0.34],
         tilt: 0,
-        colors: [0xcf7f3e, 0xd98b47, 0xc4703a],
+        colors: [0xe8743e, 0xf08a4a, 0xd9653a],
         colorJitter: 0.05,
         yaw: 'random',
         blobShadow: false,
@@ -696,13 +863,15 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         clusterRadius: 1.1,
         scale: [0.35, 0.75],
         tilt: 10,
-        colors: [0xd98a9a, 0xc96a80, 0x8f5aa8, 0xd6a0b6],
+        colors: [0xd98a9a, 0xef6e85, 0x8f5aa8, 0xfac3b1],
         colorJitter: 0.06,
         yaw: 'random',
         blobShadow: true,
       },
       // Rocas grises mojadas del borde, medio en el agua: el anillo de
       // piedra de la referencia que hoy no existe.
+      // Paleta compartida (slice 2): el gris de las rocas mojadas GLB
+      // (#a9b4b1 medido) en vez del oliva de antes.
       {
         id: 'beach_fringe_rocks',
         primitive: 'pebble',
@@ -715,7 +884,7 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         clusterRadius: 1.2,
         scale: [0.4, 0.85],
         tilt: 14,
-        colors: [0x68614d, 0x8a8765, 0x414235, 0x7e6c4e],
+        colors: [0x8c9794, 0xa9b4b1, 0x6f7a78, 0x7e6c4e],
         colorJitter: 0.06,
         yaw: 'random',
         blobShadow: false,
@@ -734,29 +903,75 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         clusterRadius: 1.0,
         scale: [0.4, 0.9],
         tilt: 18,
-        colors: [0xb8453e, 0xa63a35, 0xc45850, 0x8f5aa8],
+        colors: [0xde4845, 0xef6e85, 0xc9505a, 0x8f5aa8],
         colorJitter: 0.06,
         yaw: 'random',
         blobShadow: false,
       },
       // Abanicos de coral rojo grandes del arco trasero, en racimo.
+      // Cohesión (slice 2): los abanicos hacen arrecife con los corales,
+      // conchas y estrellas del arco trasero, con el coral de los GLB (#de4845,
+      // #ef6e85). Sin las rocas grandes: su faldón (1,9 u) entra en el interior.
+      // Mata de hojas (tuft), no cono, y a media altura: el shard grande se
+      // leía como pinchos rojos; alrededor de la palmera, como una corona.
       {
         id: 'beach_coral_fans',
-        primitive: 'shard',
-        anchor: 'disc',
+        primitive: 'tuft',
+        anchor: 'props',
         arc: 'back',
+        near: ['coralpink_beach', 'starfish_beach', 'shell_beach'],
         count: 24,
-        rMin: 9.5,
-        rMax: 11.4,
+        rMin: 0.1,
+        rMax: 1.0,
         clearCenterR: 0,
-        clusterCount: 6,
-        clusterRadius: 1.3,
-        scale: [1.5, 2.4],
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.6, 1.1],
         tilt: 12,
-        colors: [0xb8453e, 0xa63a35, 0xc45850],
+        colors: [0xde4845, 0xef6e85, 0xe8857a],
         colorJitter: 0.06,
         yaw: 'random',
-        blobShadow: true,
+        blobShadow: false,
+      },
+      // Cohesión (slice 2): cantos y conchas al pie de las rocas mojadas y
+      // del casco: la marea los deja ahí, no repartidos.
+      {
+        id: 'beach_prop_pebbles',
+        primitive: 'pebble',
+        anchor: 'props',
+        near: ['boulder_beach', 'shipwreck_beach'],
+        count: 70,
+        rMin: 0,
+        rMax: 0.6,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.1, 0.24],
+        tilt: 25,
+        colors: [0xa9b4b1, 0x8c9794, 0xf4dcb7, 0x6f7a78],
+        colorJitter: 0.05,
+        yaw: 'random',
+        blobShadow: false,
+      },
+      // Cohesión (slice 2): hierba de duna pegada a rocas, casco, palmera y
+      // corales.
+      {
+        id: 'beach_prop_seagrass',
+        primitive: 'tuft',
+        anchor: 'props',
+        near: ['boulder_beach', 'shipwreck_beach', 'palm_beach', 'coral_beach', 'coralred_beach', 'coralpink_beach'],
+        count: 60,
+        rMin: 0,
+        rMax: 0.5,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.25, 0.5],
+        tilt: 18,
+        colors: [0x508e6b, 0x56674b, 0xaaa871],
+        colorJitter: 0.06,
+        yaw: 'wind',
+        blobShadow: false,
       },
     ],
   },
@@ -849,6 +1064,8 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         blobShadow: false,
       },
       // Brotes de bambú al pie de los bambúes y entre las linternas.
+      // Paleta compartida (slice 2): hacia el verde de los bambús GLB
+      // (#8cda0c medido): los brotes son hijos de esas cañas.
       {
         id: 'shrine_bamboo_shoots',
         primitive: 'grassCross',
@@ -861,7 +1078,7 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         clusterRadius: 1.0,
         scale: [0.5, 1.1],
         tilt: 10,
-        colors: [0x5a8a3a, 0x7aa848, 0x4a7a30],
+        colors: [0x7ab83a, 0x8cc83a, 0x5e9a2e],
         colorJitter: 0.07,
         yaw: 'wind',
         blobShadow: false,
@@ -906,17 +1123,20 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
       },
       // Matorrales de azalea del arco trasero, alguno en flor rosa o
       // morada (las matas floridas de las esquinas de la referencia).
+      // Cohesión (slice 2): las azaleas enmarcan el sakura, la estatua y los
+      // bambús del arco trasero en vez de salpicar el anillo.
       {
         id: 'shrine_azaleas',
         primitive: 'dome',
-        anchor: 'disc',
+        anchor: 'props',
         arc: 'back',
+        near: ['sakura_shrine', 'kitsunestatue_shrine', 'lanternlarge_shrine', 'bamboo_shrine'],
         count: 26,
-        rMin: 9.0,
-        rMax: 11.4,
+        rMin: 0.1,
+        rMax: 1.0,
         clearCenterR: 0,
-        clusterCount: 6,
-        clusterRadius: 1.2,
+        clusterCount: 0,
+        clusterRadius: 0,
         // 2026-09-07, sobre captura: a 1,3-2,2 u leían como rocas moradas
         // gigantes. Mata de azalea: ≤1,1 u, verdes y rosas con luz.
         scale: [0.6, 1.1],
@@ -925,6 +1145,65 @@ export const SCATTER_RECIPES: Record<ArenaPackId, ScatterRecipe> = {
         colorJitter: 0.07,
         yaw: 'random',
         blobShadow: true,
+      },
+      // Cohesión (slice 2): musgo al pie de linternas, estatua y torii: la
+      // piedra vieja siempre lo tiene. ≤ 0,4 u: hay una linterna en r 7,8.
+      {
+        id: 'shrine_prop_moss',
+        primitive: 'grassCross',
+        anchor: 'props',
+        near: ['lantern_shrine', 'lanternlarge_shrine', 'kitsunestatue_shrine', 'toriismall_shrine', 'toriilarge_shrine'],
+        count: 70,
+        rMin: 0,
+        rMax: 0.35,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.12, 0.3],
+        tilt: 12,
+        colors: [0x6a7f3a, 0x58702e, 0x8a9a4e],
+        colorJitter: 0.06,
+        yaw: 'random',
+        blobShadow: false,
+      },
+      // Cohesión (slice 2): la alfombra de pétalos cae bajo la copa del
+      // sakura (#d399ab medido), no repartida por el patio.
+      {
+        id: 'shrine_prop_petals',
+        primitive: 'decal',
+        anchor: 'props',
+        near: ['sakura_shrine'],
+        count: 60,
+        rMin: 0,
+        rMax: 1.6,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.12, 0.2],
+        tilt: 0,
+        colors: [0xe7beac, 0xd99e8f, 0xf2a6c4, 0xf5c3d3],
+        colorJitter: 0.05,
+        yaw: 'random',
+        blobShadow: false,
+      },
+      // Cohesión (slice 2): brotes nuevos al pie de cada mata de bambú.
+      {
+        id: 'shrine_prop_shoots',
+        primitive: 'grassCross',
+        anchor: 'props',
+        near: ['bamboo_shrine'],
+        count: 40,
+        rMin: 0,
+        rMax: 0.45,
+        clearCenterR: 0,
+        clusterCount: 0,
+        clusterRadius: 0,
+        scale: [0.4, 0.8],
+        tilt: 10,
+        colors: [0x7ab83a, 0x8cc83a, 0x5e9a2e],
+        colorJitter: 0.05,
+        yaw: 'random',
+        blobShadow: false,
       },
     ],
   },

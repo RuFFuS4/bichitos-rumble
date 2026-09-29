@@ -22,7 +22,8 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { generateArenaLayout, pointInFragment } from '../../src/arena-fragments';
-import { ARENA_PACK_IDS, type ArenaPackId } from '../../src/arena-decorations';
+import { ARENA_PACK_IDS, getDecorFootprints, type ArenaPackId } from '../../src/arena-decorations';
+import { DECOR_TYPES } from '../../src/arena-decor-layouts';
 import { ArenaScatter } from '../../src/arena-scatter';
 import { PRIMITIVE_META } from '../../src/arena-scatter-geometry';
 import { SCATTER_DENSITY, getScatterRecipe } from '../../src/arena-scatter-recipes';
@@ -43,10 +44,12 @@ function makeHostOf(seed: number) {
   };
 }
 
+/** Con los props del pack (layout + huella medida), como Arena: así las
+ *  capas 'props' entran en todos los contratos de este fichero. */
 function buildFor(packId: ArenaPackId, seed: number, density = SCATTER_DENSITY): ArenaScatter {
   const { layout, hostOf } = makeHostOf(seed);
   const scatter = new ArenaScatter();
-  scatter.build({ layout, recipe: getScatterRecipe(packId), seed, density, hostOf });
+  scatter.build({ layout, recipe: getScatterRecipe(packId), seed, density, hostOf, props: getDecorFootprints(packId) });
   return scatter;
 }
 
@@ -219,10 +222,72 @@ describe('arena scatter — el fleco se regenera (slice 2)', () => {
   });
 });
 
+describe('arena scatter — al pie de los props (slice 2, cohesión)', () => {
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scl = new THREE.Vector3();
+  const m = new THREE.Matrix4();
+
+  it('cada capa \'props\' tiene a quién vestir: sus tipos existen y están en el layout del pack', () => {
+    let layers = 0;
+    for (const packId of ARENA_PACK_IDS) {
+      const present = new Set(getDecorFootprints(packId).map(p => p.type));
+      for (const layer of getScatterRecipe(packId).layers) {
+        if (layer.anchor !== 'props') continue;
+        layers++;
+        expect(layer.near?.length, `${packId}/${layer.id} sin near`).toBeGreaterThan(0);
+        for (const t of layer.near!) expect(DECOR_TYPES[t], `${packId}/${layer.id}: tipo ${t}`).toBeDefined();
+        expect(layer.near!.some(t => present.has(t)), `${packId}/${layer.id}: ningún prop de su near en el layout`).toBe(true);
+      }
+    }
+    expect(layers).toBeGreaterThanOrEqual(10);
+  });
+
+  it('cada instancia cae en la corona [faldón + rMin, faldón + rMax] de un prop de su filtro', () => {
+    for (const packId of ARENA_PACK_IDS) {
+      const props = getDecorFootprints(packId);
+      const scatter = buildFor(packId, 7);
+      for (const mesh of layerMeshes(scatter)) {
+        const layer = getScatterRecipe(packId).layers.find(l => `scatter:${l.id}` === mesh.name)!;
+        if (layer.anchor !== 'props') continue;
+        expect(mesh.count, `${packId}/${layer.id} vacía`).toBeGreaterThan(0);
+        const hosts = props.filter(p => layer.near!.includes(p.type) && (layer.arc !== 'back' || p.z < 0));
+        for (let i = 0; i < mesh.count; i++) {
+          mesh.getMatrixAt(i, m);
+          m.decompose(pos, quat, scl);
+          const ok = hosts.some(p => {
+            const d = Math.hypot(pos.x - p.x, pos.z - p.z);
+            return d >= p.radius + layer.rMin - 1e-6 && d <= p.radius + layer.rMax + 1e-6;
+          });
+          expect(ok, `${packId}/${layer.id} #${i} en (${pos.x.toFixed(2)}, ${pos.z.toFixed(2)}) lejos de sus props`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('sin props, las capas \'props\' no salen y el resto del diorama es el mismo byte a byte', () => {
+    for (const packId of ARENA_PACK_IDS) {
+      const seed = 7;
+      const { layout, hostOf } = makeHostOf(seed);
+      const bare = new ArenaScatter();
+      bare.build({ layout, recipe: getScatterRecipe(packId), seed, density: SCATTER_DENSITY, hostOf });
+      const full = buildFor(packId, seed);
+      const byName = new Map(layerMeshes(full).map(mesh => [mesh.name, mesh]));
+      const propsIds = new Set(getScatterRecipe(packId).layers.filter(l => l.anchor === 'props').map(l => `scatter:${l.id}`));
+      for (const mesh of layerMeshes(bare)) {
+        expect(propsIds.has(mesh.name), `${packId}: ${mesh.name} salió sin props`).toBe(false);
+        expect(Array.from(mesh.instanceMatrix.array), `${packId}/${mesh.name}`)
+          .toEqual(Array.from(byName.get(mesh.name)!.instanceMatrix.array));
+      }
+    }
+  });
+});
+
 describe('arena scatter — coste', () => {
   it('cada bioma cabe en el presupuesto del plan (≤ 16 draws, ≤ 25k tris a densidad por defecto)', () => {
-    // 8 capas por bioma, y las que llevan sombra de contacto instanciada
-    // (guijarros, rocas, arbustos) cuestan un segundo draw: 13 en tundra.
+    // 8-11 capas por bioma (slice 2 suma las de al pie de los props), y
+    // las que llevan sombra de contacto instanciada cuestan un segundo
+    // draw: 12 en los cinco.
     // Contra los 70-80 draws de una partida hoy, sigue siendo calderilla;
     // lo que este test vigila es que nadie meta una capa por objeto.
     for (const packId of ARENA_PACK_IDS) {

@@ -440,6 +440,13 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
       `setScatterRecipe`.
     - El fleco se regenera: `getScatterStats().layers[i].latent` cuenta el
       fleco que aún espera a que caiga el sector de fuera.
+    - Cohesión (slice 2, segunda mitad): las capas con `anchor: 'props'`
+      crecen al pie de los props de su `near`; se afinan igual que las
+      demás (`setScatterRecipe`, `scatter-patch`). La sombra de contacto de
+      los props son `ARENA_LOOK.propShadowScale` y `propShadowOpacity`:
+      `__devApi.setArenaLook({ propShadowScale, propShadowOpacity })` las
+      cambia en vivo (se repintan en el siguiente fotograma que corre) y
+      un `look-patch` con `ARENA_LOOK.propShadowScale` las lleva al código.
   - **Instancias de prueba mudas** (directiva de Rafa 2026-09-07):
     `scripts/lib/headless-browser.mjs` (`launchMutedBrowser`,
     `muteGameAudio`, `newMutedPage`). Silencia por dos vías —

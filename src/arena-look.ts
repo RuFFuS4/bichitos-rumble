@@ -68,6 +68,14 @@ export interface ArenaLookConfig {
    *  radio del critter, y opacidad máxima cuando está en el suelo. */
   critterShadowScale: number;
   critterShadowOpacity: number;
+  /** Sombra de contacto bajo cada prop del pack (dioramas slice 2). Radio
+   *  en múltiplos de la media geométrica de su huella en planta (√(ancho ×
+   *  fondo) / 2) y opacidad en el centro. Tiene que salir POR FUERA del
+   *  prop: el prop tapa el centro oscuro, y con 1 × solo asomaba la cola
+   *  del degradado (medido: invisible en las cinco capturas). Se leen en
+   *  vivo, como las del critter. */
+  propShadowScale: number;
+  propShadowOpacity: number;
   /** Intensidad del emisivo naranja del aviso previo al colapso. Es
    *  información crítica (ese trozo se cae en 3 s), así que se toca con
    *  cuidado: demasiado poco y no se ve, demasiado y tapa el suelo. */
@@ -96,6 +104,8 @@ export const ARENA_LOOK: ArenaLookConfig = {
   cliffBlockJitter: 0.14,
   critterShadowScale: 1.15,
   critterShadowOpacity: 0.34,
+  propShadowScale: 1.35,
+  propShadowOpacity: 0.5,
   warningEmissive: 0.34,
   toneMapping: false,
   exposure: 1.15,

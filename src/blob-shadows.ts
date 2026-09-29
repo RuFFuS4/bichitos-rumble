@@ -42,7 +42,6 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from 'three';
-import { ARENA_LOOK } from './arena-look';
 
 /** Hoja numérica de la sombra de contacto. Hermana de ARENA_LOOK (que ya
  *  aporta `critterShadowScale` y `critterShadowOpacity`): aquí solo vive
@@ -72,12 +71,13 @@ export const BLOB_SHADOW = {
   /** Altura (u) a la que la sombra de un critter se ha desvanecido del
    *  todo: al saltar o caer se aleja de él y se apaga. */
   fadeHeight: 2,
-  /** Radio de la sombra de un prop respecto a la media geométrica de su
-   *  huella (√(ancho × fondo) / 2). 1 = la huella tal cual. */
-  propRadiusScale: 1.0,
-  /** Los props son estáticos y grandes: un poco menos densa que la del
-   *  critter para no ensuciar el suelo bajo un torii. */
-  propOpacityMul: 0.8,
+  /** Cuánto puede asomar la sombra de un prop más allá del labio del
+   *  disco (u): la cola del degradado casi no pinta, pero un disco entero
+   *  sobre el vacío sí se ve. La arena recorta el radio con esto. */
+  propEdgeOverhang: 0.3,
+  /** Slots del pool de props de la arena (el pack más cargado, coral_beach,
+   *  tiene 18). */
+  propCapacity: 32,
 } as const;
 
 const SLOT_NONE = -1;
@@ -182,14 +182,14 @@ function buildMaterial(): THREE.MeshBasicMaterial {
  *   con opacidad 0 si el critter está cayendo o eliminado. Lee ARENA_LOOK
  *   en vivo, así `setArenaLook` se aplica sin rebuild.
  *
- * Props estáticos (una vez, arena.ts, tras `host.attach(mesh)` y con la
- * bbox de MUNDO ya asentada por el auto-grounding de arena-decorations):
- *   const slot = shadows.add();
- *   shadows.setForBox(slot, new THREE.Box3().setFromObject(mesh));
- *   mesh.userData.shadowSlot = slot;
- * y `remove(mesh.userData.shadowSlot)` cuando su fragmento empieza a caer
- * (startFragmentFall) o el pack se desmonta (clearPack): si no se retira,
- * la sombra se queda pintada sobre el vacío donde estaba la tapa.
+ * Props estáticos (arena.ts, dioramas slice 2): la arena tiene su PROPIO
+ * pool —así no hace falta que Game se lo preste— y reserva un slot por
+ * prop al colgarlo de su fragmento, con la bbox de MUNDO ya asentada por
+ * el auto-grounding: radio √(ancho × fondo) / 2 × ARENA_LOOK.propShadowScale
+ * (recortado en el labio del disco) y opacidad ARENA_LOOK.propShadowOpacity,
+ * leídos en vivo. `remove` cuando su fragmento empieza a caer
+ * (startFragmentFall) o el pack se desmonta: si no se retira, la sombra
+ * se queda pintada sobre el vacío donde estaba la tapa.
  */
 export class BlobShadows {
   readonly mesh: THREE.InstancedMesh;
@@ -199,7 +199,6 @@ export class BlobShadows {
   private readonly used: Uint8Array;
   private readonly scratchMatrix = new THREE.Matrix4();
   private readonly scratchColor = new THREE.Color();
-  private readonly scratchVec = new THREE.Vector3();
   private warnedFull = false;
 
   constructor(capacity: number = BLOB_SHADOW.defaultCapacity) {
@@ -270,18 +269,6 @@ export class BlobShadows {
     this.scratchColor.setRGB(a, a, a);
     this.mesh.setColorAt(slot, this.scratchColor);
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
-  }
-
-  /** Sombra de un prop estático a partir de su bbox de MUNDO (medida tras
-   *  el auto-grounding, como hace arena-decorations). Radio = media
-   *  geométrica de la huella / 2 × propRadiusScale: una palma de copa
-   *  ancha y tronco fino queda con una sombra media, no con un plato. */
-  setForBox(slot: number, box: THREE.Box3, opacityMul: number = BLOB_SHADOW.propOpacityMul): void {
-    if (box.isEmpty()) return;
-    const size = box.getSize(this.scratchVec);
-    const radius = 0.5 * Math.sqrt(Math.max(0, size.x * size.z)) * BLOB_SHADOW.propRadiusScale;
-    const center = box.getCenter(this.scratchVec);
-    this.set(slot, center.x, center.z, radius, ARENA_LOOK.critterShadowOpacity * opacityMul);
   }
 
   /** Devuelve el slot al pool. Idempotente. */
