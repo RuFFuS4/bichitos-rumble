@@ -225,6 +225,7 @@ export const FEEL = {
   snowball: {
     tumbleX: 8,               // rad per second of flight, so it reads as a thrown snowball
     tumbleZ: 6,
+    voidMargin: 4,            // u past the live rim in its direction: offline the ball is gone. Mirror: the literal +4 of BrawlRoom's edge cut
   },
 
   // --- Cone Pulse (Cheeto L) waves. Mirror: SIM.conePulse, read by
