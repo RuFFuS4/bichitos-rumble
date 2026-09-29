@@ -689,6 +689,71 @@ bicho a su último empujón y a su autor.
   rebote propio es global y ayudaría sobre todo a Trunk, que ya gana:
   mejor no tocarlo.
 
+### Choque de cabezas y All-in del bot: decididos y medidos (2026-09-29)
+
+Rafa eligió las dos recomendadas: **«los dos salen despedidos»** y **«que
+el bot falle como una persona»**. Se midieron con las mismas 900 partidas
+de la base. La base se tomó en 4a908fa; 12 partidas repetidas sobre b91c3e1
+salen idénticas, así que vale para el `dev` de hoy.
+
+**Choque de cabezas.** Cuando los dos embisten a la vez, cada uno recibe el
+cabezazo del otro con su parte de masa y su vulnerabilidad. **Además se
+lleva su propio retroceso**, como cualquier cabezazo que conecta. Así, el
+orden de la lista ya no decide nada.
+- El retroceso no estaba en la pregunta. La primera versión lo quitaba y
+  se midieron las dos. Las cifras son de las 494 partidas sin Sebastian,
+  que aíslan el choque:
+
+  | Choque | Trunk, Δ eliminado [IC 95 %] | Victorias de Trunk | ¿Alguien más? |
+  |---|---|---|---|
+  | Sin retroceso | −10,9 [−18,2; −3,7] | 27 → 35 % | no |
+  | **Con retroceso** | +4,7 [−3,0; +12,3] | 27 → 25 % | no |
+
+  Sin retroceso, desaparecía el retroceso gigante de Trunk (168 × 0,35 =
+  58,8), que era su primera causa de caída. El que ya más gana ganaba más,
+  justo lo que Rafa descartó con «gana el más fuerte». Con retroceso nadie
+  se mueve más allá del ruido.
+- «El ligero vuela más» vale **a igual fuerza**. Trunk (1,2) contra
+  Kowalski (0,8): Kowalski sale a 124,3 y Trunk a 85,7.
+- **Efectos laterales:**
+  - Pain Tolerance cuesta un poco menos: un choque cuenta como golpe
+    recibido en los dos.
+  - Un cabezazo por detrás a quien también embiste cuenta como choque.
+
+**All-in del bot**, solo offline (los bots online no lo lanzan):
+- Al empezar la carga sortea la reacción (0,18-0,32 s) y el error de
+  puntería (±20°).
+- La puntería se desvía desde el principio, a 180°/s.
+- A los 0,45 s mira el pasillo al que *quería* apuntar:
+  - vacío, suelta la carga sin gastar cooldown;
+  - con alguien, se compromete y suelta sin volver a mirar.
+
+| | Base | Ahora |
+|---|---|---|
+| All-in que aciertan | 983 de 983 | 759 de 914 (**83 %**) |
+| Fallos (Sebastian cae) | 0 | 155, el 16,6 % de sus caídas |
+| Sergei eliminado, partidas con Sebastian | 74,9 % | 63,5 % (−11,4 [−20,3; −2,5]) |
+| Sebastian eliminado | 52,2 % | 59,4 % (+7,1 [+0,7; +13,6]) |
+
+**Las 900 juntas** (las dos cosas):
+
+| Bicho | Eliminado base → ahora | Victorias base → ahora |
+|---|---|---|
+| Shelly | 70,0 → 73,6 % | 1,6 → 2,9 % |
+| Sergei | 67,9 → 63,2 % | 5,2 → 6,0 % |
+| Sihans | 67,2 → 62,6 % | 10,0 → 7,8 % |
+| Cheeto | 60,7 → 60,4 % | 13,9 → 12,6 % |
+| Sebastian | 52,2 → 59,4 % | 11,8 → 10,1 % |
+| Kurama | 57,9 → 56,1 % | 11,7 → 11,5 % |
+| Kowalski | 55,6 → 51,4 % | 13,1 → 16,5 % |
+| Kermit | 47,5 → 50,1 % | 16,8 → 14,4 % |
+| Trunk | 32,5 → 32,5 % | 27,4 → 26,9 % |
+
+Solo el de Sebastian sale significativo en el total, y es el precio de
+fallar. **Qué queda:** Shelly sigue la última, y Sergei sube pero sigue
+abajo. Trunk sigue ganando de largo. Según el plan, hay pase para Shelly.
+Sergei y Trunk los decide Rafa.
+
 ## Preguntas a Rafa — respondidas el 2026-09-25
 
 1. **Steel Shell**: si a Shelly la lanzan y saca el escudo en pleno

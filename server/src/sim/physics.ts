@@ -194,7 +194,9 @@ export function resolveCollisions(
         // × each side's knockbackScale (Sergei's Frenzy), recoil included.
         const aVulnMul = (a.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1) * knockbackScale(a);
         const bVulnMul = (b.stunTimer > 0 ? SIM.collision.stunnedVulnerability : 1) * knockbackScale(b);
-        if (a.isHeadbutting) {
+        if (a.isHeadbutting && b.isHeadbutting) {
+          headbuttClash(a, b, nx, nz, ratioA * aVulnMul, ratioB * bVulnMul, aVulnMul, bVulnMul, internal);
+        } else if (a.isHeadbutting) {
           b.vx += nx * force * ratioB * bVulnMul;
           b.vz += nz * force * ratioB * bVulnMul;
           a.vx -= nx * force * SIM.headbutt.recoilFactor * aVulnMul;
@@ -236,6 +238,59 @@ export function resolveCollisions(
       }
     }
   }
+}
+
+/** Raw headbutt force of a critter, before the mass split. Mirror of the
+ *  client's headbuttForceOf (src/physics.ts). */
+function headbuttForceOf(critterName: string): number {
+  const cfg = getCritterConfig(critterName);
+  return cfg.headbuttForce * SIM.collision.headbuttMultiplier * (cfg.headbuttBoost ?? 1.0);
+}
+
+/**
+ * Two headbutts meeting — both players in their lunge (Rafa, 2026-09-29:
+ * «los dos salen despedidos»). Each takes the other's hit as its victim
+ * (`aTakes` / `bTakes`: its mass share × stun vulnerability ×
+ * knockbackScale) plus its own recoil, like any headbutt that connects
+ * (`aVuln` / `bVuln`: stun vulnerability × knockbackScale; without it the
+ * strongest won even more, see the client's comment). Each is the other's
+ * last attacker, and a Kurama in the clash copies whom it hit. It used to
+ * go to whoever came first in `players` (join order): only `a` hit.
+ * (nx, nz) points from a to b. Mirror of the client's headbuttClash
+ * (src/physics.ts).
+ */
+function headbuttClash(
+  a: PlayerSchema,
+  b: PlayerSchema,
+  nx: number,
+  nz: number,
+  aTakes: number,
+  bTakes: number,
+  aVuln: number,
+  bVuln: number,
+  internal: Map<string, InternalLike> | undefined,
+): void {
+  const forceA = headbuttForceOf(a.critterName);
+  const forceB = headbuttForceOf(b.critterName);
+  const toA = forceB * aTakes + forceA * SIM.headbutt.recoilFactor * aVuln;
+  const toB = forceA * bTakes + forceB * SIM.headbutt.recoilFactor * bVuln;
+  a.vx -= nx * toA;
+  a.vz -= nz * toA;
+  b.vx += nx * toB;
+  b.vz += nz * toB;
+  const now = Date.now();
+  const ai = internal?.get(a.sessionId);
+  if (ai) {
+    ai.lastAttackerSid = b.sessionId;
+    ai.lastAttackTimeMs = now;
+  }
+  const bi = internal?.get(b.sessionId);
+  if (bi) {
+    bi.lastAttackerSid = a.sessionId;
+    bi.lastAttackTimeMs = now;
+  }
+  if (a.critterName === 'Kurama') a.lastHitTargetCritter = b.critterName;
+  if (b.critterName === 'Kurama') b.lastHitTargetCritter = a.critterName;
 }
 
 /** `rusher`'s dash hitting `victim` along (dirX, dirZ), if the contact

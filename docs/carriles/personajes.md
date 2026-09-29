@@ -162,12 +162,17 @@ antes de commitear el JSON.
          de Shelly online. En producción desde v1.11-caida-sierra
          (2026-09-26). Cifras en `REPASO_HABILIDADES.md` §«Los tres
          cambios visuales».
-   - [ ] **Pase de balance de los golpes de dash** (`REPASO_HABILIDADES.md`
-         §«Medido»). Kowalski (eliminado 49 → 65 %) y Sergei (70 → 78 %)
-         pierden: les tiran más los dashes que ahora golpean, no su
-         propio deslizamiento. Medir con `scripts/fall-probe.mjs`, que
-         da la causa de cada caída en tiempo de simulación, y con más
-         partidas que la tanda, que tiene ±8 puntos de ruido.
+   - [x] **Pase de balance de los golpes de dash**, medido el 2026-09-29:
+         los golpes de dash no eran la causa (0,55 % de las caídas). Salió
+         otra cosa, y Rafa decidió las dos: el choque de cabezas despide a
+         los dos (con retroceso) y el bot de Sebastian falla el All-in
+         como una persona. Cifras en `REPASO_HABILIDADES.md` §«Pase de
+         balance de las embestidas: medido» y §«Choque de cabezas y All-in
+         del bot».
+   - [ ] **Pase de Shelly** (y quizá Sergei): tras los dos cambios, Shelly
+         sigue la última (74 % eliminada, 3 % de victorias). Sergei mejora
+         pero sigue abajo, y Trunk sigue arriba. Preguntar a Rafa qué se
+         toca antes de medir.
    - [x] Lo que faltaba en `BrawlRoom` (DISTRIBUCIÓN, S2-1 a S2-5): en
          producción desde v1.9-habilidades-online (2026-09-25), salvo el
          Sinkhole, que espera el getter de ARENA. Lo de tierra de nadie,
@@ -474,16 +479,26 @@ antes de commitear el JSON.
 
 ## Cómo retomar
 
-**2026-09-29** — modo paralelo (`docs/SESIONES.md`): worktree
+**2026-09-29 (noche)** — modo paralelo (`docs/SESIONES.md`): worktree
 `.claude/worktrees/personajes`, dev server 5181 y servidor local 2581.
-El encargo de la sesión general está al principio del §Buzón:
-- checklist limpia (hecho);
-- después, el pase de balance de los golpes de dash;
-- luego, un Run por Tripo.
+Hechos y en `dev`:
+- el encargo de la sesión general: la checklist, el pase de balance de
+  los golpes de dash (no eran la causa) y las dos notas de ARENA;
+- las dos decisiones de Rafa: choque de cabezas con retroceso y All-in del
+  bot humano.
 
-Esperan también dos notas de ARENA sobre ficheros míos: el corte offline
-de proyectiles y los bots que caen por los agujeros. Hoy `game.ts` es de
-ARENA y `BrawlRoom` de DISTRIBUCIÓN.
+DISTRIBUCIÓN tiene en su buzón dos cambios del servidor que esperan
+despliegue.
+
+Lo siguiente:
+- un Run propio por cada Tripo (punto 3 del encargo);
+- el evento de golpe online en `game.ts`, que INTERFAZ ha soltado (ver
+  §Buzón);
+- el pase de Shelly, preguntando antes a Rafa.
+
+Las 900 partidas del plan (`attrib-probe --specs`) sirven de base para el
+próximo pase. El plan y los shards están en el scratchpad de la sesión: si
+se pierden, se regeneran con `--plan-only --matches=100`.
 
 **2026-09-25** — en `dev` están el corte 2 del feeling (reacción al golpe,
 acentos de arranque y frenada) y las dos tandas del repaso de habilidades

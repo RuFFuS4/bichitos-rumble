@@ -3,7 +3,7 @@
 // Not the Grip: it brings him all the way (Rafa, 2026-09-25: «entero»).
 import { expect, it } from 'vitest';
 import type { PlayerSchema } from '../../server/src/state/PlayerSchema.js';
-import { resolveCollisions } from '../../server/src/sim/physics.js';
+import { effectiveMass, resolveCollisions } from '../../server/src/sim/physics.js';
 import { createAbilityStates, knockbackScale, tickPlayerAbilities } from '../../server/src/sim/abilities.js';
 
 function player(sessionId: string, critterName: string, x: number, extra: Partial<Record<string, unknown>> = {}): PlayerSchema {
@@ -37,6 +37,23 @@ it('Sergei frenzy recoil on the server', () => {
     return { sv: s.vx, tv: t.vx };
   };
   console.log('server Sergei recoil normal', hit(false), 'frenzy', hit(true));
+});
+
+it('headbutt clash with a frenzied Sergei: he takes ×0.4 of Trunk\'s hit and of his own recoil, Trunk both in full', () => {
+  const run = (sergeiFirst: boolean) => {
+    const t = player('t', 'Trunk', sergeiFirst ? 1.0 : 0, { isHeadbutting: true });
+    const s = player('s', 'Sergei', sergeiFirst ? 0 : 1.0, { isHeadbutting: true });
+    frenzy(s);
+    resolveCollisions(sergeiFirst ? [s, t] : [t, s]);
+    return { s: Math.abs(s.vx), t: Math.abs(t.vx), mS: effectiveMass(s), mT: effectiveMass(t) };
+  };
+  const r = run(false);
+  const sergeiForce = 14 * 3.5 * 1.4; // 68.6
+  expect(r.s).toBeCloseTo((168 * r.mT / (r.mT + r.mS) + sergeiForce * 0.35) * 0.4, 10);
+  expect(r.t).toBeCloseTo(sergeiForce * r.mS / (r.mT + r.mS) + 168 * 0.35, 10);
+  const o = run(true);
+  expect(o.s).toBeCloseTo(r.s, 10);
+  expect(o.t).toBeCloseTo(r.t, 10);
 });
 
 it('Grip on the server brings a frenzied Sergei all the way, like any target', () => {

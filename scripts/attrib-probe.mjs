@@ -310,6 +310,16 @@ async function install(cfg) {
         res.gap = p.gap;
         return res;
       }
+      case 'headbuttClash': {
+        // Both in their lunge: each takes the other's headbutt plus its own
+        // recoil, written as ONE pair, so it counts as the partner's
+        // headbutt (since 2026-09-29; before, resolveCollisions gave it to
+        // `a`). Same ab as a one-sided headbutt so --compare lines up with
+        // older runs; the clash shows as vs.hb === 'a' (analyze:
+        // mutualHeadbutts).
+        const p = partner(c);
+        return p.o ? { kind: 'headbutt', by: p.o, ab: 'headbutt', gap: p.gap } : { kind: 'other', ab: 'clash?' };
+      }
       case 'reflectOff':
       case 'hitAnchored': {
         const p = partner(c);

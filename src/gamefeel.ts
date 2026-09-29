@@ -137,12 +137,23 @@ export const FEEL = {
     // Mirror: SIM.bots.floorCastRadiusFrac.
     floorCastRadiusFrac: 0.6,
     // Sebastian's All-in: a miss falls into the void. The bot charges only
-    // with someone inside the real hit lane narrowed by this inset (u),
-    // holds for allInReactionSec like a player would, then re-checks the
-    // full lane: a hit resolves, an empty lane drops the charge without
-    // spending the cooldown.
+    // with someone inside the real hit lane narrowed by this inset (u).
     allInLaneInset: 0.4,
-    allInReactionSec: 0.5,
+    // …and misses like a person (Rafa, 2026-09-29). Its aim is off by up to
+    // ±allInAimErrorDeg (uniform; WASD aims in 45° steps, a stick within
+    // ~10°) and drifts there from the start of the charge, so the line shows
+    // where the dash will go. At allInLookSec it looks at the full lane it
+    // MEANT to aim at: empty, it drops the charge without spending the
+    // cooldown; someone there, it commits and lets go a reaction time later
+    // (uniform between Min and Max, s: a person's ~0.25 s) WITHOUT looking
+    // again. Look + reaction ≈ 0.7 s gives a target time to read the line
+    // and step out. It used to look and release in the same step: 0 misses
+    // in 971 All-in falls. Offline only: online bots don't cast the All-in
+    // (server/src/sim/bot.ts).
+    allInLookSec: 0.45,
+    allInReactionMinSec: 0.18,
+    allInReactionMaxSec: 0.32,
+    allInAimErrorDeg: 20,
   },
 
   // --- Headbutt ---
@@ -211,8 +222,9 @@ export const FEEL = {
     // 2026-09-25 (Rafa left it to PERSONAJES): at 360 a Sebastian charging
     // with his back turned flipped onto someone in 0.5 s, before they could
     // read the line (reaction ~0.25 s + ~0.5 s to leave the lane). Bots
-    // don't aim while charging, so it only changes human play. Online:
-    // BrawlRoom's hold-to-fire loop reads the mirror.
+    // don't aim while charging; their aim error (FEEL.bots.allInAimErrorDeg)
+    // drifts in at this rate. Online: BrawlRoom's hold-to-fire loop reads
+    // the mirror.
     aimTurnDegPerSec: 180,
   },
 

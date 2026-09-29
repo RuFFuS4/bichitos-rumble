@@ -458,6 +458,26 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-29 — el choque de cabezas cambia en el
+  servidor: el próximo despliegue lleva servidor.**
+  - `server/src/sim/physics.ts` (espejo mío), `headbuttClash`. Cuando dos
+    jugadores embisten a la vez, cada uno recibe el cabezazo del otro con
+    su parte de masa, más su propio retroceso. Antes ganaba el primero de
+    `players`, que en tu sala es el orden de entrada. Cada uno queda como
+    último atacante del otro, para el crédito del Slayer.
+  - No hay cambio de red ni de protocolo, y `BrawlRoom` no se toca. Sin
+    redesplegar Railway, online sigue ganando el que entró antes.
+  - Con partidas vivas, aviso de mantenimiento antes de subir (directiva
+    de Rafa del 26).
+  - Qué se nota online:
+    - los choques cara a cara despiden a los dos;
+    - un cabezazo por detrás a quien también embiste cuenta como choque.
+  - Va con la nota de arriba (los bots leen el aviso de colapso): las dos
+    esperan al mismo despliegue.
+  - Medido en 900 partidas offline: sin retroceso, Trunk ganaba aún más;
+    con él, nadie se mueve más allá del ruido. Está en
+    `docs/REPASO_HABILIDADES.md` §«Choque de cabezas y All-in del bot».
+
 - **De INTERFAZ, 2026-09-29 — tu nota del cierre limpio, hecha en el
   cliente; sin tocar `server/`.**
   - **«Desconectado» ya tiene salida táctil**, y también Reconectando, la

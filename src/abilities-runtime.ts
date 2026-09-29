@@ -1384,7 +1384,8 @@ export function updateAbilities(
  * Who the All-in would catch if it resolved now from the caster's facing,
  * and where along the dash line (`t`). Shared by the resolution and the
  * bot AI (src/bot.ts), so the bot reads the real hit geometry. `inset`
- * narrows the lane's reach; the resolution uses 0.
+ * narrows the lane's reach; the resolution uses 0. `ry` sweeps another
+ * aim than the facing (the bot looks where it meant to aim).
  *
  * The sweep samples the dash path and returns the FIRST hit, whose
  * distance the resolution uses to teleport Sebastian into the strike.
@@ -1400,9 +1401,9 @@ export function findAllInTarget(
   critter: Critter,
   allCritters: readonly Critter[],
   inset = 0,
+  ry = critter.mesh.rotation.y,
 ): { target: Critter; t: number } | null {
   const range = def.allInDashRange ?? 5.5;
-  const ry = critter.mesh.rotation.y;
   const dirX = Math.sin(ry);
   const dirZ = Math.cos(ry);
   const SAMPLES = 18;

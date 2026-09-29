@@ -1,5 +1,24 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-29] Un detalle que nadie decidió daba la vuelta al balance del choque
+- **Where**: `headbuttClash` en `src/physics.ts` y
+  `server/src/sim/physics.ts` (b2dbea6, sin integrar).
+- **Symptom**: Rafa eligió «cada uno recibe el cabezazo del otro,
+  repartido por masa». El diseño añadió «sin retroceso: el golpe ajeno ya
+  lo lanza hacia atrás». Medido, Trunk, que ya ganaba de largo, perdía
+  10,9 puntos de eliminación y pasaba del 27 al 35 % de victorias. Es justo
+  el resultado por el que Rafa había descartado «gana el más fuerte».
+- **Cause**: el retroceso de Trunk (168 × 0,35 = 58,8) era su primera
+  causa de caída, y la mitad de los cabezazos son choques. Quitarlo en el
+  choque le regalaba la mitad de su castigo. El detalle parecía de
+  presentación y era de balance.
+- **Fix**: con retroceso, como cualquier cabezazo que conecta (993cc7d).
+  Medidas las dos variantes con las mismas 900 partidas: con retroceso
+  nadie se mueve más allá del ruido.
+- **Lección**: lo que se añade a una opción aprobada, fuera de lo que dice
+  su texto, es una decisión más. Se mide como variante propia antes de
+  integrar, y el informe dice cuál se eligió y por qué.
+
 ### [2026-09-29] Un pase de balance encargado sobre una causa que no era
 - **Where**: `docs/REPASO_HABILIDADES.md` §«Medido (tanda de bots)» y
   `scripts/fall-probe.mjs`.

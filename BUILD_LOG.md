@@ -1,5 +1,47 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [PERSONAJES] El choque de cabezas ya no lo gana el primero de la lista, y el bot de Sebastian falla el All-in
+
+Las dos decisiones de Rafa sobre el pase de balance (las recomendadas).
+Medidas con las mismas 900 partidas de la base; detalle en
+`docs/REPASO_HABILIDADES.md` §«Choque de cabezas y All-in del bot».
+
+- **Choque de cabezas: «los dos salen despedidos»** (`src/physics.ts` y su
+  espejo `server/src/sim/physics.ts`).
+  - Cuando dos bichos embisten a la vez, cada uno recibe el cabezazo del
+    otro con su parte de masa y su vulnerabilidad, **más su propio
+    retroceso**, como cualquier cabezazo que conecta.
+  - Antes ganaba el primero de la lista: offline, siempre el jugador;
+    online, el que entró antes en la sala. Pasaba en la mitad de los
+    cabezazos que acertaban.
+  - **La primera versión quitaba el retroceso**, un detalle que no estaba
+    en la pregunta a Rafa, y se midió. Sin el retroceso gigante de Trunk,
+    el que ya más gana ganaba más: Trunk −10,9 puntos de eliminación
+    [−18,2; −3,7] y 27 → 35 % de victorias. Con retroceso, nadie se mueve
+    más allá del ruido. Se queda con retroceso.
+  - `tests/sim/physics-clash-parity.test.ts`: el cliente da lo mismo que
+    el servidor en cinco choques.
+  - **Cambia el servidor**: el choque online necesita desplegar Railway
+    (aviso en el buzón de DISTRIBUCIÓN).
+- **El bot de Sebastian falla el All-in como una persona** (`src/bot.ts`,
+  `FEEL.bots`, solo offline).
+  - Sortea la reacción (0,18-0,32 s) y el error de puntería (±20°), y la
+    línea se desvía desde el principio de la carga.
+  - A los 0,45 s mira el pasillo al que quería apuntar. Si está vacío,
+    suelta sin gastar cooldown; si no, se compromete y suelta sin volver a
+    mirar.
+  - Antes acertaba 983 de 983. Ahora acierta el 83 %, y sus 155 fallos son
+    el 16,6 % de las caídas de Sebastian (eliminado +7,1 puntos). Sergei,
+    cuya primera causa de caída era ese All-in, baja −11,4 puntos
+    [−20,3; −2,5] en las partidas con Sebastian.
+  - `findAllInTarget` acepta un `ry` opcional. `tests/sim/bot-allin.test.ts`
+    tiene 7 casos.
+- **Golden regenerado**: las tres partidas cambian en los primeros eventos.
+  `test:sim` 332/332, smoke 4/4, tsc limpio en cliente y servidor.
+- **Qué queda**: Shelly sigue la última (74 % eliminada, 3 % de
+  victorias), y Sergei mejora pero sigue abajo. Trunk sigue arriba. Según
+  el plan, hay pase para Shelly; Sergei y Trunk los decide Rafa.
+
 ## 2026-09-29 — [Arena] Fondo v2, F3: cada bioma tiene su luz, y la de antes sigue a un interruptor
 
 Encargo de GENERAL: la F3 del plan, entregada con A/B, porque Rafa lleva
@@ -43,6 +85,7 @@ pesaba: la compensación usaba la luma sRGB y three ilumina en lineal
 **Antes, en `dev`** (`b91c3e1`): el cielo ya se mueve desde la cuenta
 atrás offline, con una línea en `game.ts` (permiso de GENERAL, ya
 soltado).
+
 
 ## 2026-09-29 — [Arena] Fondo v2, F2: el cielo se mueve y la victoria tiene horizonte
 
