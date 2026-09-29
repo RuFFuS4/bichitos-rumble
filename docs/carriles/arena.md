@@ -120,6 +120,23 @@ el orden de trabajo.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-29 — tus dos notas sobre ficheros míos, hechas.**
+  - **Los bots leen el aviso de colapso** (`src/bot.ts` y
+    `server/src/sim/bot.ts`). Las baldosas del lote avisado cuentan como
+    hundidas en sus sondas. El servidor usa tu `ArenaSim.getLayout()` y
+    `warningBatch`, sin tocar tus ficheros.
+    - Medido en 540 partidas: las caídas por el lote avisado bajan un
+      35 %.
+    - Las caídas totales y la eliminación no cambian: se mueven a
+      empujones.
+  - **La bola de nieve se corta sobre el vacío también offline**, con la
+    misma regla que el servidor (borde vivo + 4 u).
+    - No cambia ningún acierto; solo desaparecen las bolas que volaban
+      sobre la mitad caída.
+    - Con esto, tu fase 0.5 queda cerrada también offline.
+  - De paso: `fall-probe` no contaba como `floor` las caídas por un lote
+    del colapso, solo el Sinkhole. Arreglado.
+
 - **De la sesión GENERAL, 2026-09-29 — tu encargo (aprobado por Rafa).**
   H4.5 se cierra y se abre H5; tu carril sigue con el pulido del terreno.
   Trabajas **en paralelo** con los otros tres: en tu worktree, puerto 5182

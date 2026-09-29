@@ -396,6 +396,25 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De PERSONAJES, 2026-09-29 — el bot del servidor lee el aviso de
+  colapso: el próximo despliegue lleva servidor.**
+  - `server/src/sim/bot.ts` (espejo mío) trata como hundidas las baldosas
+    del lote avisado. Lee `this.arenaSim.warningBatch` y `getLayout()`, que
+    tu `BrawlRoom` ya le pasa.
+    - No hay cambio de red ni de protocolo.
+    - Sin redesplegar Railway, los bots online siguen cayendo con la
+      baldosa que tiembla.
+  - Offline la bola de nieve se corta ya a borde vivo + 4 u, como tu
+    `BrawlRoom` (~1241). El 4 vive en el cliente como
+    `FEEL.snowball.voidMargin`.
+    - Si quieres, llévate el literal de `BrawlRoom` a
+      `SIM.snowball.voidMargin` y pido la fila de paridad.
+    - Lo mismo con el alcance fijo de 0,55 (~1203).
+  - Aviso de lo que viene, sin tocar nada tuyo: el choque de cabezas lo
+    gana siempre el que va antes en la lista. En la sala eso es el orden
+    de entrada. Está en `server/src/sim/physics.ts` (espejo mío). Si Rafa
+    decide cambiarlo, irá en otro despliegue con servidor.
+
 - **De INTERFAZ, 2026-09-29 — tus tres detalles del HUD de las sondas de
   v1.11, hechos; y un caso límite del servidor para ti.**
   - **El final online con «VIVOS: 2» era del cliente, no del servidor.**

@@ -1,5 +1,33 @@
 # Error Log — Bichitos Rumble
 
+### [2026-09-29] Un pase de balance encargado sobre una causa que no era
+- **Where**: `docs/REPASO_HABILIDADES.md` §«Medido (tanda de bots)» y
+  `scripts/fall-probe.mjs`.
+- **Symptom**: el 25 se concluyó que Kowalski (49 → 65 % eliminado) y
+  Sergei (70 → 78 %) perdían por los golpes de dash nuevos, y se encargó un
+  pase de balance de esos golpes. Medido el 29 a escala, los golpes de dash
+  causan el 0,55 % de las caídas, y quitarlos no mueve a nadie. Kowalski
+  está a media tabla, y su «65 %» era la cifra como jugador.
+- **Cause**: tres cosas.
+  - Se comparó la tanda entera antes y después, con 40-80 apariciones por
+    bicho (±8 puntos), mientras cambiaban diez cosas a la vez.
+  - La sonda llamaba `contact` a cualquier caída con un rival a menos de
+    1,3 u: cabezazo, rebote propio y All-in caían en el mismo saco, y se
+    leyó como «golpes de dash».
+  - `fall-probe` nunca clasificaba bien un lote del colapso: miraba la
+    muestra del paso anterior, que ya estaba sobre la baldosa muerta.
+- **Fix**:
+  - `scripts/attrib-probe.mjs` atribuye cada caída al empujón y al
+    autor.
+  - Antes de tocar un número, un «qué pasaría si» emparejado con las
+    mismas partidas: `--kit` / `--feel` y `attrib-analyze --compare`.
+  - `fall-probe` busca el último sitio en suelo vivo.
+- **Lección**: una causa se demuestra con un contrafactual (quitarla y
+  ver que el efecto desaparece), no con una correlación antes/después.
+  Tampoco se agrupan causas distintas bajo un nombre que sugiere una
+  sola. Y se mide con muestras que den intervalos más estrechos que el
+  efecto buscado: ~400 apariciones dan ±5 puntos.
+
 ### [2026-09-25] El paso fijo nunca se enganchaba en Safari ni en iOS
 - **Where**: `src/fixed-step.ts` `FixedStepClock.advance`. Lo encontró la
   revisión previa al despliegue de DISTRIBUCIÓN.

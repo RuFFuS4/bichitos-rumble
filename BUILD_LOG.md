@@ -1,5 +1,64 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [PERSONAJES] Los bots leen el aviso de colapso, la bola offline se corta sobre el vacío, y los golpes de embestida no eran el problema
+
+Las dos notas de ARENA que eran de ficheros de PERSONAJES, y la medida
+grande que pedía el pase de balance de los golpes de embestida.
+
+- **Los bots leen el aviso de colapso** (`src/bot.ts` y su espejo
+  `server/src/sim/bot.ts`).
+  - Antes, todas sus sondas leían solo las baldosas vivas: perseguían
+    sobre una baldosa que temblaba y caían con ella. Era el 6,7 % de todas
+    las caídas, repartido por igual entre los bichos.
+  - Ahora `floorAfterWarning` trata como hundidas las baldosas del lote
+    avisado en cuatro sondas: la sonda de vacío, la franja de peligro, la
+    del dash y el aterrizaje del Sand Trap. El reflejo del escudo de
+    Shelly sigue mirando el borde real.
+  - El servidor lee `ArenaSim.warningBatch` y `getLayout()` (5200de2).
+  - Medido en 540 partidas antes de programarlo (un «qué pasaría si» en
+    la página, con las mismas semillas):
+    - caídas por el lote avisado: 330 → 214 (−35 %);
+    - caídas totales iguales (4.921), porque se mueven a empujones;
+    - la eliminación de cada bicho, dentro del ruido (±3 puntos).
+
+    Las 90 partidas de una muestra salen idénticas con el código real.
+  - Cambia la simulación: golden regenerado (las partidas 501 y 503
+    divergen en el primer colapso).
+- **La bola de nieve se corta sobre el vacío también offline**
+  (`src/projectiles.ts`, `src/abilities-runtime.ts`,
+  `FEEL.snowball.voidMargin`). Es la regla del servidor: más de 4 u
+  pasado el borde vivo en su dirección, la bola desaparece sin anillo.
+  - Antes, offline cruzaba la mitad caída de la arena.
+  - En 956 bolas, ningún acierto cambia: solo desaparecen fallos (el
+    35 %) que volaban sobre el vacío.
+- **`fall-probe` ya clasifica las caídas por colapso** como `floor`.
+  - Miraba la muestra del paso anterior, que ya estaba sobre la baldosa
+    muerta, así que un lote que caía nunca contaba.
+  - Su «suelo» era solo el Sinkhole, y las caídas por colapso se
+    mezclaban en `contact` y `alone`.
+- **El pase de balance de los golpes de embestida, medido a escala.** Se
+  midieron 900 partidas con una sonda que atribuye cada caída a su empujón
+  y a su autor, con unas 400 apariciones por bicho (la tanda de antes
+  tenía 40-80).
+  - Los golpes de embestida causan el 0,55 % de las caídas. Con los cuatro
+    a 0, nadie se mueve más de 2 puntos (Kowalski −0,5 ± 5,5; Sergei
+    −0,5 ± 5,9). No eran el problema; se quedan como están.
+  - Kowalski está a media tabla (54 %). El «65 %» era su cifra como
+    jugador, en la que la partida acaba cuando cae él. Abajo están Shelly
+    (72 %) y Sergei (71 %); arriba, Trunk (34 %).
+  - Lo que tira de verdad:
+    - los cabezazos, 22-43 % de las caídas;
+    - el rebote del propio cabezazo, 10-26 %;
+    - el All-in del bot de Sebastian, el 12 % de todas las caídas: el
+      bot solo suelta con alguien en la línea y no falla nunca;
+    - el suelo, 7-17 %.
+  - Un fallo de física en los dos lados: cuando dos bichos se cabecean a
+    la vez (la mitad de los cabezazos que aciertan), gana siempre el que va
+    antes en la lista. Offline es el jugador; online, el que entró antes.
+  - Qué hacer con esto lo decide Rafa (en `docs/REPASO_HABILIDADES.md`
+    §«Pase de balance de las embestidas: medido»). Las sondas y los datos
+    están en el scratchpad de la sesión.
+
 ## 2026-09-29 — [Arena] Fondo v2, F1: tapando el disco se sabe el bioma
 
 Encargo de GENERAL, con el criterio de Rafa: tapando el disco con la mano
