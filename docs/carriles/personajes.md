@@ -77,8 +77,11 @@ antes de commitear el JSON.
          permiso.
    - [x] **Run más vivos** (decisión 7), hechos el 2026-09-23
          (`FEELING.md §7.9`): Cheeto 3,49, Kermit 3,51, Shelly 2,00 y
-         Trunk 2,36 ciclos/s, con el pie apoyado y el bucle cerrado. Queda
-         preguntar a Rafa por la inclinación de 36° del sprint genérico.
+         Trunk 2,36 ciclos/s, con el pie apoyado y el bucle cerrado.
+   - [x] **Un Run propio por Tripo** (2026-09-29, `FEELING.md §7.12`),
+         elegido y visto por Rafa: Kermit a saltitos, Trunk a pisotones,
+         Shelly con contoneo y Cheeto en sprint felino. Adiós al sprint
+         genérico inclinado 36°.
    - [x] Sebastian patinaba (pie 1,33): no hacía falta IK. Pedía 8
          ciclos/s y el techo era 6; con el techo en 8 escabulle con el pie
          apoyado, y Kurama también (`FEELING.md §7.9`, 2026-09-24).
@@ -510,15 +513,18 @@ Hechos y en `dev`:
 - el encargo de la sesión general: la checklist, el pase de balance de
   los golpes de dash (no eran la causa) y las dos notas de ARENA;
 - las dos decisiones de Rafa: choque de cabezas con retroceso y All-in del
-  bot humano.
+  bot humano;
+- un Run propio por cada Tripo (punto 3 del encargo, `FEELING.md §7.12`).
+  Las recetas se prueban con Blender headless, que es el de Steam:
+  `R:\[APPS-STEAM]\steamapps\common\Blender\blender.exe`, en `BLENDER`.
 
 DISTRIBUCIÓN tiene en su buzón dos cambios del servidor que esperan
 despliegue.
 
 Lo siguiente:
-- un Run propio por cada Tripo (punto 3 del encargo);
-- el evento de golpe online en `game.ts`, que INTERFAZ ha soltado (ver
-  §Buzón);
+- el evento de golpe online en `game.ts`, ya libre (DISTRIBUCIÓN lo soltó
+  en 887daca). El lado del servidor es de DISTRIBUCIÓN: el contrato va a
+  su buzón;
 - el pase de Shelly, preguntando antes a Rafa.
 
 Las 900 partidas del plan (`attrib-probe --specs`) sirven de base para el

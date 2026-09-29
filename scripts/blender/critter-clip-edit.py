@@ -20,14 +20,27 @@
 #         "fromClip": "Idle",         todos los fotogramas; va antes del IK, que
 #         "frame": 0 }                recoloca las piernas desde ahí
 #     ],
+#     "blend": [                     acerca huesos a la pose de otro clip: cada
+#       { "bones": ["L_Upperarm"],    fotograma queda en slerp(pose de fromClip,
+#         "fromClip": "Idle",         pose del clip, keep); keep 0 = la de
+#         "frame": 0,                 fromClip, 1 = sin tocar (calma los brazos
+#         "keep": 0.3 }               del sprint en quien no esprinta)
+#     ],
 #     "ik": {                         reescribe la trayectoria de los pies
 #       "d": 0.3,                     fracción del ciclo con el pie apoyado
 #       "L": 0.11,                    zancada (unidades de modelo)
 #       "H": 0.035,                   altura del paso
 #       "D": 0.035,                   agachado constante de la raíz
-#       "A": 0.008,                   rebote de la raíz (dos por ciclo)
+#       "A": 0.008,                   rebote de la raíz
+#       "bounces": 2,                 rebotes por ciclo (2: uno por pisada;
+#                                     1: el salto de los dos pies a la vez)
 #       "phaseL": 0.14,               fase de mitad de apoyo del pie izquierdo
+#       "phaseR": 0.64,               la del derecho (si falta: phaseL + 0,5;
+#                                     igual a phaseL = los dos pies a la vez)
 #       "x0": 0.02,                   centro del apoyo (si falta: el del clip)
+#       "swingPeak": 0.5,             dónde cae el punto más alto del paso en el
+#                                     vuelo (0,5 = arco simétrico; 0,7 = sube
+#                                     despacio y baja de golpe: el pisotón)
 #       "footFlat": true,             pie plano mientras apoya
 #       "swingFlat": 0.7,             y cuánto plano en el vuelo (0 = el giro
 #                                     del clip, que en Kowalski baja la punta
@@ -145,6 +158,25 @@ def edit_hold(holds):
         print(f'[hold] {bone.name} fijo a {h["fromClip"]}@{h.get("frame", 0)} (hijos en su sitio: {", ".join(kids)})')
 
 
+def edit_blend(blends):
+    for bl in blends:
+        src = bpy.data.actions[bl['fromClip']]
+        ad.action, ad.action_slot = src, src.slots[0]
+        scene.frame_set(int(bl.get('frame', 0)))
+        target = {b: pb[b].rotation_quaternion.copy() for b in bl['bones']}
+        ad.action, ad.action_slot = act, slot
+        keep = float(bl['keep'])
+        per_bone = {b: [] for b in bl['bones']}
+        for f in FRAMES:
+            scene.frame_set(f)
+            for b in bl['bones']:
+                q, t = pb[b].rotation_quaternion.copy(), target[b]
+                per_bone[b].append((t if t.dot(q) >= 0 else -t).slerp(q, keep))
+        for b, quats in per_bone.items():
+            write_quat_keys(b, quats)
+        print(f'[blend] {len(bl["bones"])} huesos a {keep:.2f} del clip (resto: {bl["fromClip"]}@{bl.get("frame", 0)})')
+
+
 def report_jumps(bones, warn_deg=25.0, limit_deg=90.0):
     """Mayor giro entre fotogramas seguidos de cada hueso horneado. Más de
     90° es una rodilla que se da la vuelta (tirón del pie): para la receta.
@@ -201,10 +233,13 @@ def sample_ground(ref):
 def edit_ik(p, orig, ground):
     d, L, H = float(p.get('d', 0.3)), float(p.get('L', 0.12)), float(p.get('H', 0.05))
     D, A = float(p.get('D', 0.03)), float(p.get('A', 0.012))
+    bounces = int(p.get('bounces', 2))
     phaseL = float(p.get('phaseL', 0.66))
+    phaseR = float(p.get('phaseR', phaseL + 0.5))
     foot_flat = bool(p.get('footFlat', True))
     swing_flat = float(p.get('swingFlat', 0.0))
-    sides = {'L': phaseL % 1.0, 'R': (phaseL + 0.5) % 1.0}
+    peak = float(p.get('swingPeak', 0.5))
+    sides = {'L': phaseL % 1.0, 'R': phaseR % 1.0}
     # 1) Suelo, anchura de la pisada y pie plano: los del bicho quieto
     #    (`groundFrom`) o, sin él, el fotograma más bajo del propio clip.
     info = {}
@@ -217,12 +252,13 @@ def edit_ik(p, orig, ground):
         else:
             imin = min(range(len(zs)), key=lambda i: zs[i])
             info[s] = {'zg': zs[imin], 'x0': x0, 'y': sum(o['ankle'].y for o in orig[s]) / len(zs), 'flat': orig[s][imin]['footRot']}
-    # 2) Raíz: agachado + rebote, con el mínimo en mitad de cada apoyo.
+    # 2) Raíz: agachado + rebote, con el mínimo en mitad de cada apoyo
+    #    (`bounces` por ciclo: 2 al correr, 1 al saltar con los dos pies).
     root = pb['Root']
     to_local = root.bone.matrix_local.to_3x3().inverted()
     loc0 = root.location.copy()
     for i, f in enumerate(FRAMES):
-        dz = -D - A * math.cos(4 * math.pi * (i / N - sides['L']))
+        dz = -D - A * math.cos(2 * bounces * math.pi * (i / N - sides['L']))
         root.location = loc0 + to_local @ Vector((0, 0, dz))
         root.keyframe_insert('location', frame=f)
     WRITTEN.add('Root')
@@ -235,7 +271,8 @@ def edit_ik(p, orig, ground):
             return Vector((I['x0'] - L * psi / d, I['y'], I['zg'])), 1.0
         u = (psi - d / 2) % 1.0 / (1 - d)                 # 0 despegue → 1 aterrizaje
         x = I['x0'] - L / 2 + L * (0.5 - 0.5 * math.cos(math.pi * u))
-        z = I['zg'] + H * math.sin(math.pi * u)
+        w = 0.5 * u / peak if u < peak else 0.5 + 0.5 * (u - peak) / (1 - peak)
+        z = I['zg'] + H * math.sin(math.pi * w)
         return Vector((x, I['y'], z)), 1.0 - smoothstep(0.0, 0.3, u) * (1.0 - smoothstep(0.7, 1.0, u))
 
     # 4) IK analítico de dos huesos: la rodilla siempre hacia `pole` (adelante
@@ -379,6 +416,8 @@ legs = sample_legs() if 'ik' in P else None
 ground = sample_ground(P['ik']['groundFrom']) if 'ik' in P and 'groundFrom' in P['ik'] else None
 if 'hold' in P:
     edit_hold(P['hold'])
+if 'blend' in P:
+    edit_blend(P['blend'])
 if 'ik' in P:
     edit_ik(P['ik'], legs, ground)
 if 'torso' in P:

@@ -68,7 +68,7 @@
   "clips": [
     {
       "clip": "Run",
-      "why": "Rafa, 2026-09-23 (decisión 7): Shelly, la lenta del plantel, pasa de 1,0 a ~2 ciclos/s y sigue siendo la más pausada (identidad). L = 0,176 con el sprint genérico de Tripo. Pelvis como en el Idle, pisada bajo la cadera, suelo y pie del Idle, fase del pie izquierdo la del clip y el bucle cerrado (brazo derecho a 19,5°).",
+      "why": "Rafa, 2026-09-29: «contoneo». La tortuga deja el sprint genérico de Tripo (tronco a 36°, brazos bombeando) y anda erguida (tronco a 5°, columna a 0,4 y brazos a 0,3 del Idle), a pasos cortos y bajos (H 0,025) con los pies más tiempo apoyados (d = 0,38). El balanceo de lado a lado lo pone el juego (PERSONALITY_OVERRIDES.Shelly). Sus patas no llegan a más zancada: con d 0,45 se estiraban de más, por eso d/L sube y va a ~2,2 ciclos/s, aún la más pausada (decisión 7). Pelvis, suelo y pie del Idle, y el bucle cerrado.",
       "blender": {
         "hold": [
           {
@@ -77,11 +77,49 @@
             "frame": 0
           }
         ],
+        "blend": [
+          {
+            "bones": [
+              "L_Clavicle",
+              "L_Upperarm",
+              "L_UpperarmTwist01",
+              "L_UpperarmTwist02",
+              "L_Forearm",
+              "L_ForearmTwist01",
+              "L_ForearmTwist02",
+              "L_Hand",
+              "R_Clavicle",
+              "R_Upperarm",
+              "R_UpperarmTwist01",
+              "R_UpperarmTwist02",
+              "R_Forearm",
+              "R_ForearmTwist01",
+              "R_ForearmTwist02",
+              "R_Hand"
+            ],
+            "fromClip": "Idle",
+            "frame": 0,
+            "keep": 0.3
+          },
+          {
+            "bones": [
+              "Waist",
+              "Spine01",
+              "Spine02",
+              "NeckTwist01",
+              "NeckTwist02",
+              "Head"
+            ],
+            "fromClip": "Idle",
+            "frame": 0,
+            "keep": 0.4
+          }
+        ],
         "ik": {
-          "d": 0.3,
-          "L": 0.176,
-          "H": 0.04,
-          "D": 0.04,
+          "d": 0.38,
+          "L": 0.2,
+          "H": 0.025,
+          "D": 0.07,
           "A": 0.012,
           "phaseL": 0.54,
           "x0": 0.065,
@@ -92,6 +130,12 @@
             "frame": 0
           }
         },
+        "torso": {
+          "bone": "Waist",
+          "base": "Waist",
+          "tip": "Head",
+          "pitchDeg": 5
+        },
         "loop": {
           "minDeg": 1
         }
@@ -99,5 +143,5 @@
       "nodes": "all"
     }
   ],
-  "output": "d7429e49"
+  "output": "767fd671"
 }

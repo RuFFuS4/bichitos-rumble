@@ -188,7 +188,9 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
 - **Editar clips de un bicho sin abrir Blender** (2026-09-23):
   `node scripts/critter-recipe.mjs <id> [--out=x.glb [--set=Run.ik.L=0.12]]`
   rehace las ediciones de `scripts/critter-recipes/<id>.json` (Blender
-  headless: pelvis fija, IK de pies, tronco enderezado) sobre el GLB
+  headless: pelvis fija, IK de pies, tronco enderezado; desde el
+  2026-09-29 también saltos a dos pies, pisotón y brazos o columna hacia la
+  pose del Idle) sobre el GLB
   fijado en la receta. Sin `--out` escribe el GLB del juego, `RUN_GAIT` y
   la versión de la URL; `--set` solo va con `--out`. `node scripts/stamp-critter-glbs.mjs [--check]`
   pone `?v=<hash>` a cada GLB en `roster.ts` para que la caché nunca

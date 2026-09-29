@@ -29,4 +29,21 @@ export const PERSONALITY_OVERRIDES: Record<string, Partial<AnimationPersonality>
   // run lean drops from the formula's 12° to ~5°, and the side-to-side roll
   // over the planted foot grows from ~3.5° to ~9°: the waddle.
   Kowalski: { leanRadians: 0.09, runSwayRadians: 0.16 },
+  // 2026-09-29 — Rafa: each Tripo runs its own way (scripts/critter-recipes/).
+  // Kermit hops with both feet at once: rolling over "the planted foot"
+  // would lean him to one side on every landing, so no sway.
+  Kermit: {
+    runSwayRadians: 0,
+  },
+  // Shelly waddles: upright clip, so the formula's ~7° run lean drops to ~3°,
+  // and the roll over the planted foot grows from ~2° to ~9°, like Kowalski.
+  Shelly: {
+    leanRadians: 0.05,
+    runSwayRadians: 0.16,
+  },
+  // Trunk stomps upright: at speed 16 the formula leans him 12°, which
+  // folds the upright clip back into the old sprint. ~3.5°.
+  Trunk: {
+    leanRadians: 0.06,
+  },
 };

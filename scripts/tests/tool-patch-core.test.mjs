@@ -596,12 +596,15 @@ test('anim-personality: mutator refuses instead of guessing', () => {
 test('anim-personality: merge against the REAL animation-personality-overrides.ts round-trips', () => {
   // Whatever EOL the working tree uses (autocrlf) — don't normalize.
   const real = readFileSync(path.join(here, '../../src/animation-personality-overrides.ts'), 'utf8');
-  const patch = { tool: 'anim-personality', version: 1, data: { Sergei: { idleBobHz: 1.15, chargeStretchMult: 1.3 }, Shelly: { runBounceAmp: 0.05 } } };
+  // Sergei and Sihans have no entry in the real table (Shelly did not
+  // either, until her Run got its own override on 2026-09-29): both land
+  // as new entries.
+  const patch = { tool: 'anim-personality', version: 1, data: { Sergei: { idleBobHz: 1.15, chargeStretchMult: 1.3 }, Sihans: { runBounceAmp: 0.05 } } };
   assert.deepEqual(validateToolPatch(patch), []);
   const once = applyPatch(real, patch);
   const lf = once.replace(/\r\n/g, '\n');
   assert.match(lf, /Sergei: \{\n    idleBobHz: 1\.15,\n    chargeStretchMult: 1\.3,\n  \},/);
-  assert.match(lf, /Shelly: \{\n    runBounceAmp: 0\.05,\n  \},/);
+  assert.match(lf, /Sihans: \{\n    runBounceAmp: 0\.05,\n  \},/);
   // The file's doc header (the never-delete contract prose) survives.
   assert.ok(once.includes('This file is a ToolPatch TARGET'));
   // applyPatch dispatch === direct mutator call.

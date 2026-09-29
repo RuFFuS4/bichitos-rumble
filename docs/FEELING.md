@@ -635,3 +635,52 @@ muestras.
 Vídeos: `.tmp/graficos/_informe/entrega/arranque-frenada.mp4` y
 `arranque-frenada-lento.mp4` (×4), antes y después de Kowalski, Sergei
 y Cheeto.
+
+### 7.12 Un Run propio por Tripo (2026-09-29, rama `claude/feature/personajes-run-por-tripo`)
+
+Rafa, 2026-09-24: «no deben correr todos igual». Cheeto, Kermit, Shelly y
+Trunk compartían el mismo clip de Tripo, un sprint humano con el tronco a
+36° y los brazos bombeando; §7.9 solo les cambió el ritmo. El 29 eligió un
+andar para cada uno (las cuatro recomendadas) y dio el visto bueno a los
+vídeos:
+
+| Bicho | Andar | Cómo (receta) | Capa del juego |
+|---|---|---|---|
+| Kermit | a saltitos | los dos pies a la vez (`phaseR = phaseL`), un rebote por ciclo, agachado y 0,12 de salto; brazos y columna casi en el Idle; tronco 18° | sin balanceo lateral |
+| Trunk | pisotón | erguido (8°), pie que sube despacio y baja de golpe (`swingPeak` 0,7), cuerpo que se hunde en cada pisada; brazos y columna a 0,4 del Idle | inclinación 12° → 3,5° |
+| Shelly | contoneo | erguida (5°), pasos cortos y bajos, pies más tiempo apoyados (d 0,38); brazos y columna calmados | balanceo ~9° (como Kowalski), inclinación ~3° |
+| Cheeto | sprint felino | bajo (D 0,10) e inclinado a 50°, más tiempo en el aire que apoyado (d 0,25), patas altas | — |
+
+Las opciones nuevas del script (`blend`, `phaseR`, `bounces`,
+`swingPeak`) están en `ASSET_PIPELINE.md` §«Recetas post-import». Por
+defecto no cambian nada: Trunk y Kowalski con su receta vieja salen byte a
+byte iguales.
+
+**En partida** (`critter-motion`, antes → después):
+
+| Bicho | Ciclos/s | Pie | Inclinación | Balanceo | Pie al arrancar | Pie al frenar |
+|---|---|---|---|---|---|---|
+| Kermit | 3,51 → 3,56 | 1,00 | 12° | 4,3° → 0° | 101 → 50 cm | 8,6 → 7,8 cm |
+| Trunk | 2,36 → 2,39 | 1,00 | 12° → 3,4° | 2,9° | 116 → 49 cm | 11,1 → 6,8 cm |
+| Shelly | 2,00 → 2,23 | 1,00 | 6,9° → 2,9° | 2,2° → 8,4° | 47 → 41 cm | 3,3 → 28,9 cm |
+| Cheeto | 3,49 → 3,17 | 1,00 | 12° | 4° | 82 → 102 cm | 6,2 → 8,8 cm |
+
+- El ritmo sale de `d / L` y se mantuvo cerca de la decisión 7. Shelly
+  sube un poco porque sus patas no llegan a más zancada: con d 0,45 se
+  estiraban de más. Sigue siendo la más pausada.
+- **Shelly al frenar: 29 cm de pie.** No es el balanceo (sin él da lo
+  mismo). Es el suavizado de 60 ms de §7.8 (la velocidad del clip va por
+  detrás al frenar): antes frenaba con los pies en el aire y ahora, con el
+  apoyo más largo, con uno en el suelo. Con la cámara del juego no se ve,
+  porque los pies quedan bajo el caparazón. Si se afina, es cosa del corte
+  2 (§7.11).
+- Golden 3/3 sin regenerar: solo cambia la presentación.
+
+Cómo se trabajó: cada variante se aplica con `--out` y `--set`, y se
+renderiza el clip en Blender headless (Workbench, de lado y de frente)
+con una traza de la altura de cada tobillo y de la raíz por fotograma.
+Sin navegador, así que no compite por la GPU con los otros carriles.
+
+Vídeos: `.tmp/runs-tripo/runs-antes-despues.mp4` (el clip de lado, a su
+ritmo de partida) y `runs-en-partida.mp4` (cámara del juego), en la
+carpeta principal del repo.

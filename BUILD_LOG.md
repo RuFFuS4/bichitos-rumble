@@ -1,5 +1,39 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [PERSONAJES] Cada Tripo corre a su manera: Kermit a saltitos, Trunk a pisotones, Shelly con contoneo y Cheeto como un felino
+
+Rafa: «no deben correr todos igual». Los cuatro Tripo usaban el mismo
+sprint humano, con el tronco a 36° y los brazos bombeando. Rafa eligió un
+andar para cada uno y dio el visto bueno a los vídeos. Detalle y cifras
+en `docs/FEELING.md` §7.12.
+
+- **Kermit, a saltitos:** los dos pies a la vez, un rebote por ciclo, 0,12
+  de salto; brazos y columna calmados, tronco a 18°. Sin balanceo lateral.
+- **Trunk, a pisotones:** erguido; el pie sube despacio y cae de golpe, y
+  el cuerpo se hunde en cada pisada. La inclinación en partida baja de 12°
+  a 3,5°.
+- **Shelly, con contoneo:** erguida, pasos cortos y bajos, y el balanceo
+  lateral de ~9° que ya llevaba Kowalski.
+- **Cheeto, sprint felino:** bajo, inclinado a 50°, más tiempo en el aire
+  que apoyado.
+- **Herramienta:** `critter-clip-edit.py` gana `blend` (acerca huesos a la
+  pose de otro clip) y, en el IK, `phaseR`, `bounces` y `swingPeak`. Por
+  defecto no cambian nada: las recetas de Trunk y Kowalski sin tocar salen
+  byte a byte iguales. Está en `ASSET_PIPELINE.md`.
+- **Medido en partida:**
+  - pie apoyado a 1,00 en los cuatro;
+  - ritmo cerca de la decisión 7: Kermit 3,56, Trunk 2,39, Shelly 2,23
+    (sus patas no dan más zancada) y Cheeto 3,17;
+  - el pie al arrancar pasa de 101 a 50 cm en Kermit y de 116 a 49 cm en
+    Trunk;
+  - Shelly resbala 29 cm al frenar, por el suavizado de 60 ms que ya
+    estaba (§7.8). Con la cámara del juego no se ve.
+- **Golden 3/3 sin regenerar:** solo cambia la presentación. `check`
+  entero en verde.
+  - Se ajustó el test de `anim-personality` contra el fichero real: daba
+    por hecho que Shelly no tenía entrada.
+- **Vídeos:** `.tmp/runs-tripo/` en la carpeta principal.
+
 ## 2026-09-29 — [DISTRIBUCIÓN] H5: la F0 de CrazyGames, completa y en el CI
 
 - INTERFAZ integró su parte (2a2bc82), y `main.ts` la conecta:
@@ -167,6 +201,7 @@ Prueba de que con R = 12 no cambia nada:
 
 Fuera del carril, con el encargo de GENERAL y diff mínimo: una línea en
 `NEXT_STEPS.md` (fase 5 marcada).
+
 
 ## 2026-09-29 — [Arena] Fuera del árbol el GLB crudo de 54 MB
 

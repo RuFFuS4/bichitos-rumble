@@ -187,8 +187,9 @@ and `node scripts/critter-recipe.mjs <id>` replays them:
 1. takes the BASE GLB pinned in the recipe (`base.ref`, a commit), never
    the file it overwrites — replaying twice gives the same result;
 2. per edited clip, runs Blender headless with
-   `scripts/blender/critter-clip-edit.py` (sections `hold` → `ik` →
-   `torso`, documented at the top of that file) to get a donor GLB;
+   `scripts/blender/critter-clip-edit.py` (sections `hold` → `blend` →
+   `ik` → `torso` → `loop`, documented at the top of that file) to get a
+   donor GLB;
 3. copies ONLY that clip's listed channels (`nodes`) from the donor into
    the base — and fails if Blender edited a bone that is not listed;
 4. repacks with `gltfpack -c -kn`: geometry and the other clips come out
@@ -230,6 +231,18 @@ of both ends of their reach (the log prints each leg's range and fold
 limit; `soft` cushions the ends). The Blender script refuses a knee that
 flips (>90° between frames) and warns from 25°; the real check is in
 game: `critter-motion.mjs` (foot slip ≈ 1) and the visor A/B.
+
+Gaits other than a run (2026-09-29, one Run per Tripo — FEELING.md
+§7.12): `ik.phaseR` = `phaseL` plants both feet at once (Kermit hops),
+`ik.bounces: 1` gives one root bounce per cycle instead of one per
+footfall, `ik.swingPeak` > 0.5 lifts the foot slowly and drops it fast
+(Trunk's stomp), and `blend` pulls bones toward another clip's pose
+(`keep` 0 = that pose, 1 = untouched) — it calms the generic sprint's
+pumping arms and twisting spine. All default to the old behaviour: the
+untouched recipes replay byte-identical. The cadence a Run plays at is
+set by `d / L` (cycles/s ∝ d/L at a given speed), and a longer stance
+needs a longer stride: short legs (Shelly) run out of reach first — the
+log's leg range says so.
 
 A third optional part of `textures`, `grade`, is the palette pass
 (2026-09-24, STYLE_LOCK.md §Roster Visual Reference). It is a list of

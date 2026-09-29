@@ -50,7 +50,7 @@
   "clips": [
     {
       "clip": "Run",
-      "why": "Rafa, 2026-09-23 (decisión 7): pasitos más vivos. Cheeto corría a 1,85 ciclos/s con la zancada larga del sprint genérico de Tripo; con L = 0,206 sube a ~3,5 a la misma velocidad. Pelvis como en el Idle (el sprint la gira tanto que una pierna se estiraba de más), pisada bajo la cadera, suelo y pie del Idle, fase del pie izquierdo la del clip (los brazos siguen en oposición) y el bucle cerrado (brazo derecho a 19,5°).",
+      "why": "Rafa, 2026-09-29: «sprint felino». Del sprint genérico de Tripo a un tigre bajo (D 0,10) e inclinado hacia delante (tronco a 50°: con su cabezota, los 36° de antes se leían erguidos), con más tiempo en el aire que apoyado (d = 0,25), las patas altas (H 0,10) y rebote marcado (A 0,035). Zancada algo más larga por ciclo: ~3,2 ciclos/s en vez de 3,5 (decisión 7: 3-4). Pelvis, suelo y pie del Idle, y el bucle cerrado.",
       "blender": {
         "hold": [
           {
@@ -60,11 +60,11 @@
           }
         ],
         "ik": {
-          "d": 0.3,
-          "L": 0.206,
-          "H": 0.05,
-          "D": 0.05,
-          "A": 0.016,
+          "d": 0.25,
+          "L": 0.19,
+          "H": 0.1,
+          "D": 0.1,
+          "A": 0.035,
           "phaseL": 0.49,
           "x0": 0.125,
           "footFlat": true,
@@ -74,6 +74,12 @@
             "frame": 0
           }
         },
+        "torso": {
+          "bone": "Waist",
+          "base": "Waist",
+          "tip": "Head",
+          "pitchDeg": 50
+        },
         "loop": {
           "minDeg": 1
         }
@@ -81,5 +87,5 @@
       "nodes": "all"
     }
   ],
-  "output": "cff892ce"
+  "output": "b6dd373b"
 }

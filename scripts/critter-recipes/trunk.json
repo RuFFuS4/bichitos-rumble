@@ -11,7 +11,7 @@
   "clips": [
     {
       "clip": "Run",
-      "why": "El Run de Tripo (el mismo en Trunk, Shelly, Kermit y Cheeto) no cierra el bucle (brazo derecho 19,5°, piernas 7-12°) y en Trunk pisa como un galope asimétrico (pies en fase 0,52 y 0,88). Cerrar el bucle en esas piernas desordenaba la pisada, así que lleva el mismo tratamiento que los demás. Pelvis como en el Idle e IK simétrico con apoyo corto (d = 0,2), que lo deja en ~2,3 ciclos/s como pidió Rafa (decisión 7: Trunk ~2). Suelo y pie del Idle.",
+      "why": "Rafa, 2026-09-29: «pisotón». El sprint genérico de Tripo (el mismo en los cuatro, tronco a 36°, brazos bombeando) pasa a un elefante erguido (tronco a 8°, columna y brazos a 0,4 del Idle) que levanta el pie despacio y lo deja caer de golpe (swingPeak 0,7), con el cuerpo hundiéndose en cada pisada (D 0,07, A 0,03). Apoyo corto (d = 0,22) para seguir a ~2,4 ciclos/s (decisión 7: Trunk ~2). El bucle del Run de Tripo no cerraba (brazo derecho 19,5°); pelvis, suelo y pie del Idle.",
       "blender": {
         "hold": [
           {
@@ -20,12 +20,51 @@
             "frame": 0
           }
         ],
+        "blend": [
+          {
+            "bones": [
+              "L_Clavicle",
+              "L_Upperarm",
+              "L_UpperarmTwist01",
+              "L_UpperarmTwist02",
+              "L_Forearm",
+              "L_ForearmTwist01",
+              "L_ForearmTwist02",
+              "L_Hand",
+              "R_Clavicle",
+              "R_Upperarm",
+              "R_UpperarmTwist01",
+              "R_UpperarmTwist02",
+              "R_Forearm",
+              "R_ForearmTwist01",
+              "R_ForearmTwist02",
+              "R_Hand"
+            ],
+            "fromClip": "Idle",
+            "frame": 0,
+            "keep": 0.4
+          },
+          {
+            "bones": [
+              "Waist",
+              "Spine01",
+              "Spine02",
+              "NeckTwist01",
+              "NeckTwist02",
+              "Head"
+            ],
+            "fromClip": "Idle",
+            "frame": 0,
+            "keep": 0.4
+          }
+        ],
         "ik": {
-          "d": 0.2,
-          "L": 0.22,
-          "H": 0.04,
-          "D": 0.05,
-          "A": 0.015,
+          "d": 0.22,
+          "L": 0.24,
+          "H": 0.07,
+          "swingPeak": 0.7,
+          "D": 0.07,
+          "A": 0.03,
           "phaseL": 0.52,
           "x0": -0.025,
           "footFlat": true,
@@ -35,6 +74,12 @@
             "frame": 0
           }
         },
+        "torso": {
+          "bone": "Waist",
+          "base": "Waist",
+          "tip": "Head",
+          "pitchDeg": 8
+        },
         "loop": {
           "minDeg": 1
         }
@@ -42,5 +87,5 @@
       "nodes": "all"
     }
   ],
-  "output": "9f9c98ab"
+  "output": "00645087"
 }
