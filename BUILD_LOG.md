@@ -1,5 +1,51 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Arena] Fondo v2, F4: el cielo se traga a quien cae, se van el mar y la foto, y el cielo se mide sin navegador
+
+Cierra el fondo v2 (plan en `docs/DIORAMAS.md`, «Estado de la F4»).
+`legacyLight` se queda vivo hasta que Rafa decida sobre la F3.
+
+**La caída** (en `dev` desde `aa7ac52`, integrada aparte para soltar
+`game.ts` cuanto antes):
+- donde un bicho que cae desaparece sale un puf de nube del color del
+  bioma, en offline, online, última vida, cuenta atrás y final, sin tocar
+  `critter.ts`;
+- los sectores que caen encogen a la mitad alrededor de su centro.
+
+**Limpieza** (con permiso de GENERAL para los ficheros fuera del carril):
+- fuera el mar (`SeaRamp`, `PackDef.backdrop`, 13 claves y `mode`), la
+  foto y sus cargadores, en el juego y en el editor de decor;
+- −270 KB de dist (queda en 27,2 MB), y adiós a unos 32 MB de VRAM por
+  pack jugado;
+- los PNG maestros, en `resources/skyboxes-retirados/`. Nota a
+  DISTRIBUCIÓN.
+
+**Herramientas:**
+- `scripts/arena-sky.mjs` construye el cielo de verdad en node, sin
+  navegador y en milisegundos. Da el mismo hash que el juego (comprobado
+  en tres partidas).
+- `look-patch` lleva al código lo que se afina en vivo en `ARENA_LOOK` y
+  `BACKDROP_LOOK`.
+- `arena-shots --metrics` imprime ahora el veredicto del contrato §8, con
+  la saturación del fondo frente a la arena.
+
+**Lo que destapó la métrica nueva (decisión para Rafa):** la cláusula de
+saturación del §8 (fondo entre 0,4 y 0,9 veces la arena) no se había
+medido nunca. Medida como croma perceptual (CIELAB C*), cumplen jungle,
+desierto y coral. Tundra (1,42) y kitsune (1,19) no: su arena es casi
+gris y cualquier abismo con color la supera. Dos salidas: desaturar esos
+pozos, o que la cláusula sea «nada del fondo más saturado que los bichos».
+
+**Revisión adversarial** (2 frentes): 8 confirmados, de severidad baja y
+arreglados. Entre ellos, el control de la cúpula ahora también en 3D, y
+`look-patch` con colores hex.
+
+**Pruebas:** `tests/sim/arena-backdrop.test.ts`, con búferes idénticos
+byte a byte con la misma semilla, también a mitad de partida, y 0
+violaciones del pasillo en los 5 biomas × 3 semillas. `test:sim`, 5
+tests nuevos de `look-patch` en `check` (72/72), golden 3/3 sin
+regenerar.
+
 ## 2026-09-29 — [PERSONAJES] El choque de cabezas ya no lo gana el primero de la lista, y el bot de Sebastian falla el All-in
 
 Las dos decisiones de Rafa sobre el pase de balance (las recomendadas).

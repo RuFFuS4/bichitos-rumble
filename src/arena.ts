@@ -23,10 +23,8 @@ import {
   type ArenaPackId,
   layoutPackProps,
   loadPackGroundTexture,
-  loadPackSkyboxTexture,
   loadPackPropMeshes,
   getPackFogColor,
-  getPackBackdrop,
   getPackSky,
   getPackCliff,
   getPackGroundTile,
@@ -34,7 +32,7 @@ import {
   loadInArenaDecorations,
 } from './arena-decorations';
 import { getDecorLayout } from './arena-decor-layouts';
-import { setSceneSkyboxTexture, setSceneFogColor, setSceneClearColor, setSceneHemiGround, setSceneLighting } from './scene-atmosphere';
+import { setSceneFogColor, setSceneClearColor, setSceneHemiGround, setSceneLighting } from './scene-atmosphere';
 import { spawnVanishPuff } from './dust-puff';
 
 // Visual parameters for the pre-collapse shake effect. Applied to
@@ -123,7 +121,7 @@ function worldUvs(geo: THREE.BufferGeometry): void {
  * then clear children. Used both for fragment rebuilds and for
  * decorations teardown — same mechanics in both places.
  *
- * Note: material maps (ground texture, skybox) are NOT disposed — they
+ * Note: material maps (ground texture) are NOT disposed — they
  * live in the texture cache in arena-decorations and are reused across
  * matches. Disposing them would force a re-decode on every reload.
  */
@@ -481,7 +479,7 @@ export class Arena {
    *  which is the sentinel that made offline observability lie. */
   private serverDriven = false;
 
-  // Decorations (arena pack cosmetics) — skybox + fog + ground texture +
+  // Decorations (arena pack cosmetics) — sky (fondo v2) + fog + ground texture +
   // prop meshes scattered in a ring outside the playable radius. Separate
   // group so collapse logic (which iterates fragmentGroups) never touches
   // it. Async-loaded; if a pack asset 404s the group silently stays empty.
@@ -493,7 +491,8 @@ export class Arena {
   private packApplyToken = 0;
   /**
    * Resolves when the most recent applyPack() has finished loading every
-   * asset (ground texture, skybox, outer props, in-arena decor) — or has
+   * asset (ground texture, outer props, in-arena decor; the sky is built
+   * synchronously, fondo v2) — or has
    * given up because of a fetch error. Used by `waitForPack()` so the
    * countdown can wait for visible decor before "GO!" instead of starting
    * with an empty arena while textures pop in mid-match.
@@ -502,7 +501,7 @@ export class Arena {
    */
   private currentPackPromise: Promise<void> = Promise.resolve();
   private sceneRef: THREE.Scene;
-  /** Decorado de fondo (mar del bioma). Es DECORADO: no colisiona, no
+  /** Decorado de fondo (el cielo del bioma). Es DECORADO: no colisiona, no
    *  entra en isOnArena y se puede quitar entero sin tocar el juego. */
   private backdrop: ArenaBackdrop | null = null;
   /** Capa densa del diorama (hierba, guijarros, conchas… instanciados por
@@ -547,7 +546,7 @@ export class Arena {
 
     // 2026-09-06 (terreno v2 fase 1, decisión de Rafa): FUERA el void.
     // Eran dos mallas —un cilindro r=40 negro al 90 % de opacidad y un
-    // disco opaco a y=−30— que tapaban el skybox del pack justo en el
+    // disco opaco a y=−30— que tapaban la foto de fondo de entonces justo en el
     // cono que ve la cámara (de −26° a −66°). Ese "borrón oscuro"
     // alrededor del disco no era el cielo: era esto. Sin ellas, cada
     // bioma asoma su propio horizonte bajo el borde de la arena.
@@ -570,7 +569,7 @@ export class Arena {
 
   /**
    * Build (or rebuild) the fragment floor from a deterministic seed. When
-   * a `packId` is supplied, also swap in the pack's skybox, fog colour,
+   * a `packId` is supplied, also swap in the pack's sky, fog colour,
    * ground texture, and decorative props (async, non-blocking — the
    * fragment geometry is created immediately). If `packId` is omitted the
    * arena uses the procedural sky + flat band colours, same look as the
@@ -649,7 +648,7 @@ export class Arena {
   // --- Pack (decorations) --------------------------------------------------
 
   /**
-   * Swap in a cosmetic arena pack: skybox texture, fog colour, ground
+   * Swap in a cosmetic arena pack: sky (fondo v2), fog colour, ground
    * texture tinted across every fragment, and decorative GLB props
    * scattered in a ring outside the playable radius. Deterministic:
    * given the same (packId, seed), every client places the props in
@@ -668,7 +667,7 @@ export class Arena {
 
     // Fondo + niebla + luz: síncronos y sin assets, listos en el mismo frame
     // (el suelo y los props llegan después, por red).
-    const skyboxLoad = this.applyBackdrop(packId, seed, myToken);
+    this.applyBackdrop(packId, seed);
 
     // Capa densa: síncrona y sin assets, lista en el mismo frame que el suelo.
     this.rebuildScatter();
@@ -755,7 +754,7 @@ export class Arena {
       }
     })();
 
-    return Promise.allSettled([groundLoad, skyboxLoad, propsLoad, inArenaLoad])
+    return Promise.allSettled([groundLoad, propsLoad, inArenaLoad])
       .then(() => undefined);
   }
 
@@ -847,52 +846,28 @@ export class Arena {
   }
 
   /**
-   * El tramo de FONDO de applyPack: decorado de fondo, niebla, color de
-   * limpiado, hemisferio y (en modo mar) la foto. No toca el suelo, el
-   * colapso ni los props, así que se puede repetir a mitad de partida.
-   * Devuelve la carga de la foto (resuelta al instante en modo cielo).
+   * El tramo de FONDO de applyPack: el cielo del bioma, niebla, color de
+   * limpiado, hemisferio y luz. No toca el suelo, el colapso ni los props,
+   * así que se puede repetir a mitad de partida. Síncrono y sin assets.
    *
-   * Fondo v2 (docs/DIORAMAS.md §«Fondo v2»): la isla en el cielo. El mar
-   * y la foto solo sobreviven como A/B (`BACKDROP_LOOK.mode = 'sea'`).
+   * Fondo v2 (docs/DIORAMAS.md §«Fondo v2»): la isla en el cielo. El mar y
+   * la foto de antes se borraron en la F4.
    */
-  private applyBackdrop(packId: ArenaPackId, seed: number, token: number): Promise<void> {
-    const skyMode = BACKDROP_LOOK.mode === 'sky';
+  private applyBackdrop(packId: ArenaPackId, seed: number): void {
     const sky = getPackSky(packId);
     if (!this.backdrop) {
       this.backdrop = new ArenaBackdrop();
       this.sceneRef.add(this.backdrop.group);
     }
-    if (skyMode) {
-      this.backdrop.buildSky(sky, getPackFogColor(packId), getPackCliff(packId), seed, FRAG.maxRadius);
-    } else {
-      this.backdrop.setRamp(getPackBackdrop(packId), getPackFogColor(packId));
-    }
-    // Fog + clear colour update immediately (synchronous) so the player
-    // doesn't see a "wrong horizon" frame while textures load.
+    this.backdrop.buildSky(sky, getPackFogColor(packId), getPackCliff(packId), seed, FRAG.maxRadius);
     setSceneFogColor(getPackFogColor(packId));
-    // En modo cielo, el color de limpiado es el del pozo (un frame sin
-    // fondo nunca sale claro) y va DESPUÉS: setSceneFogColor lo reescribe.
-    // Sin foto: el cielo es la cúpula. El rebote del hemisferio es el del
-    // cielo de abajo, e ilumina la panza del cono.
-    if (skyMode) {
-      setSceneClearColor(sky.abyss);
-      setSceneSkyboxTexture(null);
-      setSceneHemiGround(sky.hemiGround, sky.hemiIntensity);
-      // F3: la luz del bioma, o la de siempre en el A/B.
-      setSceneLighting(BACKDROP_LOOK.legacyLight ? null : sky);
-      return Promise.resolve();
-    }
-    setSceneHemiGround(null);
-    setSceneLighting(null);
-    return loadPackSkyboxTexture(packId)
-      .then((tex) => {
-        // Superada por otro pack, o por un cambio a modo cielo en vivo.
-        if (token !== this.packApplyToken || BACKDROP_LOOK.mode !== 'sea') return;
-        setSceneSkyboxTexture(tex);
-      })
-      .catch((err) => {
-        console.warn('[Arena] skybox load failed:', packId, err);
-      });
+    // El color de limpiado es el del pozo (un frame sin fondo nunca sale
+    // claro) y va DESPUÉS: setSceneFogColor lo reescribe. El rebote del
+    // hemisferio es el del cielo de abajo, e ilumina la panza del cono.
+    setSceneClearColor(sky.abyss);
+    setSceneHemiGround(sky.hemiGround, sky.hemiIntensity);
+    // F3: la luz del bioma, o la de siempre en el A/B.
+    setSceneLighting(BACKDROP_LOOK.legacyLight ? null : sky);
   }
 
   /**
@@ -903,16 +878,15 @@ export class Arena {
    */
   rebuildBackdrop(): void {
     if (!this.appliedPackId || !this.layout) return;
-    void this.applyBackdrop(this.appliedPackId, this.layout.seed, this.packApplyToken);
+    this.applyBackdrop(this.appliedPackId, this.layout.seed);
   }
 
-  /** Undo whatever the last `applyPack` did: skybox + fog back to menu
-   *  defaults, decorations disposed. Called from reset() and when the
+  /** Undo whatever the last `applyPack` did: sky + fog + light back to
+   *  menu defaults, decorations disposed. Called from reset() and when the
    *  arena rebuilds without a packId. */
   private clearPack(): void {
     this.packApplyToken++;
     this.appliedPackId = null;
-    setSceneSkyboxTexture(null);
     setSceneFogColor(null);
     setSceneHemiGround(null);
     setSceneLighting(null);
@@ -1431,8 +1405,8 @@ export class Arena {
     this.syncedSeed = -1;
     this.serverDriven = false;
     this.currentRadius = FRAG.maxRadius;
-    // Drop any decorations + revert skybox / fog so the menu screens
-    // that follow (title, character select) paint the procedural sky.
+    // Drop any decorations + revert sky / fog / light so the menu screens
+    // that follow (title, character select) start from the defaults.
     this.clearPack();
   }
 

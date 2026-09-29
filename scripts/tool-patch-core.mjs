@@ -69,6 +69,7 @@ export const SUPPORTED_VERSIONS = {
   'feel-patch':       [1],
   'anim-personality': [1],
   'ability-patch':    [1],
+  'look-patch':       [1],
 };
 
 export const targetByTool = {
@@ -78,7 +79,11 @@ export const targetByTool = {
   'feel-patch':       'src/gamefeel.ts',
   'anim-personality': 'src/animation-personality-overrides.ts',
   'ability-patch':    'src/abilities.ts',
+  'look-patch':       'src/arena-look.ts',
 };
+
+/** look-patch: los records de src/arena-look.ts que se pueden reescribir. */
+const LOOK_RECORDS = ['ARENA_LOOK', 'BACKDROP_LOOK'];
 
 /** Keys written as bare TS identifiers must actually be identifiers —
  *  a typo like `"sergei "` or `"fall-fast"` would otherwise emit
@@ -184,6 +189,16 @@ export function validateToolPatch(patch) {
         errors.push(`feel-patch: "${path}" is not a finite number`);
       }
     }
+  } else if (tool === 'look-patch') {
+    for (const [path, v] of Object.entries(data)) {
+      const [rec, key, extra] = path.split('.');
+      if (!LOOK_RECORDS.includes(rec) || !key || extra !== undefined || !IDENT_RE.test(key)) {
+        errors.push(`look-patch: key "${path}" is not RECORD.key with RECORD in ${LOOK_RECORDS.join(' / ')}`);
+      }
+      if (!isFinite_(v) && typeof v !== 'boolean') {
+        errors.push(`look-patch: "${path}" is not a finite number or a boolean`);
+      }
+    }
   } else if (tool === 'anim-personality') {
     for (const [name, fields] of Object.entries(data)) {
       checkIdent('anim-personality: critter name', name);
@@ -246,6 +261,7 @@ export function applyPatch(source, patch) {
   if (patch.tool === 'feel-patch')   return applyFeelPatch(source, patch.data);
   if (patch.tool === 'anim-personality') return applyAnimPersonality(source, patch.data);
   if (patch.tool === 'ability-patch') return applyAbilityPatch(source, patch.data);
+  if (patch.tool === 'look-patch')   return applyLookPatch(source, patch.data);
   throw new Error(`unknown tool: ${patch.tool}`);
 }
 
@@ -315,6 +331,84 @@ export function applyFeelPatch(source, data) {
   }
 
   return source.slice(0, openBrace) + record + source.slice(close + 1);
+}
+
+// ===========================================================================
+// look-patch — hojas del look de la arena y del fondo (fondo v2, F4)
+// ===========================================================================
+
+/**
+ * Reescribe hojas numéricas y booleanas de `ARENA_LOOK` y `BACKDROP_LOOK`
+ * en src/arena-look.ts: lo que `__devApi.setArenaLook` / `setBackdropLook`
+ * tocan en vivo, llevado al código.
+ *
+ * Cada clave es "RECORD.clave" ("BACKDROP_LOOK.towerCount"). Como
+ * feel-patch: localiza el record, busca la línea de la clave AL PRIMER
+ * NIVEL del record (nunca dentro de un objeto anidado ni de un comentario)
+ * y cambia SOLO el valor; la coma y el comentario de afinado sobreviven
+ * byte a byte. Nunca crea claves. Un número solo sustituye a un número y
+ * un booleano a un booleano: un cambio de tipo es un error, no una
+ * conversión silenciosa. Un color escrito en hex (`0xa0c080`) se reescribe
+ * en hex, y tiene que ser un entero entre 0 y 0xffffff.
+ */
+export function applyLookPatch(source, data) {
+  let out = source;
+  for (const path of Object.keys(data).sort()) {
+    const [rec, key] = path.split('.');
+    const value = data[path];
+    const anchor = `export const ${rec}`;
+    const starts = [];
+    for (let i = out.indexOf(anchor); i >= 0; i = out.indexOf(anchor, i + 1)) {
+      const next = out[i + anchor.length];
+      if (next === ':' || next === ' ' || next === '=') starts.push(i);
+    }
+    if (starts.length !== 1) throw new Error(`look-patch: ${rec} export found ${starts.length} times`);
+    const mask = codeMask(out);
+    let open = -1;
+    for (let i = starts[0]; i < out.length; i++) {
+      if (mask[i] === M_CODE && out[i] === '{') { open = i; break; }
+    }
+    if (open < 0) throw new Error(`look-patch: ${rec} open brace not found`);
+    const close = matchBraceMasked(out, open, mask);
+    if (close < 0) throw new Error(`look-patch: ${rec} close brace not found`);
+
+    const valueRe = typeof value === 'boolean' ? '(true|false)' : '(0x[0-9a-fA-F]+|-?\\d+(?:\\.\\d+)?)';
+    const lineRe = new RegExp(`(^|\\n)([ \\t]*)${escapeRegex(key)}:[ \\t]*${valueRe}(?=[ \\t]*(?:,|//|/\\*|\\r|\\n|$))`, 'g');
+    const record = out.slice(open, close + 1);
+    const recMask = mask.slice(open, close + 1);
+    // Profundidad de llaves en cada posición del record (solo código).
+    const depthAt = new Int32Array(record.length);
+    for (let i = 0, d = 0; i < record.length; i++) {
+      if (recMask[i] === M_CODE) { if (record[i] === '{') d++; else if (record[i] === '}') d--; }
+      depthAt[i] = d;
+    }
+    const hits = [...record.matchAll(lineRe)].filter((m) => {
+      const keyIdx = m.index + m[1].length + m[2].length;
+      return recMask[keyIdx] === M_CODE && depthAt[keyIdx] === 1;
+    });
+    if (hits.length === 0) {
+      // ¿Existe con otro tipo? Mejor un error que diga por qué.
+      const anyRe = new RegExp(`(^|\\n)[ \\t]*${escapeRegex(key)}:`, 'g');
+      const exists = [...record.matchAll(anyRe)].some((m) => depthAt[m.index + m[0].length - 1] === 1);
+      throw new Error(exists
+        ? `look-patch: '${path}' is not a plain ${typeof value} in source`
+        : `look-patch: '${path}' not found`);
+    }
+    if (hits.length > 1) throw new Error(`look-patch: '${path}' matches ${hits.length} lines — refusing to guess`);
+    const m = hits[0];
+    const numStart = open + m.index + m[0].length - m[3].length;
+    const numEnd = open + m.index + m[0].length;
+    let text;
+    if (typeof value === 'boolean') text = String(value);
+    else if (m[3].startsWith('0x')) {
+      if (!Number.isInteger(value) || value < 0 || value > 0xffffff) {
+        throw new Error(`look-patch: '${path}' is a hex colour in source; ${value} is not a 0x000000-0xffffff integer`);
+      }
+      text = `0x${value.toString(16).padStart(Math.max(6, m[3].length - 2), '0')}`;
+    } else text = formatNumber(value);
+    out = out.slice(0, numStart) + text + out.slice(numEnd);
+  }
+  return out;
 }
 
 // ===========================================================================

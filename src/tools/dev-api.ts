@@ -1181,15 +1181,14 @@ export class DevApi {
 
   /** Parche sobre BACKDROP_LOOK. Todo es estructural (se hornea al
    *  construir), así que cualquier clave aplicada reconstruye la arena
-   *  conservando semilla y pack. `{ mode: 'sea' }` es el A/B con el mar. */
+   *  conservando semilla y pack. */
   setBackdropLook(patch: Record<string, unknown>): { applied: string[]; rebuilt: boolean; rejected: string[] } {
     const look = BACKDROP_LOOK as unknown as Record<string, unknown>;
     const applied: string[] = [];
     const rejected: string[] = [];
     for (const [k, v] of Object.entries(patch)) {
-      const badMode = k === 'mode' && v !== 'sky' && v !== 'sea';
       const known = Object.prototype.hasOwnProperty.call(look, k);
-      if (!known || typeof v !== typeof look[k] || badMode) { rejected.push(k); continue; }
+      if (!known || typeof v !== typeof look[k]) { rejected.push(k); continue; }
       look[k] = v;
       applied.push(k);
     }

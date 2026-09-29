@@ -4,8 +4,8 @@
 // ---------------------------------------------------------------------------
 //
 // What a "pack" does:
-//   1. Swaps the sky dome material for the pack's equirect skybox texture.
-//   2. Swaps scene.fog colour so the horizon blends with the new sky.
+//   1. Builds the pack's sky (fondo v2: arena-backdrop.ts, from `sky`).
+//   2. Swaps scene.fog colour: the horizon band of that sky.
 //   3. Tints the arena fragments' top material with the pack's ground
 //      texture (tileable PNG). Fragment geometry / collapse is untouched.
 //   4. Scatters the pack's GLB props around the arena in a ring outside
@@ -18,7 +18,7 @@
 //   - Per-pack lighting rig tweaks (relying on the existing global
 //     three-point lighting in main.ts).
 //
-// Failure mode: if any asset of a pack 404s (GLB, skybox, ground tile),
+// Failure mode: if any asset of a pack 404s (GLB, ground tile),
 // we swallow the error and fall back to the "jungle" defaults — a match
 // never breaks because of missing cosmetics. Logs at debug level.
 // ---------------------------------------------------------------------------
@@ -26,7 +26,7 @@
 import * as THREE from 'three';
 import { loadModel } from './model-loader';
 import { DECOR_TYPES, type DecorPlacement } from './arena-decor-layouts';
-import { BACKDROP_LOOK, type SeaRamp, type CliffRamp, type PackSky } from './arena-look';
+import { BACKDROP_LOOK, type CliffRamp, type PackSky } from './arena-look';
 import { FIRMA_CROWN_HEIGHT } from './arena-sky-layout';
 
 /** Anisotropía máxima del dispositivo, cacheada. La fija el renderer al
@@ -78,14 +78,14 @@ export function getRandomPackId(): ArenaPackId {
 // --- Pack catalog --------------------------------------------------------
 //
 // Each entry lists: the GLB filenames in public/models/arenas/<id>/, the
-// fog colour that blends with the pack's skybox, and any per-prop scale
+// fog colour (the horizon band of the pack's sky), and any per-prop scale
 // hints. Placement (angle / radius / rotY) is computed at runtime from
 // the arena seed so two clients in the same room see identical layouts.
 
 interface PackDef {
   /** Relative GLB filenames in public/models/arenas/<id>/. */
   props: string[];
-  /** Fog colour (hex). Picked to match the horizon band of the skybox. */
+  /** Fog colour (hex): la banda de bruma del horizonte del cielo. */
   fogColor: number;
   /** Lado del tile de suelo EN UNIDADES DE MUNDO para este bioma. La
    *  escala buena no es global: las texturas del proyecto traen el detalle
@@ -96,10 +96,6 @@ interface PackDef {
    *  playa pierde las conchas, que quedan de 2 px. Idea de Rafa
    *  (2026-09-07), medida bioma a bioma sobre capturas. */
   groundTile: number;
-  /** Rampa del mar de fondo sobre el que flota la isla (fase de fondo,
-   *  docs/DIORAMAS.md). Oscuro pegado al disco para que el canto se
-   *  recorte, claro al alejarse para leer distancia. */
-  backdrop: SeaRamp;
   /** Estratos del canto de la isla, de arriba (t = 0, el labio bajo la
    *  tapa) abajo (t = 1, la base). Es lo que convierte la pared del
    *  disco en acantilado DE ESTE bioma: roca apilada con musgo, bloques
@@ -135,10 +131,6 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     props: [],
     groundTile: 14,   // hierba y hojarasca: a 14 u la mata se lee sin repetirse
     fogColor: 0xa6c68a, // warm green horizon
-    // Mar de copas: verde profundo bajo la isla (la hierba del disco está
-    // en L≈78, así que el dosel tiene que quedar POR DEBAJO — hoy la foto
-    // estaba 44 puntos por encima) aclarando a bruma cálida al fondo.
-    backdrop: { stops: [[0, 0x0c1a0f], [0.18, 0x182d1a], [0.5, 0x3f6137], [1, 0x93b483]] },
     // Labio de musgo → tierra oscura con raíces → sillares de piedra
     // tostada (los bloques de la referencia JUNGLE TROPIC) → base en
     // sombra. El verde del labio es lo que hace que la hierba parezca
@@ -167,10 +159,6 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     props: [],
     groundTile: 18,   // placas de hielo grandes, como los anillos de la referencia
     fogColor: 0xbcc8e0, // pale lavender ice horizon
-    // Banquisa: azul frío cerca, casi blanco lejos. Es el pack más claro
-    // del juego, así que su movimiento es de VALOR, no de tono; el hielo
-    // va más oscuro que la tapa para que no se lea como pisable.
-    backdrop: { stops: [[0, 0x152230], [0.2, 0x283d50], [0.55, 0x728ca0], [1, 0xd6e2ee]] },
     // Tapa de nieve → hielo claro → azul profundo. Es el bioma donde el
     // corte vertical cuenta más: lo que se rompe es hielo, y el azul
     // saturado bajo la nieve blanca es la firma de FROZEN TUNDRA.
@@ -195,9 +183,6 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     props: [],
     groundTile: 16,   // los rizos de arena piden escala grande o parecen tela
     fogColor: 0xeab88a, // dusty golden sunset horizon
-    // Cañón de dunas: aquí el terreno CONTINÚA y la isla se lee como
-    // meseta. Naranja quemado en la sombra del cañón, arena clara lejos.
-    backdrop: { stops: [[0, 0x28160e], [0.16, 0x4b2d1a], [0.5, 0x9b6b3b], [1, 0xecc394]] },
     // Arena en el labio → roca roja → veta ocre → roja otra vez → base
     // oscura: la meseta estratificada de DESERT DUNES. Es la rampa con más
     // paradas porque el estrato ocre en medio es lo que la hace desierto
@@ -223,13 +208,9 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     props: [],
     groundTile: 9,   // conchas y estrellas pintadas: por encima de 10 u desaparecen
     fogColor: 0x9fd9e0, // cream-turquoise sea horizon
-    // Laguna: bajío junto a la isla, turquesa somero y teal profundo al
-    // alejarse. Es el peor caso de partida (57,7 % del cuadro era una
-    // mancha turquesa sin un solo borde) y donde más gana lo generado.
-    backdrop: { stops: [[0, 0x052126], [0.14, 0x0b3d44], [0.45, 0x25868b], [1, 0x8fdfe0]] },
     // Arena mojada → roca gris → verde-teal de algas hacia la línea de
-    // agua: la roca de CORAL REEF BEACH se hunde en la laguna y la parte
-    // baja del canto va del color del mar del backdrop, no del suelo.
+    // agua: la roca de CORAL REEF BEACH se hunde en la laguna, y la parte
+    // baja del canto tira hacia el color del pozo, no del suelo.
     cliff: { stops: [[0, 0xe6d3a6], [0.12, 0x9a9a92], [0.45, 0x7a7e7a], [0.7, 0x5e8c80], [1, 0x3a5c58]] },
     // Laguna del cielo: turquesa profundo a azul marino, sin verde —no es
     // agua— (luma ~47, techo 59). Cúmulos crema con panza aguamarina.
@@ -251,10 +232,6 @@ const PACKS: Record<ArenaPackId, PackDef> = {
     props: [],
     groundTile: 26,   // losas del patio a tamaño de referencia, sin repetición
     fogColor: 0xd4a8c0, // dusty pink mist
-    // Mar de nubes: oscuras bajo el canto (ahí el borde del vacío llegaba
-    // a tener ΔL de 1,1 — literalmente invisible) y retroiluminadas hacia
-    // el ciruela del pack. A este bioma hay que SUBIRLE color, no bajarlo.
-    backdrop: { stops: [[0, 0x1a141c], [0.18, 0x3a2b36], [0.5, 0x866578], [1, 0xdcc0cf]] },
     // Musgo en el labio → sillares grises apilados que se oscurecen hacia
     // la base: la muralla del patio de KITSUNE SHRINE. Sin color: aquí
     // el bermellón y los pétalos van encima, y el canto es piedra.
@@ -416,60 +393,43 @@ function groundTexturePath(packId: ArenaPackId): string {
   return `./images/arena-ground/${packId}.webp`;
 }
 
-function skyboxTexturePath(packId: ArenaPackId): string {
-  return `./images/skyboxes/${packId}.webp`;
-}
-
 function propGlbPath(packId: ArenaPackId, glbName: string): string {
   return `./models/arenas/${packId}/${glbName}`;
 }
 
 // --- Texture cache -------------------------------------------------------
 //
-// Both ground and skybox textures are reused every time the same pack
-// plays, so cache them per-session. GLBs are cached by model-loader's
-// own layer — no need to replicate that here.
+// Ground textures are reused every time the same pack plays, so cache
+// them per-session. GLBs are cached by model-loader's own layer — no need
+// to replicate that here. (Hasta la F4 del fondo v2 también se cacheaba
+// aquí la foto de cada pack, unos 32 MB de VRAM que no se soltaban.)
 
 const textureLoader = new THREE.TextureLoader();
 const textureCache = new Map<string, THREE.Texture>();
 
-function loadTexture(path: string, mode: 'ground' | 'skybox'): Promise<THREE.Texture> {
+function loadTexture(path: string): Promise<THREE.Texture> {
   const cached = textureCache.get(path);
   if (cached) return Promise.resolve(cached);
   return new Promise((resolve, reject) => {
     textureLoader.load(
       path,
       (tex) => {
-        if (mode === 'ground') {
-          // Tileable across the whole arena. TODAS las superficies de suelo
-          // (tapas de sector, centro inmune y falda) llevan UV en
-          // COORDENADAS DE MUNDO, así que un único repeat vale para las
-          // tres y el tile mide `ARENA_LOOK.tileSize` unidades de mundo.
-          //
-          // 2026-09-06: antes era repeat 4×4 sobre UV de mundo = 4
-          // repeticiones POR UNIDAD → un tile de 25 cm, ~96 en el diámetro.
-          // El mipmap lo promediaba a color plano: de ahí la sensación de
-          // "plato liso" pese a haber textura cargada.
-          // El repeat lo fija `applyGroundTexture` con el tile del pack:
-          // aquí solo se deja envolviendo, porque la textura se cachea por
-          // ruta y la comparten los cinco biomas.
-          tex.wrapS = THREE.RepeatWrapping;
-          tex.wrapT = THREE.RepeatWrapping;
-          tex.anisotropy = getMaxAnisotropy();
-          tex.colorSpace = THREE.SRGBColorSpace;
-        } else {
-          // Equirect skybox bound directly to `scene.background` via
-          // setSceneSkyboxTexture. Three.js renders scene.background in
-          // a built-in pre-pass that REQUIRES
-          // `EquirectangularReflectionMapping` for 2:1 panoramic PNGs
-          // (despite the "Reflection" name — the same mapping is used
-          // for both envmaps and skybox backgrounds; Three.js dispatches
-          // on the texture's role, not on the mapping flag).
-          tex.mapping = THREE.EquirectangularReflectionMapping;
-          tex.colorSpace = THREE.SRGBColorSpace;
-          tex.wrapS = THREE.ClampToEdgeWrapping;
-          tex.wrapT = THREE.ClampToEdgeWrapping;
-        }
+        // Tileable across the whole arena. TODAS las superficies de suelo
+        // (tapas de sector, centro inmune y falda) llevan UV en
+        // COORDENADAS DE MUNDO, así que un único repeat vale para las
+        // tres y el tile mide `ARENA_LOOK.tileSize` unidades de mundo.
+        //
+        // 2026-09-06: antes era repeat 4×4 sobre UV de mundo = 4
+        // repeticiones POR UNIDAD → un tile de 25 cm, ~96 en el diámetro.
+        // El mipmap lo promediaba a color plano: de ahí la sensación de
+        // "plato liso" pese a haber textura cargada.
+        // El repeat lo fija `applyGroundTexture` con el tile del pack:
+        // aquí solo se deja envolviendo, porque la textura se cachea por
+        // ruta y la comparten los cinco biomas.
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.anisotropy = getMaxAnisotropy();
+        tex.colorSpace = THREE.SRGBColorSpace;
         textureCache.set(path, tex);
         resolve(tex);
       },
@@ -487,12 +447,7 @@ function loadTexture(path: string, mode: 'ground' | 'skybox'): Promise<THREE.Tex
  * callers should fall back to a vanilla MeshStandardMaterial on error.
  */
 export function loadPackGroundTexture(packId: ArenaPackId): Promise<THREE.Texture> {
-  return loadTexture(groundTexturePath(packId), 'ground');
-}
-
-/** Equirectangular skybox texture for the pack. */
-export function loadPackSkyboxTexture(packId: ArenaPackId): Promise<THREE.Texture> {
-  return loadTexture(skyboxTexturePath(packId), 'skybox');
+  return loadTexture(groundTexturePath(packId));
 }
 
 /**
@@ -533,11 +488,6 @@ export async function loadPackPropMeshes(
 }
 
 /** Fog colour for the pack, used to tint scene.fog when the pack loads. */
-/** Rampa del mar de fondo del pack (fase de fondo, docs/DIORAMAS.md). */
-export function getPackBackdrop(packId: ArenaPackId): SeaRamp {
-  return PACKS[packId].backdrop;
-}
-
 /** Cielo del bioma (fondo v2). */
 export function getPackSky(packId: ArenaPackId): PackSky {
   return PACKS[packId].sky;
@@ -597,8 +547,7 @@ export function getPackFogColor(packId: ArenaPackId): number {
  */
 export function getPackCliff(packId: ArenaPackId): CliffRamp {
   const ramp = PACKS[packId].cliff;
-  // El modo mar (A/B de la F0) también va con todo lo de antes.
-  if (BACKDROP_LOOK.legacyLight || BACKDROP_LOOK.mode === 'sea') return ramp;
+  if (BACKDROP_LOOK.legacyLight) return ramp;
   return liftCliffTip(ramp, BACKDROP_LOOK.cliffTipMinRatio);
 }
 

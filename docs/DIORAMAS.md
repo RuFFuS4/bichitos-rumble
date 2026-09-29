@@ -334,6 +334,45 @@ Tras este cambio dejan de verse en partida y solo sirven para la pantalla final 
 > - `cliffTipMinRatio` no avisaba de que el canto se nota en la partida siguiente.
 >
 > Además, `setPackSky` rechaza ahora números no finitos, y `--look-patch` entra en el nombre de las capturas.
+>
+> **Estado de la F4 (2026-09-29): HECHA.** Cierra el fondo v2. `legacyLight` se queda hasta que Rafa decida sobre la F3.
+> - **La caída (§7), «el cielo se lo traga».** Integrada aparte, en `aa7ac52`, para soltar `game.ts` cuanto antes.
+>   - Donde un bicho que cae deja de caer o de verse sale un puf de nube del color del bioma, que crece y se apaga en 0,55 s.
+>   - Lo detecta `Arena.tickVisuals` con el flanco de cada bicho, así que vale offline, online, en la última vida, en la cuenta atrás y en el final, sin tocar `critter.ts`. La única línea en `game.ts` es `watchCritters`.
+>   - Los sectores que caen encogen a la mitad entre y −15 y −25, alrededor de su propio centro.
+> - **Fuera el mar, la foto y sus cargadores:**
+>   - `SeaRamp`, `PackDef.backdrop`, las 13 claves del mar y `mode` de `BACKDROP_LOOK`;
+>   - `setRamp`, `setSceneSkyboxTexture` y `loadPackSkyboxTexture`;
+>   - la foto del editor de decor y la línea de `compress-images`;
+>   - los `.webp`: −270 KB de dist, que queda en 27,2 MB.
+>
+>   Los PNG maestros están en `resources/skyboxes-retirados/`, la carpeta de arte de Rafa. Sin la foto se va también su fuga de VRAM, unos 32 MB por pack jugado.
+> - **`scripts/arena-sky.mjs`, sin navegador.** Construye el cielo de verdad (`ArenaBackdrop.buildSky`) en node. Devuelve draws, triángulos e instancias por capa, rechazos, violaciones, `maxExtent`, hash, la luz, el color de la cúpula por elevación y el ΔL previsto labio-pozo. Sale con 1 si algo incumple.
+>   - Tarda milisegundos por construcción, frente a los minutos de `arena-shots` por software.
+>   - Da el mismo hash que el navegador: comprobado en tres partidas.
+>   - Carga `src/` con un hook de resolución (`scripts/arena-sky-hooks.mjs`), así que no hace falta sacar la colocación a módulos hoja.
+> - **`look-patch`** en `tool-patch-core.mjs`: lleva al código lo que `setArenaLook`/`setBackdropLook` tocan en vivo (hojas numéricas y booleanas de `ARENA_LOOK` y `BACKDROP_LOOK`). Tiene 5 tests en `npm run check`.
+> - **`tests/sim/arena-backdrop.test.ts`:**
+>   - dos construcciones con la misma semilla dan los mismos búferes (`instanceMatrix` e `instanceColor`, byte a byte), también con el reloj del fondo a 37,5 s;
+>   - otra semilla da otro hash;
+>   - 0 violaciones y todo dentro de la cúpula, en los 5 biomas × 3 semillas.
+> - **Métricas de jerarquía:** `arena-metrics` mide también la saturación del fondo frente a la de la arena. `checkContract` da el veredicto del §8, teniendo en cuenta el pozo claro de jungle, y `arena-shots --metrics` lo imprime en cada captura.
+> - **Lo que destapó (decisión para Rafa).** La cláusula de saturación del §8 (fondo entre 0,4 y 0,9 veces la arena) no se había medido nunca. Se mide como croma perceptual (CIELAB C*); la HSV infla los oscuros y daba a los cinco pozos por encima de su arena. Con el croma, semilla 7:
+>   - jungle, desierto y coral cumplen (0,65, 0,57 y 0,73);
+>   - tundra (1,42) y kitsune (1,19) no, porque su arena es casi gris (nieve y piedra) y cualquier abismo con color la supera.
+>
+>   Hay dos salidas, y es Rafa quien elige: desaturar el pozo de esos dos biomas, o que la cláusula pase a ser «nada del fondo más saturado que los bichos», que es la intención del §8. Hasta entonces, `--metrics` los marca como incumplimiento de esa cláusula, sin esconderlo.
+>
+> **Dónde se aparta del plan:**
+> - La CLI no se queda en los módulos hoja: con el hook carga el constructor entero, y sus cifras son las del juego, no una estimación.
+> - `mobileDensity` sigue sin existir: no hay cifra de móvil que la justifique.
+>
+> **Revisión adversarial** (2 frentes y un verificador): 8 confirmados, todos de severidad baja y todos arreglados:
+> - la CLI tomaba el límite de la cúpula antes de aplicar `--look` y confundía un error de uso con un contrato roto;
+> - comentarios que seguían hablando del mar y de la foto;
+> - el control «dentro de la cúpula» medía solo en horizontal (ahora también en 3D: `maxReach`, ≤403,3; hoy 398,4);
+> - `look-patch` validaba colores hex que no sabía escribir;
+> - `checkContract` no exigía, con el pozo claro, que el fondo quedara por encima de la arena.
 
 ---
 

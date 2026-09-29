@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// scene-atmosphere — shared scene look: clear colour, fog, lights, skybox
+// scene-atmosphere — shared scene look: clear colour, fog, lights
 // ---------------------------------------------------------------------------
 //
 // H3 slice 7. Extracted from src/main.ts for two reasons:
@@ -7,13 +7,14 @@
 //   1. PARITY — /tools.html (match lab) rendered with a pre-rework
 //      dark-void fog + flat AmbientLight while the game ships the
 //      "high-altitude golden hour" rig (hemisphere + warm key + cool
-//      rim + sky fog + per-pack skybox). What you tuned in the lab was
+//      rim + sky fog + per-pack sky). What you tuned in the lab was
 //      not what production rendered. Both entries now call
-//      `initSceneAtmosphere` and get the exact same look, including
-//      the per-pack skybox pipeline.
+//      `initSceneAtmosphere` and get the exact same look. (Entonces el
+//      cielo era una foto por pack en `scene.background`; desde la F4 del
+//      fondo v2 es la cúpula de `arena-backdrop.ts`.)
 //
-//   2. CYCLE BREAK — arena.ts imported `setSceneSkyboxTexture` /
-//      `setSceneFogColor` FROM src/main.ts, so ANY entry that touched
+//   2. CYCLE BREAK — arena.ts imported the sky/fog setters (then
+//      `setSceneSkyboxTexture`) FROM src/main.ts, so ANY entry that touched
 //      arena code (the lab imports Game → … → arena.ts) transitively
 //      executed main.ts's module side effects: a second renderer, a
 //      second `new Game`, a second rAF loop and a hard dependency on
@@ -57,7 +58,7 @@ let restoreGameplayPose = false;
 
 /**
  * Apply the game's canonical atmosphere to a scene + renderer and bind
- * them as the target for the skybox/fog setters below.
+ * them as the target for the fog / clear colour / light setters below.
  *
  *   · clear colour: sky blue (fallback before the skydome paints)
  *   · FogExp2 keyed to the horizon colour, density 0.008
@@ -74,10 +75,10 @@ export function initSceneAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRen
 
   // Terreno v2 fase 1: sombras suaves y anisotropía de las texturas de
   // suelo. El tone mapping NO se activa aquí: afecta a TODO material
-  // `toneMapped` (los 9 critters, el selector de personaje, el lab) y el
-  // skybox no se tone-mapea, así que cambiaría el contraste de la escena
-  // entera. Vive tras `ARENA_LOOK.toneMapping` para poder compararlo con
-  // el roster delante.
+  // `toneMapped` (los 9 critters, el selector de personaje, el lab, la
+  // cúpula del cielo), así que cambiaría el contraste de la escena entera.
+  // Vive tras `ARENA_LOOK.toneMapping` para poder compararlo con el
+  // roster delante.
   // (PCFSoftShadowMap está deprecado en three r185 — el renderer avisa y
   // cae a PCFShadowMap; el suavizado se pide con `shadow.radius`.)
   setArenaTextureAnisotropy(renderer.capabilities.getMaxAnisotropy());
@@ -134,7 +135,7 @@ export function initSceneAtmosphere(scene: THREE.Scene, renderer: THREE.WebGLRen
 
 /**
  * Luz del bioma (fondo v2, F3): rumbo, altura, color e intensidad de la key
- * y la rim. `null` vuelve a la de siempre (menús, modo mar y el A/B de
+ * y la rim. `null` vuelve a la de siempre (menús y el A/B de
  * `BACKDROP_LOOK.legacyLight`). La altura la acota `lightDirection` (5-89°)
  * y la intensidad de la key sale de `keyIntensityOf`. Afecta a los bichos
  * (nota en el buzón de PERSONAJES, 2026-09-29).
@@ -153,33 +154,11 @@ export function setSceneLighting(light: PackLight | null): void {
 }
 
 /**
- * Bind the pack's equirect panorama as the scene background, or pass
- * `null` to drop it (menu / no-pack state). Three.js renders this in
- * its built-in skybox pass — guaranteed full-screen coverage, no
- * mesh / depth / transparency stack to worry about.
- *
- * Caller is responsible for ensuring `tex.mapping ===
- * THREE.EquirectangularReflectionMapping` (set in
- * `loadPackSkyboxTexture` so we never have to think about it here).
- */
-export function setSceneSkyboxTexture(tex: THREE.Texture | null): void {
-  if (!boundScene) return; // entry hasn't initialised its atmosphere yet
-  if (tex) {
-    if (tex.mapping !== THREE.EquirectangularReflectionMapping) {
-      tex.mapping = THREE.EquirectangularReflectionMapping;
-      tex.needsUpdate = true;
-    }
-    boundScene.background = tex;
-  } else {
-    boundScene.background = null;
-  }
-}
-
-/**
  * Retune the global fog colour. FogExp2 uses a Color, so we mutate it in
  * place (no Scene re-assignment needed). Pass `null` to restore the
- * default menu-time horizon colour. Also tints the clear colour so the
- * 1-frame gap before the skybox paints isn't jarring.
+ * default menu-time horizon colour. Also tints the clear colour; with a
+ * pack, `Arena.applyBackdrop` then sets it to the pit colour
+ * (`setSceneClearColor`), so a frame without sky never flashes light.
  */
 export function setSceneFogColor(color: number | null): void {
   if (!boundScene || !boundRenderer) return;

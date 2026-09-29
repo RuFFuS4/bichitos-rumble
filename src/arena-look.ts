@@ -117,9 +117,7 @@ export const SALT_BACKDROP = 0x3c6e_f372;
 /** Rampa de estratos del canto: paradas [t, color] con t = 0 en el labio
  *  (justo bajo la tapa) y t = 1 en la base. Cada bioma cuenta su corte
  *  vertical con ella: tierra → raíz → roca en jungle, nieve → hielo azul
- *  en tundra, roca roja estratificada en desert. Misma forma que SeaRamp
- *  a propósito: son la misma idea (color por vértice a lo largo de una
- *  coordenada), sobre superficies distintas. */
+ *  en tundra, roca roja estratificada en desert. */
 export interface CliffRamp {
   stops: Array<[number, number]>;
 }
@@ -133,13 +131,6 @@ export const CLIFF_RAMP_DEFAULT: CliffRamp = {
 // ---------------------------------------------------------------------------
 // BACKDROP_LOOK — el decorado lejano (docs/DIORAMAS.md)
 // ---------------------------------------------------------------------------
-
-/** Rampa de color del mar de un bioma: paradas [t, color] con t = 0 pegado
- *  al disco y t = 1 en el borde exterior. Oscuro cerca y claro lejos: es
- *  lo que recorta el canto de la isla y lee como distancia. */
-export interface SeaRamp {
-  stops: Array<[number, number]>;
-}
 
 /**
  * La FIRMA de un bioma en el cielo (fondo v2, F1): lo que hace que, tapando
@@ -298,9 +289,6 @@ export function keyIntensityOf(light: PackLight): number {
 }
 
 export interface BackdropLookConfig {
-  /** 'sky' = fondo v2 (la isla en el cielo). 'sea' = el mar a y=−32 con
-   *  la foto de fondo, que se conserva solo para el A/B hasta la F4. */
-  mode: 'sky' | 'sea';
   /** Cúpula pegada a la cámara: radio (dentro del `far` 500) y columnas.
    *  Sin UV, color por latitud: sin costuras (lección de b054e96). */
   domeRadius: number;
@@ -470,43 +458,6 @@ export interface BackdropLookConfig {
   lifeFallSpanMin: number;
   lifeFallSpanMax: number;
   lifeGlideScale: number;
-  /** Altura del mar. 32 u por debajo del disco, y por debajo de
-   *  VOID_FLOOR (-30) y de FRAGMENT_KILL_Y (-25): nada del juego lo
-   *  atraviesa nunca, y a esa distancia no se puede confundir con suelo
-   *  pisable. */
-  seaY: number;
-  /** Radio interior (bajo el borde del disco) y exterior. 300 u tapa la
-   *  panorámica al 100 % en 16:9, 21:9 y móvil retrato; con 170 asomaba
-   *  una línea de horizonte falsa en la pantalla de fin de partida. */
-  seaInnerR: number;
-  seaOuterR: number;
-  seaSegments: number;
-  seaRings: number;
-  /** Radio donde ARRANCA la rampa (el tono más oscuro). Lo que queda por
-   *  dentro no se ve nunca: lo tapa la propia isla. */
-  rampInnerR: number;
-  /** Radio donde la rampa de color se agota. La cámara solo ve de r≈40 a
-   *  r≈120, así que estirar el degradado hasta el borde del plano (300)
-   *  dejaba todo el bioma comprimido en un tercio de la escala. */
-  rampSpanR: number;
-  /** Exponente de la rampa: <1 concentra el degradado cerca del disco,
-   *  que es donde se mira. */
-  rampCurve: number;
-  /** Potencia con la que se reparten los anillos del plano: >1 concentra
-   *  geometría cerca de la isla (donde el degradado tiene que ser fino) y
-   *  la ahorra lejos, donde el color ya es constante. */
-  ringDistribution: number;
-  /** Perspectiva aérea horneada: cuánto se funde el mar hacia el color de
-   *  niebla del pack al alejarse, y con qué curva. Tope por debajo de 1
-   *  para que el horizonte no acabe en un color liso — que es el defecto
-   *  que arrastraba la panorámica. */
-  hazeMax: number;
-  hazeCurve: number;
-  /** Sombra proyectada de la isla sobre el mar: cuánto oscurece y hasta
-   *  qué distancia llega. Es lo que ancla la isla en vez de dejarla
-   *  recortada sobre el fondo. */
-  islandShadow: number;
-  islandShadowReach: number;
   /** F3 — A/B de la luz: `true` devuelve la de antes (la misma key y rim
    *  en todos los biomas, sin halo y con las rampas del canto tal cual).
    *  Para comparar y, si hace falta, descartar la F3 sin deshacer nada.
@@ -537,7 +488,6 @@ export interface BackdropLookConfig {
 }
 
 export const BACKDROP_LOOK: BackdropLookConfig = {
-  mode: 'sky',
   domeRadius: 420,
   // 128 columnas: con 48 el degradado del horizonte salía en facetas
   // rectas con la cámara baja.
@@ -645,19 +595,6 @@ export const BACKDROP_LOOK: BackdropLookConfig = {
   lifeFallSpanMin: 35,
   lifeFallSpanMax: 55,
   lifeGlideScale: 1.4,
-  seaY: -32,
-  seaInnerR: 0.6,
-  seaOuterR: 300,
-  seaSegments: 96,
-  seaRings: 36,
-  rampInnerR: 18,
-  rampSpanR: 115,
-  rampCurve: 0.62,
-  ringDistribution: 2.2,
-  hazeMax: 0.42,
-  hazeCurve: 0.85,
-  islandShadow: 0.55,
-  islandShadowReach: 34,
   legacyLight: false,
   sunHaloDeg: 20,
   sunHaloStrength: 0.35,

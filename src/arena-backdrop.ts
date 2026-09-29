@@ -1,35 +1,16 @@
 // ---------------------------------------------------------------------------
-// Backdrop — el suelo lejano sobre el que flota la isla
+// Backdrop — el cielo en el que flota la isla (fondo v2)
 // ---------------------------------------------------------------------------
 //
-// Terreno v2, fase de fondo (docs/DIORAMAS.md §2-3). Sustituye al papel
-// pintado por MUNDO.
+// Plan y estado: docs/DIORAMAS.md §«Fondo v2 — la isla en el cielo».
 //
 // El porqué, medido (docs/DIORAMAS.md §1): la cámara de juego mira 46°
 // hacia abajo y NO rota nunca, así que el horizonte queda 22° por encima
-// del borde superior del cuadro — en escritorio y en móvil, en los cinco
-// packs, el 100 % de los frames. Todo lo que se ve "de fondo" es, por
-// geometría, TERRENO LEJANO VISTO EN PICADO. Una panorámica pintada no
-// puede dar eso: no tiene perspectiva. De ahí la lectura de "foto mal
-// puesta". Encima solo se veía el 7,7 % de cada imagen (una ventana fija
-// de 555×218 px de 1774×887) ampliada hasta ×8 en móvil.
-//
-// La solución es geometría: un plano enorme muy por debajo del disco, con
-// la rampa de color de su bioma HORNEADA en los vértices. Con eso:
-//   - el fondo deja de ser más claro que la arena (hoy lo es en los cinco
-//     packs, de +38 a +70 de luminancia: jerarquía invertida),
-//   - el canto del acantilado tiene contra qué recortarse (en jungle y
-//     kitsune había tramos del borde con ΔL de 0,4 — el borde del vacío,
-//     que es la información crítica del juego, no se veía), y
-//   - la niebla por fin sirve: `scene.fog` sí tiñe geometría, mientras que
-//     al skybox NUNCA lo tocaba (three crea su material con `fog:false`).
-//
-// Coste: 0 bytes de payload, 1 draw call, 6.912 triángulos (96×36×2; el
-// "1.344" que decía aquí era del prototipo de 96×7).
-//
-// 2026-09-21: Rafa rechaza este mar («quiero cielo, no suelo»). Queda
-// solo para el A/B (`BACKDROP_LOOK.mode = 'sea'`) y se borra en la F4 del
-// fondo v2; lo nuevo va al final del fichero.
+// del borde superior del cuadro. Todo lo que se ve "de fondo" se ve en
+// picado: una panorámica pintada no puede darlo (no tiene perspectiva), y
+// por eso la foto se leía como "mal puesta". Lo sustituyó un mar de color
+// horneado 32 u bajo el disco; Rafa lo rechazó el 2026-09-21 («quiero
+// cielo, no suelo») y se borró en la F4, junto con la foto.
 //
 // Separación de capas: esto es DECORADO. No colisiona, no entra en
 // `isOnArena`, no toca el layout ni el colapso. Se puede borrar entero y
@@ -39,7 +20,7 @@
 import * as THREE from 'three';
 import {
   BACKDROP_LOOK, LEGACY_LIGHT, SALT_BACKDROP, lightDirection,
-  type CliffRamp, type PackLight, type PackSky, type SeaRamp, type SkyFirma,
+  type CliffRamp, type PackLight, type PackSky, type SkyFirma,
 } from './arena-look';
 import { FRAG } from './arena-fragments';
 import { GAMEPLAY_CAM_FOV, GAMEPLAY_CAM_LOOKAT, GAMEPLAY_CAM_POSITION } from './camera';
@@ -48,49 +29,8 @@ import {
   type SkyCamera, type SkyInstance, type SkyLayout, type SkyLife,
 } from './arena-sky-layout';
 
-/**
- * Anillo del mar. Va de `innerR` (justo bajo el disco) a `outerR`, con
- * suficientes anillos concéntricos para que la rampa de color se
- * interpole suave.
- *
- * Va casi hasta el eje (innerR pequeño, no 11): con un agujero grande, la
- * cámara —que mira desde arriba y desde +Z— veía por él justo por debajo
- * de la isla, y aparecía un óvalo de color de fondo bajo el disco.
- */
-function buildSeaGeometry(): THREE.RingGeometry {
-  const geo = new THREE.RingGeometry(
-    BACKDROP_LOOK.seaInnerR,
-    BACKDROP_LOOK.seaOuterR,
-    BACKDROP_LOOK.seaSegments,
-    BACKDROP_LOOK.seaRings,
-  );
-  // RingGeometry reparte los anillos LINEALMENTE entre inner y outer. Con
-  // outer = 300 eso deja apenas 4 anillos en la franja que la cámara ve de
-  // verdad (r 40-120), y el degradado se interpola en cuatro pasos: plano.
-  // Se remapean los radios con una potencia para concentrar la resolución
-  // cerca de la isla, que es donde se mira.
-  const pos = geo.getAttribute('position');
-  const inner = BACKDROP_LOOK.seaInnerR;
-  const outer = BACKDROP_LOOK.seaOuterR;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const r = Math.hypot(x, y);
-    if (r < 1e-6) continue;
-    // clamp obligatorio: los vértices del borde interior salen con un r
-    // una micra por debajo de `inner` por precisión de coma flotante, y
-    // una base negativa elevada a 2,2 da NaN — que se propaga al
-    // boundingSphere y deja la malla sin volumen calculable.
-    const u = Math.min(1, Math.max(0, (r - inner) / (outer - inner)));
-    const rNew = inner + (outer - inner) * u ** BACKDROP_LOOK.ringDistribution;
-    pos.setXY(i, (x / r) * rNew, (y / r) * rNew);
-  }
-  pos.needsUpdate = true;
-  return geo;
-}
-
 /** Interpola una rampa de paradas [t, color] en t ∈ [0,1]. */
-function sampleRamp(ramp: SeaRamp, t: number, out: THREE.Color): THREE.Color {
+function sampleRamp(ramp: CliffRamp, t: number, out: THREE.Color): THREE.Color {
   const stops = ramp.stops;
   if (stops.length === 0) return out.setHex(0x808080);
   if (t <= stops[0]![0]) return out.setHex(stops[0]![1]);
@@ -105,78 +45,11 @@ function sampleRamp(ramp: SeaRamp, t: number, out: THREE.Color): THREE.Color {
   return out.setHex(stops[stops.length - 1]![1]);
 }
 
-/**
- * Pinta la rampa del bioma en el color por vértice, junto con dos cosas
- * que en un fondo real vienen de la luz y que aquí salen gratis:
- *
- *  1. PERSPECTIVA AÉREA al revés de lo intuitivo: OSCURO cerca del disco
- *     y CLARO lejos. Es lo que hace que el canto se recorte y que el ojo
- *     lea distancia. (La niebla de escena añade lo suyo por encima, pero
- *     no puede hacer sola este trabajo: con density 0,008 todo lo que
- *     pasa de r≈100 se funde a color liso.)
- *  2. SOMBRA DE LA ISLA: una mancha más oscura pegada al disco, más
- *     intensa en el lado opuesto a la luz key. Es lo que ancla la isla en
- *     el sitio en lugar de dejarla recortada.
- */
-function paintSeaColors(geo: THREE.RingGeometry, ramp: SeaRamp, fogColor: number): void {
-  const pos = geo.getAttribute('position');
-  const colors = new Float32Array(pos.count * 3);
-  const c = new THREE.Color();
-  const FOG_TMP = new THREE.Color();
-  const inner = BACKDROP_LOOK.seaInnerR;
-  // Dirección de la luz key proyectada en el plano. El mar solo vive en
-  // el A/B de la F0, que va con la luz de antes.
-  const [lightX, , lightZ] = lightDirection(LEGACY_LIGHT.keyAzimuthDeg, LEGACY_LIGHT.keyElevationDeg);
-  const lightLen = Math.hypot(lightX, lightZ) || 1;
-
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);   // RingGeometry vive en XY antes de tumbarla
-    const r = Math.hypot(x, y);
-    // t: 0 pegado al disco, 1 en el borde exterior. Curva para que la
-    // mayor parte del degradado ocurra cerca, que es donde se mira.
-    // El degradado se agota en `rampSpanR`, no en el borde del plano: la
-    // cámara solo ve de r≈40 (bajo la isla) a r≈120 (esquinas superiores),
-    // así que repartir la rampa hasta 300 dejaba TODO el bioma en el
-    // primer tercio de la escala y el resultado era un color liso.
-    // La rampa arranca en `rampInnerR`, no en el borde interior del
-    // plano: lo primero que asoma del mar por detrás de la isla ya está a
-    // r≈20-25, así que empezar en 0 gastaba los tonos oscuros —los que
-    // recortan el canto— en geometría que la isla tapa.
-    const rampInner = BACKDROP_LOOK.rampInnerR;
-    const span = Math.max(1, BACKDROP_LOOK.rampSpanR - rampInner);
-    const t = Math.min(1, Math.max(0, (r - rampInner) / span));
-    sampleRamp(ramp, t ** BACKDROP_LOOK.rampCurve, c);
-
-    // Perspectiva aérea HORNEADA hacia el color de niebla del pack. No se
-    // delega en `scene.fog`: con density 0,008 todo lo que pasa de r≈100
-    // se funde a un color liso, que es exactamente el defecto que veníamos
-    // a arreglar (un plano de color uniforme llenando la pantalla). Aquí
-    // la curva se controla y se corta antes del blanco total.
-    const haze = Math.min(BACKDROP_LOOK.hazeMax, t ** BACKDROP_LOOK.hazeCurve * BACKDROP_LOOK.hazeMax);
-    c.lerp(FOG_TMP.setHex(fogColor), haze);
-
-    // Sombra proyectada de la isla: se desvanece con la distancia y es
-    // más fuerte en el lado contrario a la luz.
-    const shadowFalloff = Math.max(0, 1 - (r - inner) / BACKDROP_LOOK.islandShadowReach);
-    const dirDot = r > 0.001 ? (x * lightX + y * lightZ) / (r * lightLen) : 0;
-    const shadowSide = 0.5 - 0.5 * dirDot;   // 1 en el lado opuesto a la luz
-    const shadow = shadowFalloff ** 1.6 * (0.45 + 0.55 * shadowSide) * BACKDROP_LOOK.islandShadow;
-    c.multiplyScalar(1 - shadow);
-
-    colors[i * 3] = c.r;
-    colors[i * 3 + 1] = c.g;
-    colors[i * 3 + 2] = c.b;
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-}
-
 // ---------------------------------------------------------------------------
 // Fondo v2 — la isla en el cielo (docs/DIORAMAS.md §«Fondo v2»)
 // ---------------------------------------------------------------------------
 //
-// El mar de arriba se queda para el A/B (`BACKDROP_LOOK.mode = 'sea'`) hasta
-// la F4. Esto es lo que lo sustituye: una cúpula pegada a la cámara con
+// Una cúpula pegada a la cámara con
 // color por latitud (cielo, horizonte, pozo), un mar de nubes abierto en
 // cráter alrededor de la isla, un cuello de nubes en sombra bajo la punta
 // del cono, nubes lejanas que se funden con el horizonte e islotes
@@ -573,7 +446,6 @@ const _lp = new THREE.Vector3(), _ls = new THREE.Vector3();
 
 /** Coste y control del cielo, para el lab, el CLI y los criterios del slice. */
 export interface BackdropStats {
-  mode: 'sky' | 'sea';
   draws: number;
   tris: number;
   layers: Record<string, { instances: number; tris: number }>;
@@ -585,9 +457,13 @@ export interface BackdropStats {
   toriiPath: number;
   corridorViolations: number;
   corridorDeg: [number, number] | null;
+  /** Paradas de la cúpula [elevación °, color 0xRRGGBB], de +90 a −90. */
+  domeStops: Array<[number, number]>;
   /** F2: instancias que giran con la deriva (bultos con panza + torres). */
   drifting: number;
   maxExtent: number;
+  /** F4: el mismo alcance en 3D (ver `SkyLayout.maxReach`). */
+  maxReach: number;
   buildMs: number;
   hash: string | null;
 }
@@ -612,42 +488,13 @@ export class ArenaBackdrop {
     this.group.name = 'arena-backdrop';
   }
 
-  /** Construye (o reconstruye) el mar con la rampa del bioma dado. */
-  setRamp(ramp: SeaRamp, fogColor: number): void {
-    this.dispose();
-    const t0 = performance.now();
-    // Modo mar: se pinta antes que nada, siempre detrás de todo.
-    this.group.renderOrder = -10;
-    const geo = buildSeaGeometry();
-    paintSeaColors(geo, ramp, fogColor);
-    const mat = new THREE.MeshBasicMaterial({
-      vertexColors: true,
-      side: THREE.DoubleSide,
-      // La niebla va HORNEADA en el vértice (ver paintSeaColors), no
-      // delegada: `scene.fog` a la distancia de este plano lo aplana a un
-      // color liso y se pierde toda la lectura de profundidad.
-      fog: false,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = BACKDROP_LOOK.seaY;
-    mesh.frustumCulled = false;   // r=300: su bounding sphere confunde al culling
-    this.add(mesh);
-    this.lastStats = {
-      mode: 'sea', draws: 1, tris: triCount(geo),
-      layers: { sea: { instances: 1, tris: triCount(geo) } },
-      rejected: null, isletsInFrame: 0, lifeInFrame: 0, toriiPath: 0, corridorViolations: 0, corridorDeg: null,
-      drifting: 0, maxExtent: BACKDROP_LOOK.seaOuterR, buildMs: performance.now() - t0, hash: null,
-    };
-  }
-
   /** Construye el cielo del bioma (fondo v2). Determinista por semilla. */
   buildSky(sky: PackSky, horizon: number, cliff: CliffRamp, seed: number, lipRadius: number): void {
     this.dispose();
     const t0 = performance.now();
-    // Modo cielo: se pinta DESPUÉS de lo opaco del juego, con la cúpula la
-    // última, para que la GPU descarte por profundidad todo lo que tapan
-    // el disco, las nubes y los islotes (el mar se pintaba entero debajo).
+    // Se pinta DESPUÉS de lo opaco del juego, con la cúpula la última, para
+    // que la GPU descarte por profundidad todo lo que tapan el disco, las
+    // nubes y los islotes (el mar de antes se pintaba entero debajo).
     this.group.renderOrder = 5;
     const layout = layoutSky({
       look: BACKDROP_LOOK, sky, horizon, seed, salt: SALT_BACKDROP, lipRadius,
@@ -755,7 +602,6 @@ export class ArenaBackdrop {
     this.tick(0);
 
     this.lastStats = {
-      mode: 'sky',
       draws: this.meshes.length,
       tris: Object.values(layers).reduce((a, l) => a + l.tris, 0),
       layers,
@@ -765,8 +611,10 @@ export class ArenaBackdrop {
       toriiPath: layout.toriiPath,
       corridorViolations: layout.corridorViolations,
       corridorDeg: [layout.corridorTopDeg, layout.corridorBottomDeg],
+      domeStops: layout.domeStops,
       drifting: layout.cloudsDrift.length + layout.towers.length,
       maxExtent: layout.maxExtent,
+      maxReach: layout.maxReach,
       buildMs: performance.now() - t0,
       hash: layout.hash,
     };

@@ -458,6 +458,20 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De ARENA, 2026-09-29 — el payload baja 270 KB: fuera las fotos de
+  fondo.** Es la F4 del fondo v2, con permiso de GENERAL. Para que lo
+  sepas; no tienes que hacer nada.
+  - Se borran `public/images/skyboxes/*.webp` (270.120 B) y su `_raw/`.
+    El dist queda en **27,2 MB** (antes 27,4) y el presupuesto sigue en
+    OK.
+  - `scripts/compress-images.mjs` pierde la línea de los skyboxes, y
+    nada más.
+  - En producción, de rebote, se va la fuga de VRAM de la foto: unos
+    32 MB por pack jugado, que el caché de texturas no soltaba.
+  - Los masters PNG siguen en
+    `R:\Proyectos_Trabajos\WorkSpaces\Claude\bichitos-rumble\resources\skyboxes-retirados\`
+    (la carpeta de arte de Rafa) y en el historial de git.
+
 - **De PERSONAJES, 2026-09-29 — el choque de cabezas cambia en el
   servidor: el próximo despliegue lleva servidor.**
   - `server/src/sim/physics.ts` (espejo mío), `headbuttClash`. Cuando dos

@@ -82,7 +82,7 @@ Usage:
   npm run apply-tool-patch -- --dry-run          # show diff, do not write
 
 Patch shape (see src/tools/tool-storage.ts ToolPatch):
-  { "tool": "calibrate" | "anim-lab" | "decor-editor" | "feel-patch" | "anim-personality" | "ability-patch",
+  { "tool": "calibrate" | "anim-lab" | "decor-editor" | "feel-patch" | "anim-personality" | "ability-patch" | "look-patch",
     "version": 1, "generated": "...", "data": { ... } }
 `);
   process.exit(0);

@@ -208,6 +208,15 @@ antes de commitear el JSON.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De ARENA, 2026-09-29 — el destello de la caída ya está.** Es lo que
+  ARENA se quedó de tu nota del 21 sobre la caída.
+  - Donde un bicho que cae desaparece sale un puf de nube del color del
+    bioma. Lo detecta la arena por el flanco `falling` de cada bicho, sin
+    tocar `critter.ts`.
+  - Tu parte sigue siendo opcional y sin prisa: que el bicho encoja en
+    los últimos 0,3 s de la caída y antes del `visible=false` de
+    `eliminate()`. El puf funciona igual lo hagas o no.
+
 - **De ARENA, 2026-09-29 — la F3 del fondo v2 cambia la luz de los bichos
   (cada bioma tiene la suya).** Para que lo sepas; no tienes que hacer
   nada.

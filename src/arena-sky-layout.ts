@@ -149,6 +149,10 @@ export interface SkyLayout {
   /** Radio horizontal más lejano que alcanza una instancia (u). Tiene que
    *  quedar dentro de la cúpula con margen para la cámara de victoria. */
   maxExtent: number;
+  /** Lo mismo en 3D: la distancia más lejana al origen (horizontal y
+   *  vertical, con el tamaño de cada cosa). Es la que la cúpula (una
+   *  esfera pegada a la cámara) recorta: las torres suben a y ≈ +33. */
+  maxReach: number;
   hash: string;
 }
 
@@ -819,18 +823,21 @@ export function layoutSky(p: SkyLayoutParams): SkyLayout {
 
   // --- Cifras -----------------------------------------------------------------
   // Se hashea lo que se DIBUJA, por malla: el reparto quieto/deriva cuenta.
-  let maxExtent = 0;
+  let maxExtent = 0, maxReach = 0;
   let h = 0x811c9dc5 | 0;
   const mix = (n: number) => { h = Math.imul(h ^ Math.round(n * 1e4), 0x01000193); };
   for (const list of [cloudsStill, cloudsDrift, far, islets, coronas, hangs, towers]) {
     mix(list.length);
     for (const it of list) {
       maxExtent = Math.max(maxExtent, Math.hypot(it.x, it.z) + Math.max(it.sx, it.sz));
+      const ext = Math.max(it.sx, it.sy, it.sz);
+      maxReach = Math.max(maxReach, Math.hypot(Math.hypot(it.x, it.z) + ext, Math.abs(it.y) + ext));
       for (const n of [it.x, it.y, it.z, it.sx, it.sy, it.sz, it.rotY, it.r, it.g, it.b]) mix(n);
     }
   }
   for (const it of life) {
     maxExtent = Math.max(maxExtent, Math.hypot(it.x, it.z) + it.radius);
+    maxReach = Math.max(maxReach, Math.hypot(Math.hypot(it.x, it.z) + it.radius, Math.abs(it.y) + it.span + it.radius));
     for (const n of [it.kind === 'orbit' ? 1 : 2, it.x, it.y, it.z, it.radius, it.span, it.phase, it.speed]) mix(n);
   }
 
@@ -848,6 +855,7 @@ export function layoutSky(p: SkyLayoutParams): SkyLayout {
     lifeInFrame,
     corridorViolations,
     maxExtent,
+    maxReach,
     hash: (h >>> 0).toString(16).padStart(8, '0'),
   };
 }

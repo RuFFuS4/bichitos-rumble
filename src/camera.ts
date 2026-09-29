@@ -15,12 +15,9 @@ import * as THREE from 'three';
 // skybox horizon into frame; ruined gameplay framing (ring no
 // longer fully visible, critters pushed into bottom strip).
 // Reverted in 9731d64 — the framing stays locked here and the sky
-// is not the camera's problem: it's the pack's equirect panorama
-// bound as `scene.background` (`setSceneSkyboxTexture`,
-// `src/scene-atmosphere.ts`), which never moves with the camera.
-// (Este comentario decía "sky moved to a camera-attached backdrop";
-// ese backdrop nunca existió — corregido 2026-09-06, docs/ARENA_V2.md
-// §1.3 #16.)
+// is not the camera's problem. Desde el fondo v2 el cielo es una cúpula
+// de color por latitud pegada a la cámara (`src/arena-backdrop.ts`); la
+// foto de fondo (`scene.background`) se borró en su F4.
 export const GAMEPLAY_CAM_POSITION = new THREE.Vector3(0, 23, 25);
 export const GAMEPLAY_CAM_LOOKAT = new THREE.Vector3(0, -3, 0);
 /** Campo de visión vertical (°). El pasillo del canto del fondo v2 se
@@ -78,9 +75,9 @@ export function applyGameplayCameraPose(cam: THREE.PerspectiveCamera): void {
 }
 
 export function createCamera(): THREE.PerspectiveCamera {
-  // far 200 → 500: el mar del decorado (BACKDROP_LOOK.seaOuterR = 300,
-  // src/arena-backdrop.ts) se recortaba a 200 y dejaba asomar la
-  // panorámica justo en la banda que viene a tapar. near 0.1 → 0.5
+  // far 500: la cúpula del cielo tiene r 420 y va pegada a la cámara, y
+  // las nubes lejanas y las torres llegan a ~385 u del eje (fondo v2). El
+  // 500 venía del mar de antes (r 300), borrado en la F4. near 0.1 → 0.5
   // recupera la precisión de profundidad que cuesta ese far: nada se
   // dibuja a menos de 0,5 u (el plano corto del selector está a 4,5).
   const cam = new THREE.PerspectiveCamera(GAMEPLAY_CAM_FOV, window.innerWidth / window.innerHeight, 0.5, 500);

@@ -7,7 +7,7 @@
 // por clean-dist-raw, conservados en git para regenerar):
 //
 //   · sprites HUD/ability  → .webp q90 (flat-color + alpha, ~8× menos)
-//   · skyboxes + grounds   → .webp q80 (texturas, per-match lazy)
+//   · grounds              → .webp q80 (texturas, per-match lazy)
 //   · og-image.png         → og-image.jpg q82 (<600 KB — límite real de
 //     preview de WhatsApp; JPEG por compatibilidad máxima de scrapers)
 //   · favicon-br.png       → PNG 192px palette (los favicons siguen en
@@ -27,7 +27,6 @@ const jobs = [
   ['public/images/hud-icons.png', 'public/images/hud-icons.webp', (s) => s.webp({ quality: 90 })],
   ['public/images/ability-icons.png', 'public/images/ability-icons.webp', (s) => s.webp({ quality: 90 })],
   ...['jungle', 'frozen_tundra', 'desert_dunes', 'coral_beach', 'kitsune_shrine'].flatMap((pack) => [
-    [`public/images/skyboxes/${pack}.png`, `public/images/skyboxes/${pack}.webp`, (s) => s.webp({ quality: 80 })],
     [`public/images/arena-ground/${pack}.png`, `public/images/arena-ground/${pack}.webp`, (s) => s.webp({ quality: 80 })],
   ]),
   ['public/og-image.png', 'public/og-image.jpg', (s) => s.jpeg({ quality: 82, mozjpeg: true })],

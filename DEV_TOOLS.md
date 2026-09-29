@@ -394,16 +394,17 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
       y determinista: decide nubes, islotes, cúpula y el pasillo del canto.
     - **Valores**: los globales van en `BACKDROP_LOOK` y los de cada bioma
       en `PackDef.sky`.
-    - **En vivo**: `__devApi.getBackdropLook()` y
-      `setBackdropLook({ mode: 'sea' })` (`mode: 'sea'` es el A/B con el mar
-      y la foto de antes). También `getPackSky(id)` y `setPackSky(id, patch)`,
+    - **En vivo**: `__devApi.getBackdropLook()` y `setBackdropLook(patch)`
+      (el mar y la foto de antes se borraron en la F4). También
+      `getPackSky(id)` y `setPackSky(id, patch)`,
       que devuelven `{applied, rebuilt, rejected}`. `getBackdropStats()`
       da capas, tris, draws, `corridorViolations` (tiene que ser 0),
       `maxExtent`, `buildMs` y el hash. `setCameraPose('victory' | 'defeat'
       | 'wide' | 'low' | 'game')` sirve para mirar las poses de fin de
       partida sin jugar una.
-    - **CLI**: `arena-shots.mjs` con `--pose`, `--backdrop`, `--scatter 0`,
-      `--no-hud`, `--metrics`, `--critters` y `--sky-patch` (abajo).
+    - **CLI**: `arena-shots.mjs` con `--pose`, `--scatter 0`, `--no-hud`,
+      `--metrics`, `--critters` y `--sky-patch` (abajo), y
+      `scripts/arena-sky.mjs` sin navegador (F4, abajo).
     Esto cierra el hueco de doble superficie que había: antes
     `BACKDROP_LOOK` solo se tocaba editando el fichero.
   - **Escala del suelo por bioma**: `PackDef.groundTile` en
@@ -439,7 +440,7 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     y saltar la cuenta atrás ya lo hace el script.
     - **Opciones del fondo v2**: `--pose game,victory,wide,defeat,low`
       (varias poses del mismo instante congelado), `--viewport 390x844`,
-      `--backdrop sky|sea`, `--scatter 0`, `--no-hud`, `--critters
+      `--scatter 0`, `--no-hud`, `--critters
       A,B,C,D` y `--sky-patch '{json}'`.
     - **F1 del fondo** (2026-09-29): `--no-island` oculta la isla, los
       bichos y sus sombras, que es la prueba de Rafa: tapando el disco se
@@ -482,6 +483,25 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
         el canto de la isla, que se hornea al construir la arena. En vivo,
         `rebuilt: true` rehace el fondo y los islotes, pero el canto no se
         ve hasta la partida siguiente.
+      - **F4 del fondo** (2026-09-29):
+        - `node --experimental-strip-types --no-warnings
+          scripts/arena-sky.mjs [--packs a,b] [--seeds 1,7,42] [--json]
+          [--look '{json}'] [--sky '{json}']` construye el cielo de verdad
+          en node (sin navegador, en ms). Da draws, tris e instancias por
+          capa, rechazos, violaciones del pasillo, `maxExtent`, hash (el
+          mismo que el juego), la luz, el color de la cúpula por elevación
+          y el ΔL previsto labio-pozo. Sale con 1 si algo incumple.
+        - **`look-patch`** (ToolPatch, `npm run apply-tool-patch --
+          --patch=x.json`): `{"tool":"look-patch","version":1,"data":
+          {"BACKDROP_LOOK.towerCount": 9, "BACKDROP_LOOK.legacyLight":
+          true}}` reescribe esas hojas de `src/arena-look.ts`. Solo
+          números y booleanos de primer nivel, y nunca crea claves.
+        - `arena-shots --metrics` imprime y guarda el veredicto del
+          contrato §8 (`checkContract` en `scripts/lib/arena-metrics.mjs`):
+          canto, luz y saturación (croma CIELAB) del fondo frente a la
+          arena, con el pozo claro de jungle aparte. Tundra y kitsune
+          incumplen hoy la de saturación: pendiente de Rafa (DIORAMAS F4).
+        - `getBackdropStats()` da también `domeStops`.
       - **Capturas:** `arena-shots --look-patch '{json}'` (parche de
         `BACKDROP_LOOK` antes de empezar; entra en el sufijo de los
         ficheros y en la clave de las métricas). La pose `lineup` pone a

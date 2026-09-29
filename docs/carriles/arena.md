@@ -39,9 +39,13 @@ el orden de trabajo.
      antes sigue a `legacyLight`. Bloque «Estado de la F3» en DIORAMAS;
      hojas en `.tmp/shots-f3/` (`_hoja_f3_escena`, `_roster_f3`). Nota en
      el buzón de PERSONAJES.
-   - Lo que queda: F4 caída, CLI `arena-sky.mjs`, `look-patch`, test de
-     determinismo y borrado del mar y de las fotos (y, si Rafa aprueba
-     la F3, de `legacyLight`).
+   - **F4: HECHA (2026-09-29).** La caída («el cielo se lo traga»), fuera
+     el mar y la foto, la CLI `arena-sky.mjs`, `look-patch`, el test de
+     determinismo y las métricas de jerarquía. Bloque «Estado de la F4»
+     en DIORAMAS. **El fondo v2 queda cerrado**, salvo lo que diga Rafa de
+     las tres hojas.
+   - Lo que queda del fondo: si Rafa aprueba la F3, borrar `legacyLight`
+     y `LEGACY_LIGHT`; si no, ponerlo a `true` por defecto.
 2. **Dioramas slice 2**: afinar recetas sobre capturas (grietas de hielo,
    escala de acentos), fleco del borde que se regenera al caer un sector,
    viento animado barato, recomponer los 73 props autorados,
@@ -81,7 +85,7 @@ el orden de trabajo.
   - Pasillo del canto medido en ángulo y rebote del hemisferio por bioma.
   - Superficie completa: `setBackdropLook`, `setPackSky`,
     `getBackdropStats`, `setCameraPose` y `arena-shots --pose / --metrics /
-    --backdrop / --sky-patch / --critters`.
+    --sky-patch / --critters`.
   - Revisado en adversarial: 18 hallazgos, todos arreglados.
 
 ## Lo que no puedes romper
@@ -250,9 +254,10 @@ el orden de trabajo.
 ## Cómo retomar
 
 **2026-09-29**. Hecho y en `dev`: los dos desbloqueos del encargo
-(`Arena.simulate`/`present` y `ArenaSim.getLayout()`), la **F1 del fondo
-v2** (las firmas de cada bioma), la **F2** (torres, fondo del pozo,
-deriva y vida) y la **F3** (la luz de cada bioma, con A/B).
+(`Arena.simulate`/`present` y `ArenaSim.getLayout()`) y el **fondo v2
+entero**: F1 (las firmas de cada bioma), F2 (torres, fondo del pozo,
+deriva y vida), F3 (la luz de cada bioma, con A/B) y F4 (la caída, fuera
+el mar y la foto, CLI, `look-patch`, test y métricas).
 
 - **Pendiente de Rafa:** la prueba a ciegas del disco tapado
   (`.tmp/shots-f1/_tapado_a_ciegas.png`). Si algún bioma no se reconoce,
@@ -262,15 +267,17 @@ deriva y vida) y la **F3** (la luz de cada bioma, con A/B).
   del A/B de la F3 (`.tmp/shots-f3/_hoja_f3_escena.png` y
   `_roster_f3.png`). Si Rafa descarta la F3: `legacyLight: true` por
   defecto, sin deshacer nada.
-- **Después:** F4 (la caída, la CLI sin navegador, `look-patch` y el test
-  de determinismo) o lo que diga el encargo de GENERAL.
+- **Después:** lo que diga el encargo de GENERAL. Lo siguiente de la
+  lista es el punto 2 (dioramas slice 2).
 - **Trabajo en paralelo:** en `.claude/worktrees/arena`, con el dev server
   en el 5182.
 
 - **Para mirar**: `node scripts/arena-shots.mjs --out .tmp/shots-x
   --pose game,victory,low --no-hud`. Con `--sky-time 150` se ve la deriva
   en su extremo (15°) sin jugar hasta ahí.
-- **Para medir el contrato del fondo**: lo mismo con `--metrics --scatter 0`.
+- **Para medir el contrato del fondo**: lo mismo con `--metrics --scatter 0`
+  (imprime el veredicto del §8). Sin imagen y en milisegundos:
+  `node --experimental-strip-types --no-warnings scripts/arena-sky.mjs`.
 - **Para cambiar el cielo en vivo**: `__devApi.setPackSky(id, patch)` y
   `__devApi.getBackdropStats()`. Tiene que dar `corridorViolations` 0.
 

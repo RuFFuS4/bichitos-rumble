@@ -30,7 +30,7 @@
 //   · undo / redo over snapshot history (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
 //   · per-pack localStorage auto-save + last-pack restore across reloads
 //   · optional GLB preview layer with pack ambience (fog-tinted clear
-//     colour always on; equirect skybox while the GLB preview is active)
+//     colour; the equirect photo went with the fondo v2 F4)
 //   · "Preview in game" opens the real game reading the working copy
 //
 // NOT in scope (deliberately):
@@ -45,7 +45,6 @@ import {
   ARENA_PACK_IDS,
   getPackDecorScale,
   getPackFogColor,
-  loadPackSkyboxTexture,
   type ArenaPackId,
 } from '../arena-decorations';
 import { IN_GAME_TARGET_HEIGHT } from '../critter';
@@ -401,27 +400,13 @@ function setPreviewMode(on: boolean): void {
   }
 }
 
-/** Pack ambience. Two layers, deliberately asymmetric:
- *    · clear colour = pack fog colour, ALWAYS on — cheap colour-judgment
- *      context (props are tuned against the pack's light, not lab grey);
- *    · equirect skybox only while the GLB preview is active — behind
- *      placeholder discs a photo background is noise, not context.
- *  Texture loads go through arena-decorations' session cache, so pack
- *  switches after warm-up are free. */
+/** Pack ambience: clear colour = pack fog colour — cheap colour-judgment
+ *  context (props are tuned against the pack's light, not lab grey). The
+ *  equirect photo behind the GLB preview went with the fondo v2 F4: the
+ *  game has no photo any more, so it was context for a sky that no longer
+ *  exists. */
 function refreshAmbience(): void {
   renderer.setClearColor(getPackFogColor(currentPack));
-  if (!previewMode) {
-    scene.background = null;
-    return;
-  }
-  const pack = currentPack;
-  loadPackSkyboxTexture(pack)
-    .then((tex) => {
-      // Stale-guard: the user may have switched packs or toggled the
-      // preview off while the texture streamed in.
-      if (previewMode && currentPack === pack) scene.background = tex;
-    })
-    .catch(() => { scene.background = null; });   // 404 → fall back to clear colour
 }
 
 // ---------------------------------------------------------------------------

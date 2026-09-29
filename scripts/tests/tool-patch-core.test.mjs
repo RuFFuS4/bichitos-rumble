@@ -856,3 +856,82 @@ test('anim-personality: `1.2 * 2` refuses instead of half-rewriting', () => {
     /not a plain number/i,
   );
 });
+
+// ===========================================================================
+// look-patch — hojas de ARENA_LOOK / BACKDROP_LOOK (fondo v2, F4)
+// ===========================================================================
+
+import { applyLookPatch } from '../tool-patch-core.mjs';
+
+const LOOK_SRC = [
+  'export const ARENA_LOOK: ArenaLookConfig = {',
+  '  tileSize: 12,            // lado del tile',
+  '  toneMapping: false,',
+  '  tintBase: 0xa0c080,      // color base',
+  '};',
+  '',
+  'export const BACKDROP_LOOK: BackdropLookConfig = {',
+  '  // towerCount: 99, (comentario: no se toca)',
+  '  towerCount: 8,',
+  '  nested: { towerCount: 3 },',
+  '  lifeSize: 1.2,           // tamaño de la vida',
+  '  legacyLight: false,',
+  '};',
+  '',
+].join('\n');
+
+test('look-patch: replaces number and boolean leaves, comments and commas survive', () => {
+  const out = applyLookPatch(LOOK_SRC, {
+    'BACKDROP_LOOK.towerCount': 10, 'BACKDROP_LOOK.legacyLight': true, 'ARENA_LOOK.tileSize': 14.5,
+  });
+  assert.match(out, /\n  towerCount: 10,\n/);
+  assert.match(out, /legacyLight: true,/);
+  assert.match(out, /tileSize: 14\.5,            \/\/ lado del tile/);
+  // El comentario y el objeto anidado no se tocan.
+  assert.match(out, /\/\/ towerCount: 99,/);
+  assert.match(out, /nested: \{ towerCount: 3 \}/);
+  assert.match(out, /lifeSize: 1\.2,           \/\/ tamaño de la vida/);
+});
+
+test('look-patch: idempotent on second apply', () => {
+  const data = { 'BACKDROP_LOOK.lifeSize': 1.5, 'BACKDROP_LOOK.legacyLight': true };
+  const once = applyLookPatch(LOOK_SRC, data);
+  assert.equal(applyLookPatch(once, data), once);
+});
+
+test('look-patch: unknown key, wrong type and unknown record throw, never create', () => {
+  assert.throws(() => applyLookPatch(LOOK_SRC, { 'BACKDROP_LOOK.nope': 1 }), /'BACKDROP_LOOK\.nope' not found/);
+  assert.throws(() => applyLookPatch(LOOK_SRC, { 'BACKDROP_LOOK.legacyLight': 1 }), /not a plain number/);
+  assert.throws(() => applyLookPatch(LOOK_SRC, { 'BACKDROP_LOOK.towerCount': true }), /not a plain boolean/);
+  assert.throws(() => applyLookPatch(LOOK_SRC, { 'OTHER_LOOK.towerCount': 1 }), /export found 0 times/);
+});
+
+test('look-patch: validate accepts RECORD.key numbers/booleans and rejects junk', () => {
+  assert.deepEqual(validateToolPatch({ tool: 'look-patch', version: 1, data: { 'BACKDROP_LOOK.towerCount': 9, 'BACKDROP_LOOK.legacyLight': true } }), []);
+  assert.ok(validateToolPatch({ tool: 'look-patch', version: 1, data: { 'FEEL.towerCount': 9 } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'look-patch', version: 1, data: { 'BACKDROP_LOOK.a.b': 9 } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'look-patch', version: 1, data: { 'BACKDROP_LOOK.towerCount': 'x' } }).length > 0);
+  assert.ok(validateToolPatch({ tool: 'look-patch', version: 1, data: { 'BACKDROP_LOOK.towerCount': NaN } }).length > 0);
+});
+
+test('look-patch: against the REAL arena-look.ts, round-trips', () => {
+  const real = readFileSync(path.join(here, '../../src/arena-look.ts'), 'utf8');
+  const data = { 'BACKDROP_LOOK.towerCount': 9, 'BACKDROP_LOOK.legacyLight': true, 'BACKDROP_LOOK.sunHaloStrength': 0.3 };
+  const out = applyLookPatch(real, data);
+  const lf = out.replace(/\r\n/g, '\n');
+  assert.match(lf, /\n  towerCount: 9,\n/);
+  assert.match(lf, /\n  legacyLight: true,\n/);
+  assert.match(lf, /\n  sunHaloStrength: 0\.3,\n/);
+  assert.equal(applyLookPatch(out, data), out);
+  // Solo cambian esas tres líneas.
+  const a = real.replace(/\r\n/g, '\n').split('\n'), b = lf.split('\n');
+  assert.equal(a.length, b.length);
+  assert.equal(a.filter((l, i) => l !== b[i]).length, 3);
+});
+
+test('look-patch: hex colours stay hex, and must be valid colours', () => {
+  const out = applyLookPatch(LOOK_SRC, { 'ARENA_LOOK.tintBase': 0x0f0e0d });
+  assert.match(out, /tintBase: 0x0f0e0d,      \/\/ color base/);
+  assert.throws(() => applyLookPatch(LOOK_SRC, { 'ARENA_LOOK.tintBase': 1.5 }), /hex colour/);
+  assert.throws(() => applyLookPatch(LOOK_SRC, { 'ARENA_LOOK.tintBase': 0x1000000 }), /hex colour/);
+});

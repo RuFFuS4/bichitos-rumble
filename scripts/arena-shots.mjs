@@ -12,7 +12,7 @@
 //                                [--at-seconds 0] [--packs a,b]
 //                                [--viewport 1280x720]
 //                                [--pose game,victory,wide,defeat,low,lineup]
-//                                [--backdrop sky|sea] [--scatter 0]
+//                                [--scatter 0]
 //                                [--look-patch '{json}']
 //                                [--no-hud] [--metrics]
 //                                [--critters A,B,C,D] [--sky-patch '{json}']
@@ -26,8 +26,6 @@
 //               la última de la lista, y necesita la partida en juego
 //               (--at-seconds 1 o más). `low` es
 //               la cámara baja de las hojas del cono (src/camera.ts).
-//   --backdrop  A/B del fondo: `sky` (la isla en el cielo) o `sea` (el mar
-//               con la foto de antes).
 //   --scatter 0 quita la capa densa del diorama para juzgar solo el fondo.
 //   --no-hud    captura solo el canvas (hojas de contactos).
 //   --metrics   ΔL del canto y jerarquía fondo/arena en la pose de juego,
@@ -51,7 +49,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { launchMutedBrowser, muteGameAudio } from './lib/headless-browser.mjs';
-import { measureBackdrop } from './lib/arena-metrics.mjs';
+import { checkContract, measureBackdrop } from './lib/arena-metrics.mjs';
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i++) {
@@ -65,7 +63,6 @@ const URL = args.get('url') ?? 'http://localhost:5173';
 const ALL = ['jungle', 'frozen_tundra', 'desert_dunes', 'coral_beach', 'kitsune_shrine'];
 const PACKS = args.get('packs') ? String(args.get('packs')).split(',') : ALL;
 const POSES = String(args.get('pose') ?? 'game').split(',');
-const BACKDROP = args.get('backdrop');
 // --look-patch: parche de BACKDROP_LOOK antes de empezar (__devApi.setBackdropLook),
 // p. ej. '{"legacyLight":true}' para el A/B de la luz de la F3.
 const LOOK_PATCH = args.has('look-patch') ? JSON.parse(String(args.get('look-patch'))) : null;
@@ -108,10 +105,6 @@ await page.addStyleTag({ content: '#lab-sidebar { display: none !important; }' }
 if (LOOK_PATCH) {
   const r = await page.evaluate((patch) => window.__devApi.setBackdropLook(patch), LOOK_PATCH);
   if (r.rejected.length) console.warn(`  --look-patch: rechazado (${r.rejected})`);
-}
-if (BACKDROP) {
-  const r = await page.evaluate((mode) => window.__devApi.setBackdropLook({ mode }), BACKDROP);
-  if (r.rejected.length) console.warn(`  --backdrop ${BACKDROP}: rechazado (${r.rejected})`);
 }
 const allMetrics = {};
 
@@ -269,12 +262,14 @@ for (const pack of PACKS) {
       });
       const m = await measureBackdrop(png, fragments, falling);
       const stats = await page.evaluate(() => window.__devApi.getBackdropStats());
-      allMetrics[`${pack}${suffix}`] = { ...m, backdrop: stats && {
-        mode: stats.mode, draws: stats.draws, tris: stats.tris, corridorViolations: stats.corridorViolations,
+      const pit = await page.evaluate((p) => window.__devApi.getPackSky(p)?.pit ?? 'dark', pack);
+      const contract = checkContract(m, pit);
+      allMetrics[`${pack}${suffix}`] = { ...m, pit, contract, backdrop: stats && {
+        draws: stats.draws, tris: stats.tris, corridorViolations: stats.corridorViolations,
         isletsInFrame: stats.isletsInFrame, toriiPath: stats.toriiPath, maxExtent: Math.round(stats.maxExtent),
         buildMs: Math.round(stats.buildMs * 10) / 10, hash: stats.hash,
       } };
-      console.log(`  ${pack.padEnd(16)} ΔL canto mediana ${m.lip.median} · p10 ${m.lip.p10} · min ${m.lip.min} (${m.lip.azimuths} az, ${m.lip.fallingSkipped} cayendo) · fondo ${m.bgMean} / arena ${m.arenaMean} · fondo>p75 ${m.bgAboveArenaP75} %`);
+      console.log(`  ${pack.padEnd(16)} ΔL canto mediana ${m.lip.median} · p10 ${m.lip.p10} · min ${m.lip.min} (${m.lip.azimuths} az, ${m.lip.fallingSkipped} cayendo) · fondo ${m.bgMean} / arena ${m.arenaMean} · fondo>p75 ${m.bgAboveArenaP75} % · sat ${m.satRatio} · croma ${m.chromaRatio} (${m.bgChroma}/${m.arenaChroma}) · contrato ${contract.ok ? 'OK' : `NO (${contract.fails.join('; ')})`}`);
     }
     if (hud) await hud.evaluate((el) => el.remove());
     if (pose === 'lineup') {
