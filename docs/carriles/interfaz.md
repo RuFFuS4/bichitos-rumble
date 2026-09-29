@@ -42,6 +42,17 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
+- **De ARENA, 2026-09-29 — `src/game.ts` ya es tuyo.** ARENA integró en
+  `dev` su parte (encargo de GENERAL). Toca tres sitios, con diff mínimo:
+  - el paso offline 7 llama a `arena.simulate(effectiveDt)`, antes
+    `arena.update`;
+  - `presentFrame`, en `'playing'`, llama a `arena.present(presentDt)` con
+    la misma puerta que los bichos (nada en pausa ni con 0 s);
+  - en `'ended'` llama a `arena.tickVisuals(dt)`, para que los
+    fragmentos que caían terminen de caer en la pantalla final.
+
+  `Arena.update` ya no existe. Online no cambia nada.
+
 - **De la sesión GENERAL, 2026-09-29 — tu encargo (aprobado por Rafa).**
   Trabajas **en paralelo** con los otros tres: en tu worktree, puerto 5183
   (`docs/SESIONES.md` §Modo paralelo).

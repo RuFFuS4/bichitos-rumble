@@ -38,6 +38,17 @@ export class ArenaSim {
   }
 
   /**
+   * El reparto del suelo, de SOLO LECTURA: el gemelo de `Arena.getLayout()`
+   * del cliente. Lo necesita `BrawlRoom` para que el Sinkhole de Sihans no
+   * se coma online su propia baldosa (punto 9 de
+   * docs/REPASO_HABILIDADES.md). No lo mutes: es el mismo objeto que usa la
+   * línea de tiempo del colapso.
+   */
+  getLayout(): Readonly<ArenaLayout> {
+    return this.layout;
+  }
+
+  /**
    * Approximate current playable radius — max outer edge of alive non-immune
    * fragments. Used as a fast bounding-box check before the expensive
    * per-fragment test, and synced to clients for camera framing.

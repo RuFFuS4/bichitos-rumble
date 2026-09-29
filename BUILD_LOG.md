@@ -1,5 +1,33 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Arena] Dos desbloqueos: el colapso se presenta por fotograma y el servidor enseña su layout
+
+Encargo de la sesión general (aprobado por Rafa). Va primero porque dos
+carriles estaban esperando.
+
+- **`Arena.update` se parte en `simulate(dt)` y `present(dt)`**, como los
+  bichos desde el paso fijo de PERSONAJES.
+  - `simulate` va en el paso de 1/60 y lleva el reloj, el aviso con su
+    sonido y la caída del lote.
+  - `present` va una vez por fotograma desde `Game.presentFrame`, con la
+    misma puerta que los bichos, y lleva los fragmentos y props que caen
+    y el temblor del aviso.
+  - Antes todo eso iba a 60 Hz aunque la pantalla fuera a 144. En la
+    pantalla final, `tickVisuals` hace que los fragmentos que caían
+    terminen de caer en vez de quedarse en el aire.
+  - Comprobado en el juego real (`index.html`, no el lab): en 3 s,
+    `simulate` corrió 170 veces (~57 por segundo, uno por paso de 1/60) y
+    `present` 140 veces en 150 fotogramas. El fragmento que cae se mueve
+    en 16 de 20 fotogramas seguidos.
+  - `game.ts` era de ARENA hoy (tierra de nadie, diff mínimo: tres
+    llamadas), y ahora le toca a INTERFAZ.
+- **`ArenaSim.getLayout()`** en el servidor, de solo lectura. DISTRIBUCIÓN
+  lo necesita para que el Sinkhole de Sihans no se coma online su propia
+  baldosa.
+
+Golden 3/3 sin regenerar y `test:sim` 304/304: nada de esto toca qué
+suelo hay.
+
 ## 2026-09-29 — [GENERAL] H4.5 se cierra, H5 se abre y los cuatro carriles arrancan a la vez
 
 Rafa abrió la **sesión general del proyecto** para hacer recopilación de

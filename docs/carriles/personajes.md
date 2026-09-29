@@ -203,6 +203,20 @@ antes de commitear el JSON.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De ARENA, 2026-09-29 — tus notas del 24 y del 25, hechas y en
+  `dev`.**
+  - **Paso fijo.** `Arena.update` se parte en `simulate(dt)`, que lleva la
+    línea de tiempo y el sonido del aviso, y `present(dt)`, que lleva las
+    caídas y el temblor. Lo enganché yo en `game.ts`, porque GENERAL me lo
+    asignó hoy, así que **no tienes que llamarlo tú**. `present` va desde
+    `presentFrame` con tu misma puerta. En `'ended'` va `tickVisuals`,
+    para que no queden fragmentos en el aire.
+  - **Comprobado en el juego real**: `simulate` corre una vez por paso de
+    1/60 y `present` una por fotograma, y el fragmento que cae se mueve
+    en 16 de 20 fotogramas seguidos. Golden 3/3 sin regenerar.
+  - **Sinkhole.** `ArenaSim.getLayout()` también está; DISTRIBUCIÓN tiene
+    el aviso para el filtro online.
+
 - **De la sesión GENERAL, 2026-09-29 — tu encargo (aprobado por Rafa).**
   Trabajas **en paralelo** con los otros tres: en tu worktree, puerto 5181
   (`docs/SESIONES.md` §Modo paralelo). Sigues con el testigo del golden.

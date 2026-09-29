@@ -1043,33 +1043,36 @@ export class Arena {
 
   /**
    * Advance visual-only animations that must run every frame in BOTH
-   * offline + online paths — currently just the falling-fragment
-   * tumble. Offline's `update()` calls this itself; online callers
-   * (where `update()` would wrongly drive the collapse timeline) invoke
-   * this directly via the game loop.
+   * offline + online paths — the falling-fragment and falling-prop
+   * tumble. Offline, `present()` calls this; online (where the server
+   * drives the collapse timeline) the game loop calls it directly.
    */
   tickVisuals(dt: number): void {
     this.tickFallingFragments(dt);
     this.tickFallingDecorations(dt);
   }
 
-  /** Advance the collapse timeline locally (offline matches only). */
-  update(dt: number): void {
+  // 2026-09-29 (encargo de la sesión general; nota de PERSONAJES del 25):
+  // el colapso offline era un solo `update(dt)` llamado desde el paso fijo
+  // de 1/60, así que los fragmentos que caen y el temblor del aviso iban a
+  // 60 Hz aunque la pantalla fuera a 144. Se parte en dos, como los bichos:
+  // `simulate` en cada paso (qué suelo hay) y `present` una vez por
+  // fotograma (qué se ve moverse).
+
+  /**
+   * Un paso de SIMULACIÓN del colapso offline: el reloj, el inicio del
+   * aviso con su sonido y la caída del lote. Es lo único que cambia qué
+   * suelo hay (`alive`, `isOnArena`); nada de aquí mueve mallas.
+   */
+  simulate(dt: number): void {
     if (!this.layout) return;
-    this.tickVisuals(dt);
     if (this.level >= this.layout.batches.length) return;
 
     this.timer += dt;
 
     if (this.warningActive) {
       this.warningTimer -= dt;
-      if (this.warningTimer <= 0) {
-        this.collapseCurrentBatch();
-      } else {
-        const progress = 1 - this.warningTimer / FRAG.warningDuration;
-        const t = performance.now() * 0.001;
-        this.shakeBatch(this.layout.batches[this.level].indices, progress, t);
-      }
+      if (this.warningTimer <= 0) this.collapseCurrentBatch();
     } else {
       const batch = this.layout.batches[this.level];
       if (this.timer >= batch.delay) {
@@ -1081,6 +1084,20 @@ export class Arena {
         playArenaWarning(FRAG.warningDuration);
       }
     }
+  }
+
+  /**
+   * Una vez por FOTOGRAMA, offline: los fragmentos y props que caen, y el
+   * temblor del lote en aviso. Solo mueve mallas (las colisiones y
+   * `isOnArena` usan el layout estático). Quien llama le aplica la misma
+   * puerta que a los bichos: nada en pausa ni con 0 s que mostrar (la
+   * congelación del golpe), así el temblor se queda quieto como antes.
+   */
+  present(dt: number): void {
+    this.tickVisuals(dt);
+    if (!this.layout || !this.warningActive || this.level >= this.layout.batches.length) return;
+    const progress = 1 - this.warningTimer / FRAG.warningDuration;
+    this.shakeBatch(this.layout.batches[this.level].indices, progress, performance.now() * 0.001);
   }
 
   // --- Online mode: server-driven sync -----------------------------------

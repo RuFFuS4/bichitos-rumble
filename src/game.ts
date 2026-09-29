@@ -2222,8 +2222,10 @@ export class Game {
           c.respawnAt(rx, rz);
         }
 
-        // 7. Arena collapse (fragment-based, self-driven in offline)
-        this.arena.update(effectiveDt);
+        // 7. Arena collapse (fragment-based, self-driven in offline). Only
+        // the timeline: the falls and the warning shake present once per
+        // frame (presentFrame → arena.present).
+        this.arena.simulate(effectiveDt);
 
         // 8. Update HUD
         updateHUD(this.activeCount, Math.max(0, this.matchTimer));
@@ -2355,11 +2357,20 @@ export class Game {
         const presentDt = this.lastStepFrozen || isHitStopActive() ? 0 : dt;
         // Falling critters too, as in 'ended': the fall clip plays on the way down.
         for (const c of this.critters) if (c.alive) c.present(presentDt);
+        // The arena's falls and warning shake, at the display rate. Same
+        // gate as the critters, and nothing with 0 s to show: the shake
+        // holds still in the freeze, as it did when it ran in the step.
+        if (presentDt > 0) this.arena.present(presentDt);
         this.livePending = false;
         break;
       }
       case 'ended':
         for (const c of this.critters) if (c.alive) c.present(dt);
+        // Fragments already falling finish their fall instead of hanging
+        // mid-air on the end screen (the offline 'ended' step never ticked
+        // the arena; docs/DIORAMAS.md §«Fondo v2» §5). Only the falls: no
+        // warning shake once the match is over.
+        this.arena.tickVisuals(dt);
         break;
       // online: updateOnline presented every critter inside simulate().
     }

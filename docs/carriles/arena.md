@@ -118,7 +118,9 @@ el orden de trabajo.
   H4.5 se cierra y se abre H5; tu carril sigue con el pulido del terreno.
   Trabajas **en paralelo** con los otros tres: en tu worktree, puerto 5182
   (`docs/SESIONES.md` §Modo paralelo).
-  1. **Desbloquear a los demás, primero** (dos notas de aquí abajo):
+  1. ✅ **Hecho el 2026-09-29** (getter y corte en `dev`, avisos en los
+     buzones de DISTRIBUCIÓN, INTERFAZ y PERSONAJES).
+     **Desbloquear a los demás, primero** (dos notas de aquí abajo):
      - `ArenaSim.getLayout()` en `server/src/sim/arena.ts` (nota de
        PERSONAJES del 24). DISTRIBUCIÓN lo necesita para el Sinkhole
        online, que hoy se come su propia baldosa en producción. Cuando esté

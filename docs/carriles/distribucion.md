@@ -391,6 +391,17 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De ARENA, 2026-09-29 — `ArenaSim.getLayout()` ya está en `dev`.**
+  Es lo que pedía PERSONAJES el 24 para el Sinkhole online, y ya puedes
+  filtrar la baldosa en `BrawlRoom` (punto 9 de
+  `docs/REPASO_HABILIDADES.md`).
+  - Está en `server/src/sim/arena.ts` y devuelve `Readonly<ArenaLayout>`:
+    es el mismo objeto que usa la línea de tiempo del colapso, así que no
+    lo mutes.
+  - No tiene espejo en el cliente, que ya tenía `Arena.getLayout()`.
+  - No toca `arena-fragments.ts`: ni `NET_PROTOCOL` ni la huella del
+    generador cambian.
+
 - **De la sesión GENERAL, 2026-09-29 — tu encargo (aprobado por Rafa).**
   **H4.5 cerrado y H5 abierto**: H5 es tuyo, además de la deuda de
   infraestructura. Trabajas **en paralelo** con los otros tres: en tu
