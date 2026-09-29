@@ -247,6 +247,7 @@ export class Game {
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.arena = new Arena(scene);
+    this.arena.watchCritters(() => this.critters);   // F4: el puf donde desaparece quien cae
     // Sombras de contacto de los critters (dioramas, 2026-09-07). Nada en
     // el juego proyecta sombra real —los critters gordos tienen hasta 1,9 M
     // de triángulos y castShadow es inviable— y por eso todo flotaba sobre

@@ -523,6 +523,17 @@ export interface BackdropLookConfig {
    *  `legacyLight`: los islotes la leen en vivo, pero el canto de la isla
    *  se hornea al construirse y se nota en la partida siguiente. */
   cliffTipMinRatio: number;
+  /** F4 — la caída (plan §7): «el cielo se lo traga». Los sectores que
+   *  caen encogen, alrededor de su centro, de 1 a `fallShrinkTo` entre
+   *  `fallShrinkStartY` y la cota a la que se ocultan (−25). */
+  fallShrinkStartY: number;
+  fallShrinkTo: number;
+  /** El destello donde desaparece un bicho que cae: un puf del color de
+   *  las nubes del bioma que crece hasta `vanishPuffScale` (u de radio) y
+   *  se apaga desde `vanishPuffOpacity` en `vanishPuffDuration` s. */
+  vanishPuffScale: number;
+  vanishPuffOpacity: number;
+  vanishPuffDuration: number;
 }
 
 export const BACKDROP_LOOK: BackdropLookConfig = {
@@ -651,4 +662,9 @@ export const BACKDROP_LOOK: BackdropLookConfig = {
   sunHaloDeg: 20,
   sunHaloStrength: 0.35,
   cliffTipMinRatio: 0.55,
+  fallShrinkStartY: -15,
+  fallShrinkTo: 0.5,
+  vanishPuffScale: 1.6,
+  vanishPuffOpacity: 0.85,
+  vanishPuffDuration: 0.55,
 };

@@ -35,6 +35,7 @@ import {
 } from './arena-decorations';
 import { getDecorLayout } from './arena-decor-layouts';
 import { setSceneSkyboxTexture, setSceneFogColor, setSceneClearColor, setSceneHemiGround, setSceneLighting } from './scene-atmosphere';
+import { spawnVanishPuff } from './dust-puff';
 
 // Visual parameters for the pre-collapse shake effect. Applied to
 // `fragmentGroup.position.x/z` ONLY — collisions and `isOnArena` use the
@@ -422,6 +423,15 @@ export interface ArenaCollapseState {
   fragmentsTotal: number;
 }
 
+/** Lo que el destello de desaparición (F4) necesita de un bicho: si está
+ *  cayendo y su malla. Estructural para no acoplar la arena a `Critter`. */
+export interface VanishWatched {
+  readonly falling: boolean;
+  readonly mesh: THREE.Object3D;
+}
+
+const _fallC = new THREE.Vector3();
+
 export class Arena {
   currentRadius = FRAG.maxRadius;
   group: THREE.Group;
@@ -450,7 +460,15 @@ export class Arena {
     rotX: number;            // tumbling angular velocity (rad / s)
     rotZ: number;
     startY: number;          // initial Y so we can decide when to stop
+    /** Centro del sector (x, z): el encogido de la F4 va alrededor de él. */
+    cx: number;
+    cz: number;
   }> = [];
+
+  /** F4: de dónde leer los bichos para el destello de desaparición
+   *  (`watchCritters`), y lo último que se vio de cada uno cayendo. */
+  private critterSource: (() => readonly VanishWatched[]) | null = null;
+  private readonly critterFall = new WeakMap<object, { falling: boolean; x: number; y: number; z: number }>();
 
   // Online sync tracking
   private syncedLevel = -1;
@@ -1056,6 +1074,8 @@ export class Arena {
     this.tickFallingDecorations(dt);
     // Fondo v2, F2: la deriva de las nubes y la vida del cielo.
     this.backdrop?.tick(dt);
+    // F4: el destello donde desaparece un bicho que cae.
+    this.tickVanish();
   }
 
   // 2026-09-29 (encargo de la sesión general; nota de PERSONAJES del 25):
@@ -1503,12 +1523,17 @@ export class Arena {
       const x = Math.sin((idx + 1) * 73.1 + k * 11.3) * 43758.5453;
       return x - Math.floor(x);
     };
+    const f = this.layout?.fragments[idx];
+    const midR = f ? (f.innerR + f.outerR) / 2 : 0;
+    const midA = f ? Math.atan2(Math.sin(f.startAngle) + Math.sin(f.endAngle), Math.cos(f.startAngle) + Math.cos(f.endAngle)) : 0;
     this.fallingFragments.push({
       idx,
       vy: 0.8 + rand(0) * 1.2,             // 0.8..2.0 initial downward nudge
       rotX: (rand(1) * 2 - 1) * 1.6,       // ±1.6 rad/s tumble
       rotZ: (rand(2) * 2 - 1) * 1.6,
       startY: g.position.y,
+      cx: Math.cos(midA) * midR,
+      cz: Math.sin(midA) * midR,
     });
   }
 
@@ -1532,9 +1557,17 @@ export class Arena {
       // restore leaves position.y at 0 and we apply the offset directly.
       // Easiest: just subtract the accumulated drop from startY.
       ff.startY -= ff.vy * dt;        // startY drifts down with gravity
-      g.position.y = ff.startY;
       g.rotation.x += ff.rotX * dt;
       g.rotation.z += ff.rotZ * dt;
+      // F4: «el cielo se lo traga». Entre fallShrinkStartY y la cota de
+      // ocultarse encoge alrededor de SU centro: el grupo gira y escala en
+      // torno al eje del disco, así que se desplaza lo justo para que el
+      // centro del sector no se mueva (con 0,5 alrededor del eje se iba
+      // hacia debajo de la isla).
+      const k = this.fallShrink(ff.startY);
+      g.scale.setScalar(k);
+      _fallC.set(ff.cx, 0, ff.cz).applyEuler(g.rotation).multiplyScalar(1 - k);
+      g.position.set(_fallC.x, ff.startY + _fallC.y, _fallC.z);
       // La hierba, las conchas y los guijarros de este sector caen CON él:
       // se recompone solo su rango de instancias con la matriz del grupo.
       if (this.scatter) {
@@ -1548,12 +1581,52 @@ export class Arena {
         // Past the death plane — hide + reset transforms so a future
         // seed rebuild starts from a clean slate.
         g.visible = false;
-        g.position.y = 0;
+        g.position.set(0, 0, 0);
         g.rotation.x = 0;
         g.rotation.z = 0;
+        g.scale.setScalar(1);
       }
     }
     this.fallingFragments = keep;
+  }
+
+  /** Escala de un sector que cae a la cota `y` (F4): 1 hasta
+   *  `fallShrinkStartY`, `fallShrinkTo` al llegar a `FRAGMENT_KILL_Y`. */
+  private fallShrink(y: number): number {
+    const t = (BACKDROP_LOOK.fallShrinkStartY - y) / (BACKDROP_LOOK.fallShrinkStartY - this.FRAGMENT_KILL_Y);
+    return 1 - (1 - BACKDROP_LOOK.fallShrinkTo) * Math.min(1, Math.max(0, t));
+  }
+
+  /**
+   * F4 (docs/DIORAMAS.md §7): de dónde leer los bichos para el destello de
+   * «el cielo se lo traga». Se detecta aquí, en `tickVisuals`, el flanco
+   * «cayendo → ya no cae o ya no se ve» de cada uno, y el puf sale donde se
+   * le vio por última vez. Así cubre offline, online, la última vida y el
+   * final sin tocar `critter.ts` (una línea en el respawn solo cubría el
+   * respawn offline). Una función y no el array: la partida lo sustituye.
+   */
+  watchCritters(source: () => readonly VanishWatched[]): void {
+    this.critterSource = source;
+  }
+
+  private tickVanish(): void {
+    const critters = this.critterSource?.();
+    if (!critters || !this.appliedPackId) return;
+    for (const c of critters) {
+      const s = this.critterFall.get(c) ?? { falling: false, x: 0, y: 0, z: 0 };
+      const fallingNow = c.falling && c.mesh.visible;
+      if (fallingNow) {
+        s.x = c.mesh.position.x; s.y = c.mesh.position.y; s.z = c.mesh.position.z;
+      } else if (s.falling) {
+        spawnVanishPuff(this.sceneRef, s.x, s.y, s.z, getPackSky(this.appliedPackId).cloudTop, {
+          radius: BACKDROP_LOOK.vanishPuffScale,
+          opacity: BACKDROP_LOOK.vanishPuffOpacity,
+          duration: BACKDROP_LOOK.vanishPuffDuration,
+        });
+      }
+      s.falling = fallingNow;
+      this.critterFall.set(c, s);
+    }
   }
 
   private updateRadius(): void {
