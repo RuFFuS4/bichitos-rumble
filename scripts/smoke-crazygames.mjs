@@ -89,7 +89,26 @@ async function waitLog(page, entry, ms) {
 async function startMatch(page) {
   await page.keyboard.press('Enter'); // title: vs Bots (preselected)
   await page.waitForSelector('#character-select:not(.hidden)', { timeout: 15_000 });
+  // The grid can fill in after the panel shows (the dev server in CI):
+  // an Enter before that is lost. Same wait as tests/smoke.spec.ts.
+  await page.waitForSelector('#critter-grid .critter-slot.selected', { state: 'visible', timeout: 15_000 });
   await page.keyboard.press('Enter'); // the selected critter
+}
+/** Waits for one of `phases` (needs __game, the dev server); on timeout the
+ *  error says where the game was, so a CI failure explains itself. */
+async function waitPhase(page, phases, ms) {
+  try {
+    await page.waitForFunction((ps) => ps.includes(window.__game?.phase), phases, { timeout: ms });
+  } catch {
+    const where = await page.evaluate(() => ({
+      phase: window.__game?.phase,
+      screens: [...document.querySelectorAll('#title-screen, #character-select, #end-screen, #overlay')]
+        .filter((el) => el.offsetParent !== null).map((el) => el.id),
+      overlay: document.getElementById('overlay')?.textContent?.trim().slice(0, 60),
+      log: window.__platform?.state.log.slice(-5).map((l) => l.replace(/^\d+ /, '')),
+    })).catch((e) => String(e));
+    throw new Error(`no llega a ${phases.join('|')} en ${ms / 1000} s: ${JSON.stringify(where)}`);
+  }
 }
 
 // A tiny static server that puts DIST under /game/ — CG's game-files URL.
@@ -104,7 +123,10 @@ function subpathServer(port) {
       res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' }).end(body);
     } catch { res.writeHead(404).end(); }
   });
-  return new Promise((r) => server.listen(port, () => r(server)));
+  return new Promise((resolve, reject) => {
+    server.once('error', reject); // port taken: fail here, through finally
+    server.listen(port, () => resolve(server));
+  });
 }
 
 const children = [];
@@ -124,11 +146,14 @@ try {
     name: window.__platform.state.name,
     backend: window.__platform.state.backend,
     bodyClass: document.body.classList.contains('platform-crazygames'),
-    onlineButtons: ['btn-online', 'btn-friends'].filter((id) => { const el = document.getElementById(id); return el && el.offsetParent !== null; }),
+    // By role, not by id: without a server URL main.ts removes them from
+    // the DOM. The bots button anchors it: the title must be up to count.
+    botsVisible: document.getElementById('btn-vs-bots')?.offsetParent != null,
+    onlineButtons: [...document.querySelectorAll('.title-mode-btn[data-mode=online], .title-mode-btn[data-mode=friends]')].map((b) => b.id),
   }));
   check(s1.name === 'crazygames' && s1.backend === 'ready', `el SDK arranca en modo local (${s1.name}, ${s1.backend})`);
   check(s1.bodyClass, 'body lleva .platform-crazygames');
-  check(s1.onlineButtons.length === 0, `sin botones de online (${s1.onlineButtons.join(', ') || 'ninguno'})`);
+  check(s1.botsVisible && s1.onlineButtons.length === 0, `título a la vista y sin botones de online (${s1.onlineButtons.join(', ') || 'ninguno'})`);
   check(await waitLog(p1, 'loadingStop', 10_000), 'avisa del final de la carga');
   const l1 = await platformLog(p1);
   check(l1.indexOf('loadingStart') >= 0 && l1.indexOf('loadingStart') < l1.indexOf('loadingStop'), `loadingStart antes que loadingStop (${l1.slice(0, 4).join(' → ')})`);
@@ -146,20 +171,29 @@ try {
   check(!log1.requests.some((u) => /railway\.app|sentry/.test(u)), 'ninguna petición al servidor online ni a Sentry');
   check(log1.errors.length === 0, `sin errores de página (${log1.errors.slice(0, 2).join(' | ')})`);
   if (log1.sdk.length) console.log(`[smoke-cg] avisos del SDK: ${log1.sdk.join(' | ')}`);
+  await p1.context().close(); // a running match renders in software: free the CPU
 
   // --- 2. The break ad, on the dev server in CrazyGames mode ---------------
   console.log('\n[smoke-cg] === 2. el anuncio del descanso (vite --mode crazygames)');
   children.push(await startVite(['--mode', 'crazygames'], PORT));
   const log2 = { errors: [], sdk: [], requests: [], bad: [] };
-  const p2 = await newPage(browser, `http://localhost:${PORT}/?muteAudio=true`, log2);
+  // Without CG's ?muteAudio here, so the ad's own mute shows alone (the
+  // browser is still muted: --mute-audio and the game's flags).
+  const p2 = await newPage(browser, `http://localhost:${PORT}/`, log2);
   await p2.waitForFunction(() => window.__platform?.state.backend === 'ready' && window.__game, null, { timeout: 60_000 });
+  // The game's own audio module (the dev server serves the same instance):
+  // the mute has to reach it, not only the platform's state.
+  const audioMuted = () => p2.evaluate(async () => (await import('/src/audio.ts')).isExternallyMuted());
+  check(await audioMuted() === false, 'antes del anuncio, el audio del juego no está silenciado por fuera');
   await startMatch(p2);
-  await p2.waitForFunction(() => window.__game.phase === 'playing', null, { timeout: 45_000 });
+  await waitPhase(p2, ['playing'], 90_000);
   await p2.evaluate(() => { window.__platform.state.gameplayMs = 10 * 60_000; window.__game.matchTimer = 0.05; });
-  await p2.waitForFunction(() => window.__game.phase === 'ended', null, { timeout: 15_000 });
+  await waitPhase(p2, ['ended'], 15_000);
   check((await platformLog(p2)).at(-1) === 'gameplayStop', 'el final avisa de gameplayStop');
   await p2.keyboard.press('KeyR');
   check(await waitLog(p2, 'midgame requested', 5000), 'R en la pantalla final pide el anuncio');
+  const adOn = await waitLog(p2, 'mute ad on', 30_000);
+  check(adOn && await audioMuted() === true, 'mientras se ve el anuncio, el audio del juego está silenciado');
   await sleep(300);
   await p2.keyboard.press('KeyT'); // must be ignored while the break runs
   const during = await p2.evaluate(() => window.__game.phase);
@@ -169,10 +203,11 @@ try {
   await p2.waitForFunction(() => window.__game.phase === 'countdown' || window.__game.phase === 'playing', null, { timeout: 15_000 }).catch(() => {});
   const after = await p2.evaluate(() => ({ phase: window.__game.phase, mute: { ...window.__platform.state.mute } }));
   check(after.phase === 'countdown' || after.phase === 'playing', `después arranca la siguiente partida (${after.phase})`);
-  check(!after.mute.ad, 'y el silencio del anuncio se ha soltado');
+  check(!after.mute.ad && await audioMuted() === false, 'y el silencio del anuncio se ha soltado, también en el audio del juego');
   const l2 = await platformLog(p2);
   console.log(`[smoke-cg] registro: ${l2.filter((l) => /midgame|mute/.test(l)).join(' → ')}`);
   check(log2.errors.length === 0, `sin errores de página (${log2.errors.slice(0, 2).join(' | ')})`);
+  await p2.context().close();
 
   // --- 3. Under a subpath, like CG's game-files URL ------------------------
   console.log('\n[smoke-cg] === 3. el build bajo una subruta');

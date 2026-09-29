@@ -139,21 +139,30 @@ cuentas de CG verificadas en el servidor).
   - `.env.crazygames` y el modo de build en `vite.config.ts`;
   - `npm run build:crazygames`;
   - las comprobaciones de `check-payload-budget`;
-  - `tests/sim/platform.test.ts` (15 casos, con un SDK falso);
+  - `tests/sim/platform.test.ts` (19 casos, con un SDK falso);
   - `scripts/smoke-crazygames.mjs`.
 - **Medido en localhost, con el SDK en modo local:**
   - carga avisada en orden;
   - ni online ni peticiones a Railway o Sentry;
   - la pausa avisa de parar y seguir sin pedir anuncio;
-  - R pide el anuncio, el juego se silencia solo mientras se ve, T se
-    ignora y después arranca la partida siguiente;
+  - R pide el anuncio y después arranca la partida siguiente; T se
+    ignora mientras tanto;
+  - el silencio del anuncio llega al audio: el smoke lee
+    `isExternallyMuted()` de `audio.ts`, que se enciende con `adStarted`
+    y se apaga al acabar (el estado del juego, no la ganancia del bus);
   - en la web, ni el SDK ni el chunk de la plataforma.
-- **Falta, de INTERFAZ:**
-  - las rutas relativas (hoy `build:crazygames` falla por ellas y el
-    smoke da 404 de la música bajo la subruta);
-  - el silencio externo;
-  - ocultar Compartir y la pestaña online del Salón;
-  - un botón «Jugar otra», para que el móvil tenga descanso.
+- **INTERFAZ, hecho** (2a2bc82):
+  - silencio externo, cableado en `main.ts`;
+  - rutas relativas;
+  - Compartir oculto;
+  - `user-select`;
+  - el Salón sin pestañas si no hay servidor.
+
+  Con eso, `build:crazygames` pasa en verde y el smoke da todo OK, sin
+  404 bajo la subruta; los dos corren en el CI.
+- **Falta, de INTERFAZ y Rafa:** el botón «Jugar otra», para que el
+  móvil tenga descanso con anuncio. Va junto a «volver al título» en
+  táctil.
 - **Falta, de Rafa:** el texto de `privacy.html`.
 
 ## Qué ve el jugador
@@ -201,5 +210,11 @@ cuentas de CG verificadas en el servidor).
 - Si `window.focus()` recupera el teclado después de un anuncio real.
 - La latencia real de `requestAd` en Basic: si `adsDisabledBasicLaunch`
   llega al instante. De eso depende el tope de seguridad de la petición.
+- Si un anuncio llega a empezar pasado ese tope de 30 s. El juego ya ha
+  seguido, así que el anuncio tapa la cuenta atrás.
+  - Hoy se ve en silencio y suelta el silencio al acabar; el log de
+    `__platform` lo marca como `adStarted late`.
+  - Si se da en la QA, el remedio es pausar la partida mientras dure, y
+    eso es de `game.ts` (PERSONAJES).
 - Los bytes hasta la primera partida (la home móvil pide ≤ 20 MB).
 - Si subir al preview sin enviar ya cuenta como envío (art. 7.1).

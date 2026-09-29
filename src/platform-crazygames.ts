@@ -45,28 +45,38 @@ export async function createCrazyGamesBackend(hooks: PlatformHooks): Promise<Pla
     gameplayStop: () => sdk.game.gameplayStop(),
     midgame: () => new Promise<string>((resolve) => {
       let settled = false;
-      let timer = window.setTimeout(() => finish('timeout before adStarted'), MIDGAME_START_TIMEOUT_MS);
-      function finish(outcome: string): void {
+      let playTimer = 0;
+      const startTimer = window.setTimeout(() => settle('timeout before adStarted'), MIDGAME_START_TIMEOUT_MS);
+      /** The game may go on (once). */
+      function settle(outcome: string): void {
         if (settled) return;
         settled = true;
-        window.clearTimeout(timer);
-        hooks.mute('ad', false);
+        window.clearTimeout(startTimer);
         // The ad took the focus inside CrazyGames' page: give the keyboard back.
         window.focus();
         resolve(outcome);
       }
+      /** The ad is over, or given up on: the sound comes back. */
+      function adOver(): void {
+        window.clearTimeout(playTimer);
+        hooks.mute('ad', false);
+      }
       try {
         sdk.ad.requestAd('midgame', {
           adStarted: () => {
-            window.clearTimeout(timer);
+            // After the start cap the game already went on: the ad covers
+            // it, so at least it plays silent and gets its sound back when
+            // the ad ends (docs/H5_CRAZYGAMES.md §«Sin verificar»).
+            if (settled) hooks.log('adStarted late: the game already went on');
+            window.clearTimeout(startTimer);
             hooks.mute('ad', true);
-            timer = window.setTimeout(() => finish('timeout before adFinished'), MIDGAME_PLAY_TIMEOUT_MS);
+            playTimer = window.setTimeout(() => { adOver(); settle('timeout before adFinished'); }, MIDGAME_PLAY_TIMEOUT_MS);
           },
-          adFinished: () => finish('finished'),
-          adError: (error) => finish(`error ${error?.code ?? error}`),
+          adFinished: () => { adOver(); settle('finished'); },
+          adError: (error) => { adOver(); settle(`error ${error?.code ?? error}`); },
         });
       } catch (err) {
-        finish(`requestAd threw: ${err}`);
+        settle(`requestAd threw: ${err}`);
       }
     }),
   };

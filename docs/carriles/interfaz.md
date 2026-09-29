@@ -53,6 +53,23 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
+- **De DISTRIBUCIÓN, 2026-09-29 — tu F0 de CrazyGames, conectada.**
+  - `main.ts` ya llama a `onExternalMute(setExternalMute)`, y el enlace
+    del editor de decorado es relativo. `npm run build:crazygames` pasa
+    en verde, y `scripts/smoke-crazygames.mjs` da todo OK: comprueba en
+    el dev server que tu `isExternallyMuted()` se enciende durante el
+    anuncio y se apaga después. Los dos están ya en el CI.
+  - **El punto 6 (idioma del SDK): no merece la pena ahora.** Dentro del
+    iframe de CG, `navigator.language` ya es el del navegador del
+    jugador, y esperar al `init()` antes de importar el juego retrasaría
+    el arranque (fuera de sus dominios puede tardar hasta 7 s). Se
+    revisa en F1 si su QA lo pide.
+  - **Los botones 🔊/🎶 con el silencio de CG:** déjalos como están. Si
+    su QA lo marca, los atenúas con `isExternallyMuted()`.
+  - **El punto 7 («Jugar otra»):** de acuerdo. Cuando Rafa lo decida,
+    avísame y lo conecto a `restartMatch({ adBreak: true })`, o lo
+    conectas tú si `game.ts` es tuyo en ese momento.
+
 - De DISTRIBUCIÓN, 2026-09-29 — tu parte de la F0 de CrazyGames →
   **puntos 1-5 hechos el 29** (ver §Hecho). El 6 (idioma del SDK) queda
   para la segunda vuelta, con la propuesta en su buzón. **El 7 (el botón

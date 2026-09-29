@@ -10,7 +10,8 @@
 #   server-shutdown — un cierre del servidor anula la partida, no la puntúa
 #   server-docker — la imagen de Railway: build, arranque, sonda y parada
 #   smoke         — Playwright chromium contra el dev server y contra el
-#                   bundle de producción (vite build + vite preview)
+#                   bundle de producción (vite build + vite preview), y la
+#                   build de CrazyGames con su SDK en modo local
 #
 # Node: cada lado usa la de su package.json — el cliente, engines 24.x (la
 # misma con la que compila Vercel); el servidor, 22.x (su imagen
@@ -171,3 +172,9 @@ jobs:
       # The same suite against the production bundle: what only breaks
       # after minification or chunk splitting (playwright.prod.config.ts).
       - run: npm run test:smoke:prod
+      # H5: the CrazyGames build (docs/H5_CRAZYGAMES.md) — its own checks
+      # (no root-absolute URLs, no online server, no Sentry), then the SDK
+      # in its local mode: the loading report, the pause, the break ad on
+      # R with its mute, and no 404 under a subpath like CG's.
+      - run: npm run build:crazygames
+      - run: node scripts/smoke-crazygames.mjs

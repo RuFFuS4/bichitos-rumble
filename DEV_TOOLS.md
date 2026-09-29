@@ -153,8 +153,10 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
   - `node scripts/smoke-crazygames.mjs` la prueba en un navegador mudo,
     con el SDK en modo local: el build real, el anuncio del descanso con
     R y la subruta sin 404.
-  - `vite --mode crazygames` en el dev server da el mismo modo, con
-    `__game` para conducirlo.
+  - `vite --mode crazygames` en el dev server carga el mismo SDK y el
+    mismo adaptador, con `__game` para conducirlo. Pero sigue siendo DEV:
+    el online no desaparece. Lo de «sin online» solo se comprueba en la
+    build real (parte 1 del smoke).
 - **Online: cierre limpio y mantenimiento** (DISTRIBUCIÓN, 2026-09-29;
   detalle en `ONLINE.md` §«Mantenimiento y cierre limpio»):
   - `node scripts/maintenance.mjs on --for <min> | off | status` cierra

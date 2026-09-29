@@ -45,6 +45,8 @@ const state = {
    *  'ready' or 'off' (no SDK: adblock, init failed, not their domain). */
   backend: 'none' as 'none' | 'pending' | 'ready' | 'off',
   gameplay: false,
+  /** Whether the tab is visible: hidden time is not match time. */
+  visible: true,
   gameplayMs: 0,
   gameplaySince: 0,
   mute: { ad: false, platform: false } as Record<ExternalMuteReason, boolean>,
@@ -53,6 +55,9 @@ const state = {
 let backend: PlatformBackend | null = null;
 const queue: Array<(b: PlatformBackend) => void> = [];
 let muteListener: ((reason: ExternalMuteReason, on: boolean) => void) | null = null;
+/** What the backend was last told, and whether a report is on its way. */
+let reported = false;
+let reportQueued = false;
 
 function log(event: string): void {
   state.log.push(`${Math.round(performance.now())} ${event}`);
@@ -75,8 +80,21 @@ function call(fn: (b: PlatformBackend) => void): void {
   }
 }
 
+/** Match time runs while a match is on screen in a visible tab. */
+function counting(): boolean {
+  return state.gameplay && state.visible;
+}
+
 function played(now = performance.now()): number {
-  return state.gameplayMs + (state.gameplay ? now - state.gameplaySince : 0);
+  return state.gameplayMs + (counting() ? now - state.gameplaySince : 0);
+}
+
+/** Closes the running stretch of match time, applies `change`, opens a new one. */
+function recount(change: () => void): void {
+  const now = performance.now();
+  if (counting()) state.gameplayMs += now - state.gameplaySince;
+  change();
+  state.gameplaySince = now;
 }
 
 /** Once, first thing at boot (src/main.ts). Also reports the start of the
@@ -87,6 +105,9 @@ export function initPlatform(): void {
   state.name = 'crazygames';
   state.backend = 'pending';
   document.body.classList.add('platform-crazygames');
+  // A match left running in a background tab does not earn an ad.
+  state.visible = !document.hidden;
+  document.addEventListener('visibilitychange', () => recount(() => { state.visible = !document.hidden; }));
   loadingStart();
   import('./platform-crazygames')
     .then((m) => m.createCrazyGamesBackend({ mute: setMute, log }))
@@ -116,15 +137,22 @@ export function loadingStop(): void {
 }
 
 /** A match is being played (true) or not: countdown, pause, end screen,
- *  menus (false). Idempotent; it also accumulates the time played. */
+ *  menus (false). Idempotent; it also accumulates the time played. The
+ *  platform hears about it at the end of the current task, so a flip that
+ *  undoes itself within it (resuming from the pause menu straight into
+ *  restart or quit) tells it nothing. */
 export function gameplay(on: boolean): void {
   if (on === state.gameplay) return;
-  const now = performance.now();
-  if (on) state.gameplaySince = now;
-  else state.gameplayMs += now - state.gameplaySince;
-  state.gameplay = on;
-  log(on ? 'gameplayStart' : 'gameplayStop');
-  call((b) => (on ? b.gameplayStart() : b.gameplayStop()));
+  recount(() => { state.gameplay = on; });
+  if (reportQueued) return;
+  reportQueued = true;
+  queueMicrotask(() => {
+    reportQueued = false;
+    if (state.gameplay === reported) return;
+    const start = (reported = state.gameplay);
+    log(start ? 'gameplayStart' : 'gameplayStop');
+    call((b) => (start ? b.gameplayStart() : b.gameplayStop()));
+  });
 }
 
 /** The natural break between matches: an ad may play here. Resolves when

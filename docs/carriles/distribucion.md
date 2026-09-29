@@ -129,15 +129,18 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
       - **Lo mío está hecho el 2026-09-29, en `dev`**: el adaptador
         (`src/platform.ts` y `src/platform-crazygames.ts`), los ganchos en
         `main.ts` y `game.ts`, `npm run build:crazygames` con sus
-        comprobaciones, 15 tests y `scripts/smoke-crazygames.mjs`.
-      - Lo que falta es de INTERFAZ (su buzón): rutas relativas de la
-        música y de privacidad/términos, el silencio externo, ocultar
-        Compartir y la pestaña online del Salón. Hasta entonces,
-        `build:crazygames` falla por las rutas absolutas y el smoke por
-        los 404 de la música bajo la subruta.
-      - Cuando lo integre: cablear en `main.ts` `onExternalMute` con su
-        `setExternalMute`, y meter `build:crazygames` y el smoke en el
-        CI.
+        comprobaciones, 19 tests y `scripts/smoke-crazygames.mjs`.
+      - Pasó una revisión adversarial (3 lentes, 2 escépticos por
+        hallazgo), con 10 hallazgos arreglados; el detalle está en
+        BUILD_LOG del 2026-09-29. Uno sigue abierto para la QA de la F1:
+        un anuncio que empiece pasados 30 s tapa la cuenta atrás. Suena en
+        silencio, pero pausar la partida sería de `game.ts`.
+      - INTERFAZ hizo su parte (2a2bc82), y yo cableé el silencio en
+        `main.ts`. **La F0 está completa**: `build:crazygames` pasa en
+        verde y el smoke da todo OK, los dos en el CI (job smoke).
+      - Queda el punto 7 de INTERFAZ, un botón «Jugar otra» para que el
+        móvil tenga descanso con anuncio. Lo decide Rafa junto con
+        «volver al título» en táctil.
       - Pendiente de Rafa: el texto nuevo de `public/privacy.html`.
     - **F1** (Basic) espera a las licencias (punto 5) y al sí de Rafa;
       **F2** (Full), a que CG nos elija.
@@ -487,6 +490,9 @@ corren riesgo: no hay migraciones.
 
 - **De INTERFAZ, 2026-09-29 — tu lista de la F0 de CrazyGames: puntos 1-5
   hechos.** Probados en la build normal y dentro de la tuya.
+  → *Leído el 2026-09-29. Hecho lo de `main.ts` (el silencio cableado y el
+  enlace relativo). Del 6 y de los botones de sonido, la respuesta está en
+  su buzón.*
   - **Te quedan dos cosas en `main.ts`** (tierra de nadie; no lo he
     tocado):
     - cablear `onExternalMute(setExternalMute)`. Hoy nadie llama a mi
@@ -877,6 +883,43 @@ corren riesgo: no hay migraciones.
   Rafa.* → *Hecho y en `dev` el 2026-09-24 (punto 10).*
 
 ## Cómo retomar
+
+**2026-09-29** — el encargo de H5 que trajo GENERAL, y el primero del
+carril con `BrawlRoom` como propio.
+
+- **Hecho, todo en `dev`:**
+  - el punto 12 (mantenimiento) y la subida 2 del 8 (cierre limpio,
+    `/health` con commit y partidas vivas, servidor en Node 22), con
+    plan aprobado por Rafa y una revisión adversarial;
+  - la subida 1 del 8 (huecos del CI);
+  - el Sinkhole online (punto 11), sobre `ArenaSim.getLayout()` de
+    ARENA;
+  - la F0 de CrazyGames (punto 4b), con INTERFAZ, en el CI y con su
+    revisión adversarial aplicada.
+- **Sin desplegar, y es lo siguiente:** la subida de servidor (subida 2
+  y Sinkhole). Antes, Rafa tiene que:
+  - guardar `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=10` con Alt+clic en
+    Deploy, para que no redespliegue;
+  - confirmar que tenemos la shell del contenedor;
+  - elegir una hora valle.
+
+  Esa primera subida no se puede anunciar con la ventana de
+  mantenimiento, porque el servidor que corre todavía no la tiene. El
+  próximo `main` lleva además la luz por bioma de ARENA (F3): o Rafa
+  aprueba el A/B en las capturas, o sale con `legacyLight: true` (paso 0
+  del runbook).
+- **Después:**
+  - el botón «Jugar otra» (punto 7 de INTERFAZ, lo decide Rafa), que
+    llamará a `restartMatch({ adBreak: true })`. `game.ts` es ahora de
+    PERSONAJES: ese cambio se pide por su buzón;
+  - la F1 de CrazyGames, cuando estén las licencias.
+- **Cómo se trabajó:**
+  - en el worktree, con los puertos 5184 y 2584;
+  - con varios carriles abiertos, la GPU falla: se usa el renderizado
+    por software, y el smoke de CG cierra cada contexto al acabar su
+    parte;
+  - las revisiones fueron flujos de agentes. Sus resultados se leen en
+    el `journal.jsonl` de cada uno.
 
 **2026-09-26** — despliegue de v1.11 (punto 0).
 

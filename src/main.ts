@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { initObservability } from './observability';
-import { initPlatform, loadingStop } from './platform';
+import { initPlatform, loadingStop, onExternalMute } from './platform';
 import { applyStaticI18n, t } from './i18n';
 import { createCamera, handleResize, syncSize, applyGameplayCameraPose } from './camera';
 import { Game } from './game';
@@ -12,6 +12,7 @@ initObservability();
 // H5 (docs/H5_CRAZYGAMES.md): the CrazyGames build loads its SDK and starts
 // the loading report here; everywhere else this does nothing.
 initPlatform();
+onExternalMute(setExternalMute); // an ad playing, or CG's own mute setting, silences the game
 
 // i18n static pass — resolve every data-i18n/-html/-placeholder in the
 // document BEFORE anything is shown (title screen included). English is
@@ -27,6 +28,7 @@ import {
   loadMutedState,
   toggleSfxMuted, isSfxMuted,
   toggleMusicMuted, isMusicMuted,
+  setExternalMute,
 } from './audio';
 import { initBadgeToast } from './badge-toast';
 import { initHallOfBelts, openHallOfBelts } from './hall-of-belts';
@@ -331,7 +333,7 @@ setArenaForAbilities(game.arena);
     banner.innerHTML = `
       <span style="opacity: 0.7">🎨 Preview:</span>
       <strong>${previewPack}</strong>
-      <a href="/decor-editor.html" style="color: #ffdc5c; margin-left: 10px; text-decoration: none">← back to editor</a>
+      <a href="./decor-editor.html" style="color: #ffdc5c; margin-left: 10px; text-decoration: none">← back to editor</a>
     `;
     Object.assign(banner.style, {
       position: 'fixed',

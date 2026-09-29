@@ -3,9 +3,10 @@
 // ---------------------------------------------------------------------------
 //
 // Con un SDK de CrazyGames falso: la cola hasta que init() resuelve, el
-// tiempo de partida acumulado, el umbral del primer anuncio, el silencio
-// (anuncio y ajuste de CG), que cualquier error o silencio del SDK deja
-// seguir al juego, y que en la web o sin SDK no pasa nada. La build real se
+// tiempo de partida acumulado (sin la pestaña oculta), el umbral del primer
+// anuncio, el silencio (anuncio, también si llega tarde, y ajuste de CG),
+// que cualquier error o silencio del SDK deja seguir al juego, y que en la
+// web o sin SDK no pasa nada. La build real se
 // prueba con scripts/build-crazygames.mjs y scripts/smoke-crazygames.mjs.
 // ---------------------------------------------------------------------------
 
@@ -46,7 +47,13 @@ async function load(
   vi.resetModules();
   vi.stubEnv('VITE_PLATFORM', platformName ?? '');
   const classes: string[] = [];
-  vi.stubGlobal('document', { body: { classList: { add: (c: string) => classes.push(c) } } });
+  const doc = {
+    hidden: false,
+    onVisibility: null as null | (() => void),
+    body: { classList: { add: (c: string) => classes.push(c) } },
+    addEventListener: (type: string, l: () => void) => { if (type === 'visibilitychange') doc.onVisibility = l; },
+  };
+  vi.stubGlobal('document', doc);
   vi.stubGlobal('window', { CrazyGames: sdk ? { SDK: sdk } : undefined, focus: vi.fn(), setTimeout, clearTimeout });
   const platform = await import('../../src/platform');
   const mutes: string[] = [];
@@ -56,7 +63,20 @@ async function load(
   beforeReady?.(platform);
   // Let the dynamic import and init() settle.
   await vi.waitFor(() => expect(state.backend).not.toBe('pending'));
-  return { platform, state, classes, mutes };
+  return { platform, state, classes, mutes, doc };
+}
+
+/** Lets the gameplay report, sent at the end of the task, go out. */
+const endOfTask = () => Promise.resolve();
+
+/** 3 min of match and the break requested: the SDK holds the ad callbacks. */
+async function breakAfterAMatch(platform: typeof import('../../src/platform')) {
+  platform.gameplay(true);
+  vi.advanceTimersByTime(platform.FIRST_MIDGAME_AFTER_GAMEPLAY_MS);
+  platform.gameplay(false);
+  const done = platform.midgameBreak();
+  await vi.advanceTimersByTimeAsync(0);
+  return { done }; // wrapped: an async function would wait for it
 }
 
 // The first dynamic import of the backend pays Vite's transform: warm it.
@@ -103,9 +123,40 @@ describe('en la build de CrazyGames', () => {
     const { platform } = await load('crazygames', sdk);
     platform.gameplay(true);
     platform.gameplay(true);
+    await endOfTask();
     platform.gameplay(false);
     platform.gameplay(false);
+    await endOfTask();
     expect(sdk.calls.filter((c) => c.startsWith('gameplay'))).toEqual(['gameplayStart', 'gameplayStop']);
+  });
+
+  it('un vaivén dentro de la misma tarea no llega a CG (reanudar para reiniciar o salir)', async () => {
+    const sdk = fakeSdk();
+    const { platform } = await load('crazygames', sdk);
+    platform.gameplay(true);
+    await endOfTask();
+    platform.gameplay(false); // ESC: la pausa
+    await endOfTask();
+    platform.gameplay(true); // «Reiniciar» quita la pausa...
+    platform.gameplay(false); // ...y entra en la cuenta atrás en el mismo clic
+    await endOfTask();
+    expect(sdk.calls.filter((c) => c.startsWith('gameplay'))).toEqual(['gameplayStart', 'gameplayStop']);
+  });
+
+  it('el tiempo con la pestaña oculta no cuenta para el primer anuncio', async () => {
+    const sdk = fakeSdk();
+    const { platform, doc } = await load('crazygames', sdk);
+    platform.gameplay(true);
+    vi.advanceTimersByTime(60_000);
+    doc.hidden = true;
+    doc.onVisibility!();
+    vi.advanceTimersByTime(10 * 60_000); // la partida sigue en una pestaña de fondo
+    doc.hidden = false;
+    doc.onVisibility!();
+    vi.advanceTimersByTime(60_000);
+    platform.gameplay(false);
+    await platform.midgameBreak();
+    expect(sdk.calls).not.toContain('requestAd midgame'); // 2 min, no 12
   });
 
   it('no pide anuncio hasta 3 min de partida acumulada', async () => {
@@ -184,6 +235,31 @@ describe('en la build de CrazyGames', () => {
     await vi.advanceTimersByTimeAsync(platform.MIDGAME_PLAY_TIMEOUT_MS);
     await done;
     expect(state.log.some((l) => l.endsWith('timeout before adFinished'))).toBe(true);
+    expect(mutes).toEqual(['ad on', 'ad off']);
+  });
+
+  it('un anuncio que empieza tras el tope se ve en silencio y suelta el silencio al acabar', async () => {
+    const sdk = fakeSdk();
+    const { platform, mutes, state } = await load('crazygames', sdk);
+    const { done } = await breakAfterAMatch(platform);
+    await vi.advanceTimersByTimeAsync(platform.MIDGAME_START_TIMEOUT_MS);
+    await done; // el juego ya siguió
+    sdk.lastAd!.adStarted!();
+    expect(mutes).toEqual(['ad on']);
+    expect(state.log.some((l) => l.endsWith('adStarted late: the game already went on'))).toBe(true);
+    sdk.lastAd!.adFinished!();
+    expect(mutes).toEqual(['ad on', 'ad off']);
+  });
+
+  it('un adStarted después de adFinished no deja el silencio puesto', async () => {
+    const sdk = fakeSdk();
+    const { platform, mutes } = await load('crazygames', sdk);
+    const { done } = await breakAfterAMatch(platform);
+    sdk.lastAd!.adFinished!();
+    await done;
+    sdk.lastAd!.adStarted!();
+    expect(mutes).toEqual(['ad on']);
+    await vi.advanceTimersByTimeAsync(platform.MIDGAME_PLAY_TIMEOUT_MS);
     expect(mutes).toEqual(['ad on', 'ad off']);
   });
 

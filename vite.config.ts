@@ -32,10 +32,14 @@ try {
 // mode never runs this plugin, so the own site and itch are untouched.
 function crazyGamesBuild(): Plugin {
   let outDir = 'dist';
+  let isBuild = false;
   return {
     name: 'bichitos-crazygames-build',
     apply: (_config, env) => env.mode === 'crazygames',
-    configResolved(config) { outDir = config.build.outDir; },
+    configResolved(config) {
+      outDir = config.build.outDir;
+      isBuild = config.command === 'build';
+    },
     transformIndexHtml(html) {
       return html
         .replace(/\n\s*<link rel="manifest"[^>]*>/, '')
@@ -45,6 +49,9 @@ function crazyGamesBuild(): Plugin {
         .replace('</title>', '</title>\n  <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>');
     },
     closeBundle() {
+      // The dev server also runs this hook when it closes: its outDir is the
+      // own site's dist/, which is not ours to trim.
+      if (!isBuild) return;
       for (const f of ['og-image.jpg', 'manifest.webmanifest', 'sitemap.xml', 'robots.txt']) {
         rmSync(join(outDir, f), { force: true });
       }

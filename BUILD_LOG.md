@@ -1,5 +1,40 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [DISTRIBUCIÓN] H5: la F0 de CrazyGames, completa y en el CI
+
+- INTERFAZ integró su parte (2a2bc82), y `main.ts` la conecta:
+  - `onExternalMute(setExternalMute)`: el anuncio y el silencio propio de
+    CrazyGames apagan el audio del juego;
+  - el enlace «← back to editor» pasa a ser relativo. Era la última ruta
+    absoluta.
+- `npm run build:crazygames` pasa en verde.
+- `scripts/smoke-crazygames.mjs` da todo OK:
+  - build real y anuncio con R;
+  - `isExternallyMuted()` del propio `audio.ts` encendido durante el
+    anuncio y apagado después;
+  - sin 404 bajo `/game/`.
+  - El smoke cierra cada página al acabar su parte: dos partidas
+    renderizando por software dejaban sin CPU a la tercera.
+- Los dos entran en el CI (job smoke).
+- La revisión adversarial de la F0 (3 lentes, 2 escépticos por hallazgo)
+  dejó 10 hallazgos en pie, todos menores o medios. Arreglados:
+  - **Un anuncio que empieza pasado el tope de 30 s** dejaba el juego
+    mudo hasta el siguiente descanso. Ahora se ve en silencio y suelta el
+    silencio al acabar. Pausar debajo sería de `game.ts`; queda anotado
+    para la QA de la F1.
+  - **Salir o reiniciar desde el menú de pausa** mandaba a CG un
+    `gameplayStart` falso. `platform.ts` avisa al final de la tarea, y un
+    vaivén dentro de ella no llega. `game.ts` sin tocar.
+  - **La pestaña oculta** ya no cuenta para los 3 min del primer anuncio.
+  - `vite --mode crazygames` ya no recorta el `dist/` de la web al cerrar
+    el dev server.
+  - El smoke: el chequeo «sin online» tiene un ancla y ya puede fallar, y
+    un puerto ocupado cae por `finally`.
+  - Docs: DEV_TOOLS, H5, y la cuenta de tests de la entrada anterior.
+  - Los 4 tests nuevos fallan con el código anterior.
+- Queda el botón «Jugar otra» (INTERFAZ y Rafa), para que el móvil tenga
+  descanso con anuncio, y el texto de `privacy.html` (Rafa).
+
 ## 2026-09-29 — [Interfaz] F0 de CrazyGames: silencio externo, rutas relativas y lo que no debe verse allí
 
 - **Qué** (la parte de INTERFAZ del plan H5, `docs/H5_CRAZYGAMES.md`,
@@ -78,7 +113,7 @@
     - dev server: R pide el anuncio, «mute ad on → mute ad off → midgame
       finished», T ignorado y la siguiente partida arranca.
   - En la web nada cambia: `check` sin el SDK y sin el chunk de la
-    plataforma, 363 tests, smoke 4/4 y 4/4 contra producción, golden 3/3.
+    plataforma, 368 tests, smoke 4/4 y 4/4 contra producción, golden 3/3.
 - **Falta** (su buzón, `docs/carriles/interfaz.md`):
   - INTERFAZ: rutas relativas (la música saldría muda bajo la subruta de
     CG), silencio externo, ocultar Compartir y la pestaña online, y un
