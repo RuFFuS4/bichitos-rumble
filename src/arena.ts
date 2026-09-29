@@ -1050,6 +1050,8 @@ export class Arena {
   tickVisuals(dt: number): void {
     this.tickFallingFragments(dt);
     this.tickFallingDecorations(dt);
+    // Fondo v2, F2: la deriva de las nubes y la vida del cielo.
+    this.backdrop?.tick(dt);
   }
 
   // 2026-09-29 (encargo de la sesión general; nota de PERSONAJES del 25):
@@ -1108,6 +1110,12 @@ export class Arena {
    *  la partida en curso. */
   get currentSeed(): number | null {
     return this.layout ? this.layout.seed : null;
+  }
+
+  /** Reloj del fondo (deriva y vida, F2) a `seconds`, para capturas
+   *  reproducibles (`arena-shots --sky-time`). No toca la partida. */
+  setBackdropTime(seconds: number): void {
+    this.backdrop?.setTime(seconds);
   }
 
   /** Coste y control del fondo (capas, rechazos del pasillo, hash) para el

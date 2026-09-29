@@ -157,6 +157,7 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       // Islotes-maceta con copas apiladas y lianas colgando.
       isletSides: 12, isletTip: 0.35, isletDepth: 1.2,
       firma: 'canopy', firmaMain: 0x4f8a3c, firmaAccent: 0x2f6a2a, firmaDetail: 0x5a4028, firmaHang: 0x35552a,
+      lifeColor: 0x2e5a1f,
       hemiGround: 0x5f7a55, hemiIntensity: 0.7,
     },
   },
@@ -182,6 +183,7 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       // Icebergs invertidos (seis caras, casi en punta) con carámbanos.
       isletSides: 6, isletTip: 0.02, isletDepth: 2.2,
       firma: 'iceberg', firmaMain: 0xf2f6fb, firmaAccent: 0x9fd6f2, firmaDetail: 0x7fb0d8, firmaHang: 0xcbe8fa,
+      lifeColor: 0xf6f9ff,
       hemiGround: 0x8a9cc0, hemiIntensity: 0.7,
     },
   },
@@ -207,6 +209,7 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       // que la isla; cascadas de arena.
       isletSides: 10, isletTip: 0.55, isletDepth: 0.9,
       firma: 'mesa', firmaMain: 0xb35a34, firmaAccent: 0x6a8a3a, firmaDetail: 0x8a5a34, firmaHang: 0xe0b070,
+      lifeColor: 0x7a4e30,
       hemiGround: 0xa8784a, hemiIntensity: 0.7,
     },
   },
@@ -232,6 +235,7 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       // Atolones con charca turquesa y palmera; cascadas blancas.
       isletSides: 14, isletTip: 0.12, isletDepth: 1.3,
       firma: 'atoll', firmaMain: 0x4f9a3c, firmaAccent: 0x3fd0d8, firmaDetail: 0x8a6a44, firmaHang: 0xf4fbff,
+      lifeColor: 0xf4f6f8,
       hemiGround: 0x6fb3b5, hemiIntensity: 0.7,
     },
   },
@@ -259,6 +263,7 @@ const PACKS: Record<ArenaPackId, PackDef> = {
       // Rocas con torii bermellón, y un camino de toriis que baja al abismo.
       isletSides: 7, isletTip: 0.2, isletDepth: 1.1,
       firma: 'torii', firmaMain: 0xd8321e, firmaAccent: 0x2a2020, firmaDetail: 0x6e6e66, firmaHang: 0x6e6e66,
+      lifeColor: 0xf2b8cc,
       hemiGround: 0x9a7890, hemiIntensity: 0.7,
     },
   },

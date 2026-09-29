@@ -1,5 +1,53 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-29 — [Arena] Fondo v2, F2: el cielo se mueve y la victoria tiene horizonte
+
+Encargo de GENERAL, mientras Rafa hace la prueba a ciegas de la F1. Detalle
+en `docs/DIORAMAS.md`, «Estado de la F2».
+
+- **Torres de cúmulo** en el horizonte: se ven con la cámara baja y en la
+  victoria, que antes tenía el cielo plano.
+- **Fondo del pozo:** 24 bultos sueltos muy abajo, del color del abismo.
+- **Deriva:** las nubes giran 0,1°/s de ida y vuelta con el reloj de la
+  partida; la isla no se mueve.
+- **Vida por bioma:** gaviotas, hojas, nieve, buitres y pétalos.
+
+Coste: +3 draws, 0 bytes. El fondo queda en 43-46k triángulos. Hoja en
+`.tmp/shots-f2/_hoja_f2.png`.
+
+**Cifras** (semillas 1, 7 y 42, y la 7 con la deriva a 15°):
+- ΔL mediano del canto: 65-75,4.
+- Fondo claro en pozos oscuros: ≤7,8 % (decisión 1: ≤8 %).
+- 0 violaciones del pasillo en 200 semillas × 5 biomas.
+- Golden 3/3 sin regenerar, `test:sim` 314/314 y `check` en verde.
+
+**Dos cosas que las capturas enseñaron y el plan no preveía:**
+- **Deriva.** Girando, metía y sacaba cúmulos claros del cuadro. Con la
+  semilla 7 a 15°, el fondo claro pasaba del 7,8 al 10,7 %. Ahora solo
+  gira lo que durante todo el arco queda entero dentro o entero fuera del
+  cuadro de juego.
+- **Fondo del pozo.** Con la densidad del plan (60 bultos grandes) tapaba
+  el pozo y se leía como un suelo de rocas: lo que Rafa rechazó. Queda
+  en 24, pequeños.
+
+Además, las torres van en malla propia de 18×5: con el bulto de C2 salían
+como una tarta de pisos.
+
+**Revisión adversarial** (3 lentes): 6 de 8 hallazgos confirmados. Los
+arreglados:
+- el contrato del pozo claro de jungle, que no contaba la sombra de los
+  bultos (el canto de jungle sube de rebote a 75,4);
+- el orden de un `Euler` compartido entre aves y caída;
+- la deriva con velocidad negativa;
+- la cabecera de coste.
+
+Queda anotado en el carril: offline, la cuenta atrás no avanza el cielo
+(`game.ts`).
+
+**Herramienta nueva:** `arena-shots --sky-time S` (y
+`Arena.setBackdropTime`). Captura la deriva y la vida en cualquier
+instante sin jugar hasta él.
+
 ## 2026-09-29 — [Interfaz] En el móvil, «Desconectado» ya tiene salida, y los avisos de conexión son del juego
 
 - **Qué** (encargo de la sesión GENERAL, que venía del buzón de

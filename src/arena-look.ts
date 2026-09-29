@@ -200,6 +200,10 @@ export interface PackSky {
   firmaAccent: number;
   firmaDetail: number;
   firmaHang: number;
+  /** Vida del bioma (F2): el color de lo que se mueve en el aire. Qué es
+   *  sale de la firma: gaviotas (atoll), hojas (canopy), nieve (iceberg),
+   *  buitres (mesa) y pétalos (torii). */
+  lifeColor: number;
   /** Rebote de luz desde el cielo de abajo: `groundColor` e intensidad del
    *  hemisferio. Es lo que ilumina la panza del cono (plan §6). */
   hemiGround: number;
@@ -308,6 +312,76 @@ export interface BackdropLookConfig {
   toriiPathY0: number;
   toriiPathY1: number;
   toriiRockRadius: number;
+  /** F2 — torres de cúmulo en el horizonte: solo se ven con cámara baja y
+   *  en la pantalla final, donde el cielo era plano. Pilas de bultos que
+   *  se estrechan hacia arriba (dos por piso, desplazados: centrados se
+   *  leían como una tarta de pisos), en malla propia de `towerSides` ×
+   *  `towerRows` y sin panza (el bulto de C2 se facetaría en esa silueta
+   *  contra el cielo y oscurecía cada piso: riesgo 3); cuánto se funden
+   *  con el horizonte (tope, para que se sigan leyendo contra el cielo).
+   *  Por geometría nunca entran en el cuadro de juego:
+   *  a r ≥ 265 y cota ≥ −50 quedan por encima de −17°, y el techo del
+   *  cuadro está en −22° en las esquinas. */
+  towerCount: number;
+  towerSides: number;
+  towerRows: number;
+  towerRMin: number;
+  towerRMax: number;
+  towerBaseY: number;
+  towerHeightMin: number;
+  towerHeightMax: number;
+  towerBaseSize: number;
+  towerHaze: number;
+  /** F2 — fondo del pozo: bultos del color del abismo muy abajo, SUELTOS
+   *  (~25 % de cobertura: tapando todo el pozo se leía como un suelo, y
+   *  Rafa pidió cielo, no suelo). Dan profundidad al pozo (riesgo 2: color
+   *  liso) sin romper su contrato:
+   *  se separan del `abyss` como mucho `pitFloorVary`, y siempre hacia el
+   *  lado seguro (más oscuros en pozo oscuro, más claros en pozo claro). */
+  pitFloorCount: number;
+  pitFloorRMax: number;
+  pitFloorYMin: number;
+  pitFloorYMax: number;
+  pitFloorSizeMin: number;
+  pitFloorSizeMax: number;
+  pitFloorVary: number;
+  /** F2 — deriva: las nubes que en todo el arco `driftCheckDeg` ni tocan
+   *  el pasillo ni cruzan el borde del cuadro de juego giran alrededor del
+   *  eje a `driftDegPerSec`, de ida y vuelta dentro de ese arco, con el
+   *  reloj de la partida (pausa = quietas). */
+  driftDegPerSec: number;
+  driftCheckDeg: number;
+  /** F2 — vida: cuántos elementos, su tamaño (u), velocidades de vuelo
+   *  (rad/s en su órbita) y de caída (u/s), aleteo (Hz; los buitres de
+   *  mesa van a un tercio: planean), cuánto se inclinan las aves hacia
+   *  dentro del giro (rad) y el balanceo (u) de lo que cae. Por
+   *  debajo de `lifeTopY` y fuera del pasillo en toda su trayectoria; al
+   *  menos `lifeMinInFrame` dentro del cuadro de juego (la cámara no
+   *  rota: lo de fuera solo se ve en la victoria). */
+  lifeCount: number;
+  lifeMinInFrame: number;
+  lifeSize: number;
+  lifeOrbitSpeed: number;
+  lifeFallSpeed: number;
+  lifeFlapHz: number;
+  lifeBankRad: number;
+  lifeSway: number;
+  lifeTopY: number;
+  /** Dónde: radio (u) del centro de cada trayectoria; órbitas de radio
+   *  `lifeOrbitR*` entre `lifeBottomY` y 6 u por debajo de `lifeTopY`, con
+   *  un vaivén vertical de `lifeBob`; caídas de `lifeFallSpan*` u que
+   *  empiezan en los 6 u de debajo de `lifeTopY`. Los buitres (planean)
+   *  van a `lifeGlideScale` del tamaño. La colocación prueba el pasillo con
+   *  estos mismos valores: la envolvente es la trayectoria real. */
+  lifeRMin: number;
+  lifeRMax: number;
+  lifeOrbitRMin: number;
+  lifeOrbitRMax: number;
+  lifeBottomY: number;
+  lifeBob: number;
+  lifeFallSpanMin: number;
+  lifeFallSpanMax: number;
+  lifeGlideScale: number;
   /** Altura del mar. 32 u por debajo del disco, y por debajo de
    *  VOID_FLOOR (-30) y de FRAGMENT_KILL_Y (-25): nada del juego lo
    *  atraviesa nunca, y a esa distancia no se puede confundir con suelo
@@ -424,6 +498,43 @@ export const BACKDROP_LOOK: BackdropLookConfig = {
   toriiPathY0: -24,
   toriiPathY1: -58,
   toriiRockRadius: 2.6,
+  towerCount: 8,
+  towerSides: 18,
+  towerRows: 5,
+  towerRMin: 265,
+  towerRMax: 350,
+  towerBaseY: -50,
+  towerHeightMin: 55,
+  towerHeightMax: 95,
+  towerBaseSize: 24,
+  towerHaze: 0.5,
+  pitFloorCount: 24,
+  pitFloorRMax: 160,
+  pitFloorYMin: -175,
+  pitFloorYMax: -150,
+  pitFloorSizeMin: 8,
+  pitFloorSizeMax: 18,
+  pitFloorVary: 0.14,
+  driftDegPerSec: 0.1,
+  driftCheckDeg: 15,
+  lifeCount: 30,
+  lifeMinInFrame: 14,
+  lifeSize: 1.2,
+  lifeOrbitSpeed: 0.18,
+  lifeFallSpeed: 2.2,
+  lifeFlapHz: 2.4,
+  lifeBankRad: 0.3,
+  lifeSway: 1.6,
+  lifeTopY: -12,
+  lifeRMin: 25,
+  lifeRMax: 100,
+  lifeOrbitRMin: 5,
+  lifeOrbitRMax: 13,
+  lifeBottomY: -60,
+  lifeBob: 0.6,
+  lifeFallSpanMin: 35,
+  lifeFallSpanMax: 55,
+  lifeGlideScale: 1.4,
   seaY: -32,
   seaInnerR: 0.6,
   seaOuterR: 300,

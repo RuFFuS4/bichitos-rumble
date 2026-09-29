@@ -452,6 +452,20 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
       mal escrita va a `rejected`.
       `getBackdropStats()` da además `toriiPath`, las rocas del camino de
       kitsune.
+    - **F2 del fondo** (2026-09-29): torres, fondo del pozo, deriva y vida.
+      - Las claves nuevas de `BACKDROP_LOOK` (`tower*`, `pitFloor*`,
+        `drift*`, `life*`) se tocan con `setBackdropLook`. El color de la
+        vida es `PackSky.lifeColor` y se toca con `setPackSky`.
+      - `getBackdropStats()` da además:
+        - `drifting`: instancias que giran;
+        - `lifeInFrame`;
+        - `rejected.towers`, `rejected.driftHeld` (bultos que se quedan
+          quietos porque su arco toca el pasillo o cruza el borde del
+          cuadro) y `rejected.life`.
+      - `arena-shots --sky-time S` pone el reloj del fondo en S segundos
+        sobre el instante congelado. Separa la deriva del colapso: con
+        `--sky-time 150`, la deriva está en su extremo, 15°. Por debajo
+        llama a `Arena.setBackdropTime(s)`.
     - **`--metrics`**: escribe `metrics*.json`, que se acumula entre
       ejecuciones (`scripts/lib/arena-metrics.mjs`). Mide el ΔL del canto
       en 64 azimuts sobre el **labio vivo**, más la luma media de fondo y

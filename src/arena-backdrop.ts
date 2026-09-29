@@ -40,7 +40,10 @@ import * as THREE from 'three';
 import { BACKDROP_LOOK, SALT_BACKDROP, type CliffRamp, type PackSky, type SeaRamp, type SkyFirma } from './arena-look';
 import { FRAG } from './arena-fragments';
 import { GAMEPLAY_CAM_FOV, GAMEPLAY_CAM_LOOKAT, GAMEPLAY_CAM_POSITION } from './camera';
-import { FIRMA_CROWN_HEIGHT, LIANA_ATTACH_T, layoutSky, type SkyCamera, type SkyInstance, type SkyLayout } from './arena-sky-layout';
+import {
+  BUMP_SHADE_SPAN, FIRMA_CROWN_HEIGHT, LIANA_ATTACH_T, LIFE_BY_FIRMA, LIFE_SWAY_Z, layoutSky,
+  type SkyCamera, type SkyInstance, type SkyLayout, type SkyLife,
+} from './arena-sky-layout';
 
 /**
  * Anillo del mar. Va de `innerR` (justo bajo el disco) a `outerR`, con
@@ -177,9 +180,10 @@ function paintSeaColors(geo: THREE.RingGeometry, ramp: SeaRamp, fogColor: number
 // hermanos más abajo. Dónde va cada cosa lo decide `arena-sky-layout.ts`
 // (módulo hoja, determinista); aquí solo se hacen las mallas.
 //
-// Coste: 0 bytes, 6 draw calls (cúpula, nubes —cercanas, cuello y
-// jirones—, lejanas, islotes, coronas y lo que cuelga), ~30-35k triángulos
-// según la cobertura del bioma. Todo es geometría con
+// Coste: 0 bytes, 9 draw calls (cúpula; nubes con panza quietas y a la
+// deriva —cercanas, cuello, jirones y fondo del pozo—; lejanas; islotes;
+// coronas; lo que cuelga; torres; vida), 8 en kitsune (sin colgantes);
+// ~42-48k triángulos según la cobertura del bioma. Todo es geometría con
 // color de vértice e `InstancedMesh`, sin textura (lección de 9047031:
 // `clouds.png` en un plano 18 u bajo el disco tapó el cuadro de blanco) y
 // sin UV en la cúpula (lección de b054e96: costuras según la GPU).
@@ -266,7 +270,7 @@ function buildBumpGeometry(width: number, height: number, belly: number, shade: 
   const colors = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
     const lit = Math.max(0, n.fromBufferAttribute(nrm, i).dot(L));
-    const k = (belly + (1 - belly) * (pos.getY(i) / 0.75)) * (1 - shade * 0.45 * (1 - lit));
+    const k = (belly + (1 - belly) * (pos.getY(i) / 0.75)) * (1 - shade * BUMP_SHADE_SPAN * (1 - lit));
     colors[i * 3] = k; colors[i * 3 + 1] = k; colors[i * 3 + 2] = k;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -482,6 +486,45 @@ function buildHangGeometry(sky: PackSky): THREE.BufferGeometry | null {
   return compose(parts);
 }
 
+// ---------------------------------------------------------------------------
+// F2 — la vida (docs/DIORAMAS.md §«Fondo v2» §3)
+// ---------------------------------------------------------------------------
+//
+// Una malla por bioma, sin luz y de un solo color (`PackSky.lifeColor`). Las
+// aves son una uve con el cuerpo en +Z (el vuelo) y las alas en ±X, con las
+// puntas arriba: la escala Y de la instancia es el aleteo. Lo que cae es un
+// rombo plano (hoja, pétalo) o un octaedro (nieve). Unidad: `lifeSize`; todo
+// cabe en una esfera de radio LIFE_ELEMENT_RADIUS (la colocación la usa).
+
+function buildLifeGeometry(firma: SkyFirma): THREE.BufferGeometry {
+  let pos: number[];
+  switch (firma) {
+    case 'atoll':
+    case 'mesa': {
+      // Envergadura 2; los buitres (mesa) salen mayores por su escala.
+      pos = [0, 0, 0.25, 0, 0, -0.2, -1, 0.3, -0.15,
+        0, 0, 0.25, 1, 0.3, -0.15, 0, 0, -0.2];
+      break;
+    }
+    case 'canopy':
+    case 'torii': {
+      // Hoja alargada / pétalo más redondo.
+      const w = firma === 'canopy' ? 0.25 : 0.3, l = firma === 'canopy' ? 0.5 : 0.32;
+      pos = [0, 0, l, w, 0, 0, 0, 0, -l, 0, 0, l, 0, 0, -l, -w, 0, 0];
+      break;
+    }
+    case 'iceberg': {
+      const g = new THREE.OctahedronGeometry(0.5, 0);
+      g.deleteAttribute('uv');
+      g.deleteAttribute('normal');
+      return g;
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  return geo;
+}
+
 function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, list: SkyInstance[]): THREE.InstancedMesh {
   const mesh = new THREE.InstancedMesh(geo, mat, list.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
@@ -503,6 +546,9 @@ function triCount(geo: THREE.BufferGeometry): number {
   return (geo.index ? geo.index.count : geo.getAttribute('position').count) / 3;
 }
 
+const _lm = new THREE.Matrix4(), _lq = new THREE.Quaternion(), _le = new THREE.Euler();
+const _lp = new THREE.Vector3(), _ls = new THREE.Vector3();
+
 /** Coste y control del cielo, para el lab, el CLI y los criterios del slice. */
 export interface BackdropStats {
   mode: 'sky' | 'sea';
@@ -511,10 +557,14 @@ export interface BackdropStats {
   layers: Record<string, { instances: number; tris: number }>;
   rejected: SkyLayout['rejected'] | null;
   isletsInFrame: number;
+  /** F2: elementos de vida dentro del cuadro de juego. */
+  lifeInFrame: number;
   /** Rocas del camino de toriis (kitsune); 0 si no cupo o no aplica. */
   toriiPath: number;
   corridorViolations: number;
   corridorDeg: [number, number] | null;
+  /** F2: instancias que giran con la deriva (bultos con panza + torres). */
+  drifting: number;
   maxExtent: number;
   buildMs: number;
   hash: string | null;
@@ -528,6 +578,13 @@ export class ArenaBackdrop {
   readonly group = new THREE.Group();
   private meshes: THREE.Mesh[] = [];
   private lastStats: BackdropStats | null = null;
+  /** F2: reloj del fondo (s de partida desde que se construyó), las mallas
+   *  que giran con la deriva y la vida con sus trayectorias. */
+  private time = 0;
+  private driftMeshes: THREE.Mesh[] = [];
+  private lifeMesh: THREE.InstancedMesh | null = null;
+  private life: SkyLife[] = [];
+  private lifeGlide = false;
 
   constructor() {
     this.group.name = 'arena-backdrop';
@@ -557,8 +614,8 @@ export class ArenaBackdrop {
     this.lastStats = {
       mode: 'sea', draws: 1, tris: triCount(geo),
       layers: { sea: { instances: 1, tris: triCount(geo) } },
-      rejected: null, isletsInFrame: 0, toriiPath: 0, corridorViolations: 0, corridorDeg: null,
-      maxExtent: BACKDROP_LOOK.seaOuterR, buildMs: performance.now() - t0, hash: null,
+      rejected: null, isletsInFrame: 0, lifeInFrame: 0, toriiPath: 0, corridorViolations: 0, corridorDeg: null,
+      drifting: 0, maxExtent: BACKDROP_LOOK.seaOuterR, buildMs: performance.now() - t0, hash: null,
     };
   }
 
@@ -578,22 +635,34 @@ export class ArenaBackdrop {
     const cloudMat = () => new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
     const layers: BackdropStats['layers'] = {};
     const addLayer = (name: string, geo: THREE.BufferGeometry, mat: THREE.Material, list: SkyInstance[]) => {
-      if (list.length === 0) { geo.dispose(); mat.dispose(); return; }
-      this.add(instanced(geo, mat, list));
+      if (list.length === 0) { geo.dispose(); mat.dispose(); return null; }
+      const mesh = instanced(geo, mat, list);
+      this.add(mesh);
       layers[name] = { instances: list.length, tris: triCount(geo) * list.length };
+      return mesh;
     };
-    // Cercanas y cuello comparten bulto con panza, material y MALLA: una
-    // sola draw call (las cifras se reparten por capa para el lab).
-    // Los jirones de C1 (F1) también van en ella.
+    // Cercanas, cuello, jirones (F1) y fondo del pozo (F2) comparten bulto
+    // con panza y material. Van en DOS mallas: la quieta y la de la deriva,
+    // que gira entera alrededor del eje (F2; qué va en cada una lo decide
+    // la colocación). Las cifras se reparten por capa para el lab.
     const bump = buildBumpGeometry(14, 3, BACKDROP_LOOK.cloudBelly, BACKDROP_LOOK.cloudShade);
-    addLayer('clouds', bump, cloudMat(), [...layout.near, ...layout.neck, ...layout.wisps]);
-    if (layers.clouds) {
-      const per = triCount(bump);
-      delete layers.clouds;
-      layers.near = { instances: layout.near.length, tris: per * layout.near.length };
-      layers.neck = { instances: layout.neck.length, tris: per * layout.neck.length };
-      layers.wisps = { instances: layout.wisps.length, tris: per * layout.wisps.length };
+    const per = triCount(bump);
+    addLayer('cloudsStill', bump, cloudMat(), layout.cloudsStill);
+    const drift = addLayer('cloudsDrift', bump.clone(), cloudMat(), layout.cloudsDrift);
+    if (drift) this.driftMeshes.push(drift);
+    delete layers.cloudsStill;
+    delete layers.cloudsDrift;
+    for (const [name, list] of [['near', layout.near], ['neck', layout.neck], ['wisps', layout.wisps],
+      ['pitFloor', layout.pitFloor]] as const) {
+      if (list.length) layers[name] = { instances: list.length, tris: per * list.length };
     }
+    // F2: torres de cúmulo, en malla propia de más lados (su silueta se
+    // recorta contra el cielo en la victoria) y con la deriva: giran enteras.
+    // Sin panza (1): con ella, cada piso sacaba su franja oscura.
+    const towers = addLayer('towers',
+      buildBumpGeometry(BACKDROP_LOOK.towerSides, BACKDROP_LOOK.towerRows, 1, BACKDROP_LOOK.cloudShade),
+      cloudMat(), layout.towers);
+    if (towers) this.driftMeshes.push(towers);
     // 12 lados y no 8: con 8, las lejanas (enormes y de color plano) se
     // recortaban como octógonos.
     addLayer('far', buildBumpGeometry(12, 2, 1, 0), cloudMat(), layout.far);
@@ -638,6 +707,23 @@ export class ArenaBackdrop {
     this.add(dome);
     layers.dome = { instances: 1, tris: triCount(domeGeo) };
 
+    // F2: la vida. Matrices en CPU cada fotograma (`tick`), de ahí el uso
+    // dinámico del búfer.
+    this.life = layout.life;
+    this.lifeGlide = LIFE_BY_FIRMA[sky.firma].glide;
+    if (layout.life.length) {
+      const lifeGeo = buildLifeGeometry(sky.firma);
+      const mesh = new THREE.InstancedMesh(lifeGeo,
+        new THREE.MeshBasicMaterial({ color: sky.lifeColor, side: THREE.DoubleSide, fog: false }), layout.life.length);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      this.add(mesh);
+      this.lifeMesh = mesh;
+      layers.life = { instances: layout.life.length, tris: triCount(lifeGeo) * layout.life.length };
+    }
+    this.time = 0;
+    this.tick(0);
+
     this.lastStats = {
       mode: 'sky',
       draws: this.meshes.length,
@@ -645,13 +731,81 @@ export class ArenaBackdrop {
       layers,
       rejected: layout.rejected,
       isletsInFrame: layout.isletsInFrame,
+      lifeInFrame: layout.lifeInFrame,
       toriiPath: layout.toriiPath,
       corridorViolations: layout.corridorViolations,
       corridorDeg: [layout.corridorTopDeg, layout.corridorBottomDeg],
+      drifting: layout.cloudsDrift.length + layout.towers.length,
       maxExtent: layout.maxExtent,
       buildMs: performance.now() - t0,
       hash: layout.hash,
     };
+  }
+
+  /**
+   * F2: deriva y vida, con el reloj de la PARTIDA: lo llama
+   * `Arena.tickVisuals`, así que la pausa lo congela, a t=0 (al construir)
+   * todo está en su sitio de colocación y las capturas se reproducen.
+   * Offline, la cuenta atrás no llama a `tickVisuals` (`game.ts`): el cielo
+   * arranca con la partida. Online corre desde que llega la semilla.
+   */
+  tick(dt: number): void {
+    if (this.driftMeshes.length === 0 && !this.lifeMesh) return;
+    this.time += dt;
+    const L = BACKDROP_LOOK;
+    // Ida y vuelta (onda triangular) dentro del arco que la colocación
+    // comprobó contra el pasillo: más allá, lo que gira podría entrar en
+    // él. No vale un tope: online el fondo se construye en la sala de
+    // espera, y con un tope la deriva se paraba a mitad de partida. A
+    // 0,1°/s la media vuelta dura 150 s y el cambio de sentido no se ve.
+    // La luz horneada en los bultos gira con ellos: 15° no se notan.
+    const span = L.driftCheckDeg;
+    // Siempre hacia +θ, que es el sentido que comprobó la colocación: con
+    // una velocidad negativa (el look la acepta) iría hacia el otro lado.
+    const travel = Math.abs(this.time * L.driftDegPerSec);
+    const deg = span > 0 ? span - Math.abs(span - (travel % (2 * span))) : 0;
+    for (const m of this.driftMeshes) m.rotation.y = (deg * Math.PI) / 180;
+    if (this.lifeMesh) this.placeLife();
+  }
+
+  /** Pone el reloj del fondo en `seconds`: capturas de la deriva y la vida
+   *  en cualquier instante sin jugar hasta él (`arena-shots --sky-time`). */
+  setTime(seconds: number): void {
+    this.time = 0;
+    this.tick(Math.max(0, seconds));
+  }
+
+  /** Coloca cada elemento de vida en su trayectoria en el instante actual. */
+  private placeLife(): void {
+    const mesh = this.lifeMesh!;
+    const L = BACKDROP_LOOK, t = this.time;
+    // Los buitres (mesa) son mayores y planean: aletean a un tercio y poco.
+    const size = L.lifeSize * (this.lifeGlide ? L.lifeGlideScale : 1);
+    const flapW = 2 * Math.PI * L.lifeFlapHz * (this.lifeGlide ? 1 / 3 : 1);
+    this.life.forEach((it, i) => {
+      if (it.kind === 'orbit') {
+        const a = it.phase + it.speed * L.lifeOrbitSpeed * t;
+        const dir = Math.sign(it.speed);
+        _lp.set(it.x + Math.cos(a) * it.radius, it.y + L.lifeBob * Math.sin(2 * a + it.phase), it.z + Math.sin(a) * it.radius);
+        // El cuerpo (+Z) mira hacia donde vuela; el ala de dentro, abajo.
+        _le.set(0, Math.atan2(-dir * Math.sin(a), dir * Math.cos(a)), dir * L.lifeBankRad, 'YXZ');
+        const s = Math.sin(flapW * t + it.phase);
+        _ls.set(size, size * (this.lifeGlide ? 0.8 + 0.2 * s : 0.35 + 0.65 * s), size);
+      } else {
+        // u: fracción de la caída; aparece y se apaga escalando, sin salto.
+        const u = (((t * L.lifeFallSpeed * it.speed) / it.span + it.phase / (2 * Math.PI)) % 1 + 1) % 1;
+        _lp.set(
+          it.x + Math.sin(t * 0.9 * it.speed + it.phase) * it.radius,
+          it.y - u * it.span,
+          it.z + Math.cos(t * 0.7 * it.speed + 1.3 * it.phase) * it.radius * LIFE_SWAY_Z);
+        // Orden explícito: `_le` es compartido y las aves lo dejan en 'YXZ'.
+        _le.set(t * 1.7 * it.speed + it.phase, t * 1.1 * it.speed + 2 * it.phase, 0.5 * it.phase, 'XYZ');
+        const k = size * Math.max(0, Math.min(1, u / 0.08, (1 - u) / 0.15));
+        _ls.set(k, k, k);
+      }
+      mesh.setMatrixAt(i, _lm.compose(_lp, _lq.setFromEuler(_le), _ls));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
   }
 
   private add(mesh: THREE.Mesh): void {
@@ -670,6 +824,9 @@ export class ArenaBackdrop {
       if (mesh instanceof THREE.InstancedMesh) mesh.dispose();
     }
     this.meshes = [];
+    this.driftMeshes = [];
+    this.lifeMesh = null;
+    this.life = [];
     this.lastStats = null;
   }
 

@@ -32,10 +32,16 @@ el orden de trabajo.
        justa (jungle 7,6 %), con otras baja mucho (0,3-5 %).
    - **F1, las firmas: HECHA (2026-09-29)**. Bloque «Estado de la F1» en
      DIORAMAS; hojas en `.tmp/shots-f1/` (`_hoja_f1`, `_tapado_a_ciegas`).
-   - Lo que queda: F2 torres, fondo del pozo, deriva y vida · F3
-     luz por bioma (absorbe la antigua «fase 3, rig de luz») · F4 caída,
-     CLI `arena-sky.mjs`, `look-patch`, test de determinismo y borrado del
-     mar y de las fotos.
+   - **F2, el cielo se mueve: HECHA (2026-09-29)**. Torres del horizonte,
+     fondo del pozo, deriva y vida. Bloque «Estado de la F2» en DIORAMAS;
+     hoja en `.tmp/shots-f2/_hoja_f2.png`.
+   - Lo que queda: F3 luz por bioma (absorbe la antigua «fase 3, rig de
+     luz») · F4 caída, CLI `arena-sky.mjs`, `look-patch`, test de
+     determinismo y borrado del mar y de las fotos.
+   - Nota para quien tenga `src/game.ts`: offline, la cuenta atrás no
+     llama a `arena.tickVisuals`, así que el cielo (deriva y vida) arranca
+     con la partida. Es cosmético: una línea en la rama `'countdown'` de
+     `presentFrame` lo arregla.
 2. **Dioramas slice 2**: afinar recetas sobre capturas (grietas de hielo,
    escala de acentos), fleco del borde que se regenera al caer un sector,
    viento animado barato, recomponer los 73 props autorados,
@@ -244,19 +250,23 @@ el orden de trabajo.
 ## Cómo retomar
 
 **2026-09-29**. Hecho y en `dev`: los dos desbloqueos del encargo
-(`Arena.simulate`/`present` y `ArenaSim.getLayout()`) y la **F1 del fondo
-v2** (las firmas de cada bioma).
+(`Arena.simulate`/`present` y `ArenaSim.getLayout()`), la **F1 del fondo
+v2** (las firmas de cada bioma) y la **F2** (torres, fondo del pozo,
+deriva y vida).
 
 - **Pendiente de Rafa:** la prueba a ciegas del disco tapado
   (`.tmp/shots-f1/_tapado_a_ciegas.png`). Si algún bioma no se reconoce,
-  ese es el trabajo siguiente. El candidato es tundra.
-- **Después:** F2 (torres del horizonte, fondo del pozo, deriva y vida) o
-  lo que diga el encargo de GENERAL.
+  ese es el trabajo siguiente. El candidato es tundra. La nieve de la F2
+  ayuda a tundra, pero no entra en la hoja a ciegas, que es de la F1.
+  También la hoja de la F2: `.tmp/shots-f2/_hoja_f2.png`.
+- **Después:** F3 (la luz de cada bioma) o lo que diga el encargo de
+  GENERAL.
 - **Trabajo en paralelo:** en `.claude/worktrees/arena`, con el dev server
   en el 5182.
 
 - **Para mirar**: `node scripts/arena-shots.mjs --out .tmp/shots-x
-  --pose game,victory,low --no-hud`.
+  --pose game,victory,low --no-hud`. Con `--sky-time 150` se ve la deriva
+  en su extremo (15°) sin jugar hasta ahí.
 - **Para medir el contrato del fondo**: lo mismo con `--metrics --scatter 0`.
 - **Para cambiar el cielo en vivo**: `__devApi.setPackSky(id, patch)` y
   `__devApi.getBackdropStats()`. Tiene que dar `corridorViolations` 0.

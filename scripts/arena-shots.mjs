@@ -15,7 +15,7 @@
 //                                [--backdrop sky|sea] [--scatter 0]
 //                                [--no-hud] [--metrics]
 //                                [--critters A,B,C,D] [--sky-patch '{json}']
-//                                [--gpu] [--no-island]
+//                                [--gpu] [--no-island] [--sky-time S]
 //
 // Fondo v2 (docs/DIORAMAS.md §«Fondo v2», §12):
 //   --pose      una o varias poses por pack. Las de fin de partida replican
@@ -37,6 +37,9 @@
 //               software: ~18 s por fotograma a 1400×900). Sigue mudo.
 //   --no-island oculta la isla y los bichos: el criterio de Rafa para la
 //               F1 del fondo es que, tapando el disco, se sepa el bioma.
+//   --sky-time  pone el reloj del fondo (deriva de las nubes y vida, F2) en
+//               S segundos sobre el instante congelado: separa el efecto de
+//               la deriva del del colapso. Sufijo `_skyS`.
 // ---------------------------------------------------------------------------
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -63,6 +66,7 @@ const CRITTERS = String(args.get('critters') ?? 'Sergei,Trunk,Kurama,Shelly').sp
 const SKY_PATCH = args.has('sky-patch') ? JSON.parse(String(args.get('sky-patch'))) : null;
 const GPU = args.has('gpu');
 const NO_ISLAND = args.has('no-island');
+const SKY_TIME = args.has('sky-time') ? Number(args.get('sky-time')) : null;
 const HIDE_HUD_CSS = 'body > *:not(canvas) { visibility: hidden !important; }';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -162,10 +166,11 @@ for (const pack of PACKS) {
     });
   }
   if (SCATTER !== null) await page.evaluate((d) => window.__devApi.setScatterDensity(d), SCATTER);
+  if (SKY_TIME !== null) await page.evaluate((t) => window.__game.arena.setBackdropTime(t), SKY_TIME);
   for (const pose of POSES) {
     await page.evaluate((p) => window.__devApi.setCameraPose(p), pose);
     await sleep(700);
-    const suffix = `${AT > 0 ? `_t${AT}` : ''}${pose !== 'game' ? `_${pose}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}${NO_ISLAND ? '_noisland' : ''}`;
+    const suffix = `${AT > 0 ? `_t${AT}` : ''}${SKY_TIME !== null ? `_sky${SKY_TIME}` : ''}${pose !== 'game' ? `_${pose}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}${NO_ISLAND ? '_noisland' : ''}`;
     const file = `${OUT}/${pack}${suffix}.png`;
     const hud = NO_HUD ? await page.addStyleTag({ content: HIDE_HUD_CSS }) : null;
     await page.screenshot({ path: file });
@@ -225,7 +230,7 @@ for (const pack of PACKS) {
   await page.evaluate(() => { window.__devApi.setCameraPose(null); window.__devApi.setSpeed(1); });
 }
 if (METRICS) {
-  const file = `${OUT}/metrics${AT > 0 ? `_t${AT}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}.json`;
+  const file = `${OUT}/metrics${AT > 0 ? `_t${AT}` : ''}${SKY_TIME !== null ? `_sky${SKY_TIME}` : ''}${VW !== 1280 ? `_${VW}x${VH}` : ''}.json`;
   // Se ACUMULA con lo que ya hubiera: lanzar bioma a bioma (un navegador
   // por bioma, ver docs/carriles/arena.md) no debe pisar las cifras.
   const prev = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};

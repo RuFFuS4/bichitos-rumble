@@ -40,6 +40,29 @@ export const FIRMA_CROWN_HEIGHT: Record<SkyFirma, number> = {
   torii: 1.35,    // torii
 };
 
+/** Cuánto oscurece la luz horneada la cara en sombra de un bulto de nube,
+ *  por unidad de `cloudShade`. La comparten el constructor del bulto
+ *  (arena-backdrop) y el contrato del pozo, que necesita saber lo más
+ *  oscuro que llega a pintar un bulto. */
+export const BUMP_SHADE_SPAN = 0.45;
+
+/** Vida (F2) por firma: si vuela en órbita o cae, y si planea (buitres:
+ *  mayores y con poco aleteo). */
+export const LIFE_BY_FIRMA: Record<SkyFirma, { kind: 'orbit' | 'fall'; glide: boolean }> = {
+  atoll: { kind: 'orbit', glide: false },   // gaviotas
+  mesa: { kind: 'orbit', glide: true },     // buitres
+  canopy: { kind: 'fall', glide: false },   // hojas
+  iceberg: { kind: 'fall', glide: false },  // nieve
+  torii: { kind: 'fall', glide: false },    // pétalos
+};
+/** Semieje Z del balanceo de lo que cae, en fracción de su radio (el X es
+ *  el radio entero). */
+export const LIFE_SWAY_Z = 0.7;
+/** Radio de la esfera que envuelve cualquier geometría de vida, en
+ *  unidades de `lifeSize`: media envergadura de la uve (1) con las puntas
+ *  a 0,3 de alto. Los rombos y el octaedro caben dentro. */
+export const LIFE_ELEMENT_RADIUS = 1.05;
+
 /** Cota (fracción del alto de la panza) a la que nacen las lianas de la
  *  maceta. La comparten la colocación y el constructor, que las pone en la
  *  pared del islote a esa cota y no dentro. */
@@ -63,6 +86,24 @@ export interface SkyInstance {
   r: number; g: number; b: number;
 }
 
+/**
+ * F2: un elemento de vida. Solo su trayectoria; la posición de cada
+ * fotograma la calcula `arena-backdrop` con el reloj de la partida.
+ *  · `orbit`: planea en un círculo de radio `radius` alrededor de
+ *    (x, y, z); el signo de `speed` es el sentido de giro.
+ *  · `fall`: cae de `y` a `y − span` por la columna (x, z), balanceándose
+ *    `radius`, y vuelve a empezar arriba.
+ */
+export interface SkyLife {
+  kind: 'orbit' | 'fall';
+  x: number; y: number; z: number;
+  radius: number;
+  span: number;
+  /** Fase inicial (rad) y multiplicador de la velocidad del look. */
+  phase: number;
+  speed: number;
+}
+
 export interface SkyLayout {
   near: SkyInstance[];
   neck: SkyInstance[];
@@ -73,6 +114,15 @@ export interface SkyLayout {
   coronas: SkyInstance[];
   hangs: SkyInstance[];
   wisps: SkyInstance[];
+  /** F2: torres de cúmulo (malla propia, gira entera) y fondo del pozo. */
+  towers: SkyInstance[];
+  pitFloor: SkyInstance[];
+  /** F2: la malla de bultos con panza (cercanas, cuello, jirones y fondo
+   *  del pozo) partida en dos: lo que gira con la deriva y lo que no. Son
+   *  las mismas instancias que las listas de arriba, repartidas. */
+  cloudsStill: SkyInstance[];
+  cloudsDrift: SkyInstance[];
+  life: SkyLife[];
   /** Rocas del camino de toriis (kitsune); 0 si no cupo ningún rumbo. */
   toriiPath: number;
   /** Paradas de la cúpula [elevación °, color hex sRGB], de +90 a −90. */
@@ -83,8 +133,14 @@ export interface SkyLayout {
   rejected: {
     nearCorridor: number; nearSparse: number; far: number; islets: number;
     wisps: number; hangsShortened: number; hangsDropped: number;
+    /** F2: torres en el cuadro de juego, nubes que se quedan quietas porque
+     *  su arco de deriva toca el pasillo, y trayectorias de vida que lo
+     *  tocan (o atraviesan un islote). */
+    towers: number; driftHeld: number; life: number;
   };
   isletsInFrame: number;
+  /** F2: elementos de vida dentro del cuadro de juego. */
+  lifeInFrame: number;
   /** Lo que rompe el contrato del pozo detrás del canto (plan §4/§8): el
    *  propio `abyss` fuera de su techo (pozo oscuro) o de su suelo (pozo
    *  claro), y cada nube del cuello que toque el pasillo y lo incumpla.
@@ -226,6 +282,12 @@ function pointInPolygon(px: number, py: number, poly: Array<[number, number]>): 
   return inside;
 }
 
+/** Centro y seis puntos extremos de una esfera unidad: la prueba de si una
+ *  esfera cae entera dentro o fuera del cuadro (deriva, F2). */
+const SPHERE_PROBES: ReadonlyArray<readonly [number, number, number]> = [
+  [0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1],
+];
+
 /** Radio de la esfera que envuelve un bulto de nube (media esfera de
  *  base plana, alto 0,75·sy), centrada a media altura. */
 const bumpEnvelope = (sx: number, sy: number, sz: number) => Math.hypot(Math.max(sx, sz), 0.375 * sy);
@@ -285,6 +347,21 @@ export function layoutSky(p: SkyLayoutParams): SkyLayout {
     ? srgbLuma(c) > sky.abyssCeiling
     : srgbLuma(c) < sky.abyssFloor;
   if (breaksPit(abyss)) corridorViolations++;   // la cúpula pinta `abyss` en todo el pasillo
+  // Un BULTO con panza pinta entre su instanceColor (cima al sol: techo del
+  // pozo oscuro) y ese color por `minShade` (panza en sombra: suelo del pozo
+  // claro). Contar solo el instanceColor dejaba el cuello y el fondo del
+  // pozo de jungle por debajo de su suelo sin contarlo (revisión F2).
+  const minShade = look.cloudBelly * (1 - look.cloudShade * BUMP_SHADE_SPAN);
+  const shaded = new THREE.Color();
+  const bumpBreaksPit = (c: THREE.Color) => sky.pit === 'dark'
+    ? breaksPit(c)
+    : breaksPit(shaded.copy(c).multiplyScalar(minShade));
+  // En pozo claro, los bultos oscuros de color de pozo salen de `abyss` por
+  // este factor: el menor que deja su panza en sombra sobre el suelo.
+  let lightK = 1;
+  if (sky.pit === 'light') {
+    while (lightK < 2 && bumpBreaksPit(tmp.copy(abyss).multiplyScalar(lightK))) lightK += 0.01;
+  }
 
   // --- C2: mar de nubes cercano, abierto en cráter por el pasillo --------
   // Cada candidato es un CÚMULO: un bulto principal y 2-3 satélites más
@@ -350,8 +427,10 @@ export function layoutSky(p: SkyLayoutParams): SkyLayout {
       const s = lerp(look.neckSizeMin, look.neckSizeMax, rand());
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       const h = 0.75 * s;
-      tmp.copy(abyss).multiplyScalar(0.88 + 0.12 * rand());
-      if (touchesCorridor(x, topY - h / 2, z, bumpEnvelope(s * 1.3, s, s)) && breaksPit(tmp)) corridorViolations++;
+      // En sombra en pozo oscuro; en pozo claro, algo más claros que él.
+      const k = rand();
+      tmp.copy(abyss).multiplyScalar(sky.pit === 'dark' ? 0.88 + 0.12 * k : lightK * (1 + 0.12 * k));
+      if (touchesCorridor(x, topY - h / 2, z, bumpEnvelope(s * 1.3, s, s)) && bumpBreaksPit(tmp)) corridorViolations++;
       push(neck, x, topY - h, z, s * 1.3, s, s, 0, tmp);
     }
   }
@@ -551,6 +630,178 @@ export function layoutSky(p: SkyLayoutParams): SkyLayout {
     }
   }
 
+  // --- F2: torres de cúmulo en el horizonte --------------------------------
+  // Pilas de bultos que se estrechan hacia arriba. Desde la cámara de juego
+  // quedan por encima del techo del cuadro; se ven con la cámara baja y en
+  // la pantalla final, donde el cielo era plano. Se funden con el horizonte
+  // solo hasta `towerHaze`: del todo, no se verían.
+  const towers: SkyInstance[] = [];
+  let towerRejected = 0;
+  {
+    const rand = layerRand('towers');
+    const cloudTop = new THREE.Color(sky.cloudTop);
+    // Un rumbo por sector (con holgura de medio sector), no al azar: la
+    // victoria mira hacia donde mire el ganador (≈71° de ancho), y con
+    // rumbos al azar podía no caer ninguna torre en el cuadro.
+    const a0 = rand() * Math.PI * 2;
+    for (let i = 0; i < look.towerCount; i++) {
+      const r = lerp(look.towerRMin, look.towerRMax, rand());
+      const a = a0 + ((i + 0.5 + (rand() - 0.5) * 0.5) / look.towerCount) * Math.PI * 2;
+      const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+      const H = lerp(look.towerHeightMin, look.towerHeightMax, rand());
+      const levels = 5 + Math.floor(rand() * 2);
+      const topSize = look.towerBaseSize * 0.45;
+      const bumps: Array<[number, number, number, number]> = [];
+      for (let k = 0; k < levels; k++) {
+        const f = k / (levels - 1);
+        const s = look.towerBaseSize * (1 - 0.55 * f);
+        const y = look.towerBaseY + f * (H - 0.75 * topSize);
+        // Dos bultos por piso, a lados opuestos del eje y de tamaño
+        // distinto: la silueta sale en coliflor y no en pisos.
+        const phi = rand() * Math.PI * 2;
+        const d = 0.4 * s;
+        bumps.push([cx + Math.cos(phi) * d, y, cz + Math.sin(phi) * d, s * (0.8 + 0.2 * rand())]);
+        const phi2 = phi + Math.PI + (rand() - 0.5) * 1.2;
+        bumps.push([cx + Math.cos(phi2) * d, y - 0.15 * s, cz + Math.sin(phi2) * d, s * (0.6 + 0.2 * rand())]);
+      }
+      // Ningún bulto en el cuadro de juego (ni con la deriva: ver la nota de
+      // `towerCount`, es por geometría) ni en el pasillo.
+      if (bumps.some(([x, y, z, s]) => inFrame(x, y, z) || inFrame(x, y + 0.75 * s, z)
+        || touchesCorridor(x, y + 0.375 * s, z, bumpEnvelope(s, s, s)))) {
+        towerRejected++;
+        continue;
+      }
+      tmp.copy(cloudTop).lerp(horizon, look.towerHaze);
+      for (const [x, y, z, s] of bumps) push(towers, x, y, z, s, s, s, 0, tmp);
+    }
+  }
+
+  // --- F2: fondo del pozo ---------------------------------------------------
+  // Bultos del color del abismo muy abajo, bajo la isla y alrededor: el pozo
+  // deja de ser un color liso (riesgo 2). Se separan del `abyss` solo hacia
+  // el lado seguro del contrato, así que detrás del canto lo cumplen por
+  // construcción (y si no, se cuenta).
+  const pitFloor: SkyInstance[] = [];
+  {
+    const rand = layerRand('pit-floor');
+    for (let i = 0; i < look.pitFloorCount; i++) {
+      const r = Math.sqrt(rand()) * look.pitFloorRMax;
+      const a = rand() * Math.PI * 2;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const topY = lerp(look.pitFloorYMin, look.pitFloorYMax, rand());
+      const s = lerp(look.pitFloorSizeMin, look.pitFloorSizeMax, rand());
+      const k = look.pitFloorVary * rand();
+      tmp.copy(abyss).multiplyScalar(sky.pit === 'dark' ? 1 - k : lightK * (1 + k));
+      const h = 0.75 * s;
+      if (touchesCorridor(x, topY - h / 2, z, bumpEnvelope(s * 1.2, s, s)) && bumpBreaksPit(tmp)) corridorViolations++;
+      push(pitFloor, x, topY - h, z, s * 1.2, s, s, 0, tmp);
+    }
+  }
+
+  // --- F2: deriva ------------------------------------------------------------
+  // Qué bultos de la malla con panza giran alrededor del eje durante la
+  // partida. Los CLAROS (cercanas y jirones) solo si en ningún punto del
+  // arco en el que van y vienen (`driftCheckDeg`: la deriva es una onda
+  // triangular dentro de él; se prueba cada grado)
+  //   · tocan el pasillo, ni
+  //   · cruzan el borde del cuadro de juego: o están enteros dentro todo el
+  //     arco o enteros fuera. Si no, la deriva mete y saca nubes claras del
+  //     cuadro y la cantidad de fondo claro deja de ser la medida: con la
+  //     semilla 7 a 15° entraban cúmulos por la derecha y el fondo claro
+  //     pasaba del 7,8 al 10,7 % (decisión 1: ≤8 %).
+  // Comprobar la órbita entera
+  // dejaría quieto casi todo C2. El fondo del pozo gira siempre: es oscuro
+  // y puede estar en el pasillo. El cuello no: abraza el cono, y la isla no
+  // se mueve.
+  const driftSteps = Math.max(1, Math.ceil(look.driftCheckDeg));
+  /** 1 si la esfera cae entera dentro del cuadro, −1 si entera fuera, 0 si
+   *  cruza el borde (centro y seis puntos extremos). */
+  const frameSide = (x: number, y: number, z: number, rad: number) => {
+    let inside = 0;
+    for (const [dx, dy, dz] of SPHERE_PROBES) if (inFrame(x + dx * rad, y + dy * rad, z + dz * rad)) inside++;
+    return inside === SPHERE_PROBES.length ? 1 : inside === 0 ? -1 : 0;
+  };
+  const canDrift = (it: SkyInstance) => {
+    const cy = it.y + 0.375 * it.sy;
+    const env = bumpEnvelope(it.sx, it.sy, it.sz);
+    const side = frameSide(it.x, cy, it.z, env);
+    if (side === 0) return false;
+    for (let k = 1; k <= driftSteps; k++) {
+      const th = ((k / driftSteps) * look.driftCheckDeg * Math.PI) / 180;
+      const c = Math.cos(th), sn = Math.sin(th);
+      // Mismo sentido que el giro de la malla en arena-backdrop (rotation.y = +θ).
+      const x = it.x * c + it.z * sn, z = -it.x * sn + it.z * c;
+      if (touchesCorridor(x, cy, z, env) || frameSide(x, cy, z, env) !== side) return false;
+    }
+    return true;
+  };
+  const cloudsStill: SkyInstance[] = [...neck];
+  const cloudsDrift: SkyInstance[] = [...pitFloor];
+  let driftHeld = 0;
+  for (const it of [...near, ...wisps]) {
+    if (canDrift(it)) cloudsDrift.push(it);
+    else { cloudsStill.push(it); driftHeld++; }
+  }
+
+  // --- F2: vida ---------------------------------------------------------------
+  // Lo que se mueve en el aire, según la firma: aves que planean en círculo
+  // por debajo de la isla (gaviotas en coral, buitres en el desierto) o
+  // cosas que caen al vacío (hojas, nieve, pétalos). Toda trayectoria se
+  // prueba entera contra el pasillo —la vida nunca pasa por detrás del
+  // canto— y contra los islotes, que no atraviesa.
+  const life: SkyLife[] = [];
+  let lifeRejected = 0, lifeInFrame = 0;
+  {
+    const rand = layerRand('life');
+    const { kind, glide } = LIFE_BY_FIRMA[sky.firma];
+    // La esfera que envuelve el elemento, a su tamaño real.
+    const elemR = look.lifeSize * (glide ? look.lifeGlideScale : 1) * LIFE_ELEMENT_RADIUS;
+    const ORBIT_SAMPLES = 32;
+    const clearOfIslets = (x: number, z: number, pad: number) =>
+      placed.every(o => Math.hypot(o.x - x, o.z - z) > o.rad + pad);
+    for (let attempt = 0; attempt < 1000 && life.length < look.lifeCount; attempt++) {
+      const r = lerp(look.lifeRMin, look.lifeRMax, rand());
+      const a = rand() * Math.PI * 2;
+      const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+      const phase = rand() * Math.PI * 2;
+      const speed = 0.7 + 0.6 * rand();
+      if (kind === 'orbit') {
+        const radius = lerp(look.lifeOrbitRMin, look.lifeOrbitRMax, rand());
+        const cy = lerp(look.lifeBottomY, look.lifeTopY - 6, rand());
+        // Primero se llenan los que se ven en juego (como los islotes).
+        const visible = inFrame(cx, cy, cz);
+        if (lifeInFrame < look.lifeMinInFrame && !visible) continue;
+        // Envolvente: el elemento, el vaivén vertical y lo que el arco se
+        // separa de la cuerda entre dos muestras.
+        const halfGap = 2 * radius * Math.sin(Math.PI / ORBIT_SAMPLES / 2);
+        const pad = elemR + look.lifeBob + halfGap;
+        let ok = true;
+        for (let k = 0; k < ORBIT_SAMPLES && ok; k++) {
+          const t = (k / ORBIT_SAMPLES) * Math.PI * 2;
+          const px = cx + Math.cos(t) * radius, pz = cz + Math.sin(t) * radius;
+          ok = !touchesCorridor(px, cy, pz, pad) && clearOfIslets(px, pz, elemR + halfGap);
+        }
+        if (!ok) { lifeRejected++; continue; }
+        if (visible) lifeInFrame++;
+        life.push({ kind: 'orbit', x: cx, y: cy, z: cz, radius, span: 0, phase, speed: rand() < 0.5 ? speed : -speed });
+      } else {
+        const y0 = lerp(look.lifeTopY - 6, look.lifeTopY, rand());
+        const span = lerp(look.lifeFallSpanMin, look.lifeFallSpanMax, rand());
+        const visible = inFrame(cx, y0 - span / 2, cz);
+        if (lifeInFrame < look.lifeMinInFrame && !visible) continue;
+        // Envolvente: el balanceo (elipse de semiejes sway y sway·0,7), el
+        // elemento y media separación entre muestras de la columna.
+        const n = Math.ceil(span / 2);
+        const pad = look.lifeSway * Math.hypot(1, LIFE_SWAY_Z) + elemR + span / n / 2;
+        let ok = clearOfIslets(cx, cz, pad);
+        for (let k = 0; k <= n && ok; k++) ok = !touchesCorridor(cx, y0 - (k / n) * span, cz, pad);
+        if (!ok) { lifeRejected++; continue; }
+        if (visible) lifeInFrame++;
+        life.push({ kind: 'fall', x: cx, y: y0, z: cz, radius: look.lifeSway, span, phase, speed });
+      }
+    }
+  }
+
   // --- Cúpula: color por latitud ------------------------------------------
   const zenith = new THREE.Color(sky.zenith);
   const skyLow = zenith.clone().lerp(horizon, 0.55);
@@ -567,26 +818,34 @@ export function layoutSky(p: SkyLayoutParams): SkyLayout {
   ];
 
   // --- Cifras -----------------------------------------------------------------
+  // Se hashea lo que se DIBUJA, por malla: el reparto quieto/deriva cuenta.
   let maxExtent = 0;
   let h = 0x811c9dc5 | 0;
-  for (const list of [near, neck, far, islets, coronas, hangs, wisps]) {
+  const mix = (n: number) => { h = Math.imul(h ^ Math.round(n * 1e4), 0x01000193); };
+  for (const list of [cloudsStill, cloudsDrift, far, islets, coronas, hangs, towers]) {
+    mix(list.length);
     for (const it of list) {
       maxExtent = Math.max(maxExtent, Math.hypot(it.x, it.z) + Math.max(it.sx, it.sz));
-      for (const n of [it.x, it.y, it.z, it.sx, it.sy, it.sz, it.rotY, it.r, it.g, it.b]) {
-        h = Math.imul(h ^ Math.round(n * 1e4), 0x01000193);
-      }
+      for (const n of [it.x, it.y, it.z, it.sx, it.sy, it.sz, it.rotY, it.r, it.g, it.b]) mix(n);
     }
+  }
+  for (const it of life) {
+    maxExtent = Math.max(maxExtent, Math.hypot(it.x, it.z) + it.radius);
+    for (const n of [it.kind === 'orbit' ? 1 : 2, it.x, it.y, it.z, it.radius, it.span, it.phase, it.speed]) mix(n);
   }
 
   return {
-    near, neck, far, islets, coronas, hangs, wisps, toriiPath, domeStops,
+    near, neck, far, islets, coronas, hangs, wisps, towers, pitFloor, cloudsStill, cloudsDrift, life,
+    toriiPath, domeStops,
     corridorTopDeg: topDeg,
     corridorBottomDeg: bottomDeg,
     rejected: {
       nearCorridor, nearSparse, far: farRejected, islets: isletRejected,
       wisps: wispCorridor, hangsShortened, hangsDropped,
+      towers: towerRejected, driftHeld, life: lifeRejected,
     },
     isletsInFrame,
+    lifeInFrame,
     corridorViolations,
     maxExtent,
     hash: (h >>> 0).toString(16).padStart(8, '0'),

@@ -261,6 +261,41 @@ Tras este cambio dejan de verse en partida y solo sirven para la pantalla final 
 > - El camino de toriis se coloca **antes** que los islotes normales: al revés, faltaba en la mitad de las semillas. Ahora sale en 300 de 300.
 >
 > **Revisión adversarial:** 3 lentes, un verificador por hallazgo, 15 confirmados y todos arreglados. Entre ellos: toriis girados 90°; lianas que nacían dentro de la maceta y no llegaban al color del pozo; carámbanos metidos en el iceberg; frondas aplastadas en el eje equivocado; una prueba de cascadas tan holgada que quitaba la mitad sin motivo; y `setPackSky` aceptando una firma mal escrita, que dejaba el cielo sin islotes.
+>
+> **Estado de la F2 (2026-09-29): HECHA.** El cielo se mueve y el horizonte de la victoria deja de ser plano:
+> - **Torres de cúmulo** en el horizonte (r 265-350): 8 torres de 5-6 pisos, con dos bultos por piso. Solo se ven con la cámara baja y en la victoria. Van una por sector de 45°, así que cualquier encuadre de victoria recoge alguna.
+> - **Fondo del pozo:** 24 bultos sueltos entre y −175 y −150, del color del abismo.
+> - **Deriva:** las nubes giran a 0,1°/s alrededor del eje, de ida y vuelta entre 0° y 15°, con el reloj de la partida. La isla, el cuello y los islotes no giran.
+> - **Vida:** 30 elementos por bioma, al menos 14 dentro del cuadro de juego.
+>
+> | Bioma | Vida |
+> |---|---|
+> | coral (`atoll`) | gaviotas blancas planeando en círculo |
+> | jungle (`canopy`) | hojas oscuras cayendo al pozo claro |
+> | tundra (`iceberg`) | nieve que cae |
+> | desierto (`mesa`) | buitres pardos, mayores y planeando |
+> | kitsune (`torii`) | pétalos rosas que caen |
+>
+> **Coste:** +3 draws (malla de la deriva, torres y vida), 0 bytes. El fondo queda en 9 draws (8 en kitsune, que no tiene colgantes) y 43-46k triángulos, de los que las torres son ~14k. Construcción de 2-3 ms en node.
+>
+> **Hoja para Rafa:** `.tmp/shots-f2/_hoja_f2.png`, con los 5 biomas en la pose de juego, la cámara baja, la victoria y el juego con la deriva a 15°. La semilla es la 7.
+>
+> **Dónde se aparta del plan:**
+> - **Las torres van en malla propia, no en la de C2.** El bulto de C2 (14×3) se facetaba en la silueta contra el cielo, y su panza sacaba una franja oscura en cada piso. La malla de las torres es de 18×5 y sin panza. Cuesta +1 draw y ~14k triángulos, no los 4,9k previstos; como gira entera con la deriva, no hace falta otra malla más.
+> - **Las torres, en coliflor.** Con un bulto centrado por piso se leían como una tarta de pisos (primera hoja). Ahora llevan dos bultos por piso, a lados opuestos del eje y de distinto tamaño.
+> - **El fondo del pozo es escaso: 24 bultos pequeños, no 60 grandes.** Con 60 de 14-30 u tapaba el pozo entero y, sobre todo con la cámara baja, se leía como un suelo de rocas: justo lo que Rafa rechazó («cielo, no suelo»). Ahora cubre ~25 %.
+> - **La deriva va de ida y vuelta.** Es una onda triangular entre 0° y `driftCheckDeg` (15°), el arco que se comprueba grado a grado. Con un tope y parada se quedaba quieta a mitad de partida online, porque allí el fondo se construye en la sala de espera.
+> - **La deriva no cruza el borde del cuadro.** Solo giran los bultos claros que, en todo el arco, ni tocan el pasillo ni cruzan el borde del cuadro de juego: o están enteros dentro o enteros fuera. Con la semilla 7 a 15° entraban cúmulos por la derecha, y el fondo claro subía del 7,8 al 10,7 % (decisión 1: ≤8 %). Se quedan quietos ~20-25 bultos por bioma y giran ~140-165. El fondo del pozo gira siempre, porque es oscuro y puede estar en el pasillo. El cuello no gira nunca: abraza el cono.
+> - **El contrato del pozo cuenta la sombra de los bultos.** Un bulto con panza pinta entre su color de instancia y ese color × 0,584 (panza y cara en sombra). En el pozo claro de jungle, el cuello y el fondo del pozo quedaban hasta 1,8 puntos por debajo del suelo detrás del canto, y `corridorViolations` daba 0. Ahora se mide con lo más oscuro que se pinta, y en el pozo claro esos bultos salen algo más claros que el abismo. De rebote, el canto de jungle sube: mediana 75,4 y mínimo ≥41,7, antes 72,1 y 40,4.
+> - **Vida visible en juego.** Con 24 elementos repartidos alrededor, casi ninguno caía en el cuadro; ahora se llenan primero `lifeMinInFrame`. Los colores contrastan con su pozo. Las hojas de jungle son oscuras, porque claras no se veían sobre el pozo claro. Los buitres son pardos, porque casi negros se perdían en el abismo del desierto. Las trayectorias se prueban contra el pasillo con la envolvente real: tamaño, vaivén, balanceo y hueco entre muestras.
+> - **Límite conocido:** offline, la cuenta atrás no llama a `tickVisuals` (`src/game.ts`), así que el cielo arranca con la partida. Online corre desde que llega la semilla.
+>
+> **Cifras** (`arena-shots --metrics`, semillas 1, 7 y 42 en t=0, más la 7 con la deriva a 15° con `--sky-time 150`):
+> - ΔL mediano del canto: 65-75,4; p10 ≥39,1; mínimo ≥16,8, el mismo de la F1 (kitsune).
+> - Fondo claro en pozos oscuros: ≤7,8 % en t=0 y ≤7,4 % con la deriva a 15°.
+> - `corridorViolations`: 0 en 200 semillas × 5 biomas (node), y `maxExtent` 385 (límite 403,5).
+>
+> **Revisión adversarial:** 3 lentes y un verificador por lente. Confirmó 6 de 8 hallazgos y se arreglaron todos menos el de la cuenta atrás, que queda como límite conocido. Eran estos: el contrato del pozo claro sin contar la sombra; un `Euler` compartido que heredaba el orden de las aves en lo que cae; una `driftDegPerSec` negativa, que giraría hacia el lado no comprobado; y la cabecera de la malla, que exageraba draws y triángulos. Los dos refutados (literales de la vida copiados a mano entre ficheros) se centralizaron igualmente en `BACKDROP_LOOK` y en constantes exportadas de la colocación.
 
 ---
 
