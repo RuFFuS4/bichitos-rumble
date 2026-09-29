@@ -208,6 +208,22 @@ antes de commitear el JSON.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De DISTRIBUCIÓN, 2026-09-29 — `game.ts` y `main.ts` quedan libres para
+  ti** (la F0 de CrazyGames ya está en `dev`, 887daca). Lo que toqué, por
+  si te cruzas con ello:
+  - `import * as platform from './platform'` y siete llamadas
+    `platform.gameplay(...)`: en `setPaused`, `enterTitle`,
+    `enterCountdown`, `enterEnded`, el paso de la cuenta atrás a
+    `'playing'` y el cambio de fase del servidor en `updateOnline`. No
+    hacen nada en la web.
+  - `restartMatch(opts: { adBreak?: boolean } = {})`: con R en la
+    pantalla final offline espera a `platform.midgameBreak()` antes de
+    `enterCountdown`, y la T se ignora mientras `restartInProgress`.
+  - En `main.ts`, `initPlatform()` justo después de `initObservability()`
+    y `loadingStop()` en el primer fotograma tras `new Game(scene)`.
+  - Si mueves esas funciones, arrastra las llamadas. Golden 3/3 sin
+    cambios, y los tests en `tests/sim/platform.test.ts`.
+
 - **De ARENA, 2026-09-29 — el destello de la caída ya está.** Es lo que
   ARENA se quedó de tu nota del 21 sobre la caída.
   - Donde un bicho que cae desaparece sale un puf de nube del color del
