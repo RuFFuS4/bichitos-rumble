@@ -157,18 +157,21 @@ antes de commitear el JSON.
          iconos se mueven en cada fotograma a 144 y 240 Hz. Cifras en
          `REPASO_HABILIDADES.md` §«Segundo corte»; mapa y diseño en
          `.tmp/paso-fijo-2/` del worktree.
-   - [ ] Preguntar a Rafa por tres cambios visuales seguros: clip de
-         caída offline, clips en la cuenta atrás y sierra de Shelly
-         online.
+   - [x] Tres cambios visuales (Rafa: «Sí, Sí y Sí», 2026-09-25): el clip
+         de caída offline y online, los clips en la cuenta atrás y la sierra
+         de Shelly online. En producción desde v1.11-caida-sierra
+         (2026-09-26). Cifras en `REPASO_HABILIDADES.md` §«Los tres
+         cambios visuales».
    - [ ] **Pase de balance de los golpes de dash** (`REPASO_HABILIDADES.md`
          §«Medido»). Kowalski (eliminado 49 → 65 %) y Sergei (70 → 78 %)
          pierden: les tiran más los dashes que ahora golpean, no su
          propio deslizamiento. Medir con `scripts/fall-probe.mjs`, que
          da la causa de cada caída en tiempo de simulación, y con más
          partidas que la tanda, que tiene ±8 puntos de ruido.
-   - [ ] Lo que falta en `BrawlRoom` (DISTRIBUCIÓN, S2-1 a S2-5), en tierra
-         de nadie, INTERFAZ y ARENA: listado en el documento, con aviso en
-         cada buzón.
+   - [x] Lo que faltaba en `BrawlRoom` (DISTRIBUCIÓN, S2-1 a S2-5): en
+         producción desde v1.9-habilidades-online (2026-09-25), salvo el
+         Sinkhole, que espera el getter de ARENA. Lo de tierra de nadie,
+         INTERFAZ y ARENA quedó en sus buzones.
    - [x] Las 6 cosas pequeñas de tierra de nadie (permiso de Rafa,
          2026-09-25), hechas: ver `REPASO_HABILIDADES.md`.
    - [x] Las preguntas de la segunda tanda, respondidas el 2026-09-25:
@@ -407,6 +410,17 @@ antes de commitear el JSON.
   *Los puntos 1 y 2 siguen pendientes.*
 
 ## Cómo retomar
+
+**2026-09-29** — modo paralelo (`docs/SESIONES.md`): worktree
+`.claude/worktrees/personajes`, dev server 5181 y servidor local 2581.
+El encargo de la sesión general está al principio del §Buzón:
+- checklist limpia (hecho);
+- después, el pase de balance de los golpes de dash;
+- luego, un Run por Tripo.
+
+Esperan también dos notas de ARENA sobre ficheros míos: el corte offline
+de proyectiles y los bots que caen por los agujeros. Hoy `game.ts` es de
+ARENA y `BrawlRoom` de DISTRIBUCIÓN.
 
 **2026-09-25** — en `dev` están el corte 2 del feeling (reacción al golpe,
 acentos de arranque y frenada) y las dos tandas del repaso de habilidades
