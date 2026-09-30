@@ -787,6 +787,9 @@ idénticas.
   decisión de Rafa. Además, la tanda mide bots contra bots (regla 6 de
   `docs/BALANCE.md`): Shelly en manos de una persona puede ser otra
   cosa.
+- **Decisión de Rafa (2026-09-30): se queda como está y se prueba con
+  personas.** Si en esa prueba sigue perdiendo, lo siguiente a medir es su
+  velocidad y el cabezazo de su bot.
 
 ## Preguntas a Rafa — respondidas el 2026-09-25
 
