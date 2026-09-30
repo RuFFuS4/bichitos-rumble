@@ -179,8 +179,12 @@ antes de commitear el JSON.
          del bot».
    - [ ] **Pase de Shelly** (y quizá Sergei): tras los dos cambios, Shelly
          sigue la última (74 % eliminada, 3 % de victorias). Sergei mejora
-         pero sigue abajo, y Trunk sigue arriba. Preguntar a Rafa qué se
-         toca antes de medir.
+         pero sigue abajo, y Trunk sigue arriba. **Medido el 2026-09-30**:
+         concha más a mano, bot de tanque, menos retroceso y más masa, solas
+         y juntas, quedan en el ruido (`REPASO_HABILIDADES.md` §«Pase de
+         Shelly»). Espera a que Rafa diga qué se prueba después: su
+         velocidad (es identidad), cómo busca el cabezazo su bot, o dejarla
+         así hasta una prueba con personas.
    - [x] Lo que faltaba en `BrawlRoom` (DISTRIBUCIÓN, S2-1 a S2-5): en
          producción desde v1.9-habilidades-online (2026-09-25), salvo el
          Sinkhole, que espera el getter de ARENA. Lo de tierra de nadie,
@@ -550,7 +554,8 @@ despliegue.
   DISTRIBUCIÓN, con el código. `game.ts` queda soltado sin tocarlo.
 
 Lo siguiente:
-- el pase de Shelly, preguntando antes a Rafa;
+- el pase de Shelly: medidas cuatro palancas, ninguna sirve (2026-09-30).
+  Espera a Rafa;
 - lo que queda del feeling (§Pendiente 1): el arranque de los Meshy y el
   vocabulario que falta (stretch al salir despedido, anticipación, inercia
   de orejas y cola).

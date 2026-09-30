@@ -1,5 +1,28 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-30 — [PERSONAJES] Shelly: cuatro palancas medidas y ninguna sirve; la sonda gana `--config`
+
+Shelly sigue la última (74 % eliminada). Rafa pidió medir cuatro
+palancas antes de elegir, sobre las 383 partidas del plan en que sale
+ella. Resultado: ninguna sale del ruido, ni sola ni juntas.
+- **Concha a 8 s:** −2,9 puntos.
+- **Bot de tanque:** −3,1.
+- **Mitad de retroceso:** −1,3.
+- **Masa 1,6 pagada con fuerza 12:** −5,2 [−10,5; 0,0].
+- **Las cuatro:** −2,9.
+
+Cae ~3 veces por minuto en todas, porque si se le quita una causa crece
+otra. El bot de tanque ni siquiera evita los choques: cuando viene el
+golpe, ella ya está embistiendo.
+
+- Nada va al juego: el código de las palancas se tiró.
+- Sí se queda `attrib-probe --config=Bicho.campo=valor`, que cambia en
+  vivo masa, velocidad o fuerza de un bicho, con la misma comprobación de
+  módulo que `--kit`. Está en `DEV_TOOLS.md`.
+- Lo siguiente lo decide Rafa: su velocidad (es identidad), cómo busca el
+  cabezazo su bot, o esperar a una prueba con personas. Detalle en
+  `docs/REPASO_HABILIDADES.md` §«Pase de Shelly».
+
 ## 2026-09-29 — [DISTRIBUCIÓN] El golpe online: la mitad de red
 
 - Es la otra mitad de la entrada de PERSONAJES (73df833). Online, un

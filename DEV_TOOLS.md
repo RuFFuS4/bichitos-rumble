@@ -309,14 +309,16 @@ Todo lo tunable tiene camino sin navegador. Catálogo actual:
     `contact` o `alone`.
 - **¿Quién tiró a quién, y con qué?** (2026-09-29):
   `node scripts/attrib-probe.mjs --url=... [--players=...] [--matches=100]
-  [--shard=i/n] [--kit=Bicho.slot.campo=valor] [--feel=sec.key=val]`, y
+  [--shard=i/n] [--kit=Bicho.slot.campo=valor] [--feel=sec.key=val]
+  [--config=Bicho.campo=valor]`, y
   después `node scripts/attrib-analyze.mjs <dir> [--compare=<dir>]`.
   - Juega partidas deterministas de bots en el laboratorio. De **cada**
     caída de **cada** bicho apunta el último empujón, su autor y qué
     hacía la víctima: cabezazo, rebote propio, J, K, L, All-in, agarre,
     suelo o solo.
   - `--kit` cambia en vivo cualquier campo numérico de las habilidades,
-    y `--feel` cualquier valor de FEEL. Con `--compare` sobre el mismo
+    `--config` los del bicho (masa, velocidad, fuerza del cabezazo;
+    desde el 2026-09-30) y `--feel` cualquier valor de FEEL. Con `--compare` sobre el mismo
     plan salen los Δ emparejados con su intervalo de confianza. Así se
     mide un «qué pasaría si» sin tocar el código.
   - La sonda del pase de balance de las embestidas: 900 partidas y unas

@@ -754,6 +754,40 @@ fallar. **Qué queda:** Shelly sigue la última, y Sergei sube pero sigue
 abajo. Trunk sigue ganando de largo. Según el plan, hay pase para Shelly.
 Sergei y Trunk los decide Rafa.
 
+### Pase de Shelly: cuatro palancas medidas, ninguna sirve (2026-09-30)
+
+Rafa pidió medir las cuatro antes de elegir. Cada una se probó como «qué
+pasaría si» sobre las 383 partidas del plan en las que sale Shelly,
+emparejadas con la base: el `dev` de hoy, con 14 partidas repetidas
+idénticas.
+
+| Palanca | Cómo | Shelly eliminada (base 73,6 %) | Δ [IC 95 %] |
+|---|---|---|---|
+| Concha más a mano | Steel Shell: 12 → 8 s de cooldown | 70,8 % | −2,9 [−8,2; +2,5] |
+| Bot más de tanque | ante un cabezazo que viene, concha en vez de embestir | 70,5 % | −3,1 [−8,3; +2,1] |
+| Menos retroceso propio | la mitad al conectar su cabezazo | 72,3 % | −1,3 [−7,1; +4,5] |
+| Más masa | 1,4 → 1,6, pagada con golpe: fuerza 14 → 12 | 68,4 % | −5,2 [−10,5; 0,0] |
+| **Las cuatro juntas** | | 70,8 % | −2,9 [−8,5; +2,8] |
+
+- **Cae igual en todas: ~2,9-3,0 caídas por minuto**, más que nadie
+  (el resto, 1,9-3,2). Cuando se le quita una causa, crece otra.
+- **El 38 % de sus caídas son choques** (ella también embiste). El bot de
+  tanque no los evita, porque sube de 1,13 a 1,23 por minuto. Shelly
+  embiste a cualquiera a menos de 2 u, así que ya está en plena
+  embestida cuando llega el otro, y la concha llega tarde.
+- Con menos retroceso, las caídas por rebote propio bajan a la mitad
+  (0,23 → 0,11 por minuto), pero las absorben los choques y los
+  cabezazos.
+- La masa sale de la tabla: Shelly ya está en el tope de peso (w +2).
+- **Nada de esto va al juego.** El código de las palancas se tiró.
+  Queda solo `--config` en `attrib-probe` (masa, velocidad o fuerza de
+  un bicho, en vivo) para el próximo intento.
+- **Lo que apuntan los datos:** su lentitud (velocidad 8, la mínima) o la
+  forma en que su bot busca el cabezazo. La lentitud es identidad por
+  decisión de Rafa. Además, la tanda mide bots contra bots (regla 6 de
+  `docs/BALANCE.md`): Shelly en manos de una persona puede ser otra
+  cosa.
+
 ## Preguntas a Rafa — respondidas el 2026-09-25
 
 1. **Steel Shell**: si a Shelly la lanzan y saca el escudo en pleno

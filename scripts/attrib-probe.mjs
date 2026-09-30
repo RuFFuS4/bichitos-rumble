@@ -63,6 +63,8 @@
 //   --out        output JSON (def .tmp/attrib/attrib.json)
 //   --kit        Critter.slot.key=value,... what-ifs on the live ability defs
 //                (e.g. Sergei.0.dashHitForce=0); checked to be the game's objects
+//   --config     Critter.key=value,... what-ifs on the live CritterConfig
+//                (e.g. Shelly.mass=1.6); checked to be the game's objects
 //   --no-gpu     SwiftShader instead of ANGLE/D3D11
 //   --resume     keep the matches already in --out, run only the missing ones
 //   --retries    retries per match after a crash/hang (def 2; fresh browser)
@@ -88,6 +90,7 @@ const { values: opt } = parseArgs({
     speed: { type: 'string', default: '16' },
     feel: { type: 'string', default: '' },
     kit: { type: 'string', default: '' },
+    config: { type: 'string', default: '' },
     th: { type: 'string', default: '0.5' },
     window: { type: 'string', default: '3' },
     out: { type: 'string', default: '.tmp/attrib/attrib.json' },
@@ -125,6 +128,15 @@ const kit = opt.kit.split(',').map((s) => s.trim()).filter(Boolean).map((kv) => 
   if (!m) throw new Error(`--kit: "${kv}" no es Bicho.slot.clave=numero`);
   if (!ALL.includes(m[1])) throw new Error(`--kit: ${m[1]} no es del roster`);
   return { critter: m[1], slot: Number(m[2]), key: m[3], value: Number(m[4]) };
+});
+// --config=Shelly.mass=1.6,Shelly.headbuttRecoilScale=0.5 — what-ifs on the
+// live CritterConfig (CRITTER_PRESETS, the objects each Critter.config points
+// at: mass, speed, headbuttForce, headbuttBoost, headbuttRecoilScale…).
+const config = opt.config.split(',').map((s) => s.trim()).filter(Boolean).map((kv) => {
+  const m = /^([A-Za-z]+)\.([A-Za-z_$][\w$]*)=(-?\d+(?:\.\d+)?)$/.exec(kv);
+  if (!m) throw new Error(`--config: "${kv}" no es Bicho.clave=numero`);
+  if (!ALL.includes(m[1])) throw new Error(`--config: ${m[1]} no es del roster`);
+  return { critter: m[1], key: m[2], value: Number(m[3]) };
 });
 const feel = Object.fromEntries(opt.feel.split(',').map((s) => s.trim()).filter(Boolean).map((kv) => {
   const m = /^([A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*)=(-?\d+(?:\.\d+)?)$/.exec(kv);
@@ -192,7 +204,24 @@ async function install(cfg) {
     const defs = AB.CRITTER_ABILITIES[c.config.name];
     return defs && c.abilityStates.every((s, i) => s.def === defs[i]) ? 'same-instance' : 'DIFFERENT';
   })();
-  const A = { cur: null, installInfo: { identity, kitIdentity } };
+  const CR = await import('/src/critter.ts');
+  const configIdentity = g.critters.every((c) => CR.CRITTER_PRESETS.includes(c.config)) ? 'same-instance' : 'DIFFERENT';
+  const A = { cur: null, installInfo: { identity, kitIdentity, configIdentity } };
+  // CritterConfig what-ifs: same remember-then-set as the kit.
+  const configOrig = new Map();
+  A.applyConfig = (list) => {
+    const preset = (n) => CR.CRITTER_PRESETS.find((p) => p.name === n);
+    for (const [k, v] of configOrig) { const [n, key] = k.split('|'); preset(n)[key] = v; }
+    for (const o of list) {
+      const p = preset(o.critter);
+      const cur = p[o.key];
+      if (cur !== undefined && typeof cur !== 'number') throw new Error(`--config: ${o.critter}.${o.key} no es numerico`);
+      const k = `${o.critter}|${o.key}`;
+      if (!configOrig.has(k)) configOrig.set(k, cur);
+      p[o.key] = o.value;
+    }
+    return list.map((o) => `${o.critter}.${o.key}: ${configOrig.get(`${o.critter}|${o.key}`)} → ${preset(o.critter)[o.key]}`);
+  };
   // Ability-def what-ifs: remember the code values once, then set.
   const kitOrig = new Map();
   A.applyKit = (list) => {
@@ -747,13 +776,17 @@ async function openPage() {
   await withDeadline(page.evaluate(() => window.__devApi.endMatch()), 30000, 'warmup-end');
   if (info.identity !== 'same-instance') throw new Error(`module identity check failed: ${info.identity}`);
   if (info.kitIdentity !== 'same-instance') throw new Error(`abilities.ts identity check failed: ${info.kitIdentity}`);
+  if (info.configIdentity !== 'same-instance') throw new Error(`critter.ts identity check failed: ${info.configIdentity}`);
   return { page, info };
 }
 
 let kitLogged = false;
+let configLogged = false;
 async function runMatch(page, spec) {
   const kitLog = await withDeadline(page.evaluate((kit) => window.__attr.applyKit(kit), kit), 30000, 'kit');
   if (!kitLogged && kit.length) { console.log(`[${opt.shard}] --kit: ${kitLog.join(' · ')}`); kitLogged = true; }
+  const configLog = await withDeadline(page.evaluate((config) => window.__attr.applyConfig(config), config), 30000, 'config');
+  if (!configLogged && config.length) { console.log(`[${opt.shard}] --config: ${configLog.join(' · ')}`); configLogged = true; }
   await withDeadline(page.evaluate(({ spec, feel, speed }) => {
     const FEEL = window.__feel;
     for (const [p, v] of Object.entries(feel)) {
@@ -805,7 +838,7 @@ const save = () => {
   const tmp = `${OUT}.tmp`;
   writeFileSync(tmp, JSON.stringify({
     version: 1, generatedAtIso: new Date().toISOString(),
-    config: { url: opt.url, shard: opt.shard, speed, feel, kit, kitIdentity: info.kitIdentity, th: cfg.th, window: cfg.window, gpu: !opt['no-gpu'], identity: info.identity },
+    config: { url: opt.url, shard: opt.shard, speed, feel, kit, critterConfig: config, kitIdentity: info.kitIdentity, th: cfg.th, window: cfg.window, gpu: !opt['no-gpu'], identity: info.identity },
     plan: mine, failures, matches: [...results].sort((a, b) => a.idx - b.idx),
   }));
   renameSync(tmp, OUT);
