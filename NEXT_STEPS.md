@@ -27,62 +27,93 @@ sala privada real en prod; detalle en [`ROADMAP.md`](ROADMAP.md) y
 
 ---
 
-## Cómo retomar — reparto del 2026-09-29
+## Cómo retomar — estado del 2026-09-30
 
-**En producción: `v1.11-caida-sierra`** (2026-09-26). En código,
-producción y `dev` son lo mismo: no hay nada esperando despliegue
-(`git log --oneline main..dev` solo da documentación). Detalle y
-comprobaciones de cada versión en BUILD_LOG (DISTRIBUCIÓN).
+**En producción: `v1.11-caida-sierra`** (2026-09-26). **En `dev`, sin
+desplegar, está todo lo de la jornada del 29**: `git log --oneline
+main..dev` lo lista. Lleva **servidor** (11 ficheros), así que reinicia
+Railway, y es la subida que trae el mecanismo del aviso de mantenimiento,
+por lo que **esta primera no se puede anunciar**.
 
-**Decisiones de Rafa del 2026-09-29**, sobre la recopilación de la sesión
-general: **cerrar H4.5 y abrir H5**, con el reparto de abajo tal cual, y
-**las cuatro sesiones a la vez**, cada una en su worktree
-([`docs/SESIONES.md`](docs/SESIONES.md) §Modo paralelo). El encargo
-completo de cada carril está al principio de su §Buzón.
+**El 2026-09-29 los cuatro carriles trabajaron a la vez**, cada uno en su
+worktree ([`docs/SESIONES.md`](docs/SESIONES.md) §Modo paralelo), y
+cumplieron su primer encargo y lo que vino detrás:
 
-| Carril | Primero | Después |
+| Carril | Entregado el 29 (en `dev`) | Siguiente |
 |---|---|---|
-| 🏝️ ARENA | Desbloquear a los demás: `ArenaSim.getLayout()` (el Sinkhole online se come su baldosa) y `Arena.update` partido en simular/presentar | F1 del fondo v2: firmas por bioma y jirones |
-| 🦔 PERSONAJES | Balance de los golpes de dash (Kowalski 49 → 65 % eliminado, Sergei 70 → 78 %) | Un Run propio por Tripo; proyectiles offline y bots que caen por los agujeros (notas reasignadas desde ARENA) |
-| 🖥️ INTERFAZ | Los tres fallos del HUD que se ven en producción | Portales a la frecuencia de la pantalla |
-| 📦 DISTRIBUCIÓN | **Plan** a Rafa de `onBeforeShutdown` + aviso de mantenimiento (hard-stop) | Huecos del CI; Sinkhole online tras el getter de ARENA; plan del SDK de CrazyGames (H5) |
+| 🏝️ ARENA | Desbloqueos (`ArenaSim.getLayout()`, colapso por fotograma); **fondo v2 completo** (F1 firmas, F2 horizonte y vida, F3 luz por bioma con A/B, F4 caída y fuera el mar y las fotos, −270 KB); **dioramas slice 2** (borde que se regenera, doble superficie, cohesión); fase 5 (todo lo visual en función del radio, idéntico con r = 12); fuera el GLB crudo de 54 MB | **En espera de Rafa** (5 revisiones, abajo) |
+| 🦔 PERSONAJES | Bots que leen el aviso de colapso; bola cortada sobre el vacío; balance medido a escala (los golpes de dash no eran la causa); **choque de cabezas justo** (antes online ganaba quien entró antes); bot de Sebastian que falla el All-in; **Run propio por Tripo**; su mitad del golpe online; Shelly medida (ninguna palanca la mueve) | Espera la prueba con personas de Shelly |
+| 🖥️ INTERFAZ | Tres fallos del HUD de producción; portales por fotograma; **salida táctil en las 4 pantallas sin salida**; avisos propios en vez de `alert`/`confirm`; su parte de CrazyGames | Botones de la pantalla final y ⏸ táctil (decididos por Rafa), en curso |
+| 📦 DISTRIBUCIÓN | Sinkhole online; CI que arranca el servidor y prueba el bundle de producción; **cierre limpio del servidor** (anula en vez de puntuar) y **modo mantenimiento**; **F0 de CrazyGames completa**; la mitad de red del golpe online | El despliegue, cuando Rafa abra la ventana |
 
-**Cruces vigilados** (hoy):
-- **`game.ts` es de ARENA** hasta que integre y lo diga; luego pasa a
-  INTERFAZ para enganchar los portales.
-- **`BrawlRoom` es de DISTRIBUCIÓN**: el evento de golpe online de
-  PERSONAJES espera.
-- El Sinkhole online de DISTRIBUCIÓN va **detrás** del getter de ARENA.
+**Condiciones del próximo despliegue** (runbook de DISTRIBUCIÓN):
+- La **luz F3** va activa por defecto: o Rafa la aprueba en las capturas
+  del visto bueno, o se despliega con `BACKDROP_LOOK.legacyLight: true`.
+- Railway: `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=10` con Alt+Deploy,
+  acceso a la shell del contenedor y **hora valle** (`/health` ya dice
+  cuántas partidas hay vivas).
 
-**Lo que solo puede hacer Rafa** (acumulado de v1.8 a v1.11):
+**Lo que solo puede hacer Rafa:**
+- [ ] **Texto de `public/privacy.html`** — dice «sin anuncios ni
+      rastreadores», y hoy es falso (Sentry y Vercel Analytics). Está
+      publicado. DISTRIBUCIÓN tiene el texto nuevo preparado.
+- [ ] **Las cinco revisiones de ARENA**: la prueba a ciegas de la F1
+      (`.tmp/shots-f1/_tapado_a_ciegas.png`), la hoja de la F2
+      (`.tmp/shots-f2/_hoja_f2.png`), el A/B de la luz F3
+      (`.tmp/shots-f3/`), la saturación de tundra y kitsune (bajar el
+      color del pozo, o que la regla sea «nada del fondo más saturado que
+      los bichos», que es lo recomendado) y la hoja de cohesión
+      (`.tmp/shots-s2/_cohesion_ab.png`).
+- [ ] **La ventana de despliegue** (condiciones de arriba).
+- [ ] **Prueba con personas de Shelly** (decidido el 2026-09-30: se queda
+      como está porque ninguna palanca medida la movía). Si con jugadores
+      reales sigue la última, lo siguiente es medir su velocidad y cómo
+      busca el cabezazo su bot.
 - [ ] Sentry sin issues nuevos tras v1.8, v1.10 y v1.11.
 - [ ] El A/B del suavizado online (`?netsmooth=legacy` frente a normal,
       con `__game.netSmoother.stats()`), pendiente desde v1.8.
-- [ ] Jugar offline en un iPhone y en un monitor de 144 Hz: igual de
-      fluido y empujando lo mismo.
+- [ ] Jugar offline en un iPhone y en un monitor de 144 Hz.
 - [ ] Mirar online, a ojo, una Shelly girando y un bicho cayendo por el
       borde de delante.
 - [ ] Borrar los nicks de prueba desde la shell de Railway
       (`cd /app && npm run admin:delete-test`, primero sin `--confirm`).
 - [ ] **Licencias comerciales de Meshy/Tripo: el bloqueante de H5.**
-- [ ] Acceso a Tripo, si se quieren las texturas nuevas de esos bichos.
+- [ ] Acceso a Tripo, si se quieren texturas nuevas de esos bichos.
+- [ ] Si se quiere que el `.git` deje de pesar 3,7 GB, reescribir el
+      historial (el GLB de 54 MB ya salió del árbol). Es destructivo:
+      decisión aparte.
+
+**Pendiente para H6, anotado**: `main.ts` guarda la posición base de la
+cámara al arrancar; el perfil 8P tendrá que pasarle el radio
+(`applyGameplayCameraPose` ya lo acepta).
 
 **Estado de la máquina**: toda instancia de prueba nace muda
-(`scripts/lib/headless-browser.mjs`), también las de los worktrees.
+(`scripts/lib/headless-browser.mjs`), también las de los worktrees. Con
+los cuatro carriles capturando a la vez, **por software** (la GPU falla).
 
 ---
 
 ## H5 — Monetización mínima (EN CURSO desde 2026-09-29)
 
-Plan y gate en [`ROADMAP.md`](ROADMAP.md) §H5. Lo lleva **DISTRIBUCIÓN**
-en paralelo con el pulido de los otros tres carriles.
+Plan y gate en [`ROADMAP.md`](ROADMAP.md) §H5 y el del SDK en
+[`docs/H5_CRAZYGAMES.md`](docs/H5_CRAZYGAMES.md). Lo lleva
+**DISTRIBUCIÓN**.
 
 - [ ] **Licencias comerciales de los assets de IA** (Meshy/Tripo) —
       **Rafa**. Es el camino crítico: sin ellas no hay monetización.
 - [x] Donaciones en itch.io (desde H2).
-- [ ] **Plan del SDK de CrazyGames** (DISTRIBUCIÓN): ad-break natural en
-      la pausa entre partidas, hooks de carga, sin dañar la experiencia.
-      A Rafa antes de integrar nada.
+- [x] **Plan del SDK de CrazyGames**, aprobado por Rafa el 2026-09-29:
+      build aparte detrás de un flag (la web e itch no cambian), sin
+      online en esa build, sin exclusividad y sin anuncios con
+      recompensa hasta H6.
+- [x] **F0 de CrazyGames** (2026-09-29): `npm run build:crazygames`, en
+      el CI con su smoke (silencio durante el anuncio y cero 404 bajo la
+      subruta).
+- [ ] **Política de privacidad veraz** antes de cualquier anuncio (ver
+      «Lo que solo puede hacer Rafa»).
+- [ ] F1 de CrazyGames: QA en su preview. Queda sin verificar que un
+      anuncio pasados 30 s tape la cuenta atrás (`H5_CRAZYGAMES.md`
+      §«Sin verificar»).
 - [ ] Evaluar Poki con los datos del primer portal.
 - [ ] Decisión con métricas en la mano (retención D7, partidas/día) antes
       de pensar en cosméticos.

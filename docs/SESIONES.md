@@ -63,6 +63,7 @@ O sea: viable, pero con fricción. Por turnos no hay ninguna.
   `scripts/write-arena-layout-golden.mjs` · `scripts/compress-arena-textures.mjs`
 - `public/models/arenas/**` · las texturas de suelo y skybox de `public/images/`
 - `docs/ARENA_V2.md` · `docs/DIORAMAS.md` · `ARENA_PROMPTS.md`
+- El editor de decorado, `src/decoreditor/` (asignado el 2026-09-29)
 - `tests/sim/arena-*.test.ts` + `tests/sim/arena-layout-golden.json`
 - **Excepción concedida por Rafa (2026-09-21):** las líneas de versión de
   `server/src/protocol.ts` (`NET_PROTOCOL`, su fila en
@@ -192,6 +193,24 @@ Cómo se trabaja desde un worktree:
 - **`git add` con rutas explícitas, nunca `-A`**: hay worktrees vivos y
   arte local.
 
+Lo aprendido el primer día en paralelo (2026-09-29):
+
+- **La tierra de nadie se reparte por turnos, y el turno lo da la sesión
+  general.** `game.ts` recibió ese día ocho commits de tres carriles
+  (ARENA, INTERFAZ y DISTRIBUCIÓN) sin un solo conflicto, porque cada
+  carril lo pedía, lo soltaba al integrar y lo decía.
+- **Una sesión que trabaja no vuelve a leer su buzón.** Si dejas algo en
+  el buzón de otro carril, avisa también a la sesión general, que es quien
+  se lo hace llegar.
+- **Si una tarea necesita el servidor de otro carril, el dueño del
+  servidor lo emite.** Así se hizo el golpe online: PERSONAJES definió el
+  contrato (con el código exacto en el buzón) y DISTRIBUCIÓN lo metió en
+  `BrawlRoom`.
+- **No se apila trabajo que hay que juzgar a ojo** mientras Rafa tenga
+  revisiones pendientes del mismo carril: se pasa a trabajo que se
+  compruebe sin él (herramientas, pruebas, refactores sin cambio visible)
+  o se espera.
+
 ## Tierra de nadie (permiso explícito, nunca dos carriles a la vez)
 
 Estos ficheros los quieren todos. Quien los toque: **diff mínimo, dicho en
@@ -203,6 +222,8 @@ el commit, y nunca a medias entre sesiones.**
 - `src/tools/dev-api.ts` — 1.290 líneas; la directiva de doble superficie
   hace que **todos** quieran añadir métodos aquí. Añade al final, no
   reordenes.
+- El studio: `src/tools/sidebar.ts` (cada carril tiene su sección; añade
+  la tuya, no toques las ajenas) y `src/tools/tool-storage.ts`.
 - `package.json` · `tsconfig*.json` · `playwright.config.ts` ·
   `scripts/lib/headless-browser.mjs` · `scripts/tool-patch-core.mjs`
 - Docs troncales: `CLAUDE.md` / `AGENTS.md` (espejos, se tocan a la vez),
