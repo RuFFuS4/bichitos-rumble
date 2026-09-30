@@ -130,21 +130,36 @@ function ensureToast(): HTMLDivElement {
       }
       #online-belt-toast strong { color: #ffdc5c; font-weight: 800; }
       #online-belt-toast.is-me strong { color: #fff; }
-      /* Phones: the end screen fills the bottom centre (share button,
-         "tap to play again") and the local belt toast takes the
-         bottom-left corner (index.html), so this one takes the
-         bottom-right — they used to overlap when an online win also
-         unlocked a local belt (review 2026-09-29). */
+      /* Phones: the end screen's button row fills the bottom centre and
+         the local belt toast takes the bottom-left corner (index.html), so
+         this one takes the bottom-right — they used to overlap when an
+         online win also unlocked a local belt (review 2026-09-29). Same
+         width cap as the local one: clear of the row. */
       @media (max-height: 520px) {
         #online-belt-toast {
           left: auto;
           right: 12px;
           bottom: 12px;
           min-width: 0;
-          max-width: min(300px, calc(50vw - 112px));
+          max-width: min(300px, calc(50vw - 176px));
+          padding: 8px 12px 10px;
           transform: translateY(16px);
         }
+        body:not(.touch-mode) #online-belt-toast { max-width: min(300px, calc(50vw - 205px)); }
         #online-belt-toast.visible { transform: translateY(0); }
+        /* Compact like the local card: the corner is narrow, and the text
+           wraps (a long nickname breaks) instead of leaving the card. */
+        #online-belt-toast .obt-head { font-size: 10px; letter-spacing: 1.2px; margin-bottom: 3px; }
+        #online-belt-toast .obt-body { gap: 8px; }
+        #online-belt-toast .obt-icon { width: 32px; height: 32px; font-size: 22px; flex-shrink: 0; }
+        #online-belt-toast .obt-text { font-size: 13px; overflow-wrap: break-word; min-width: 0; }
+        /* The metric ("5 in a row") is the line that pushed the card up
+           into the stats panel; the Hall of Belts shows it. */
+        #online-belt-toast .obt-value { display: none; }
+      }
+      /* The narrowest phones: the text needs the icon's room. */
+      @media (max-height: 520px) and (max-width: 720px) {
+        #online-belt-toast .obt-icon { display: none; }
       }
     `;
     document.head.appendChild(style);

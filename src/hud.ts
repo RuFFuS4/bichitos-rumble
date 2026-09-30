@@ -46,7 +46,6 @@ export {
 
 export {
   showEndScreen, hideEndScreen,
-  setEndTapHandler,
   showMatchHud,
   setEndMatchStats, clearEndMatchStats,
 } from './hud/end';

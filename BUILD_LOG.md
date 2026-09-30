@@ -1,5 +1,57 @@
 # Build Log — Bichitos Rumble
 
+## 2026-09-30 — [Interfaz] La pantalla final con botones, y pausa en táctil
+
+- **Qué** (decisión de Rafa del 2026-09-30, con maquetas delante: las
+  cuatro opciones recomendadas):
+  - **Una fila de botones**: «▶ Jugar otra» (principal) · «⏏ Título» ·
+    📤. Empujan las mismas acciones de menú que R y T (`data-menu-action`).
+    Así «Jugar otra» coge el camino de la R, anuncio de CrazyGames
+    incluido (`restartMatch({ adBreak: true })`, punto 7 de la F0), sin
+    tocar nada de DISTRIBUCIÓN. En teclado llevan la R y la T dentro; en
+    táctil y con mando, no.
+  - **Fuera el «toca en cualquier parte»**, en web, itch y CG. Un toque
+    residual de la partida reiniciaba por sorpresa, y en CG habría
+    lanzado un anuncio. Se van también los avisos «R reiniciar · T
+    título» y «Toca para jugar otra vez», porque ahora lo dicen los
+    botones. En `game.ts` (con permiso de GENERAL) se va el registro de
+    `setEndTapHandler`.
+  - **⏸ táctil** en el grupo de sonido, solo en partida offline y en
+    táctil. Abre el menú de pausa de siempre, con la misma guarda que ESC
+    (`game.ts` `initPauseMenu`, 4 líneas). En la cuenta atrás no hace
+    nada; online y en la pantalla final no se ve.
+  - **Móvil**: la fila y el panel de estadísticas se compactan, y los dos
+    carteles de cinturón se quedan en sus esquinas de abajo sin tocarlos.
+    Van sin descripción ni dato (están en el Salón), y el nombre se parte
+    en vez de acabar en «…». En los móviles más estrechos van sin icono.
+  - **Una sola salida por pantalla final** (lo cazó la revisión). Online,
+    «Jugar otra» mantiene la pantalla mientras busca sala (hasta ~2 s).
+    Un «Título» en ese hueco mandaba al título, y la sala nueva
+    arrastraba después al jugador dentro. Ahora, en cuanto sale un botón,
+    la fila queda inerte hasta que la pantalla se cierra (`end.ts`, sin
+    tocar `game.ts`). Medido con 4 clientes reales: el segundo toque no
+    hace nada y el jugador entra en la sala nueva, desde la que sale con
+    su botón.
+- **Verificado:**
+  - `check`, 379 tests de sim, smoke 4/4 en dev y 4/4 contra el bundle de
+    producción;
+  - un guion de navegador, 23/23: botones en escritorio y en móvil, R y T
+    siguen, el clic o toque suelto ya no reinicia, y la pausa en la
+    cuenta atrás, en juego (el reloj se para), al continuar, al salir al
+    título y en la pantalla final;
+  - en modo CrazyGames, 5/5: el botón pide el anuncio igual que la R y
+    un toque suelto no. `smoke-crazygames.mjs` da «todo OK»;
+  - la pantalla final medida en 8 tamaños (de 568×320 a 1920×1080) y,
+    con los dos carteles a la vez y los nombres más largos, en 8 móviles
+    y ventanas bajas: ni los carteles ni la fila se pisan, y ningún texto
+    se sale. La única excepción es 568×320 (iPhone SE de 2016) con los
+    dos carteles a la vez, que tapan los bordes del panel de estadísticas;
+    se queda como caso límite;
+  - la revisión adversarial (2 lentes, un escéptico por hallazgo)
+    encontró 3 fallos leves y refutó 1: la carrera online de arriba y los
+    dos carteles, que en móvil crecían sobre las estadísticas. Los tres
+    están arreglados y medidos.
+
 ## 2026-09-30 — [PERSONAJES] Shelly: cuatro palancas medidas y ninguna sirve; la sonda gana `--config`
 
 Shelly sigue la última (74 % eliminada). Rafa pidió medir cuatro

@@ -20,18 +20,7 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
      ficha en castellano y la selección compacta en móvil.
    - La selección en escritorio y en iPad, que también desbordaba, quedó
      arreglada el mismo día (ver §Hecho).
-2. **En táctil no se vuelve al título desde la pantalla final ni se
-   pausa offline** (visto el 2026-09-29, no es un callejón: «Toca para
-   jugar otra vez» siempre funciona). **Va junto con el punto 7 de
-   CrazyGames** (un botón explícito «Jugar otra», porque el anuncio no
-   puede salir con un toque cualquiera): se diseñan juntos y los decide
-   Rafa en una sola vez. El menú de pausa solo abre con
-   Escape. El mecanismo ya existe: un botón `data-menu-action="back"` en
-   la pantalla final (su manejador de «jugar otra vez», en
-   `hud/end.ts`, tiene que saltarse `[data-menu-action]` como ya se salta
-   los `kbd`) y un botón de pausa táctil en el HUD. Falta decidir con
-   Rafa dónde van sin tapar arena.
-3. **Audio**: eres el dueño de `src/audio.ts`. Si cambias las claves
+2. **Audio**: eres el dueño de `src/audio.ts`. Si cambias las claves
    `bichitos.sfxMuted` / `bichitos.musicMuted`, avisa a todos los
    carriles — las lee `scripts/lib/headless-browser.mjs` y de ellas
    depende que las instancias de prueba nazcan mudas (directiva de Rafa).
@@ -53,6 +42,10 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 *(Notas que te dejan otros carriles.)*
 
+- ~~De DISTRIBUCIÓN, 2026-09-29 — tu F0 de CrazyGames, conectada~~ →
+  leído. El punto 7 está hecho el 30 (§Hecho): «Jugar otra» empuja la
+  acción `restart`, la misma que la R, así que ya entra por tu
+  `restartMatch({ adBreak: true })` sin tocar nada tuyo.
 - **De DISTRIBUCIÓN, 2026-09-29 — tu F0 de CrazyGames, conectada.**
   - `main.ts` ya llama a `onExternalMute(setExternalMute)`, y el enlace
     del editor de decorado es relativo. `npm run build:crazygames` pasa
@@ -72,10 +65,10 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
 
 - De DISTRIBUCIÓN, 2026-09-29 — tu parte de la F0 de CrazyGames →
   **puntos 1-5 hechos el 29** (ver §Hecho). El 6 (idioma del SDK) queda
-  para la segunda vuelta, con la propuesta en su buzón. **El 7 (el botón
-  «Jugar otra») está pendiente**: va junto con el punto 2 de §Pendiente
-  («volver al título» en táctil), en una sola decisión de Rafa, como pidió
-  GENERAL. Lo que pedía, para el registro:
+  para la segunda vuelta, con la propuesta en su buzón. El 7 (el botón
+  «Jugar otra»), **hecho el 30**, junto con «volver al título» y la pausa
+  en táctil, en una sola decisión de Rafa (§Hecho). Lo que pedía, para el
+  registro:
 - **De DISTRIBUCIÓN, 2026-09-29 — tu parte de la F0 de CrazyGames (H5),
   aprobada por Rafa.** El plan completo está en
   [`docs/H5_CRAZYGAMES.md`](../H5_CRAZYGAMES.md). Es una build aparte
@@ -192,6 +185,36 @@ Territorio y reglas: [`docs/SESIONES.md`](../SESIONES.md). Detalle en
   hecho (ver §Hecho, miniaturas).
 
 ## Hecho
+
+- **2026-09-30 — La pantalla final con botones, y pausa en táctil.**
+  Rafa lo decidió en una sola vez, con maquetas delante (móvil y PC, dos
+  disposiciones), y eligió las cuatro recomendadas:
+  - una fila «▶ Jugar otra» · «⏏ Título» · 📤, igual en todas las
+    plataformas y con la R y la T dentro en teclado;
+  - fuera el «toca en cualquier parte» en todas: reiniciaba con un toque
+    residual y en CrazyGames habría lanzado un anuncio;
+  - ⏸ táctil junto al sonido, solo en partida offline, que abre el menú de
+    pausa de siempre.
+
+  Los botones empujan `restart` / `back` (`data-menu-action`), así que van
+  por el mismo camino que R y T, anuncio de CG incluido. En `game.ts`, con
+  permiso de GENERAL: fuera `setEndTapHandler` y el clic del ⏸ con la
+  guarda de ESC. En móvil se compactan la fila y las estadísticas, y los
+  carteles de cinturón quedan en sus esquinas sin tocarlas (sin
+  descripción, nombre partido, sin icono en los más estrechos). Una vez
+  sale un botón, la fila queda inerte hasta que la pantalla se cierra
+  (`end-leaving`). Así, online, un «Título» durante la búsqueda de sala
+  ya no manda al título para que luego la sala nueva arrastre dentro al
+  jugador. Pruebas:
+  - 23/23 de flujo;
+  - 5/5 del anuncio en CG, y su smoke en verde;
+  - 5/5 online con 4 clientes;
+  - los carteles, medidos en 8 tamaños.
+
+  Caso límite conocido: 568×320 con los dos carteles a la vez.
+  - Queda fuera: `tools.html` (el laboratorio) conserva su «Tap to play
+    again» en su propia pantalla final, que ya no reinicia al tocar. Es
+    una herramienta de escritorio.
 
 - **2026-09-29 — F0 de CrazyGames, la parte de INTERFAZ** (encargo de
   GENERAL, plan en [`docs/H5_CRAZYGAMES.md`](../H5_CRAZYGAMES.md)).
@@ -453,8 +476,7 @@ Cuatro clientes llenan la sala y la partida arranca sin los 60 s de
 espera. Si la máquina va justa de memoria, el smoke no levanta su propio
 Vite en el 5173: se lanza contra el 5183 con una config en `.tmp/`.
 
-Siguiente del carril: salir al título y pausar en táctil (punto 2), el
-audio (punto 3), o lo que pidan los buzones.
+Siguiente del carril: el audio (punto 2) o lo que pidan los buzones.
 
 **2026-09-24** — reestructura del HUD en móvil hecha entera; para medir
 cualquier cambio de HUD: `node scripts/hud-shots.mjs`.

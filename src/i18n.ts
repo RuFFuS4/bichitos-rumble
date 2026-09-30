@@ -153,13 +153,12 @@ const DICT = {
   // ---- End screen ---------------------------------------------------------
   'end-belt-earned':        { en: 'Belt earned',
                               es: 'Cinturón conseguido' },
-  'end-share':              { en: '📤 Share',
-                              es: '📤 Compartir' },
-  // [html]
-  'end-prompt-desktop':     { en: '<kbd>R</kbd> restart · <kbd>T</kbd> title',
-                              es: '<kbd>R</kbd> reiniciar · <kbd>T</kbd> título' },
-  'end-prompt-touch':       { en: 'Tap to play again',
-                              es: 'Toca para jugar otra vez' },
+  // Los botones de salida (2026-09-30): sustituyen a «R reiniciar · T
+  // título» y a «Toca para jugar otra vez». Compartir es solo el icono; su
+  // nombre va en title/aria-label (hud/end.ts).
+  'end-again':              { en: '▶ Play again',              es: '▶ Jugar otra' },
+  'end-to-title':           { en: '⏏ Title',                   es: '⏏ Título' },
+  'end-share-label':        { en: 'Share',                     es: 'Compartir' },
   // [html]
   'end-portal-prompt':      { en: '<kbd class="kbd-portal-exit">P</kbd> next game 🌀 · <kbd class="kbd-portal-return">B</kbd> return to previous',
                               es: '<kbd class="kbd-portal-exit">P</kbd> siguiente juego 🌀 · <kbd class="kbd-portal-return">B</kbd> volver al anterior' },
@@ -214,6 +213,8 @@ const DICT = {
                                      es: 'El servidor ha cerrado la sala para actualizarse o por mantenimiento.' },
   // Botón del overlay de Reconectando / Desconectado (la salida en táctil).
   'hud-back-to-title':        { en: '⏏ Back to title',          es: '⏏ Volver al título' },
+  // Botón ⏸ táctil del grupo de ajustes (partida offline): title/aria-label.
+  'hud-pause':                { en: 'Pause',                    es: 'Pausa' },
   'hud-leaving':              { en: 'Leaving...',               es: 'Saliendo...' },
   // OJO: hud/runtime.ts#digitVariant compara el texto del overlay con este
   // valor para aplicar el estilo verde de "GO!". Si cambias el es:, el

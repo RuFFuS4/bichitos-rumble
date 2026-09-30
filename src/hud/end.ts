@@ -101,33 +101,34 @@ export function clearEndMatchStats(): void {
   endStatsEl.innerHTML = '';
 }
 
-// ---- Tap handler --------------------------------------------------------
+// ---- Buttons --------------------------------------------------------------
 
-// Tap-anywhere handler on the end screen — mobile menu UX.
-// Title screen uses explicit mode buttons, not tap-anywhere, to avoid
-// starting a match accidentally.
-let endTapHandler: (() => void) | null = null;
-
-export function setEndTapHandler(handler: () => void): void {
-  endTapHandler = handler;
+// "Play again" and "Title" carry data-menu-action (index.html), so input.ts
+// turns their clicks into R / T. Until 2026-09-30 a tap anywhere restarted,
+// and a leftover touch from the match did it by surprise (Rafa's call:
+// buttons only, everywhere). No focus on press: a focused button would take
+// the next Space — a headbutt — as another click.
+for (const btn of endScreen.querySelectorAll<HTMLButtonElement>('.end-btn')) {
+  btn.addEventListener('mousedown', (e) => e.preventDefault());
+}
+// One way out per end screen: once "Play again" or "Title" fires, the row
+// goes inert until the screen closes. Online, "Play again" keeps this screen
+// up while it requeues (up to ~2 s), and a "Title" tap in that window sent
+// the player to the title just before the new room pulled them back in.
+for (const btn of endScreen.querySelectorAll<HTMLButtonElement>('.end-btn[data-menu-action]')) {
+  btn.addEventListener('click', () => endScreen.classList.add('end-leaving'));
 }
 
-endScreen.addEventListener('click', (e) => {
-  // Don't trigger if clicking on the kbd hint elements (let them be passive)
-  const target = e.target as HTMLElement;
-  if (target.closest('kbd')) return;
-  endTapHandler?.();
-});
-
-// ---- Show / hide --------------------------------------------------------
-
 // --- H4 share — end screen ------------------------------------------------
-// The button lives inside the tap-to-restart overlay, so clicks must not
-// bubble (a share tap would instantly restart the match otherwise).
+// An icon: its name goes in title / aria-label.
 let endShareText = t('share-pitch');
 const btnEndShare = document.getElementById('btn-end-share') as HTMLButtonElement | null;
-btnEndShare?.addEventListener('click', (ev) => {
-  ev.stopPropagation();
+const SHARE_ICON = '📤';
+if (btnEndShare) {
+  btnEndShare.title = t('end-share-label');
+  btnEndShare.setAttribute('aria-label', t('end-share-label'));
+}
+btnEndShare?.addEventListener('click', () => {
   const url = `${location.origin}${location.pathname}`;
   const nav: Navigator = navigator;
   if (typeof nav.share === 'function') {
@@ -136,8 +137,7 @@ btnEndShare?.addEventListener('click', (ev) => {
   } else {
     nav.clipboard?.writeText(`${endShareText} ${url}`).then(() => {
       btnEndShare.textContent = t('share-copied');
-      // Vuelve al texto original del botón — misma clave que su data-i18n.
-      setTimeout(() => { btnEndShare.textContent = t('end-share'); }, 1600);
+      setTimeout(() => { btnEndShare.textContent = SHARE_ICON; }, 1600);
     }).catch(() => { /* clipboard blocked */ });
   }
 });
@@ -174,7 +174,7 @@ export function showEndScreen(
   // Show portal prompt only for players who arrived via portal
   const portalPrompt = document.getElementById('end-portal-prompt');
   if (portalPrompt) portalPrompt.style.display = showPortalOptions ? '' : 'none';
-  endScreen.classList.remove('hidden');
+  endScreen.classList.remove('hidden', 'end-leaving');
   // Body flag for CSS that depends on the end screen being up (touch
   // controls hidden, belt toast placement — index.html).
   document.body.classList.add('end-screen-active');
@@ -205,6 +205,7 @@ export function showMatchHud(): void {
  *  unread local toast keeps its slot for the next win (badge-toast.ts). */
 function leaveEndScreen(): void {
   document.body.classList.remove('end-screen-active');
+  endScreen.classList.remove('end-leaving');
   hideBadgeToast();
   hideOnlineBeltToast();
 }

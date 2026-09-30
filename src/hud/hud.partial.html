@@ -113,6 +113,9 @@
     }
     .settings-btn:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.4); }
     .settings-btn.muted { opacity: 0.45; }
+    /* Touch pause (game.ts initPauseMenu): hidden here — so tools.html never
+       shows it — and shown by index.html only in a touch offline match. */
+    #btn-pause-touch { display: none; }
     /* Countdown overlay — giant digits with gradient fill + per-number
        colour (3 red → 2 amber → 1 yellow → GO! green) so the urgency
        ramps visibly. Digits land with a scale-down pop; GO! adds a
@@ -801,6 +804,7 @@
         <span id="hud-alive">Alive: 4</span>
       </div>
       <div id="hud-settings">
+        <button id="btn-pause-touch" class="settings-btn" type="button" title="Pause" aria-label="Pause">⏸</button>
         <button id="btn-portal-toggle" class="settings-btn touch-only" title="Toggle portals" aria-label="Toggle portals">🌀</button>
         <button id="btn-sfx" class="settings-btn" title="Disable sound effects" aria-pressed="false">🔊</button>
         <button id="btn-music" class="settings-btn" title="Disable music" aria-pressed="false">🎶</button>

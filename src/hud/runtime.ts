@@ -585,6 +585,16 @@ if (portalToggleBtn) {
   });
 }
 
+// Touch pause ⏸ (game.ts initPauseMenu opens the menu). Named here, and it
+// never takes focus: a focused button would take the next Space — a
+// headbutt — as a click.
+const pauseTouchBtn = document.getElementById('btn-pause-touch');
+if (pauseTouchBtn) {
+  pauseTouchBtn.title = t('hud-pause');
+  pauseTouchBtn.setAttribute('aria-label', t('hud-pause'));
+  pauseTouchBtn.addEventListener('mousedown', (e) => e.preventDefault());
+}
+
 // ---- Spectator prompt (online — "you're out, press T") ------------------
 
 /**

@@ -16,7 +16,7 @@ import {
   showCharacterSelect, updateCharacterSelect, hideCharacterSelect,
   showEndScreen, hideEndScreen,
   showMatchHud,
-  setSlotClickHandler, setTitleModeHandlers, updateTitleModeSelection, isOnlineModeAvailable, setEndTapHandler,
+  setSlotClickHandler, setTitleModeHandlers, updateTitleModeSelection, isOnlineModeAvailable,
   setPortalLegend, setPortalToggleHandler,
   showWaitingScreen, hideWaitingScreen, updateWaitingScreen, setWaitingShareRoom,
   showSpectatorPrompt, hideSpectatorPrompt,
@@ -300,21 +300,6 @@ export class Game {
       },
     );
 
-    setEndTapHandler(() => {
-      // Fires from the end-screen DOM click. Works in both offline
-      // ('ended' phase) and online (phase 'online' + server phase 'ended').
-      // restartMatch itself decides offline-vs-online reconnect flow.
-      if (this.restartInProgress || this.connectInProgress) return;
-      if (this.phase === 'ended') {
-        this.restartMatch();
-        return;
-      }
-      if (this.phase === 'online') {
-        const serverPhase = (this.room?.state as any)?.phase;
-        if (serverPhase === 'ended') this.restartMatch();
-      }
-    });
-
     this.initPortalKeys();
 
     // Mobile portal toggle button → same toggle as desktop P key
@@ -404,6 +389,13 @@ export class Game {
       e.preventDefault();
     });
 
+    // Touch has no ESC: the ⏸ of the settings cluster (touch + offline
+    // only, CSS in index.html). Same guard as ESC; it only opens — the
+    // menu covers it, and "Resume" closes.
+    document.getElementById('btn-pause-touch')
+      ?.addEventListener('click', () => {
+        if (this.phase === 'playing' && !this.room) this.setPaused(true);
+      });
     document.getElementById('btn-pause-resume')
       ?.addEventListener('click', () => this.setPaused(false));
     document.getElementById('btn-pause-restart')

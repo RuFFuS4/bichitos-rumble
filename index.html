@@ -1016,20 +1016,55 @@
        (e.g. match ended on the very first frame, edge case). Entry is
        animated via .stats-enter — panel slides up + fades in, numbers
        get an easeOutCubic count-up via hud.ts setEndMatchStats(). */
-    /* H4 — share button on the end screen */
-    .end-share-btn {
-      font: 700 14px/1 'Segoe UI', Arial, sans-serif;
-      letter-spacing: 1px;
+    /* End screen ways out (2026-09-30, Rafa's pick: one row) — Play again
+       (main), Title, and Share as an icon. The R / T chips are for the
+       keyboard only. */
+    #end-screen .end-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    #end-screen .end-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 48px;
+      padding: 12px 22px;
+      font: 700 16px/1 'Segoe UI', Arial, sans-serif;
+      letter-spacing: 0.5px;
       color: #fff;
-      background: rgba(255, 220, 92, 0.18);
-      border: 1px solid #ffdc5c;
-      border-radius: 8px;
-      padding: 10px 22px;
-      margin-top: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 10px;
       cursor: pointer;
       pointer-events: auto;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.15s, border-color 0.15s;
     }
-    .end-share-btn:hover { background: rgba(255, 220, 92, 0.32); }
+    #end-screen .end-btn:hover,
+    #end-screen .end-btn:active { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.6); }
+    #end-screen .end-btn-primary {
+      padding: 14px 30px;
+      font-size: 18px;
+      background: rgba(255, 220, 92, 0.24);
+      border-color: #ffdc5c;
+    }
+    #end-screen .end-btn-primary:hover,
+    #end-screen .end-btn-primary:active { background: rgba(255, 220, 92, 0.38); border-color: #ffdc5c; }
+    #end-screen .end-share-btn { padding: 12px 16px; }
+    #end-screen .end-btn kbd {
+      font: 700 12px/1.4 monospace;
+      color: #ffdc5c;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 3px;
+      padding: 0 6px;
+    }
+    body.using-gamepad #end-screen .end-btn kbd { display: none; }
+    /* A way out already taken (hud/end.ts): the row waits, inert. */
+    #end-screen.end-leaving .end-btn[data-menu-action] { pointer-events: none; opacity: 0.55; }
     /* CrazyGames build (src/platform sets the class): no sharing a link to
        another site — the contract bars promoting our own (art. 10.2(b)). */
     body.platform-crazygames #btn-end-share { display: none; }
@@ -2195,6 +2230,10 @@
     /* Waiting room: nothing to steer yet, and the stick and buttons sat on
        the slots and the "Leave room" button. */
     body.touch-mode.match-active.waiting-room #touch-controls { display: none; }
+    /* Touch has no ESC: the ⏸ in the settings cluster opens the pause menu
+       (Rafa, 2026-09-30). Offline only — online has no pause — and not on
+       the end screen. */
+    body.touch-mode.match-active:not(.online-mode):not(.end-screen-active) #btn-pause-touch { display: flex; }
 
     #touch-joystick {
       position: absolute;
@@ -2457,22 +2496,44 @@
       .touch-button { width: 54px; height: 54px; font-size: 12px; }
       .touch-btn-headbutt { width: 70px; height: 70px; font-size: 18px; }
 
+      /* End screen buttons, tighter: the row (~296 px, so its left edge is
+         50vw − 148 px) leaves the bottom corners to the belt toasts. */
+      #end-screen .end-actions { margin-top: 8px; gap: 8px; }
+      #end-screen .end-btn { min-height: 44px; padding: 10px 14px; font-size: 15px; }
+      #end-screen .end-btn-primary { padding: 11px 20px; font-size: 16px; }
+      #end-screen .end-share-btn { padding: 10px 12px; }
+      /* Stats, compact: narrower (~330 px) and shorter, so the bottom
+         corners stay free for the belt toasts when their names wrap. */
+      #end-stats.end-stats { gap: 14px; margin: 6px 0 8px; padding: 8px 16px; }
+      #end-stats .stat { min-width: 54px; gap: 2px; }
+      #end-stats .stat:not(:last-child)::after { right: -7px; }
+      #end-stats .stat-icon { font-size: 15px; }
+      #end-stats .stat-value { font-size: 20px; }
+      #end-stats .stat-label { font-size: 8px; letter-spacing: 1px; }
+
       /* Belt toast: phones have no free band at the top (the result title
          sits right under the timer), so it takes the bottom-left corner,
-         free on the end screen once the stick is hidden. */
+         free on the end screen once the stick is hidden. Clear of the
+         button row (the row is ~296 px, ~354 with the keyboard's R/T
+         chips); no description — the Hall of Belts has it. The online belt
+         toast mirrors it bottom-right (online-belt-toast.ts). */
       .badge-toast {
         --toast-tx: 0%;
         top: auto;
         bottom: 12px;
         left: 12px;
         min-width: 0;
-        /* Clear of the centred share button and "tap to play again"
-           prompt (~173 px wide, so its left edge is 50vw − 87 px). */
-        max-width: min(300px, calc(50vw - 112px));
-        padding: 10px 14px 10px 10px;
-        gap: 10px;
+        max-width: min(300px, calc(50vw - 176px));
+        padding: 8px 12px 8px 8px;
+        gap: 8px;
       }
-      .badge-toast-icon { width: 44px; height: 44px; }
+      body:not(.touch-mode) .badge-toast { max-width: min(300px, calc(50vw - 205px)); }
+      .badge-toast-icon { width: 32px; height: 32px; flex-shrink: 0; }
+      .badge-toast-desc { display: none; }
+      /* Narrow corner: the name wraps (a long word breaks) instead of
+         ending in "…". */
+      .badge-toast-label { font-size: 9px; letter-spacing: 1.2px; }
+      .badge-toast-name { font-size: 13px; line-height: 1.2; white-space: normal; overflow-wrap: break-word; }
 
       /* Title signature (`by @RGomezR14`) — tighten so it doesn't
          eat the bottom of a 340-px-tall match HUD. */
@@ -2506,6 +2567,12 @@
       #waiting-screen .waiting-share-label { width: auto; font-size: 11px; }
       #waiting-screen .waiting-share-link { max-width: 220px; }
       #waiting-screen .waiting-hint { display: none; }
+    }
+    /* The narrowest phones in landscape (iPhone SE and the like): the belt
+       toast's corner leaves ~100-160 px, and the name needs the icon's room
+       (online-belt-toast.ts does the same for its card). */
+    @media (max-height: 520px) and (max-width: 720px) {
+      .badge-toast-icon { display: none; }
     }
 
     /* ---------- Responsive: very narrow (portrait phones that somehow
@@ -2707,11 +2774,16 @@
       <div class="belt-slot-label" data-i18n="end-belt-earned">Belt earned</div>
     </div>
     <div id="end-stats" class="end-stats" style="display:none;"></div>
-    <!-- H4 share: navigator.share con fallback clipboard (end.ts). El
-         stopPropagation evita que el tap-to-restart del overlay salte. -->
-    <button id="btn-end-share" class="end-share-btn" type="button" data-i18n="end-share">📤 Share</button>
-    <div class="prompt desktop-only" data-i18n-html="end-prompt-desktop"><kbd>R</kbd> restart · <kbd>T</kbd> title</div>
-    <div class="prompt touch-only" data-i18n="end-prompt-touch">Tap to play again</div>
+    <!-- The ways out, as buttons (Rafa, 2026-09-30): no more tap-anywhere,
+         which a leftover touch fired by surprise — and on CrazyGames it
+         would launch an ad. They push the same menu actions as R and T
+         (input.ts data-menu-action), so "Play again" takes R's path,
+         ad break included. Share: navigator.share / clipboard (end.ts). -->
+    <div class="end-actions">
+      <button id="btn-end-again" class="end-btn end-btn-primary" type="button" data-menu-action="restart"><span data-i18n="end-again">▶ Play again</span><kbd class="desktop-only">R</kbd></button>
+      <button id="btn-end-title" class="end-btn" type="button" data-menu-action="back"><span data-i18n="end-to-title">⏏ Title</span><kbd class="desktop-only">T</kbd></button>
+      <button id="btn-end-share" class="end-btn end-share-btn" type="button">📤</button>
+    </div>
     <div id="end-portal-prompt" class="prompt desktop-only" style="display:none;" data-i18n-html="end-portal-prompt">
       <kbd class="kbd-portal-exit">P</kbd> next game 🌀 · <kbd class="kbd-portal-return">B</kbd> return to previous
     </div>

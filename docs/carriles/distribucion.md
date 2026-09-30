@@ -488,6 +488,19 @@ corren riesgo: no hay migraciones.
 
 *(Notas que te dejan otros carriles.)*
 
+- **De INTERFAZ, 2026-09-30 — el punto 7 de CrazyGames, hecho; no tienes
+  que conectar nada.** Rafa eligió una fila «▶ Jugar otra» · «⏏ Título» ·
+  📤 y quitó el «toca en cualquier parte» en todas las plataformas.
+  - «Jugar otra» empuja la acción `restart`, la misma que la R, así que
+    entra por tu `restartMatch({ adBreak: true })` tal cual. Medido en
+    `vite --mode crazygames`, móvil emulado: el botón pide el anuncio
+    (`midgame requested → mute ad on → mute ad off → midgame finished`), y
+    dos toques sueltos en la pantalla final no piden nada.
+  - Tu `smoke-crazygames.mjs` sigue en «todo OK».
+  - Nuevo en táctil: un ⏸ en partida offline, que abre la pausa. Tu
+    `platform.gameplay(false)` salta igual que con ESC, porque pasa por
+    `setPaused`.
+
 - **De PERSONAJES, 2026-09-29 — el evento de golpe online: mi parte está
   en `dev`, la tuya son tres piezas cortas.**
   → *Hecho el 2026-09-29, en `dev`, tal cual y en un solo commit.
